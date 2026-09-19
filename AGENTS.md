@@ -1,15 +1,55 @@
-# AGENTS.md
+# AGENTS.md — маршрутизатор инструкций
 
-## Agent skills
+Этот файл должен оставаться коротким: он выбирает нужный контекст, а не
+пересказывает все правила проекта. Подгружай дополнительные документы только
+когда срабатывает их условие.
 
-### Issue tracker
+## Базовые правила
 
-Issues are tracked in GitHub Issues (via the `gh` CLI). See `docs/agents/issue-tracker.md`.
+- Общение с пользователем и комментарии в коде — на русском языке.
+- Не переписывай чужие незавершённые изменения и не выполняй разрушительные
+  git-команды без явного запроса.
+- При коммите используй Conventional Commits и добавляй `refs #N`, где `N`
+  берётся из номера задачи в текущей ветке.
+- Если задача требует решения пользователя, задай один конкретный вопрос и
+  продолжай после ответа.
 
-### Triage labels
+## MCP без ритуалов
 
-Default triage labels are used unchanged: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+MCP-инструменты используются как источник актуальной внешней информации или
+как обязательный интерфейс к специализированной среде. Не вызывай MCP только
+для подтверждения очевидного синтаксиса или уже прочитанного локального кода.
 
-### Domain docs
+| Условие | Что делать |
+|---|---|
+| Новый или сомнительный API библиотеки, фреймворка, ORM, SDK | Запросить документацию через Context7. |
+| Пользователь явно просит браузерную UI-проверку или это acceptance criterion | Использовать Chrome DevTools MCP или Playwright MCP. |
+| Нужно извлечь контекст из PDF/Word/Excel/PowerPoint/изображения/архива | Использовать MarkItDown MCP или доступный профильный конвертер. |
+| Работа с Docker-контейнерами, compose, образами, volume/network/buildx | Использовать Docker MCP. |
+| Поиск или управление образами Docker Hub | Использовать Docker Hub MCP. |
 
-Single-context layout: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+## Указатели по типам работ
+
+- **Оформление кода:** при изменении кода соблюдай
+  `.github/prompts/formatting.prompt.md`.
+- **Тесты:** при создании или изменении тестов соблюдай
+  `.github/prompts/unittests.prompt.md`.
+- **Traceability:** при смысловом изменении поведения, API/UI-контракта,
+  доменного правила, интеграции или теста применяй
+  `.github/instructions/traceability.instructions.md`. Для механических
+  переименований, форматирования и refactoring-only правок метка не нужна.
+- **Issue tracker:** GitHub Issues через `gh`; детали в
+  `docs/agents/issue-tracker.md`.
+- **Triage labels:** соответствие меток смотри в
+  `docs/agents/triage-labels.md`.
+- **Domain docs:** контекстные словари и ADR ищи через
+  `docs/agents/domain.md`.
+
+## OpenSpec
+
+- Для OpenSpec-команд используй CLI и JSON-вывод, когда результат нужно
+  разбирать программно.
+- `openspec\config.yaml` — prompt-level ограничения для создания артефактов.
+  Применяй их как фильтр решений, но не копируй в proposal/design/spec/tasks.
+- В explore-режиме OpenSpec не создавай и не меняй артефакты без явного
+  согласия пользователя; сначала обсуждай и фиксируй только выбранные решения.
