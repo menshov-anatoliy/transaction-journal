@@ -2,7 +2,7 @@
 
 ## Context
 
-Журнал создаётся с нуля: спек проекта пусты, кодовой базы ещё нет, стек зафиксирован картой ([#1](https://github.com/menshov-anatoliy/transaction-journal/issues/1)): C#/.NET, EF Core + SQLite, Blazor Server. Фактическая основа по Bybit V5 API — исследование `docs/research/bybit-api.md` (ветка `research/bybit-api`): эндпоинты, окна, пагинация, лимиты, авторизация. Доменные правила — CONTEXT.md и ADR-0001/ADR-0002. Место хранения API-секрета решается параллельным тикетом [#4](https://github.com/menshov-anatoliy/transaction-journal/issues/4); дизайн зависит от него только через интерфейс чтения секрета.
+Журнал создаётся с нуля: спек проекта пусты, кодовой базы ещё нет, стек зафиксирован картой ([#1](https://github.com/menshov-anatoliy/transaction-journal/issues/1)): C#/.NET, EF Core + SQLite, Blazor Server. Фактическая основа по Bybit V5 API — исследование `docs/research/bybit-api.md`: эндпоинты, окна, пагинация, лимиты, авторизация. Доменные правила — CONTEXT.md и ADR-0001/ADR-0002. Место хранения API-секрета решается параллельным тикетом [#4](https://github.com/menshov-anatoliy/transaction-journal/issues/4); дизайн зависит от него только через интерфейс чтения секрета.
 
 ## Goals / Non-Goals
 
