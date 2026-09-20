@@ -1,0 +1,193 @@
+using Bunit;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
+using NUnit.Framework;
+using TransactionJournal.Analytics;
+using TransactionJournal.Components.Layout;
+using TransactionJournal.Data;
+using ConstructionDetailPage = TransactionJournal.Components.Pages.ConstructionDetail;
+using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
+using Assert = NUnit.Framework.Assert;
+using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
+
+namespace TransactionJournal.Tests.Ui;
+
+/// <summary>
+/// Проверки бейджа «Входящих» и транзитной именованной вкладки конструкции:
+/// бейдж показывает число непривязанных сделок и исчезает на пустых «Входящих»;
+/// вкладка открытой в деталях конструкции занимает фиксированное место сразу
+/// после «Конструкций», несёт статусную точку, закрывается крестиком
+/// с возвратом к списку и сохраняется при переходе на статические экраны.
+/// Traceability: openspec:ui/screens#requirement-app-frame-navigation
+/// </summary>
+[TestClass]
+public class FrameNavigationTests
+{
+	private Bunit.TestContext _context = null!;
+	private Mock<IFrameReadModel> _frame = null!;
+
+	[TestInitialize]
+	public void Initialize()
+	{
+		_context = new Bunit.TestContext();
+		_frame = new Mock<IFrameReadModel>();
+		_frame
+			.Setup(model => model.CountInboxAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(0);
+		_context.Services.AddSingleton(_frame.Object);
+		_context.Services.AddSingleton(new Mock<IJournalMetricsReadModel>().Object);
+	}
+
+	[TestCleanup]
+	public void Cleanup()
+	{
+		_context.Dispose();
+	}
+
+	[TestMethod]
+	[Description("Бейдж вкладки «Входящие» показывает число непривязанных сделок")]
+	public void TryIfInboxBadgeCountsUnassignedTrades()
+	{
+		// Arrange: во «Входящих» три непривязанные сделки.
+		_frame
+			.Setup(model => model.CountInboxAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(3);
+
+		// Act: пользователь открывает экран «Конструкции».
+		var cut = RenderFrame(Screen<ConstructionsPage>());
+
+		// Assert: вкладка «Входящие» несёт бейдж с числом непривязанных сделок.
+		// Требование: вкладка «Входящие» показывает бейдж с числом непривязанных сделок.
+		// Traceability: openspec:ui/screens#scenario-inbox-badge-counts-unassigned
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".tab-badge").TextContent, Is.EqualTo("3")));
+	}
+
+	[TestMethod]
+	[Description("После привязки всех сделок бейдж «Входящих» исчезает")]
+	public void TryIfInboxBadgeDisappearsWhenAllTradesBound()
+	{
+		// Arrange: сначала две непривязанные сделки, после привязки — ноль.
+		_frame
+			.SetupSequence(model => model.CountInboxAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(2)
+			.ReturnsAsync(0);
+
+		var cut = RenderFrame(Screen<ConstructionsPage>());
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll(".tab-badge"), Has.Count.EqualTo(1)));
+
+		// Act: сделки привязаны, каркас перечитал счётчик при смене экрана.
+		var navigation = _context.Services.GetRequiredService<NavigationManager>();
+		navigation.NavigateTo("/inbox");
+
+		// Assert: бейдж исчезает, когда непривязанных сделок не осталось.
+		// Traceability: openspec:ui/screens#scenario-inbox-badge-counts-unassigned
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll(".tab-badge"), Has.Count.EqualTo(0)));
+	}
+
+	[TestMethod]
+	[Description("Открытая в деталях конструкция получает именованную вкладку со статусной точкой сразу после «Конструкций»")]
+	public void TryIfOpenedConstructionGetsNamedTransitTabWithStatusDot()
+	{
+		// Arrange: в деталях открыта конструкция «Календарь сентябрь» со статусом «открыта».
+		_frame
+			.Setup(model => model.FindConstructionHeaderAsync(7, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConstructionHeader(7, "Календарь сентябрь", ConstructionStatus.Open));
+
+		var navigation = _context.Services.GetRequiredService<NavigationManager>();
+		navigation.NavigateTo("/constructions/7");
+		var cut = RenderFrame(DetailScreen(7));
+
+		// Assert: транзитная вкладка именована конструкцией, ведёт в её детали,
+		// несёт точку ручного статуса и крестик закрытия; её фиксированное место —
+		// сразу после вкладки «Конструкции».
+		// Traceability: openspec:ui/screens#requirement-app-frame-navigation
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(4)));
+		var tabs = cut.FindAll("nav.tabs a");
+		Assert.That(tabs[0].GetAttribute("href"), Is.EqualTo("/"));
+		Assert.That(tabs[1].GetAttribute("href"), Is.EqualTo("/constructions/7"));
+		Assert.That(tabs[1].TextContent, Does.Contain("Календарь сентябрь"));
+		Assert.That(cut.Find(".transit-tab .status-dot").ClassList, Does.Contain("status-open"));
+		Assert.That(cut.Find(".transit-tab .tab-close"), Is.Not.Null);
+	}
+
+	[TestMethod]
+	[Description("Крестик транзитной вкладки убирает вкладку и возвращает к списку конструкций")]
+	public void TryIfTransitTabCloseReturnsToConstructionList()
+	{
+		// Arrange: пользователь в деталях закрытой конструкции.
+		_frame
+			.Setup(model => model.FindConstructionHeaderAsync(7, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConstructionHeader(7, "Календарь сентябрь", ConstructionStatus.Closed));
+
+		var navigation = _context.Services.GetRequiredService<NavigationManager>();
+		navigation.NavigateTo("/constructions/7");
+		var cut = RenderFrame(DetailScreen(7));
+
+		// Assert до закрытия: точка вкладки отражает ручной статус «закрыта».
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.Find(".transit-tab .status-dot").ClassList, Does.Contain("status-closed")));
+
+		// Act: пользователь нажимает крестик вкладки.
+		cut.Find(".tab-close").Click();
+
+		// Assert: приложение возвращает пользователя к списку конструкций
+		// и убирает вкладку.
+		// Traceability: openspec:ui/screens#scenario-transit-tab-closes-to-list
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(3)));
+		Assert.That(cut.FindAll(".transit-tab"), Has.Count.EqualTo(0));
+		Assert.That(navigation.Uri, Does.EndWith("/"));
+	}
+
+	[TestMethod]
+	[Description("Переход на статическую вкладку сохраняет транзитную вкладку конструкции до явного закрытия")]
+	public void TryIfStaticNavigationKeepsTransitTabUntilClosed()
+	{
+		// Arrange: в деталях открыта конструкция.
+		_frame
+			.Setup(model => model.FindConstructionHeaderAsync(7, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConstructionHeader(7, "Календарь сентябрь", ConstructionStatus.Open));
+
+		var navigation = _context.Services.GetRequiredService<NavigationManager>();
+		navigation.NavigateTo("/constructions/7");
+		var cut = RenderFrame(DetailScreen(7));
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(4)));
+
+		// Act: пользователь уходит на статический экран «Входящие».
+		navigation.NavigateTo("/inbox");
+
+		// Assert: транзитная вкладка сохраняется до явного закрытия.
+		// Traceability: openspec:ui/screens#scenario-transit-tab-closes-to-list
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.Find(".transit-tab").TextContent, Does.Contain("Календарь сентябрь")));
+
+		// Act: крестик закрывает вкладку и из статического экрана.
+		cut.Find(".tab-close").Click();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(3)));
+		Assert.That(navigation.Uri, Does.EndWith("/"));
+	}
+
+	#region Помощники
+
+	/// <summary>Рендерит каркас с заданным экраном в теле страницы.</summary>
+	private IRenderedComponent<MainLayout> RenderFrame(RenderFragment screen) =>
+		_context.RenderComponent<MainLayout>(parameters => parameters.Add(layout => layout.Body, screen));
+
+	/// <summary>Фрагмент рендера экрана как тела каркаса.</summary>
+	private static RenderFragment Screen<TScreen>() where TScreen : IComponent => builder =>
+	{
+		builder.OpenComponent<TScreen>(0);
+		builder.CloseComponent();
+	};
+
+	/// <summary>Фрагмент рендера экрана деталей заданной конструкции.</summary>
+	private static RenderFragment DetailScreen(long constructionId) => builder =>
+	{
+		builder.OpenComponent<ConstructionDetailPage>(0);
+		builder.AddAttribute(1, nameof(ConstructionDetailPage.ConstructionId), constructionId);
+		builder.CloseComponent();
+	};
+
+	#endregion
+}

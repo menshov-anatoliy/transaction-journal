@@ -1,7 +1,11 @@
 ﻿@inherits LayoutComponentBase
 @using System.Globalization
 @using TransactionJournal.Analytics
+@using TransactionJournal.Components.Layout
+@using TransactionJournal.Data
+@implements IDisposable
 @inject IJournalMetricsReadModel Metrics
+@inject IFrameReadModel Frame
 @inject NavigationManager Navigation
 
 @* Верхняя панель «Терминала»: бренд, текущий экран и постоянно видимый итог
@@ -13,12 +17,35 @@
 	<span class="topbar-total">@TotalLabel</span>
 </div>
 
-@* Статические вкладки навигации: «Конструкции», «Входящие», «Настройки»;
-    транзитная вкладка конструкции и бейдж «Входящих» достраиваются поверх. *@
+@* Навигация каркаса: статические вкладки «Конструкции», «Входящие» с бейджем
+    непривязанных сделок, «Настройки»; сразу после «Конструкций» — фиксированное
+    место транзитной именованной вкладки открытой в деталях конструкции. *@
 @* Traceability: openspec:ui/screens#requirement-app-frame-navigation *@
 <nav class="tabs" aria-label="Основные разделы журнала">
 	<NavLink class="tab" href="/" Match="NavLinkMatch.All">Конструкции</NavLink>
-	<NavLink class="tab" href="/inbox">Входящие</NavLink>
+	@if (_transit is { } transit)
+	{
+		@* Транзитная вкладка конструкции: именуется конструкцией, несёт статусную
+		    точку и закрывается крестиком; переход на другой экран вкладку сохраняет. *@
+		@* Traceability: openspec:ui/screens#requirement-app-frame-navigation *@
+		<span class="transit-tab">
+			<NavLink class="tab" href="@TransitHref(transit.Id)" Match="NavLinkMatch.Prefix">
+				<span class="status-dot @StatusDotClass(transit.Status)" title="@StatusTitle(transit.Status)"></span>
+				@transit.Name
+			</NavLink>
+			<button type="button" class="tab-close" title="Закрыть вкладку" aria-label="Закрыть вкладку конструкции" @onclick="CloseTransitTab">✕</button>
+		</span>
+	}
+	@* Бейдж «Входящих» показывает число непривязанных сделок; пустые «Входящие»
+	    бейджа не носят. Счётчик перечитывается при каждой смене экрана. *@
+	@* Traceability: openspec:ui/screens#scenario-inbox-badge-counts-unassigned *@
+	<NavLink class="tab" href="/inbox">
+		Входящие
+		@if (_inboxCount > 0)
+		{
+			<span class="tab-badge">@_inboxCount</span>
+		}
+	</NavLink>
 	<NavLink class="tab" href="/settings">Настройки</NavLink>
 </nav>
 
@@ -35,20 +62,141 @@
 @code {
 	private JournalMetrics? _journal;
 	private bool _journalUnavailable;
+	private int _inboxCount;
+	private ConstructionHeader? _transit;
 
 	protected override async Task OnInitializedAsync()
+	{
+		// Смена экрана в живом circuit перечитывает данные панели: итог журнала,
+		// счётчик «Входящих» и заголовок транзитной вкладки всегда берутся из
+		// текущего состояния журнала, устаревших значений каркас не показывает.
+		// Traceability: change:add-ui-screens/design#d7
+		Navigation.LocationChanged += OnLocationChanged;
+		await RefreshPanelAsync(Navigation.Uri);
+	}
+
+	private void OnLocationChanged(object? sender, LocationChangedEventArgs e) =>
+		_ = RefreshAfterNavigationAsync(e.Location);
+
+	/// <summary>
+	/// Перечитывает панель каркаса после навигации и перерисовывает разметку:
+	/// обработчик события маршрутизатора обязан вернуть управление синхронно,
+	/// поэтому фактическая работа уходит в независимую задачу.
+	/// </summary>
+	private async Task RefreshAfterNavigationAsync(string uri)
+	{
+		try
+		{
+			await RefreshPanelAsync(uri);
+		}
+		catch (Exception)
+		{
+			// Панель — ориентир, а не условие навигации: непредвиденный сбой чтения
+			// оставляет прежние значения вкладок, навигация продолжает работать.
+		}
+
+		await InvokeAsync(StateHasChanged);
+	}
+
+	/// <summary>
+	/// Читает данные панели по заданному адресу: итог журнала, счётчик
+	/// непривязанных сделок и заголовок транзитной вкладки, если адрес —
+	/// детали конструкции. Переход на статический экран транзитную вкладку
+	/// не закрывает: она живёт до крестика или смены конструкции.
+	/// </summary>
+	private async Task RefreshPanelAsync(string uri)
 	{
 		try
 		{
 			_journal = await Metrics.ReadAsync();
+			_journalUnavailable = false;
 		}
 		catch (Exception)
 		{
 			// Итог панели — ориентир, а не условие навигации: повреждённое сырьё или
 			// недоступная база оставляют панель с явной меткой недоступности, экраны работают.
+			_journal = null;
 			_journalUnavailable = true;
 		}
+
+		try
+		{
+			_inboxCount = await Frame.CountInboxAsync();
+		}
+		catch (Exception)
+		{
+			// Повреждённое сырьё не должно ломать навигацию: бейдж скрывается,
+			// пока счётчик непривязанных сделок невозможно вычислить.
+			_inboxCount = 0;
+		}
+
+		var constructionId = ParseConstructionId(Navigation.ToBaseRelativePath(uri));
+		if (constructionId is { } id)
+		{
+			try
+			{
+				_transit = await Frame.FindConstructionHeaderAsync(id);
+			}
+			catch (Exception)
+			{
+				// Заголовок недоступен — вкладка не открывается до успешного чтения.
+				_transit = null;
+			}
+		}
 	}
+
+	/// <summary>
+	/// Закрывает транзитную вкладку конструкции: крестик убирает вкладку
+	/// и возвращает пользователя к списку конструкций.
+	/// </summary>
+	// Крестик — способ закрыть вкладку из любого экрана; смена конструкции
+	// заменяет вкладку на новую.
+	// Traceability: openspec:ui/screens#scenario-transit-tab-closes-to-list
+	private void CloseTransitTab()
+	{
+		_transit = null;
+		Navigation.NavigateTo("/");
+	}
+
+	/// <summary>Адрес деталей конструкции для транзитной вкладки.</summary>
+	private static string TransitHref(long constructionId) => $"/constructions/{constructionId}";
+
+	/// <summary>
+	/// Выделяет идентификатор конструкции из относительного адреса
+	/// /constructions/{id}; остальные адреса вкладку не открывают.
+	/// </summary>
+	private static long? ParseConstructionId(string baseRelativePath)
+	{
+		var query = baseRelativePath.IndexOf('?');
+		if (query >= 0)
+		{
+			baseRelativePath = baseRelativePath[..query];
+		}
+
+		var segments = baseRelativePath.Split('/');
+		return segments.Length >= 2
+			&& segments[0] == "constructions"
+			&& long.TryParse(segments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var id)
+				? id
+				: null;
+	}
+
+	/// <summary>Класс статусной точки транзитной вкладки по ручному статусу конструкции.</summary>
+	private static string StatusDotClass(ConstructionStatus status) => status switch
+	{
+		ConstructionStatus.Closed => "status-closed",
+		ConstructionStatus.Archived => "status-archived",
+		_ => "status-open",
+	};
+
+	/// <summary>Подсказка статусной точки — ручной статус конструкции словами.</summary>
+	private static string StatusTitle(ConstructionStatus status) => status switch
+	{
+		ConstructionStatus.Open => "открыта",
+		ConstructionStatus.Closed => "закрыта",
+		ConstructionStatus.Archived => "архив",
+		_ => "статус неизвестен",
+	};
 
 	/// <summary>Название текущего экрана в панели — выводится из адреса навигации.</summary>
 	private string ScreenLabel
@@ -69,7 +217,8 @@
 				"inbox" => "Входящие",
 				"settings" => "Настройки",
 				"sync" => "Синхронизация Bybit",
-				"constructions" => "Конструкция",
+				// Экран деталей называется открытой конструкцией — как и его вкладка.
+				"constructions" => _transit is null ? "Конструкция" : $"Конструкция: {_transit.Name}",
 				_ => "Журнал",
 			};
 		}
@@ -103,4 +252,6 @@
 			return $"итог по журналу: {total} USDT";
 		}
 	}
+
+	public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 }

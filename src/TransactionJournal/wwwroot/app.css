@@ -45,6 +45,58 @@ body {
 .tabs a:hover { color: #f0f6fc; }
 .tabs a.active { color: #f0f6fc; border-bottom-color: #f78166; }
 
+/* Бейдж «Входящих»: счётчик непривязанных сделок на вкладке. */
+.tab-badge {
+	background: #1f6feb;
+	color: #f0f6fc;
+	border-radius: 9px;
+	font-size: 11px;
+	line-height: 1;
+	padding: 2px 6px;
+	margin-left: 6px;
+	font-family: ui-monospace, Consolas, monospace;
+	vertical-align: middle;
+}
+
+/* Транзитная вкладка конструкции: имя, статусная точка и закрывающий крестик. */
+.tabs .transit-tab {
+	display: inline-flex;
+	align-items: center;
+	border-bottom: 2px solid transparent;
+}
+
+.tabs .transit-tab a {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding-right: 6px;
+}
+
+.tabs .tab-close {
+	background: none;
+	border: none;
+	color: #8b949e;
+	cursor: pointer;
+	font-size: 12px;
+	line-height: 1;
+	padding: 9px 12px 9px 2px;
+}
+
+.tabs .tab-close:hover { color: #f85149; }
+
+/* Статусная точка транзитной вкладки — ручной статус конструкции. */
+.status-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	display: inline-block;
+	flex: none;
+}
+
+.status-dot.status-open { background: #3fb950; }
+.status-dot.status-closed { background: #8b949e; }
+.status-dot.status-archived { background: #d29922; }
+
 .screen { padding: 14px 16px; max-width: 1280px; margin: 0 auto; }
 
 .note {

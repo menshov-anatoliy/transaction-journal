@@ -32,6 +32,15 @@ public class AppFrameTests
 	public void Initialize()
 	{
 		_context = new Bunit.TestContext();
+
+		// Каркас дополнительно читает счётчик «Входящих» и заголовки конструкций
+		// через собственную read-модель: базовым проверкам каркаса достаточно
+		// пустых значений по умолчанию.
+		var frame = new Mock<IFrameReadModel>();
+		frame
+			.Setup(model => model.CountInboxAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(0);
+		_context.Services.AddSingleton(frame.Object);
 	}
 
 	[TestCleanup]

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Analytics;
 using TransactionJournal.Bybit;
 using TransactionJournal.Components;
+using TransactionJournal.Components.Layout;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Materialization;
@@ -74,6 +75,14 @@ builder.Services.AddSingleton(sp => new InboxReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton(sp => new ManualCloseMarkService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+
+// Read-модель каркаса «Терминала»: счётчик непривязанных сделок для бейджа
+// «Входящих» и заголовок открытой конструкции для транзитной вкладки — тонкая
+// композиция готовых проекций домена без собственных правил.
+builder.Services.AddSingleton(sp => new FrameReadModel(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<InboxReadModel>()));
+builder.Services.AddSingleton<IFrameReadModel>(sp => sp.GetRequiredService<FrameReadModel>());
 
 // Провайдер марок аналитики: публичные тикеры без аутентификации и кэш последней
 // известной марки со временем получения. Read-модель позиций получает его как
