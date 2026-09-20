@@ -1,4 +1,62 @@
-﻿h1:focus {
+/* ===== Каркас «Терминал» (тёмная тема прототипа #6, вариант A) ===== */
+:root { color-scheme: dark; }
+
+body {
+	background: #0d1117;
+	color: #c9d1d9;
+	font-family: "Segoe UI", system-ui, sans-serif;
+	font-size: 13px;
+}
+
+.pos { color: #3fb950; }
+.neg { color: #f85149; }
+
+.topbar {
+	display: flex;
+	align-items: center;
+	gap: 18px;
+	background: #161b22;
+	border-bottom: 1px solid #30363d;
+	padding: 0 16px;
+	height: 42px;
+}
+
+.topbar .brand { font-weight: 700; color: #f0f6fc; letter-spacing: .5px; }
+.topbar .topbar-screen { color: #8b949e; }
+.topbar .topbar-total { margin-left: auto; font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
+
+.tabs {
+	display: flex;
+	gap: 2px;
+	background: #161b22;
+	border-bottom: 1px solid #30363d;
+	padding: 0 12px;
+}
+
+.tabs a {
+	color: #8b949e;
+	text-decoration: none;
+	border-bottom: 2px solid transparent;
+	padding: 9px 14px;
+	font-size: 13px;
+	display: inline-block;
+}
+
+.tabs a:hover { color: #f0f6fc; }
+.tabs a.active { color: #f0f6fc; border-bottom-color: #f78166; }
+
+.screen { padding: 14px 16px; max-width: 1280px; margin: 0 auto; }
+
+.note {
+	background: #161b22;
+	border-left: 3px solid #1f6feb;
+	padding: 6px 10px;
+	margin: 6px 0;
+	font-size: 12px;
+	color: #8b949e;
+}
+
+h1:focus {
 	outline: none;
 }
 

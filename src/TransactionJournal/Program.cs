@@ -96,6 +96,16 @@ builder.Services.AddSingleton(sp => new PositionReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
 	sp.GetRequiredService<IInstrumentMarkSource>()));
 
+// Композиция метрик журнала для экранов UI: метрики позиций и итоги конструкций
+// вычисляются из текущих данных при каждом чтении (контракт «аналитика при чтении»),
+// нереализованная часть оценивается свежими марками того же провайдера, а постоянный
+// итог панели «Терминала» читается отсюда же.
+builder.Services.AddSingleton(sp => new JournalMetricsReadModel(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<IFreshInstrumentMarkSource>(),
+	sp.GetRequiredService<IInstrumentMarkSource>()));
+builder.Services.AddSingleton<IJournalMetricsReadModel>(sp => sp.GetRequiredService<JournalMetricsReadModel>());
+
 var app = builder.Build();
 
 // Журнал разворачивается сам: применяем миграции и включаем WAL-режим SQLite.

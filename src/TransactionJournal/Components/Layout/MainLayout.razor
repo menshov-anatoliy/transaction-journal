@@ -1,9 +1,106 @@
 ﻿@inherits LayoutComponentBase
+@using System.Globalization
+@using TransactionJournal.Analytics
+@inject IJournalMetricsReadModel Metrics
+@inject NavigationManager Navigation
 
-@Body
+@* Верхняя панель «Терминала»: бренд, текущий экран и постоянно видимый итог
+   по журналу — ориентир, доступный на любом экране приложения. *@
+@* Traceability: openspec:ui/screens#requirement-app-frame-navigation *@
+<div class="topbar">
+	<span class="brand">ЖУРНАЛ BYBIT</span>
+	<span class="topbar-screen">экран: @ScreenLabel</span>
+	<span class="topbar-total">@TotalLabel</span>
+</div>
 
-<div id="blazor-error-ui" data-nosnippet>
+@* Статические вкладки навигации: «Конструкции», «Входящие», «Настройки»;
+    транзитная вкладка конструкции и бейдж «Входящих» достраиваются поверх. *@
+@* Traceability: openspec:ui/screens#requirement-app-frame-navigation *@
+<nav class="tabs" aria-label="Основные разделы журнала">
+	<NavLink class="tab" href="/" Match="NavLinkMatch.All">Конструкции</NavLink>
+	<NavLink class="tab" href="/inbox">Входящие</NavLink>
+	<NavLink class="tab" href="/settings">Настройки</NavLink>
+</nav>
+
+<main class="screen">
+	@Body
+</main>
+
+<div id="blazor-error-ui" data-nosnippet">
 	An unhandled error has occurred.
 	<a href="." class="reload">Reload</a>
 	<span class="dismiss">🗙</span>
 </div>
+
+@code {
+	private JournalMetrics? _journal;
+	private bool _journalUnavailable;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			_journal = await Metrics.ReadAsync();
+		}
+		catch (Exception)
+		{
+			// Итог панели — ориентир, а не условие навигации: повреждённое сырьё или
+			// недоступная база оставляют панель с явной меткой недоступности, экраны работают.
+			_journalUnavailable = true;
+		}
+	}
+
+	/// <summary>Название текущего экрана в панели — выводится из адреса навигации.</summary>
+	private string ScreenLabel
+	{
+		get
+		{
+			var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+			var query = relative.IndexOf('?');
+			if (query >= 0)
+			{
+				relative = relative[..query];
+			}
+
+			var segment = relative.Split('/')[0];
+			return segment switch
+			{
+				"" => "Конструкции",
+				"inbox" => "Входящие",
+				"settings" => "Настройки",
+				"sync" => "Синхронизация Bybit",
+				"constructions" => "Конструкция",
+				_ => "Журнал",
+			};
+		}
+	}
+
+	/// <summary>Итог по журналу в панели: вычисляется по текущим данным, сбой марок помечает итог неполным.</summary>
+	private string TotalLabel
+	{
+		get
+		{
+			if (_journalUnavailable)
+			{
+				return "итог по журналу: недоступен";
+			}
+
+			if (_journal is null)
+			{
+				return "итог по журналу: …";
+			}
+
+			// Сбой марок обнуляет итог хотя бы одной конструкции — итог неполный,
+			// частичная сумма не подменяет его.
+			// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
+			// Traceability: change:add-ui-screens/design#d4
+			if (_journal.TotalPnL is null)
+			{
+				return "итог по журналу: неполный (сбой марок)";
+			}
+
+			var total = _journal.TotalPnL.Value.ToString("+0.##;-0.##;0", CultureInfo.InvariantCulture);
+			return $"итог по журналу: {total} USDT";
+		}
+	}
+}
