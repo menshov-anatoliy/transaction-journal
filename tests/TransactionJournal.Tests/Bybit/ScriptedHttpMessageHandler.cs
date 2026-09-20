@@ -6,14 +6,16 @@ namespace TransactionJournal.Tests.Bybit;
 /// <summary>
 /// Фиктивный транспорт для интеграционных проверок клиента против зафиксированных
 /// HTTP-ответов: запоминает все отправленные запросы и отвечает заготовленными
-/// телами по порядку; при исчерпании сценария отвечает пустым успешным ответом.
-/// Поддерживает произвольные заголовки ответов, транспортные сбои и фиксацию
-/// моментов отправки по часам подставленного поставщика времени.
+/// телами по порядку; при исчерпании сценария переходит на динамический responder
+/// (если задан) либо отвечает пустым успешным ответом. Поддерживает произвольные
+/// заголовки ответов, транспортные сбои и фиксацию моментов отправки по часам
+/// подставленного поставщика времени.
 /// </summary>
 internal sealed class ScriptedHttpMessageHandler : HttpMessageHandler
 {
 	private readonly Queue<Func<HttpRequestMessage, HttpResponseMessage>> _responses = new();
 	private readonly TimeProvider? _timeProvider;
+	private Func<HttpRequestMessage, HttpResponseMessage>? _responder;
 
 	/// <summary>Все запросы, прошедшие через транспорт, в порядке отправки.</summary>
 	public List<HttpRequestMessage> Requests { get; } = [];
@@ -24,6 +26,16 @@ internal sealed class ScriptedHttpMessageHandler : HttpMessageHandler
 	public ScriptedHttpMessageHandler(TimeProvider? timeProvider = null)
 	{
 		_timeProvider = timeProvider;
+	}
+
+	/// <summary>
+	/// Задаёт динамический responder — ответ вычисляется по самому запросу (путь и параметры),
+	/// когда сценарий заготовок исчерпан. Нужен композитным проверкам, где порядок и число
+	/// HTTP-запросов определяются конвейером синхронизации, а не сценарием теста.
+	/// </summary>
+	public void SetResponder(Func<HttpRequestMessage, HttpResponseMessage> responder)
+	{
+		_responder = responder ?? throw new ArgumentNullException(nameof(responder));
 	}
 
 	/// <summary>Добавляет ответ с JSON-телом, статусом и произвольными заголовками в конец сценария.</summary>
@@ -64,7 +76,7 @@ internal sealed class ScriptedHttpMessageHandler : HttpMessageHandler
 			RequestTimestampsMs.Add(_timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
 		}
 
-		var respond = _responses.Count > 0 ? _responses.Dequeue() : _ => new HttpResponseMessage(HttpStatusCode.OK);
+		var respond = _responses.Count > 0 ? _responses.Dequeue() : _responder ?? (_ => new HttpResponseMessage(HttpStatusCode.OK));
 		return Task.FromResult(respond(request));
 	}
 }
