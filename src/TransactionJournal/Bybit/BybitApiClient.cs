@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 
 namespace TransactionJournal.Bybit;
 
@@ -22,9 +21,6 @@ public sealed class BybitApiClient
 	private const string ExecutionListPath = "/v5/execution/list";
 	private const string DeliveryRecordPath = "/v5/asset/delivery-record";
 	private const string InstrumentsInfoPath = "/v5/market/instruments-info";
-	private const string RetCodePropertyName = "retCode";
-	private const string RetMsgPropertyName = "retMsg";
-	private const string ResultPropertyName = "result";
 	private const string ApiKeyHeaderName = "X-BAPI-API-KEY";
 	private const string TimestampHeaderName = "X-BAPI-TIMESTAMP";
 	private const string RecvWindowHeaderName = "X-BAPI-RECV-WINDOW";
@@ -163,10 +159,10 @@ public sealed class BybitApiClient
 		var body = await _resilience.SendAsync(
 			_httpClient,
 			() => new HttpRequestMessage(HttpMethod.Get, BuildUri(ServerTimePath, queryString: string.Empty)),
-			ThrowIfApiError,
+			BybitResponse.ThrowIfApiError,
 			cancellationToken).ConfigureAwait(false);
 
-		var serverTime = DeserializeResult<BybitServerTime>(body, ServerTimePath);
+		var serverTime = BybitResponse.DeserializeResult<BybitServerTime>(body, ServerTimePath);
 		if (serverTime.TryGetMilliseconds(out _) == false)
 		{
 			throw BybitApiException.FromMalformedBody("Ответ /v5/market/time не содержит корректное поле timeNano.", body);
@@ -203,7 +199,7 @@ public sealed class BybitApiClient
 		return _resilience.SendAsync(
 			_httpClient,
 			() => BuildSignedRequest(path, queryString),
-			ThrowIfApiError,
+			BybitResponse.ThrowIfApiError,
 			cancellationToken);
 	}
 
@@ -232,32 +228,7 @@ public sealed class BybitApiClient
 		CancellationToken cancellationToken)
 	{
 		var body = await GetAsync(path, query, cancellationToken).ConfigureAwait(false);
-		return DeserializeResult<BybitPagedResponse<TItem>>(body, path);
-	}
-
-	/// <summary>
-	/// Разбирает поле result конверта Bybit в типизированный ответ; ошибки формы
-	/// приводятся к понятному исключению с сохранением тела для диагностики.
-	/// </summary>
-	private static T DeserializeResult<T>(string body, string path)
-	{
-		try
-		{
-			using var document = JsonDocument.Parse(body);
-			var result = document.RootElement.GetProperty(ResultPropertyName);
-			return result.Deserialize<T>(BybitJson.Options)
-				?? throw BybitApiException.FromMalformedBody(
-					$"Ответ {path} не удалось разобрать как {typeof(T).Name}.", body);
-		}
-		catch (JsonException exception)
-		{
-			throw BybitApiException.FromMalformedBody(
-				$"Ответ {path} не соответствует ожидаемому формату результата: {exception.Message}", body);
-		}
-		catch (KeyNotFoundException)
-		{
-			throw BybitApiException.FromMalformedBody($"Ответ {path} не содержит поле result.", body);
-		}
+		return BybitResponse.DeserializeResult<BybitPagedResponse<TItem>>(body, path);
 	}
 
 	private Uri BuildUri(string path, string queryString)
@@ -269,50 +240,6 @@ public sealed class BybitApiClient
 		}
 
 		return new Uri(url, UriKind.Absolute);
-	}
-
-	private static void ThrowIfApiError(string body)
-	{
-		if (TryReadEnvelope(body, out var retCode, out var retMsg))
-		{
-			// Нулевой retCode — успешный ответ биржи; любое другое значение — ошибка.
-			if (retCode != 0)
-			{
-				throw new BybitApiException(retCode, retMsg ?? string.Empty, body);
-			}
-
-			return;
-		}
-
-		throw BybitApiException.FromMalformedBody("Ответ Bybit не содержит корректное поле retCode.", body);
-	}
-
-	private static bool TryReadEnvelope(string body, out int retCode, out string? retMsg)
-	{
-		try
-		{
-			using var document = JsonDocument.Parse(body);
-			var root = document.RootElement;
-			if (root.ValueKind == JsonValueKind.Object
-				&& root.TryGetProperty(RetCodePropertyName, out var retCodeElement)
-				&& retCodeElement.ValueKind == JsonValueKind.Number
-				&& retCodeElement.TryGetInt32(out retCode))
-			{
-				retMsg = root.TryGetProperty(RetMsgPropertyName, out var retMsgElement)
-					&& retMsgElement.ValueKind == JsonValueKind.String
-					? retMsgElement.GetString()
-					: null;
-				return true;
-			}
-		}
-		catch (JsonException)
-		{
-			// Некорректный JSON возвращается вызывающей стороне как «нет конверта retCode».
-		}
-
-		retCode = 0;
-		retMsg = null;
-		return false;
 	}
 
 	#endregion

@@ -1,0 +1,38 @@
+{
+	"retCode": 0,
+	"retMsg": "OK",
+	"result": {
+		"category": "option",
+		"list": [
+			{
+				"symbol": "BTC-29DEC23-25000-C",
+				"bid1Price": "24.5",
+				"bid1Size": "2",
+				"bid1Iv": "0.5389",
+				"ask1Price": "25.5",
+				"ask1Size": "2",
+				"ask1Iv": "0.5445",
+				"lastPrice": "25",
+				"highPrice24h": "36.5",
+				"lowPrice24h": "19.5",
+				"markPrice": "24.77",
+				"indexPrice": "26845.62",
+				"markIv": "0.5417",
+				"underlyingPrice": "26843.79460751",
+				"openInterest": "5770",
+				"turnover24h": "3885.21",
+				"volume24h": "155.13",
+				"totalVolume": "75331.41",
+				"totalTurnover": "231606.94",
+				"delta": "0.3426",
+				"gamma": "0.00010967",
+				"vega": "31.1594",
+				"theta": "-11.2011",
+				"predictedDeliveryPrice": "0",
+				"change24h": "-18.309"
+			}
+		]
+	},
+	"retExt": {},
+	"time": 1683593521584
+}

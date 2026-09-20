@@ -1,0 +1,37 @@
+{
+	"retCode": 0,
+	"retMsg": "OK",
+	"result": {
+		"category": "linear",
+		"list": [
+			{
+				"symbol": "BTCUSDT",
+				"lastPrice": "27745.5",
+				"indexPrice": "27735.67102472",
+				"markPrice": "27739.74",
+				"prevPrice24h": "27611.5",
+				"price24hPcnt": "0.004835",
+				"highPrice24h": "27896.5",
+				"lowPrice24h": "27422.5",
+				"prevPrice1h": "27764.5",
+				"openInterest": "74033.459",
+				"openInterestValue": "2052656378.86",
+				"turnover24h": "1918247508.43",
+				"volume24h": "69403.276",
+				"fundingRate": "0.0001",
+				"nextFundingTime": "1683667200000",
+				"bid1Price": "27744.5",
+				"bid1Size": "84.149",
+				"ask1Price": "27745.5",
+				"ask1Size": "81.116",
+				"deliveryFeeRate": "",
+				"deliveryTime": "0",
+				"preOpenPrice": "",
+				"basisRate": "0.000141",
+				"basis": "3.9"
+			}
+		]
+	},
+	"retExt": {},
+	"time": 1683593521584
+}
