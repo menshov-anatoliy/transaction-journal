@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Bybit;
 using TransactionJournal.Components;
 using TransactionJournal.Data;
+using TransactionJournal.Domain;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
 
@@ -58,6 +59,13 @@ builder.Services.AddSingleton<IJournalRawSnapshotStore>(sp => sp.GetRequiredServ
 builder.Services.AddSingleton<ISyncRunJournal>(sp => sp.GetRequiredService<JournalSyncStore>());
 builder.Services.AddSingleton<JournalMaterializer>();
 builder.Services.AddTransient<IJournalSyncService, JournalSyncService>();
+
+// Слой доменных операций: use-case сервисы над контекстом журнала; каждый вызов
+// создаёт короткоживущий контекст, поэтому длительные сессии Blazor Server
+// не держат соединений между операциями. Позиции и результаты — производные,
+// мутирующий API ограничен пользовательскими записями домена.
+builder.Services.AddSingleton(sp => new ConstructionService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 
 var app = builder.Build();
 
