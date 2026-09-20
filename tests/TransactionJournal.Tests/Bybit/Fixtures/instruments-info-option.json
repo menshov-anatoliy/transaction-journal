@@ -1,0 +1,62 @@
+{
+	"retCode": 0,
+	"retMsg": "OK",
+	"result": {
+		"category": "option",
+		"nextPageCursor": "",
+		"list": [
+			{
+				"symbol": "BTC-24JUN23-56000-P",
+				"contractType": "",
+				"status": "Trading",
+				"baseCoin": "BTC",
+				"quoteCoin": "USD",
+				"settleCoin": "USDC",
+				"launchTime": "1641394800000",
+				"deliveryTime": "1674873600000",
+				"deliveryFeeRate": "0.0001",
+				"priceFilter": {
+					"minPrice": "0.1",
+					"maxPrice": "10000000",
+					"tickSize": "0.1"
+				},
+				"lotSizeFilter": {
+					"maxOrderQty": "2000",
+					"minOrderQty": "0.01",
+					"qtyStep": "0.01",
+					"maxMktOrderQty": "1000",
+					"minMktOrderQty": "0.01"
+				},
+				"optionsType": "Put",
+				"displayName": "LARGE BTC-24JUN23-56000-P"
+			},
+			{
+				"symbol": "ETH-24JUN23-3000-C",
+				"contractType": "",
+				"status": "Trading",
+				"baseCoin": "ETH",
+				"quoteCoin": "USD",
+				"settleCoin": "USDC",
+				"launchTime": "1641394800000",
+				"deliveryTime": "1674873600000",
+				"deliveryFeeRate": "0.0001",
+				"priceFilter": {
+					"minPrice": "0.1",
+					"maxPrice": "10000000",
+					"tickSize": "0.1"
+				},
+				"lotSizeFilter": {
+					"maxOrderQty": "2000",
+					"minOrderQty": "0.01",
+					"qtyStep": "0.01",
+					"maxMktOrderQty": "1000",
+					"minMktOrderQty": "0.01"
+				},
+				"optionsType": "Call",
+				"displayName": "ETH-24JUN23-3000-C"
+			}
+		]
+	},
+	"retExt": {},
+	"time": 1672214887232
+}

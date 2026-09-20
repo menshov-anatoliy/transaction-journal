@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
@@ -23,13 +22,13 @@ public class BybitApiClientTests
 	private const string ApiSecret = "test-api-secret";
 	private const long ServerTimeMs = 1701680884232L;
 
-	private ScriptedHandler _handler = null!;
+	private ScriptedHttpMessageHandler _handler = null!;
 	private BybitApiClient _client = null!;
 
 	[TestInitialize]
 	public void Initialize()
 	{
-		_handler = new ScriptedHandler();
+		_handler = new ScriptedHttpMessageHandler();
 		var credentials = new BybitCredentials(ApiKey, ApiSecret);
 		var credentialsProvider = Mock.Of<IBybitCredentialsProvider>(
 			provider => provider.GetCredentials() == credentials);
@@ -173,32 +172,6 @@ public class BybitApiClientTests
 		// Формат ответа /v5/market/time: секунды и наносекунды строками в result.
 		return "{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"timeSecond\":\"1701680884\","
 			+ "\"timeNano\":\"1701680884232618083\"},\"retExt\":null,\"time\":" + ServerTimeMs + "}";
-	}
-
-	/// <summary>
-	/// Фиктивный транспорт: запоминает все запросы и отвечает заранее заготовленными
-	/// ответами по порядку; последний ответ повторяется, если запросов больше, чем сценариев.
-	/// </summary>
-	private sealed class ScriptedHandler : HttpMessageHandler
-	{
-		private readonly Queue<Func<HttpRequestMessage, HttpResponseMessage>> _responses = new();
-
-		public List<HttpRequestMessage> Requests { get; } = [];
-
-		public void EnqueueJson(string json, HttpStatusCode statusCode = HttpStatusCode.OK)
-		{
-			_responses.Enqueue(_ => new HttpResponseMessage(statusCode)
-			{
-				Content = new StringContent(json, Encoding.UTF8, "application/json"),
-			});
-		}
-
-		protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-		{
-			Requests.Add(request);
-			var respond = _responses.Count > 0 ? _responses.Dequeue() : _ => new HttpResponseMessage(HttpStatusCode.OK);
-			return Task.FromResult(respond(request));
-		}
 	}
 
 	#endregion

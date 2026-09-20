@@ -23,4 +23,8 @@
     <ProjectReference Include="..\..\src\TransactionJournal\TransactionJournal.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Bybit\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

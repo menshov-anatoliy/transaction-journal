@@ -15,10 +15,12 @@ namespace TransactionJournal.Bybit;
 public sealed class BybitApiClient
 {
 	private const string ServerTimePath = "/v5/market/time";
-	private const string RetCodePropertyName = "retCode";
-	private const string RetMsgPropertyName = "retMsg";
-	private const string ResultPropertyName = "result";
-	private const string TimeNanoPropertyName = "timeNano";
+		private const string ExecutionListPath = "/v5/execution/list";
+		private const string DeliveryRecordPath = "/v5/asset/delivery-record";
+		private const string InstrumentsInfoPath = "/v5/market/instruments-info";
+		private const string RetCodePropertyName = "retCode";
+		private const string RetMsgPropertyName = "retMsg";
+		private const string ResultPropertyName = "result";
 	private const string ApiKeyHeaderName = "X-BAPI-API-KEY";
 	private const string TimestampHeaderName = "X-BAPI-TIMESTAMP";
 	private const string RecvWindowHeaderName = "X-BAPI-RECV-WINDOW";
@@ -27,9 +29,6 @@ public sealed class BybitApiClient
 
 	/// <summary>Код ошибки класса 10003 — неверная подпись/время; лечится сверкой часов.</summary>
 	private const int SignErrorRetCode = 10003;
-
-	/// <summary>Первые 13 разрядов наносекунд строки timeNano дают миллисекунды сервера.</summary>
-	private const int MillisecondsDigitsCount = 13;
 
 	private readonly HttpClient _httpClient;
 	private readonly IBybitCredentialsProvider _credentialsProvider;
@@ -76,6 +75,92 @@ public sealed class BybitApiClient
 		return body;
 	}
 
+	#region Типизированные read-only эндпоинты
+
+	/// <summary>
+	/// GET /v5/execution/list — история исполнения сделок категории linear/option
+	/// с курсорной пагинацией; записи приходят по убыванию execTime.
+	/// Метод только читает историю и не выполняет торговых операций, поэтому
+	/// хватает API-ключа с правами readonly.
+	/// </summary>
+	/// <remarks>
+	/// Окно startTime/endTime ограничено семью днями, limit — диапазоном [1..100].
+	/// Traceability: doc:docs/research/bybit-api.md#1-история-исполнения-сделок-unified-аккаунта-execution-list
+	/// Traceability: openspec:sync/bybit-history#requirement-read-only-access
+	/// </remarks>
+	/// <exception cref="BybitApiException">Биржа ответила ошибкой retCode или неудачным HTTP-статусом.</exception>
+	public async Task<BybitPagedResponse<BybitExecution>> GetExecutionListAsync(
+		BybitExecutionListQuery query,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(query);
+		return await GetPagedResultAsync<BybitExecution>(ExecutionListPath, query.ToQueryParameters(), cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// GET /v5/asset/delivery-record — delivery-записи экспираций опционов и датированных
+	/// фьючерсов: отдельный источник закрывающих записей журнала с расчётной ценой доставки
+	/// вместо цены исполнения.
+	/// </summary>
+	/// <remarks>
+	/// Окно startTime/endTime ограничено тридцатью днями, limit — диапазоном [1..50],
+	/// сортировка по deliveryTime по убыванию.
+	/// Traceability: openspec:sync/bybit-history#requirement-expiry-delivery-closing-entries
+	/// Traceability: doc:docs/research/bybit-api.md#21-основной-источник--get-delivery-record
+	/// </remarks>
+	/// <exception cref="BybitApiException">Биржа ответила ошибкой retCode или неудачным HTTP-статусом.</exception>
+	public async Task<BybitPagedResponse<BybitDeliveryRecord>> GetDeliveryRecordAsync(
+		BybitDeliveryRecordQuery query,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(query);
+		return await GetPagedResultAsync<BybitDeliveryRecord>(DeliveryRecordPath, query.ToQueryParameters(), cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// GET /v5/market/instruments-info — публичный справочник спецификаций инструментов:
+	/// канонические категория, тип опциона, базовый актив, расчётная валюта и время delivery.
+	/// </summary>
+	/// <remarks>
+	/// Справочник журнала строится из этого эндпоинта, а не из разбора строки символа.
+	/// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
+	/// Traceability: doc:docs/research/bybit-api.md#3-публичные-марки-tickers-без-аутентификации
+	/// </remarks>
+	/// <exception cref="BybitApiException">Биржа ответила ошибкой retCode или неудачным HTTP-статусом.</exception>
+	public async Task<BybitPagedResponse<BybitInstrumentInfo>> GetInstrumentsInfoAsync(
+		BybitInstrumentInfoQuery query,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(query);
+		return await GetPagedResultAsync<BybitInstrumentInfo>(InstrumentsInfoPath, query.ToQueryParameters(), cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// GET /v5/market/time — публичное серверное время биржи строками секунд и наносекунд.
+	/// Запрос не подписывается: эндпоинт публичный и доступен без ключа.
+	/// </summary>
+	/// <remarks>
+	/// Серверное время используется для сверки часов перед подписью запросов.
+	/// Traceability: change:add-bybit-sync/design#d6
+	/// </remarks>
+	/// <exception cref="BybitApiException">Эндпоинт недоступен или вернул некорректное время.</exception>
+	public async Task<BybitServerTime> GetServerTimeAsync(CancellationToken cancellationToken = default)
+	{
+		using var timeRequest = new HttpRequestMessage(HttpMethod.Get, BuildUri(ServerTimePath, queryString: string.Empty));
+		var body = await ReadResponseBodyAsync(timeRequest, cancellationToken).ConfigureAwait(false);
+		ThrowIfApiError(body);
+
+		var serverTime = DeserializeResult<BybitServerTime>(body, ServerTimePath);
+		if (serverTime.TryGetMilliseconds(out _) == false)
+		{
+			throw BybitApiException.FromMalformedBody("Ответ /v5/market/time не содержит корректное поле timeNano.", body);
+		}
+
+		return serverTime;
+	}
+
+	#endregion
+
 	/// <summary>
 	/// Сверяет часы с публичным эндпоинтом /v5/market/time и запоминает смещение серверного
 	/// времени относительно локного; последующие подписи используют скорректированный timestamp.
@@ -83,12 +168,9 @@ public sealed class BybitApiClient
 	/// <exception cref="BybitApiException">Эндпоинт времени недоступен или вернул некорректный ответ.</exception>
 	public async Task SynchronizeClockAsync(CancellationToken cancellationToken = default)
 	{
-		using var timeRequest = new HttpRequestMessage(HttpMethod.Get, BuildUri(ServerTimePath, queryString: string.Empty));
-		var body = await ReadResponseBodyAsync(timeRequest, cancellationToken).ConfigureAwait(false);
-		ThrowIfApiError(body);
-
-		var serverTimeMs = ReadServerTimeMilliseconds(body);
-		var offset = serverTimeMs - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+		// Валидация timeNano уже выполнена в GetServerTimeAsync — здесь остаётся расчёт смещения.
+		var serverTime = await GetServerTimeAsync(cancellationToken).ConfigureAwait(false);
+		var offset = serverTime.Milliseconds - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 		Interlocked.Exchange(ref _serverTimeOffsetMs, offset);
 	}
 
@@ -116,6 +198,40 @@ public sealed class BybitApiClient
 		request.Headers.Add(SignTypeHeaderName, "2");
 
 		return await ReadResponseBodyAsync(request, cancellationToken).ConfigureAwait(false);
+	}
+
+	private async Task<BybitPagedResponse<TItem>> GetPagedResultAsync<TItem>(
+		string path,
+		IReadOnlyList<KeyValuePair<string, string>> query,
+		CancellationToken cancellationToken)
+	{
+		var body = await GetAsync(path, query, cancellationToken).ConfigureAwait(false);
+		return DeserializeResult<BybitPagedResponse<TItem>>(body, path);
+	}
+
+	/// <summary>
+	/// Разбирает поле result конверта Bybit в типизированный ответ; ошибки формы
+	/// приводятся к понятному исключению с сохранением тела для диагностики.
+	/// </summary>
+	private static T DeserializeResult<T>(string body, string path)
+	{
+		try
+		{
+			using var document = JsonDocument.Parse(body);
+			var result = document.RootElement.GetProperty(ResultPropertyName);
+			return result.Deserialize<T>(BybitJson.Options)
+				?? throw BybitApiException.FromMalformedBody(
+					$"Ответ {path} не удалось разобрать как {typeof(T).Name}.", body);
+		}
+		catch (JsonException exception)
+		{
+			throw BybitApiException.FromMalformedBody(
+				$"Ответ {path} не соответствует ожидаемому формату результата: {exception.Message}", body);
+		}
+		catch (KeyNotFoundException)
+		{
+			throw BybitApiException.FromMalformedBody($"Ответ {path} не содержит поле result.", body);
+		}
 	}
 
 	private async Task<string> ReadResponseBodyAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -183,38 +299,6 @@ public sealed class BybitApiClient
 		retCode = 0;
 		retMsg = null;
 		return false;
-	}
-
-	private static long ReadServerTimeMilliseconds(string body)
-	{
-		try
-		{
-			using var document = JsonDocument.Parse(body);
-			var timeNano = document.RootElement
-				.GetProperty(ResultPropertyName)
-				.GetProperty(TimeNanoPropertyName)
-				.GetString();
-			if (timeNano is not null
-				&& timeNano.Length >= MillisecondsDigitsCount
-				&& long.TryParse(
-					timeNano[..MillisecondsDigitsCount],
-					NumberStyles.Integer,
-					CultureInfo.InvariantCulture,
-					out var milliseconds))
-			{
-				return milliseconds;
-			}
-		}
-		catch (KeyNotFoundException)
-		{
-			// Отсутствие полей времени обрабатывается ниже как некорректный ответ.
-		}
-		catch (JsonException)
-		{
-			// Некорректный JSON обрабатывается ниже как некорректный ответ.
-		}
-
-		throw BybitApiException.FromMalformedBody("Ответ /v5/market/time не содержит корректное поле timeNano.", body);
 	}
 
 	#endregion

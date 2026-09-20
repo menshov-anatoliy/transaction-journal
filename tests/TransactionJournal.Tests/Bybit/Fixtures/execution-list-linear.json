@@ -1,0 +1,37 @@
+{
+	"retCode": 0,
+	"retMsg": "OK",
+	"result": {
+		"nextPageCursor": "",
+		"category": "linear",
+		"list": [
+			{
+				"symbol": "BTCUSDT",
+				"orderId": "c6f055d9-7f21-4079-913e-c56298561a56",
+				"orderLinkId": "",
+				"side": "Buy",
+				"orderPrice": "10969.5",
+				"orderQty": "0.001",
+				"leavesQty": "0",
+				"createType": "CreateByUser",
+				"orderType": "Limit",
+				"stopOrderType": "UNKNOWN",
+				"execFee": "0.00000219",
+				"execId": "e6c7b8cd-3f07-4b48-8f8c-5277f3b8342f",
+				"execPrice": "10969.5",
+				"execQty": "0.001",
+				"execType": "Trade",
+				"execValue": "10.9695",
+				"execTime": "1672214887219",
+				"feeCurrency": "USDT",
+				"isMaker": false,
+				"feeRate": "0.0002",
+				"markPrice": "10978.51000000",
+				"closedSize": "0",
+				"seq": 17823123
+			}
+		]
+	},
+	"retExt": {},
+	"time": 1672214887233
+}
