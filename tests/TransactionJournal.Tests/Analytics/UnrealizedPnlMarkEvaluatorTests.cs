@@ -61,6 +61,7 @@ public class UnrealizedPnlMarkEvaluatorTests
 		// Требование: нереализованный PnL оценён по последней марке инструмента на
 		// момент запроса, вместе с оценкой возвращается отметка времени марок.
 		// Traceability: openspec:analytics/performance#scenario-open-residual-valued-at-request
+		// Traceability: openspec:analytics/performance#scenario-open-position-average-and-mark
 		_markSource
 			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
 			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 130m, At(120)));
@@ -136,7 +137,10 @@ public class UnrealizedPnlMarkEvaluatorTests
 			FirstConstructionId, 1000m, evaluation.Positions, adjustments, Now);
 
 		// Assert: открытый остаток остался без марки и оценки, отметка времени
-		// марок — null с признаком сбоя.
+		// марок — null с признаком сбоя. Марка позиции деградировала в null
+		// вместе с нереализованным PnL — часть сценария средней и марки
+		// открытой позиции.
+		// Traceability: openspec:analytics/performance#scenario-open-position-average-and-mark
 		var openPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
 		Assert.That(openPosition.MarkPrice, Is.Null);
 		Assert.That(openPosition.UnrealizedPnL, Is.Null);

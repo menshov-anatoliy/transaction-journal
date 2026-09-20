@@ -98,6 +98,7 @@ public class PositionMetricsCalculatorTests
 		// Требование: у позиции с ненулевым остатком средняя цена — из непокрытых
 		// слоёв; нереализованная оценка марками подключается слоем марок отдельно.
 		// Traceability: openspec:analytics/performance#requirement-position-metrics
+		// Traceability: openspec:analytics/performance#scenario-open-position-average-and-mark
 		var entries = new[]
 		{
 			Trade(30, "exec-sell-1", -1.5m, 115m),
