@@ -23,7 +23,7 @@ public sealed record InstrumentMarkSnapshot(string Symbol, decimal MarkPrice, Da
 // Traceability: openspec:analytics/performance#requirement-mark-provider
 // Traceability: change:add-analytics/design#d2
 /// </summary>
-public sealed class InstrumentMarkProvider : IInstrumentMarkSource
+public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstrumentMarkSource
 {
 	private readonly DbContextOptions<JournalDbContext> _options;
 	private readonly BybitTickersClient _tickersClient;

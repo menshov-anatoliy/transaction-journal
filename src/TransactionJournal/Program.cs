@@ -83,6 +83,13 @@ builder.Services.AddSingleton(sp => new InstrumentMarkProvider(
 	sp.GetRequiredService<BybitTickersClient>()));
 builder.Services.AddSingleton<IInstrumentMarkSource>(sp => sp.GetRequiredService<InstrumentMarkProvider>());
 
+// Оценка нереализованного PnL открытых остатков: свежие марки берутся у провайдера
+// тем же запросом, что и марка позиции, а недоступность тикеров деградирует только
+// в null нереализованной части с отметкой времени марок — реализованные метрики
+// читаются как есть.
+builder.Services.AddSingleton<IFreshInstrumentMarkSource>(sp => sp.GetRequiredService<InstrumentMarkProvider>());
+builder.Services.AddSingleton<UnrealizedPnlMarkEvaluator>();
+
 // Read-модель позиций — производный запрос остатков без мутирующего API; источник
 // последних марок подставляет цену ручным пометкам, заданным без цены пользователя.
 builder.Services.AddSingleton(sp => new PositionReadModel(
