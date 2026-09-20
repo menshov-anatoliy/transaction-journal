@@ -5,6 +5,13 @@ namespace TransactionJournal.Sync;
 /// <summary>Итог прохода окна истории исполнения.</summary>
 public sealed class ExecutionWindowPassResult
 {
+	/// <summary>
+	/// Все записи окна в порядке выдачи биржи, включая известные журналу. Движок
+	/// синхронизации отличает по ним пустое окно (биржа исчерпала данные) и находит
+	/// самую раннюю запись для границы backfill.
+	/// </summary>
+	public required IReadOnlyList<BybitExecution> AllExecutions { get; init; }
+
 	/// <summary>Новые (неизвестные журналу) записи окна в порядке выдачи биржи: новые раньше старых.</summary>
 	public required IReadOnlyList<BybitExecution> NewExecutions { get; init; }
 

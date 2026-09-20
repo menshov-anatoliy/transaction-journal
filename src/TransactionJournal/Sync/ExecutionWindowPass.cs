@@ -55,6 +55,7 @@ public sealed class ExecutionWindowPass
 		}
 
 		var newExecutions = new List<BybitExecution>();
+		var allExecutions = new List<BybitExecution>();
 		var pagesFetched = 0;
 		var earlyStopped = false;
 		string? cursor = null;
@@ -78,6 +79,10 @@ public sealed class ExecutionWindowPass
 
 			if (page.List.Count > 0)
 			{
+				// Все записи окна запоминаются целиком: движок синхронизации отличает пустое
+				// окно от окна только с известными записями и ищет самую раннюю запись для границы backfill.
+				allExecutions.AddRange(page.List);
+
 				// Известность записей спрашиваем у хранилища пачкой — по одной странице за раз.
 				var pageExecIds = page.List.Select(execution => execution.ExecId).ToArray();
 				var knownExecIds = await _knownIdProbe.FindKnownAsync(pageExecIds, cancellationToken).ConfigureAwait(false);
@@ -106,6 +111,7 @@ public sealed class ExecutionWindowPass
 
 		return new ExecutionWindowPassResult
 		{
+			AllExecutions = allExecutions,
 			NewExecutions = newExecutions,
 			PagesFetched = pagesFetched,
 			EarlyStopped = earlyStopped,
