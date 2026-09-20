@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ПРОТОТИП — пять экранов MVP (журнал сделок Bybit)</title>
+<!--
+  План прототипа: три структурно разных варианта всех пяти экранов MVP
+  (список конструкций, детали, «Входящие», корректировка PnL, настройки),
+  переключение через #variant=A|B|C + плавающая нижняя панель и клавиши ←/→.
+
+  ВЫБРОСНОЙ ПРОТОТИП: одиночный HTML-файл, двойной клик — и работает.
+  Не продакшн, без тестов и обработки ошибок. Ответ, который он ищет:
+  «как должны выглядеть пять экранов, чтобы пользователь отреагировал
+  до написания спеки UI» (тикет #6 карты wayfinder).
+
+  Адаптация: скилл prototype предлагает ?variant= в URL, но прототип
+  открывается как file:// — надёжнее hash (#variant=B), поведение то же:
+  шарится ссылкой и переживает перезагрузку.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: "Segoe UI", system-ui, sans-serif; background: #f3f4f6; }
+  #app { min-height: 100%; padding-bottom: 96px; }
+  button { font: inherit; cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; }
+
+  /* ===== Плавающий переключатель (общий, не часть дизайна) ===== */
+  #switcher {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 10px; z-index: 999;
+    background: #d6008f; color: #fff; border-radius: 999px;
+    padding: 8px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35);
+    font-size: 13px; font-weight: 600; user-select: none;
+  }
+  #switcher button {
+    background: rgba(255,255,255,.18); color: #fff; border: 0;
+    width: 30px; height: 30px; border-radius: 50%; font-size: 15px; line-height: 1;
+  }
+  #switcher button:hover { background: rgba(255,255,255,.35); }
+  #switcher .hint { opacity: .75; font-weight: 400; font-size: 11px; }
+
+  /* Штамп выбросного прототипа */
+  #stamp {
+    position: fixed; top: 10px; right: -34px; transform: rotate(35deg);
+    background: #b91c1c; color: #fff; font-size: 10px; letter-spacing: 2px;
+    padding: 4px 44px; z-index: 998; opacity: .82; pointer-events: none;
+  }
+
+  .pos { color: #16a34a; } .neg { color: #dc2626; }
+
+  /* ============================================================
+     ВАРИАНТ A — «Терминал»: тёмный, плотный, верхняя навигация,
+     таблицы с моноширинными цифрами. Данные важнее украшений.
+     ============================================================ */
+  .va { background: #0d1117; color: #c9d1d9; min-height: 100vh; font-size: 13px; }
+  .va .topbar {
+    display: flex; align-items: center; gap: 18px;
+    background: #161b22; border-bottom: 1px solid #30363d; padding: 0 16px;
+    height: 42px;
+  }
+  .va .topbar .brand { font-weight: 700; color: #f0f6fc; letter-spacing: .5px; }
+  .va .topbar .total { margin-left: auto; font-family: ui-monospace, Consolas, monospace; }
+  .va .tabs { display: flex; gap: 2px; background: #161b22; border-bottom: 1px solid #30363d; padding: 0 12px; }
+  .va .tabs button {
+    background: transparent; color: #8b949e; border: 0; border-bottom: 2px solid transparent;
+    padding: 9px 14px; font-size: 13px;
+  }
+  .va .tabs button.active { color: #f0f6fc; border-bottom-color: #f78166; }
+  .va .tabs button .badge {
+    background: #d6008f; color: #fff; border-radius: 8px; padding: 0 6px;
+    font-size: 10px; margin-left: 5px;
+  }
+  .va main { padding: 14px 16px; max-width: 1280px; margin: 0 auto; }
+  .va .toolbar { display: flex; gap: 8px; align-items: center; margin: 0 0 10px; }
+  .va .toolbar .title { font-size: 15px; font-weight: 700; color: #f0f6fc; margin-right: auto; }
+  .va .btn {
+    background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+    border-radius: 4px; padding: 5px 12px; font-size: 12px;
+  }
+  .va .btn:hover { background: #30363d; }
+  .va .btn.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .va .btn.primary:hover { background: #388bfd; }
+  .va .btn:disabled { opacity: .45; cursor: default; }
+  .va table { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .va th {
+    text-align: left; color: #8b949e; font-weight: 600; font-family: "Segoe UI", sans-serif;
+    border-bottom: 1px solid #30363d; padding: 6px 10px; white-space: nowrap;
+  }
+  .va td { border-bottom: 1px solid #21262d; padding: 5px 10px; white-space: nowrap; }
+  .va tr:hover td { background: #161b22; }
+  .va tr.clickable { cursor: pointer; }
+  .va .status { font-family: "Segoe UI", sans-serif; }
+  .va .status.open { color: #3fb950; } .va .status.closed { color: #8b949e; } .va .status.arch { color: #d29922; }
+  /* Маркер статуса: цветная точка на вкладке конструкции + бейдж в шапке деталей */
+  .va .st-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+  .va .st-dot.open { background: #3fb950; box-shadow: 0 0 6px rgba(63,185,80,.6); }
+  .va .st-dot.closed { background: #8b949e; }
+  .va .st-dot.arch { background: #d29922; box-shadow: 0 0 6px rgba(210,153,34,.5); }
+  .va .st-badge {
+    display: inline-flex; align-items: center; gap: 6px; font-family: "Segoe UI", sans-serif;
+    font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 10px;
+    border: 1px solid; margin-left: 10px; vertical-align: middle;
+  }
+  .va .st-badge.open { color: #3fb950; border-color: rgba(63,185,80,.45); background: rgba(63,185,80,.12); }
+  .va .st-badge.closed { color: #8b949e; border-color: rgba(139,148,158,.45); background: rgba(139,148,158,.12); }
+  .va .st-badge.arch { color: #d29922; border-color: rgba(210,153,34,.45); background: rgba(210,153,34,.12); }
+  .va .kstrip { display: flex; gap: 24px; margin-bottom: 12px; font-size: 12px; color: #8b949e; }
+  .va .kstrip b { color: #f0f6fc; font-family: ui-monospace, Consolas, monospace; font-size: 14px; display: block; }
+  .va .section { margin: 18px 0 6px; font-size: 13px; font-weight: 700; color: #f0f6fc; }
+  .va .section small { color: #8b949e; font-weight: 400; margin-left: 8px; }
+  .va .note {
+    background: #161b22; border-left: 3px solid #1f6feb; padding: 6px 10px;
+    margin: 6px 0; font-size: 12px; color: #8b949e;
+  }
+  .va .form-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 10px 16px; max-width: 720px; }
+  .va label { display: block; font-size: 11px; color: #8b949e; margin-bottom: 3px; }
+  .va input, .va select, .va textarea {
+    background: #0d1117; border: 1px solid #30363d; color: #c9d1d9;
+    border-radius: 4px; padding: 6px 8px; font: inherit; width: 100%;
+  }
+  .va .mono-log { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #8b949e; }
+  .va .warn { color: #d29922; }
+  .va .checkbox { accent-color: #1f6feb; }
+
+  /* ============================================================
+     ВАРИАНТ B — «Дашборд»: светлый, левый сайдбар, карточки
+     со скруглениями, крупные итоговые числа, спокойные акценты.
+     ============================================================ */
+  .vb { background: #f3f4f6; color: #111827; min-height: 100vh; display: flex; }
+  .vb .sidebar {
+    width: 248px; background: #ffffff; border-right: 1px solid #e5e7eb;
+    padding: 20px 14px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px;
+  }
+  .vb .sidebar .brand { font-size: 16px; font-weight: 800; padding: 0 10px 16px; }
+  .vb .sidebar .brand small { display: block; font-size: 11px; font-weight: 400; color: #6b7280; margin-top: 2px; }
+  .vb .sidebar button {
+    display: flex; justify-content: space-between; align-items: center;
+    background: transparent; border: 0; text-align: left; padding: 10px 12px;
+    border-radius: 10px; color: #374151; font-size: 14px;
+  }
+  .vb .sidebar button:hover { background: #f3f4f6; }
+  .vb .sidebar button.active { background: #111827; color: #fff; }
+  .vb .sidebar .badge {
+    background: #d6008f; color: #fff; border-radius: 999px; font-size: 11px;
+    min-width: 20px; text-align: center; padding: 1px 6px;
+  }
+  .vb .sidebar .sum { margin-top: auto; padding: 12px; background: #f9fafb; border-radius: 12px; font-size: 12px; color: #6b7280; }
+  .vb .sidebar .sum b { display: block; font-size: 18px; color: #111827; }
+  .vb .content { flex: 1; padding: 28px 32px; max-width: 1100px; }
+  .vb h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+  .vb .sub { color: #6b7280; font-size: 13px; margin-bottom: 22px; }
+  .vb .card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
+    padding: 18px 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+  .vb .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .vb .kpi .label { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
+  .vb .kpi .value { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .vb .cards-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .vb .const-card { cursor: pointer; transition: transform .08s; }
+  .vb .const-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,.08); }
+  .vb .const-card .name { font-size: 15px; font-weight: 700; margin-bottom: 10px; display: flex; justify-content: space-between; gap: 8px; align-items: center;}
+  .vb .chip { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .vb .chip.open { background: #dcfce7; color: #166534; }
+  .vb .chip.closed { background: #f3f4f6; color: #6b7280; }
+  .vb .chip.arch { background: #fef3c7; color: #92400e; }
+  .vb .big-pnl { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .vb .muted { color: #6b7280; font-size: 12px; }
+  .vb .bar { height: 8px; border-radius: 4px; background: #f3f4f6; overflow: hidden; display: flex; margin: 12px 0 6px; }
+  .vb .bar i { display: block; height: 100%; }
+  .vb .hero { display: flex; gap: 30px; align-items: center; margin-bottom: 20px; }
+  .vb .hero .big { font-size: 40px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .vb .hero dl { display: grid; grid-template-columns: auto auto; gap: 4px 18px; font-size: 13px; color: #6b7280; }
+  .vb .hero dt::after { content: ":"; }
+  .vb .hero dd { color: #111827; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .vb .pill-tabs { display: flex; gap: 6px; margin: 18px 0; flex-wrap: wrap; }
+  .vb .pill-tabs button {
+    border: 1px solid #e5e7eb; background: #fff; border-radius: 999px;
+    padding: 6px 16px; font-size: 13px; color: #374151;
+  }
+  .vb .pill-tabs button.active { background: #111827; color: #fff; border-color: #111827; }
+  .vb table { font-size: 13px; }
+  .vb th { text-align: left; color: #6b7280; font-weight: 600; font-size: 12px; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; }
+  .vb td { padding: 8px 10px; border-bottom: 1px solid #f3f4f6; font-variant-numeric: tabular-nums; }
+  .vb .day-group { font-size: 12px; font-weight: 700; color: #6b7280; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .5px; }
+  .vb .inbox-layout { display: grid; grid-template-columns: 1fr 280px; gap: 18px; align-items: start; }
+  .vb .trade-card { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; }
+  .vb .trade-card.sel { outline: 2px solid #d6008f; }
+  .vb .stack { display: flex; flex-direction: column; gap: 8px; }
+  .vb .bind-panel button {
+    display: block; width: 100%; margin-bottom: 8px; border: 1px solid #e5e7eb;
+    background: #fff; border-radius: 10px; padding: 10px; font-size: 13px; text-align: left;
+  }
+  .vb .bind-panel button:hover { border-color: #111827; }
+  .vb .dialog { max-width: 560px; margin: 0 auto; }
+  .vb .field { margin-bottom: 14px; }
+  .vb .field label { display: block; font-size: 12px; color: #6b7280; margin-bottom: 5px; font-weight: 600; }
+  .vb input, .vb select, .vb textarea {
+    width: 100%; border: 1px solid #d1d5db; border-radius: 10px;
+    padding: 10px 12px; font: inherit; background: #fff;
+  }
+  .vb .btn {
+    border: 1px solid #111827; background: #111827; color: #fff;
+    border-radius: 10px; padding: 10px 20px; font-size: 14px;
+  }
+  .vb .btn.ghost { background: #fff; color: #111827; }
+
+  /* ============================================================
+     ВАРИАНТ C — «Мастер»: светлый минимализм, вертикальный рельс
+     с пронумерованными экранами, одна колонна фокуса, крупные
+     заголовки, основная кнопка внизу справа, очередь вместо таблиц.
+     ============================================================ */
+  .vc { background: #fafaf9; color: #1c1917; min-height: 100vh; display: flex; }
+  .vc .rail {
+    width: 264px; padding: 36px 18px; border-right: 1px solid #e7e5e4;
+    display: flex; flex-direction: column; gap: 2px; flex-shrink: 0;
+  }
+  .vc .rail .brand { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #a8a29e; padding: 0 12px 24px; }
+  .vc .rail button {
+    display: flex; gap: 14px; align-items: baseline; background: transparent; border: 0;
+    text-align: left; padding: 12px; border-radius: 12px; color: #78716c; font-size: 15px;
+  }
+  .vc .rail button .n { font-size: 12px; font-variant-numeric: tabular-nums; color: #d6d3d1; }
+  .vc .rail button.active { background: #ffffff; color: #1c1917; font-weight: 700; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+  .vc .rail button.active .n { color: #1c1917; }
+  .vc .rail .queue-hint { margin-top: auto; font-size: 12px; color: #a8a29e; padding: 0 12px; line-height: 1.5; }
+  .vc .stage { flex: 1; max-width: 720px; padding: 48px 56px; }
+  .vc h1 { font-size: 30px; font-weight: 800; letter-spacing: -.5px; margin-bottom: 6px; }
+  .vc .lede { color: #78716c; font-size: 15px; margin-bottom: 36px; }
+  .vc .row-item { border-bottom: 1px solid #e7e5e4; padding: 18px 4px; cursor: pointer; display: flex; align-items: center; gap: 18px; }
+  .vc .row-item:hover { background: #fff; }
+  .vc .row-item .pct { margin-left: auto; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .vc .row-item .meta { font-size: 12.5px; color: #a8a29e; margin-top: 3px; }
+  .vc .actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 36px; }
+  .vc .btn {
+    border: 0; background: #1c1917; color: #fff; border-radius: 999px;
+    padding: 13px 30px; font-size: 15px;
+  }
+  .vc .btn.ghost { background: transparent; color: #78716c; border: 1px solid #d6d3d1; }
+  .vc .focus-card {
+    background: #fff; border: 1px solid #e7e5e4; border-radius: 20px;
+    padding: 28px 30px; box-shadow: 0 10px 34px rgba(28,25,23,.07);
+  }
+  .vc .focus-card .exec { font-size: 11px; color: #a8a29e; letter-spacing: 1px; margin-bottom: 10px; }
+  .vc .focus-card .instr { font-size: 24px; font-weight: 800; margin-bottom: 14px; }
+  .vc .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; font-size: 14px; }
+  .vc .kv .k { color: #a8a29e; font-size: 12px; }
+  .vc .kv .v { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .vc .choices { display: flex; flex-direction: column; gap: 10px; margin-top: 26px; }
+  .vc .choice {
+    display: flex; justify-content: space-between; align-items: center;
+    border: 1px solid #e7e5e4; background: #fff; border-radius: 14px;
+    padding: 16px 20px; font-size: 15px;
+  }
+  .vc .choice:hover { border-color: #1c1917; }
+  .vc .progress { display: flex; gap: 6px; margin: 26px 0 0; }
+  .vc .progress i { height: 4px; flex: 1; border-radius: 2px; background: #e7e5e4; }
+  .vc .progress i.done { background: #1c1917; }
+  .vc .step-form .field { margin-bottom: 22px; }
+  .vc .step-form label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .vc .step-form input, .vc .step-form select, .vc .step-form textarea {
+    width: 100%; border: 1px solid #d6d3d1; border-radius: 12px; padding: 13px 14px; font: inherit; background: #fff;
+  }
+  .vc .report-section { margin-bottom: 30px; }
+  .vc .report-section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #a8a29e; margin-bottom: 12px; }
+  .vc table { font-size: 13.5px; }
+  .vc th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #a8a29e; padding: 6px 8px; border-bottom: 1px solid #e7e5e4; }
+  .vc td { padding: 9px 8px; border-bottom: 1px solid #f5f5f4; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="stamp">ВЫБРОСНЫЙ ПРОТОТИП</div>
+<div id="switcher">
+  <button id="prev" title="Предыдущий вариант">&#8592;</button>
+  <span id="vlabel">Вариант A</span>
+  <button id="next" title="Следующий вариант">&#8594;</button>
+  <span class="hint">или клавиши &#8592;/&#8594;</span>
+</div>
+
+<script>
+"use strict";
+
+/* ================= Мок-данные (термины домена из CONTEXT.md) ================= */
+
+const CONSTRUCTIONS = [
+  {
+    id: 1, name: "Контртренд ETH под прикрытием путов", status: "открыта",
+    capital: 3000, realized: 214.32, unrealized: -58.20, adjustments: 87.40,
+    opened: "2026-06-20", closed: null,
+    comment: "Путы взял на два месяца вперёд, роллировать не раньше конца августа.",
+    positions: [
+      { instrument: "ETHUSDT (фьючерс)", net: -3.2, avg: 3128.5, mark: 3152.4, upl: -76.48,
+        comment: "Усреднение только до 3150." },
+      { instrument: "ETH-26SEP26-2800-P", net: 4.0, avg: 61.2, mark: 65.77, upl: 18.28, comment: null },
+    ],
+    trades: [
+      { id: "e-9a41", date: "2026-06-20 09:14", side: "продажа", qty: 1.6, price: 3141.0, fee: 0.50,
+        comment: null },
+      { id: "e-9a42", date: "2026-06-20 09:14", side: "продажа", qty: 1.6, price: 3140.5, fee: 0.50,
+        comment: "Это исполнение робота, не моё." },
+      { id: "e-b203", date: "2026-06-21 15:02", side: "покупка", qty: 2.0, price: 58.90, fee: 0.12, comment: null },
+      { id: "e-c877", date: "2026-06-27 11:40", side: "покупка", qty: 0.5, price: 3162.0, fee: 0.16, comment: null },
+      { id: "e-f120", date: "2026-07-15 10:05", side: "покупка", qty: 2.0, price: 63.50, fee: 0.13, comment: null },
+    ],
+    closings: [],
+    adjustmentsList: [
+      { date: "2026-07-02", label: "PnL робота grid-ETH за июнь", amount: 87.40, source: "робот" },
+    ],
+  },
+  {
+    id: 2, name: "Стреддл BTC на 6 июня", status: "закрыта",
+    capital: 2000, realized: 143.63, unrealized: 0, adjustments: 0,
+    opened: "2026-04-18", closed: "2026-06-06",
+    comment: "Проданный стреддл перед отчётом по инфляции.",
+    positions: [],
+    trades: [
+      { id: "e-31a5", date: "2026-04-18 13:31", side: "продажа", qty: 0.06, price: 1550.0, fee: 0.19, comment: null },
+      { id: "e-31a6", date: "2026-04-18 13:31", side: "продажа", qty: 0.06, price: 1670.0, fee: 0.18, comment: null },
+    ],
+    closings: [
+      { date: "2026-06-06 08:00", kind: "delivery", instrument: "BTC-06JUN26-105000-P",
+        detail: "расчётная цена 104 180, внутренняя стоимость 820 × 0,06", amount: -49.20 },
+      { date: "2026-06-06 08:00", kind: "экспирация OTM", instrument: "BTC-06JUN26-105000-C",
+        detail: "закрыта по нулевой цене в deliveryTime", amount: 0 },
+    ],
+    adjustmentsList: [],
+  },
+  {
+    id: 3, name: "Пропущенный рост — коллы BTC", status: "закрыта",
+    capital: 1500, realized: -313.01, unrealized: 0, adjustments: 0,
+    opened: "2026-07-14", closed: "2026-08-30",
+    comment: "Догоняющая покупка, нарушено правило входа.",
+    positions: [],
+    trades: [
+      { id: "e-77d1", date: "2026-07-14 13:22", side: "покупка", qty: 0.08, price: 3080.0, fee: 0.26, comment: null },
+      { id: "e-77d2", date: "2026-07-14 13:22", side: "покупка", qty: 0.03, price: 2210.0, fee: 0.09, comment: null },
+    ],
+    closings: [
+      { date: "2026-08-30 08:00", kind: "экспирация OTM", instrument: "BTC-29AUG26-120000-C",
+        detail: "закрыта по нулевой цене в deliveryTime", amount: 0 },
+    ],
+    adjustmentsList: [],
+  },
+  {
+    id: 4, name: "Диапазон SOL", status: "открыта",
+    capital: 1000, realized: 0, unrealized: 64.10, adjustments: 0,
+    opened: "2026-09-02", closed: null,
+    comment: "Проданные крылья на спокойном рынке.",
+    positions: [
+      { instrument: "SOL-27MAR26-120-P", net: -80, avg: 1.45, mark: 0.825, upl: 50.00, comment: null },
+      { instrument: "SOL-27MAR26-200-C", net: -40, avg: 1.10, mark: 0.7475, upl: 14.10, comment: null },
+    ],
+    trades: [
+      { id: "e-aa01", date: "2026-09-02 10:18", side: "продажа", qty: 80, price: 1.45, fee: 0.12, comment: null },
+      { id: "e-aa02", date: "2026-09-02 10:19", side: "продажа", qty: 40, price: 1.10, fee: 0.05, comment: null },
+    ],
+    closings: [],
+    adjustmentsList: [],
+  },
+  {
+    id: 5, name: "Песочница робота grid-ETH", status: "архив",
+    capital: 500, realized: 38.15, unrealized: 0, adjustments: 0,
+    opened: "2026-05-06", closed: "2026-05-28",
+    comment: "Обкатка сеточника на маленьком объёме.",
+    positions: [],
+    trades: [
+      { id: "e-5501", date: "2026-05-06 09:00", side: "покупка", qty: 0.4, price: 3010.0, fee: 0.12, comment: null },
+      { id: "e-5599", date: "2026-05-28 17:44", side: "продажа", qty: 0.4, price: 3112.5, fee: 0.13, comment: null },
+    ],
+    closings: [],
+    adjustmentsList: [],
+  },
+];
+
+const INBOX = [
+  { execId: "e-d101", date: "2026-09-19 21:32", instrument: "BTCUSDT (фьючерс)", side: "покупка", qty: 0.012, price: 63180.5, fee: 0.015 },
+  { execId: "e-d102", date: "2026-09-19 21:32", instrument: "BTCUSDT (фьючерс)", side: "покупка", qty: 0.008, price: 63181.0, fee: 0.010 },
+  { execId: "e-c984", date: "2026-09-19 20:47", instrument: "BTC-26DEC26-70000-P", side: "продажа", qty: 0.05, price: 955.0, fee: 0.048 },
+  { execId: "e-c701", date: "2026-09-18 14:03", instrument: "SOLUSDT (фьючерс)", side: "продажа", qty: 40, price: 138.22, fee: 0.011 },
+  { execId: "e-c433", date: "2026-09-17 11:26", instrument: "ETH-26DEC26-4000-C", side: "покупка", qty: 0.5, price: 122.5, fee: 0.061 },
+  { execId: "e-c290", date: "2026-09-16 19:55", instrument: "BTCUSDT (фьючерс)", side: "продажа", qty: 0.010, price: 62405.0, fee: 0.012 },
+];
+
+const ALL_ADJUSTMENTS = [
+  { construction: "Контртренд ETH под прикрытием путов", date: "2026-07-02", label: "PnL робота grid-ETH за июнь", amount: 87.40, source: "робот" },
+  { construction: "Контртренд ETH под прикрытием путов", date: "2026-06-30", label: "Поправка комиссии за перенос", amount: -4.20, source: "ручная" },
+];
+
+const SYNC = {
+  last: "19.09.2026 21:40", mode: "инкремент",
+  result: "+14 сделок, 2 экспирации OTM закрыты автоматически",
+  log: [
+    "2026-09-19 21:40  инкремент   +14 сделок, 2 экспирации  ок",
+    "2026-09-12 22:05  инкремент   +31 сделка, 1 delivery    ок",
+    "2026-09-01 18:12  backfill    вся история, 812 сделок   ок",
+  ],
+  warning: "deliveryRpl Bybit (−87,12) отличается от журнального FIFO (−79,40) по «Стреддл BTC на 6 июня» — расхождение свёрнуто в предупреждение.",
+};
+
+const MARKS_AS_OF = "19.09.2026 22:40";
+
+/* ================= Утилиты ================= */
+
+const state = {
+  variant: "A",
+  screens: { A: "list", B: "list", C: "list" }, // выбранный экран в каждом варианте
+  detailId: 1,
+  selected: new Set(),      // выбранные строки «Входящих»
+  inboxIndex: 0,            // очередь варианта C
+  adjustStep: 1,
+  detailTab: "positions",
+};
+
+function fmt(n, digits = 2) {
+  const s = Math.abs(n).toLocaleString("ru-RU", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return (n < 0 ? "\u2212" : "") + s;
+}
+function signCls(n) { return n > 0 ? "pos" : (n < 0 ? "neg" : ""); }
+function pnl(n, digits = 2) { return `<span class="${signCls(n)}">${n > 0 ? "+" : ""}${fmt(n, digits)}</span>`; }
+function pct(n) { return `<span class="${signCls(n)}">${n > 0 ? "+" : ""}${fmt(n, 1)}%</span>`; }
+function tradeSum(t) { // сумма со знаком: продажа даёт плюс, покупка — минус
+  const v = t.qty * t.price;
+  return t.side === "продажа" ? v : -v;
+}
+function byId(id) { return CONSTRUCTIONS.find(c => c.id === Number(id)); }
+function totalOf(c) { return c.realized + c.unrealized + c.adjustments; }
+function pctOf(c) { return totalOf(c) / c.capital * 100; }
+function daysBetween(a, b) {
+  return Math.round((new Date(b) - new Date(a)) / 86400000);
+}
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+
+const SCREENS = [
+  { key: "list",   label: "Конструкции" },
+  { key: "detail", label: "Конструкция" },
+  { key: "inbox",  label: "Входящие" },
+  { key: "adjust", label: "Корректировка PnL" },
+  { key: "settings", label: "Настройки" },
+];
+
+/* Переключение экрана внутри варианта */
+function go(screen, detailId) {
+  state.screens[state.variant] = screen;
+  if (detailId !== undefined) state.detailId = Number(detailId);
+  render();
+}
+function toggleSel(execId) {
+  if (state.selected.has(execId)) state.selected.delete(execId);
+  else state.selected.add(execId);
+  render();
+}
+function inboxStep(d) {
+  state.inboxIndex = Math.max(0, Math.min(INBOX.length - 1, state.inboxIndex + d));
+  render();
+}
+function setAdjustStep(n) { state.adjustStep = n; render(); }
+function setDetailTab(t) { state.detailTab = t; render(); }
+function toggleAll() {
+  // «Выбрать всё» во «Входящих»: либо все, либо ничего
+  if (state.selected.size === INBOX.length) state.selected.clear();
+  else INBOX.forEach(t => state.selected.add(t.execId));
+  render();
+}
+function fakeSync() {
+  alert("ПРОТОТИП: здесь будет запрос синхронизации —\n7-дневные окна по execution list, экспирации, справочник инструментов.\n(спека add-bybit-sync, требование «ручные режимы»)");
+}
+
+/* ============================================================
+   ВАРИАНТ A — «Терминал»
+   ============================================================ */
+
+function renderA() {
+  const scr = state.screens.A;
+  // Вкладка «Корректировка PnL» убрана: функциональность живёт внутри «Конструкции».
+  // Вкладка конструкции — транзитная: именуется по конструкции, помечена ×
+  // и закрывается при уходе на любой другой экран.
+  const stKey = (st) => st === "открыта" ? "open" : st === "закрыта" ? "closed" : "arch";
+  const detailTab = scr === "detail"
+    ? `<button class="active" onclick="go('detail', state.detailId)" title="Статус: ${esc(byId(state.detailId).status)}">
+         <span class="st-dot ${stKey(byId(state.detailId).status)}"></span>${esc(byId(state.detailId).name)}
+         <span title="Закрыть вкладку" style="margin-left:8px;color:#8b949e"
+               onclick="event.stopPropagation(); go('list')">&#10005;</span>
+       </button>`
+    : "";
+  // Статические вкладки: «Конструкции», «Входящие», «Настройки».
+  // Именованная вкладка конструкции — на фиксированном месте: сразу
+  // после «Конструкций». Появляется только когда конструкция открыта.
+  const nav = [];
+  for (const s of SCREENS.filter(x => !["adjust", "detail"].includes(x.key))) {
+    nav.push(`<button class="${scr === s.key ? "active" : ""}" onclick="go('${s.key}')">${s.label}${s.key === "inbox" ? ` <span class="badge">${INBOX.length}</span>` : ""}</button>`);
+    if (s.key === "list" && scr === "detail") nav.push(detailTab);
+  }
+  const totalJournal = CONSTRUCTIONS.reduce((a, c) => a + totalOf(c), 0);
+  let body = "";
+
+  if (scr === "list") {
+    const rows = CONSTRUCTIONS.map(c => `
+      <tr class="clickable" onclick="go('detail', ${c.id})">
+        <td>${esc(c.name)}</td>
+        <td><span class="status ${c.status === "открыта" ? "open" : c.status === "закрыта" ? "closed" : "arch"}">${c.status}</span></td>
+        <td>${fmt(c.capital)}</td>
+        <td>${pnl(c.realized)}</td>
+        <td>${c.unrealized === 0 ? "—" : pnl(c.unrealized)}</td>
+        <td>${c.adjustments === 0 ? "—" : pnl(c.adjustments)}</td>
+        <td><b>${pnl(totalOf(c))}</b></td>
+        <td>${pct(pctOf(c))}</td>
+        <td>${c.opened}</td>
+        <td>${c.closed ?? "—"}</td>
+      </tr>`).join("");
+    body = `
+      <div class="toolbar"><span class="title">Конструкции</span>
+        <button class="btn" onclick="fakeSync()">Синхронизировать</button>
+        <button class="btn primary" onclick="go('inbox')">Разобрать входящие (${INBOX.length})</button>
+      </div>
+      <div class="kstrip">
+        <div>итог по журналу<b>${pnl(totalJournal)} USDT</b></div>
+        <div>марки на<b>${MARKS_AS_OF}</b></div>
+        <div>конструкций<b>${CONSTRUCTIONS.length} (2 открыты)</b></div>
+      </div>
+      <table>
+        <thead><tr><th>Конструкция</th><th>Статус</th><th>Капитал</th><th>Реализов.</th><th>Нереализов.</th><th>Коррект.</th><th>Итог</th><th>% капитала</th><th>Открыта</th><th>Закрыта</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  if (scr === "detail") {
+    const c = byId(state.detailId);
+    const posRows = c.positions.length ? c.positions.map(p => `
+      <tr><td>${esc(p.instrument)}</td><td>${p.net > 0 ? "+" : ""}${fmt(p.net, 1)}</td>
+      <td>${fmt(p.avg)}</td><td>${fmt(p.mark)}</td><td>${pnl(p.upl)}</td>
+      <td>${p.net === 0 ? "закрыта" : "открыта"}</td><td>${esc(p.comment ?? "")}</td></tr>`).join("")
+      : `<tr><td colspan="7">открытых позиций нет</td></tr>`;
+    const tradeRows = c.trades.map(t => `
+      <tr><td>${t.date}</td><td>${t.id}</td><td>${esc(t.instrument ?? "")}</td>
+      <td>${t.side}</td><td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td>
+      <td>${pnl(tradeSum(t))}</td><td>${fmt(t.fee)}</td><td>${esc(t.comment ?? "")}</td></tr>`).join("");
+    const closingRows = c.closings.map(k => `
+      <tr><td>${k.date}</td><td>${k.kind}</td><td>${esc(k.instrument)}</td>
+      <td colspan="2">${esc(k.detail)}</td><td>${k.amount === 0 ? "0,00" : pnl(k.amount)}</td></tr>`).join("");
+    const adjRows = c.adjustmentsList.length ? c.adjustmentsList.map(a => `
+      <tr><td>${a.date}</td><td>${esc(a.label)}</td><td>${a.source}</td><td>${pnl(a.amount)}</td></tr>`).join("")
+      : `<tr><td colspan="4">нет</td></tr>`;
+    body = `
+      <div class="toolbar">
+        <button class="btn" onclick="go('list')">&#8592; к списку</button>
+        <span class="title">${esc(c.name)}<span class="st-badge ${stKey(c.status)}"><span class="st-dot ${stKey(c.status)}" style="margin-right:0"></span>${c.status}</span></span>
+        <button class="btn">Изменить капитал</button>
+        <button class="btn">${c.status === "архив" ? "Вернуть из архива" : "В архив"}</button>
+      </div>
+      <div class="kstrip">
+        <div>итог<b>${pnl(totalOf(c))} USDT</b></div>
+        <div>% от капитала (${fmt(c.capital, 0)})<b>${pct(pctOf(c))}</b></div>
+        <div>реализов. / нереализов.<b>${pnl(c.realized)} / ${c.unrealized === 0 ? "—" : pnl(c.unrealized)}</b></div>
+        <div>корректировки<b>${c.adjustments === 0 ? "—" : pnl(c.adjustments)}</b></div>
+        <div>период<b>${c.opened} → ${c.closed ?? "сейчас"} (${daysBetween(c.opened, c.closed ?? "2026-09-19")} дн.)</b></div>
+        <div>марки на<b>${MARKS_AS_OF}</b></div>
+      </div>
+      ${c.comment ? `<div class="note">Комментарий: ${esc(c.comment)}</div>` : ""}
+      <div class="section">Позиции <small>чистый остаток по инструменту</small></div>
+      <table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Марка</th><th>Нереализ.</th><th>Статус</th><th>Комментарий</th></tr></thead>
+      <tbody>${posRows}</tbody></table>
+      <div class="section">Сделки <small>без агрегации, execId</small></div>
+      <table><thead><tr><th>Дата</th><th>execId</th><th>Инструмент</th><th>Направл.</th><th>Кол-во</th><th>Цена</th><th>Сумма</th><th>Комиссия</th><th>Комментарий</th></tr></thead>
+      <tbody>${tradeRows}</tbody></table>
+      ${closingRows ? `<div class="section">Закрывающие записи <small>delivery / экспирация OTM</small></div>
+      <table><thead><tr><th>Дата</th><th>Тип</th><th>Инструмент</th><th>Детали</th><th></th><th>Сумма</th></tr></thead><tbody>${closingRows}</tbody></table>` : ""}
+      <div class="section">Внешние корректировки PnL <small>слагаемое результата без сделки — робот или ручная поправка</small></div>
+      <table><thead><tr><th>Дата</th><th>Описание</th><th>Источник</th><th>Сумма</th></tr></thead><tbody>${adjRows}</tbody></table>
+      <div class="form-grid" style="margin-top:12px">
+        <div><label>Дата</label><input type="date" value="2026-09-19"></div>
+        <div><label>Источник</label><select><option>робот</option><option>ручная</option></select></div>
+        <div><label>Сумма, USDT (со знаком)</label><input type="text" value="+87.40"></div>
+        <div><label>Описание</label><input type="text" value="PnL робота grid-ETH за сентябрь"></div>
+      </div>
+      <div class="toolbar" style="margin-top:10px">
+        <button class="btn primary">Добавить корректировку в эту конструкцию</button>
+      </div>`;
+  }
+
+  if (scr === "inbox") {
+    const rows = INBOX.map(t => `
+      <tr><td><input type="checkbox" class="checkbox" ${state.selected.has(t.execId) ? "checked" : ""} onclick="event.stopPropagation(); toggleSel('${t.execId}')"></td>
+      <td>${t.date}</td><td>${t.execId}</td><td>${esc(t.instrument)}</td><td>${t.side}</td>
+      <td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${pnl(tradeSum(t))}</td><td>${fmt(t.fee)}</td></tr>`).join("");
+    body = `
+      <div class="toolbar"><span class="title">Входящие — сделки без конструкции</span>
+        <select style="background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:4px 8px;">
+          <option>привязать выбранные к…</option>
+          ${CONSTRUCTIONS.map(c => `<option>${esc(c.name)}</option>`).join("")}
+        </select>
+        <button class="btn primary" ${state.selected.size ? "" : "disabled"}>Привязать</button>
+        <button class="btn" ${state.selected.size ? "" : "disabled"}>Создать конструкцию из выбранных</button>
+      </div>
+      <table><thead><tr><th><input type="checkbox" class="checkbox" title="Выбрать всё" ${state.selected.size === INBOX.length ? "checked" : ""} onclick="toggleAll()"></th><th>Дата</th><th>execId</th><th>Инструмент</th><th>Направл.</th><th>Кол-во</th><th>Цена</th><th>Сумма</th><th>Комиссия</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <div class="note">Выбрано ${state.selected.size} из ${INBOX.length}. Сделка принадлежит ровно одной конструкции. После привязки производные (позиции, PnL) пересчитываются при чтении.</div>`;
+  }
+
+  if (scr === "adjust") {
+    body = `
+      <div class="toolbar"><span class="title">Внешняя корректировка PnL</span></div>
+      <div class="form-grid">
+        <div><label>Конструкция</label><select>${CONSTRUCTIONS.map(c => `<option>${esc(c.name)}</option>`).join("")}</select></div>
+        <div><label>Дата</label><input type="date" value="2026-09-19"></div>
+        <div><label>Источник</label><select><option>робот</option><option>ручная</option></select></div>
+        <div><label>Сумма, USDT (со знаком)</label><input type="text" value="+87.40"></div>
+        <div style="grid-column: 1 / -1"><label>Описание</label><input type="text" value="PnL робота grid-ETH за сентябрь"></div>
+      </div>
+      <div class="toolbar" style="margin-top:14px">
+        <button class="btn">Отмена</button>
+        <button class="btn primary">Добавить корректировку</button>
+      </div>
+      <div class="section">Существующие корректировки</div>
+      <table><thead><tr><th>Дата</th><th>Конструкция</th><th>Описание</th><th>Источник</th><th>Сумма</th></tr></thead>
+      <tbody>${ALL_ADJUSTMENTS.map(a => `<tr><td>${a.date}</td><td>${esc(a.construction)}</td><td>${esc(a.label)}</td><td>${a.source}</td><td>${pnl(a.amount)}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  if (scr === "settings") {
+    body = `
+      <div class="toolbar"><span class="title">Настройки</span></div>
+      <div class="form-grid">
+        <div><label>API-ключ Bybit (read-only)</label><input type="text" value="abcd······wxyz" readonly></div>
+        <div><label>Аккаунт</label><input type="text" value="Unified (UTA), субаккаунтов нет" readonly></div>
+        <div style="grid-column: 1 / -1"><label>Секрет</label><input type="text" value="переменные окружения Bybit__ApiKey / Bybit__ApiSecret — в журнале не хранится" readonly></div>
+        <div><label>Режим синхронизации</label><select><option>инкремент (7-дневные окна)</option><option>backfill всей истории</option></select></div>
+        <div><label>Валюта учёта</label><input type="text" value="USDT, USDC ≡ USDT 1:1 (ADR-0001)" readonly></div>
+      </div>
+      <div class="toolbar" style="margin-top:14px">
+        <button class="btn primary" onclick="fakeSync()">Синхронизировать сейчас</button>
+        <span style="color:#8b949e">последняя: ${SYNC.last} — ${SYNC.result}</span>
+      </div>
+      <div class="section">Журнал синхронизаций</div>
+      <div class="mono-log">${SYNC.log.map(l => `<div>${l}</div>`).join("")}
+        <div class="warn">предупреждение: ${SYNC.warning}</div></div>
+      <div class="section">Опасная зона</div>
+      <button class="btn">Переразобрать сырые записи заново</button>`;
+  }
+
+  return `<div class="va">
+    <div class="topbar"><span class="brand">ЖУРНАЛ BYBIT</span>
+      <span style="color:#8b949e">экран: ${SCREENS.find(s => s.key === scr).label}</span>
+      <span class="total">итог по журналу: ${pnl(totalJournal)} USDT</span></div>
+    <div class="tabs">${nav.join("")}</div>
+    <main>${body}</main>
+  </div>`;
+}
+
+/* ============================================================
+   ВАРИАНТ B — «Дашборд»
+   ============================================================ */
+
+function renderB() {
+  const scr = state.screens.B;
+  const totalJournal = CONSTRUCTIONS.reduce((a, c) => a + totalOf(c), 0);
+  const realizedSum = CONSTRUCTIONS.reduce((a, c) => a + c.realized, 0);
+  const unrealSum = CONSTRUCTIONS.reduce((a, c) => a + c.unrealized, 0);
+  const adjSum = CONSTRUCTIONS.reduce((a, c) => a + c.adjustments, 0);
+  let body = "";
+
+  if (scr === "list") {
+    const cards = CONSTRUCTIONS.map(c => {
+      const t = totalOf(c), p = pctOf(c);
+      const rShare = Math.abs(c.realized) / Math.max(Math.abs(c.realized) + Math.abs(c.unrealized), 0.0001) * 100;
+      const cls = c.status === "открыта" ? "open" : c.status === "закрыта" ? "closed" : "arch";
+      return `<div class="card const-card" onclick="go('detail', ${c.id})">
+        <div class="name"><span>${esc(c.name)}</span><span class="chip ${cls}">${c.status}</span></div>
+        <div class="big-pnl">${pnl(t)} <span style="font-size:14px">USDT</span></div>
+        <div class="bar"><i style="width:${rShare}%;background:#16a34a"></i><i style="flex:1;background:#f59e0b"></i></div>
+        <div class="muted">реализовано ${pnl(c.realized)} · нереализовано ${c.unrealized === 0 ? "—" : pnl(c.unrealized)}${c.adjustments ? ` · корректировки ${pnl(c.adjustments)}` : ""}</div>
+        <div class="muted" style="margin-top:8px">капитал ${fmt(c.capital, 0)} USDT · ${pct(p)} от капитала · с ${c.opened}</div>
+      </div>`;
+    }).join("");
+    body = `
+      <h1>Мои конструкции</h1>
+      <div class="sub">итог считается из сделок журнала, марки на ${MARKS_AS_OF}</div>
+      <div class="kpi-row">
+        <div class="card kpi"><div class="label">Итог по журналу</div><div class="value">${pnl(totalJournal)} USDT</div></div>
+        <div class="card kpi"><div class="label">Реализовано</div><div class="value">${pnl(realizedSum)} USDT</div></div>
+        <div class="card kpi"><div class="label">Нереализовано</div><div class="value">${pnl(unrealSum)} USDT</div></div>
+        <div class="card kpi"><div class="label">Корректировки</div><div class="value">${pnl(adjSum)} USDT</div></div>
+      </div>
+      <div class="cards-grid">${cards}</div>`;
+  }
+
+  if (scr === "detail") {
+    const c = byId(state.detailId);
+    const tabs = [["positions", "Позиции"], ["trades", "Сделки"], ["closings", "Закрывающие"], ["adjust", "Корректировки"], ["comments", "Комментарии"]];
+    let tabBody = "";
+    if (state.detailTab === "positions") {
+      tabBody = c.positions.length ? `<table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Марка</th><th>Нереализовано</th><th>Статус</th></tr></thead><tbody>
+        ${c.positions.map(p => `<tr><td>${esc(p.instrument)}</td><td>${p.net > 0 ? "+" : ""}${fmt(p.net, 1)}</td><td>${fmt(p.avg)}</td><td>${fmt(p.mark)}</td><td>${pnl(p.upl)}</td><td>${p.net === 0 ? "закрыта" : "открыта"}</td></tr>`).join("")}
+        </tbody></table>` : `<div class="muted">Открытых позиций нет — все остатки обнулены.</div>`;
+    }
+    if (state.detailTab === "trades") {
+      tabBody = `<table><thead><tr><th>Дата</th><th>execId</th><th>Инструмент</th><th>Направление</th><th>Кол-во</th><th>Цена</th><th>Сумма</th><th>Комиссия</th></tr></thead><tbody>
+        ${c.trades.map(t => `<tr><td>${t.date}</td><td>${t.id}</td><td>${esc(t.instrument ?? "")}</td><td>${t.side}</td><td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${pnl(tradeSum(t))}</td><td>${fmt(t.fee)}</td></tr>`).join("")}
+        </tbody></table>`;
+    }
+    if (state.detailTab === "closings") {
+      tabBody = c.closings.length ? `<table><thead><tr><th>Дата</th><th>Тип</th><th>Инструмент</th><th>Детали</th><th>Сумма</th></tr></thead><tbody>
+        ${c.closings.map(k => `<tr><td>${k.date}</td><td>${k.kind}</td><td>${esc(k.instrument)}</td><td>${esc(k.detail)}</td><td>${k.amount === 0 ? "0,00" : pnl(k.amount)}</td></tr>`).join("")}
+        </tbody></table>` : `<div class="muted">Закрывающих записей нет.</div>`;
+    }
+    if (state.detailTab === "adjust") {
+      tabBody = c.adjustmentsList.length ? `<table><thead><tr><th>Дата</th><th>Описание</th><th>Источник</th><th>Сумма</th></tr></thead><tbody>
+        ${c.adjustmentsList.map(a => `<tr><td>${a.date}</td><td>${esc(a.label)}</td><td>${a.source}</td><td>${pnl(a.amount)}</td></tr>`).join("")}
+        </tbody></table>` : `<div class="muted">Корректировок нет.</div>`;
+    }
+    if (state.detailTab === "comments") {
+      tabBody = `
+        <div class="card" style="margin-bottom:10px"><b>Конструкция</b><div class="muted" style="margin-top:6px">${esc(c.comment)}</div></div>
+        ${c.positions.filter(p => p.comment).map(p => `<div class="card" style="margin-bottom:10px"><b>Позиция ${esc(p.instrument)}</b><div class="muted" style="margin-top:6px">${esc(p.comment)}</div></div>`).join("")}
+        ${c.trades.filter(t => t.comment).map(t => `<div class="card" style="margin-bottom:10px"><b>Сделка ${t.id} (${t.date})</b><div class="muted" style="margin-top:6px">${esc(t.comment)}</div></div>`).join("")}`;
+    }
+    body = `
+      <button class="btn ghost" style="margin-bottom:18px" onclick="go('list')">&#8592; Все конструкции</button>
+      <div class="hero">
+        <div><div class="big">${pnl(totalOf(c))}</div><div class="muted">USDT · ${pct(pctOf(c))} от капитала ${fmt(c.capital, 0)}</div></div>
+        <dl>
+          <dt>Статус</dt><dd>${c.status}</dd>
+          <dt>Реализовано</dt><dd>${pnl(c.realized)} USDT</dd>
+          <dt>Нереализовано</dt><dd>${c.unrealized === 0 ? "—" : pnl(c.unrealized) + " USDT"}</dd>
+          <dt>Корректировки</dt><dd>${c.adjustments === 0 ? "—" : pnl(c.adjustments) + " USDT"}</dd>
+          <dt>Период</dt><dd>${c.opened} → ${c.closed ?? "сейчас"}</dd>
+        </dl>
+      </div>
+      <div class="pill-tabs">${tabs.map(([k, l]) => `<button class="${state.detailTab === k ? "active" : ""}" onclick="setDetailTab('${k}')">${l}</button>`).join("")}</div>
+      <div class="card">${tabBody}</div>`;
+  }
+
+  if (scr === "inbox") {
+    const byDay = {};
+    INBOX.forEach(t => { const d = t.date.slice(0, 10); (byDay[d] = byDay[d] || []).push(t); });
+    const groups = Object.entries(byDay).map(([d, ts]) => `
+      <div class="day-group">${d}</div>
+      <div class="stack">${ts.map(t => `
+        <div class="card trade-card ${state.selected.has(t.execId) ? "sel" : ""}" onclick="toggleSel('${t.execId}')">
+          <div><b>${esc(t.instrument)}</b><div class="muted" style="margin-top:3px">${t.date.slice(11)} · ${t.side} · execId ${t.execId}</div></div>
+          <div style="text-align:right"><b>${fmt(t.qty)} × ${fmt(t.price)}</b><div class="muted" style="margin-top:3px">сумма ${pnl(tradeSum(t))} · комиссия ${fmt(t.fee)}</div></div>
+        </div>`).join("")}</div>`).join("");
+    body = `
+      <h1>Входящие</h1>
+      <div class="sub">новые сделки из синхронизации ждут привязки к конструкции</div>
+      <div class="inbox-layout">
+        <div>${groups}</div>
+        <div class="card bind-panel">
+          <b style="font-size:14px">Привязка</b>
+          <div class="muted" style="margin:8px 0 14px">выбрано ${state.selected.size} из ${INBOX.length}</div>
+          ${CONSTRUCTIONS.map(c => `<button><span>${esc(c.name)}</span><span class="muted">${c.status}</span></button>`).join("")}
+          <button><b>+ Создать новую конструкцию</b></button>
+          <div class="muted" style="margin-top:10px">каждая сделка — ровно в одну конструкцию</div>
+        </div>
+      </div>`;
+  }
+
+  if (scr === "adjust") {
+    body = `
+      <h1>Корректировка PnL</h1>
+      <div class="sub">слагаемое результата без сделки — PnL робота или ручная поправка</div>
+      <div class="card dialog">
+        <div class="field"><label>Конструкция</label><select>${CONSTRUCTIONS.map(c => `<option>${esc(c.name)}</option>`).join("")}</select></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="field"><label>Дата</label><input type="date" value="2026-09-19"></div>
+          <div class="field"><label>Сумма, USDT</label><input type="text" value="+87.40"></div>
+        </div>
+        <div class="field"><label>Источник</label><select><option>робот</option><option>ручная</option></select></div>
+        <div class="field"><label>Описание</label><input type="text" value="PnL робота grid-ETH за сентябрь"></div>
+        <button class="btn">Добавить</button>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <table><thead><tr><th>Дата</th><th>Конструкция</th><th>Описание</th><th>Источник</th><th>Сумма</th></tr></thead>
+        <tbody>${ALL_ADJUSTMENTS.map(a => `<tr><td>${a.date}</td><td>${esc(a.construction)}</td><td>${esc(a.label)}</td><td>${a.source}</td><td>${pnl(a.amount)}</td></tr>`).join("")}</tbody></table>
+      </div>`;
+  }
+
+  if (scr === "settings") {
+    body = `
+      <h1>Настройки</h1>
+      <div class="sub">подключение к Bybit и синхронизация</div>
+      <div class="card" style="margin-bottom:14px">
+        <b>Подключение</b>
+        <div class="field" style="margin-top:12px"><label>API-ключ (read-only)</label><input type="text" value="abcd······wxyz" readonly></div>
+        <div class="field"><label>Секрет</label><input type="text" value="переменные окружения Bybit__ApiKey / Bybit__ApiSecret" readonly></div>
+        <div class="muted">Unified-аккаунт (UTA), субаккаунтов нет. Ключ без права торговли.</div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <b>Синхронизация</b>
+        <div style="display:flex;gap:14px;align-items:center;margin:14px 0">
+          <button class="btn" onclick="fakeSync()">Синхронизировать сейчас</button>
+          <div class="muted">последняя: ${SYNC.last} · ${SYNC.result}</div>
+        </div>
+        <table><thead><tr><th>Когда</th><th>Режим</th><th>Результат</th><th>Статус</th></tr></thead>
+        <tbody>${SYNC.log.map(l => { const p = l.split(/\s{2,}/); return `<tr><td>${p[0]}</td><td>${p[1]}</td><td>${p[2]}</td><td>${p[3]}</td></tr>`; }).join("")}</tbody></table>
+        <div class="muted" style="margin-top:10px;color:#b45309">⚠ ${SYNC.warning}</div>
+      </div>
+      <div class="card">
+        <b>Учёт</b>
+        <div class="field" style="margin-top:12px"><label>Валюта</label><input type="text" value="USDT; USDC ≡ USDT 1:1 (ADR-0001)" readonly></div>
+      </div>`;
+  }
+
+  const nav = SCREENS.map(s =>
+    `<button class="${scr === s.key ? "active" : ""}" onclick="go('${s.key}')"><span>${s.label}</span>${s.key === "inbox" ? `<span class="badge">${INBOX.length}</span>` : ""}</button>`
+  ).join("");
+  return `<div class="vb">
+    <div class="sidebar">
+      <div class="brand">Журнал Bybit<small>конструкции · позиции · сделки</small></div>
+      ${nav}
+      <div class="sum">итог по журналу<b>${pnl(totalJournal)} USDT</b></div>
+    </div>
+    <div class="content">${body}</div>
+  </div>`;
+}
+
+/* ============================================================
+   ВАРИАНТ C — «Мастер»
+   ============================================================ */
+
+function renderC() {
+  const scr = state.screens.C;
+  let body = "";
+
+  if (scr === "list") {
+    const rows = CONSTRUCTIONS.map(c => `
+      <div class="row-item" onclick="go('detail', ${c.id})">
+        <div><b style="font-size:16px">${esc(c.name)}</b>
+          <div class="meta">${c.status} · капитал ${fmt(c.capital, 0)} USDT · с ${c.opened}${c.closed ? ` по ${c.closed}` : ""}</div></div>
+        <div class="pct">${pct(pctOf(c))}</div>
+      </div>`).join("");
+    body = `
+      <h1>Конструкции</h1>
+      <div class="lede">Каждая строка — одна торговая цель. Проценты считаются от выделенного капитала.</div>
+      ${rows}
+      <div class="actions"><button class="btn ghost" onclick="fakeSync()">Синхронизировать Bybit</button></div>`;
+  }
+
+  if (scr === "detail") {
+    const c = byId(state.detailId);
+    body = `
+      <button class="btn ghost" style="margin-bottom:20px" onclick="go('list')">&#8592; ко всем конструкциям</button>
+      <h1>${esc(c.name)}</h1>
+      <div class="lede">${c.status} · ${c.opened} → ${c.closed ?? "сейчас"} · ${daysBetween(c.opened, c.closed ?? "2026-09-19")} дней</div>
+      <div class="focus-card" style="margin-bottom:26px">
+        <div class="kv">
+          <div><div class="k">Итог</div><div class="v" style="font-size:26px">${pnl(totalOf(c))} USDT</div></div>
+          <div><div class="k">От капитала ${fmt(c.capital, 0)} USDT</div><div class="v" style="font-size:26px">${pct(pctOf(c))}</div></div>
+          <div><div class="k">Реализовано (FIFO)</div><div class="v">${pnl(c.realized)}</div></div>
+          <div><div class="k">Нереализовано на ${MARKS_AS_OF}</div><div class="v">${c.unrealized === 0 ? "—" : pnl(c.unrealized)}</div></div>
+          <div><div class="k">Корректировки</div><div class="v">${c.adjustments === 0 ? "—" : pnl(c.adjustments)}</div></div>
+          <div><div class="k">Комментарий</div><div class="v" style="font-weight:400;font-size:13px">${esc(c.comment)}</div></div>
+        </div>
+      </div>
+      <div class="report-section"><h2>Позиции</h2>
+        ${c.positions.length ? `<table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Марка</th><th>Нереализ.</th></tr></thead><tbody>
+        ${c.positions.map(p => `<tr><td>${esc(p.instrument)}</td><td>${p.net > 0 ? "+" : ""}${fmt(p.net, 1)}</td><td>${fmt(p.avg)}</td><td>${fmt(p.mark)}</td><td>${pnl(p.upl)}</td></tr>`).join("")}</tbody></table>`
+        : `<div class="lede" style="margin-bottom:0">Открытых позиций нет.</div>`}</div>
+      <div class="report-section"><h2>Сделки</h2>
+        <table><thead><tr><th>Дата</th><th>execId</th><th>Направл.</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead><tbody>
+        ${c.trades.map(t => `<tr><td>${t.date}</td><td>${t.id}</td><td>${t.side}</td><td>${fmt(t.qty)}</td><td>${fmt(t.price)}</td><td>${pnl(tradeSum(t))}</td></tr>`).join("")}</tbody></table></div>
+      ${c.closings.length ? `<div class="report-section"><h2>Закрывающие записи</h2>
+        <table><thead><tr><th>Дата</th><th>Тип</th><th>Инструмент</th><th>Сумма</th></tr></thead><tbody>
+        ${c.closings.map(k => `<tr><td>${k.date}</td><td>${k.kind}</td><td>${esc(k.instrument)}</td><td>${k.amount === 0 ? "0,00" : pnl(k.amount)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${c.adjustmentsList.length ? `<div class="report-section"><h2>Корректировки</h2>
+        <table><thead><tr><th>Дата</th><th>Описание</th><th>Сумма</th></tr></thead><tbody>
+        ${c.adjustmentsList.map(a => `<tr><td>${a.date}</td><td>${esc(a.label)}</td><td>${pnl(a.amount)}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
+  }
+
+  if (scr === "inbox") {
+    const t = INBOX[state.inboxIndex];
+    body = `
+      <h1>Входящие</h1>
+      <div class="lede">Сделка ${state.inboxIndex + 1} из ${INBOX.length}. Решите, в какую конструкцию она попадает — следующая появится сама.</div>
+      <div class="focus-card">
+        <div class="exec">execId ${t.execId} · ${t.date}</div>
+        <div class="instr">${esc(t.instrument)}</div>
+        <div class="kv">
+          <div><div class="k">Направление</div><div class="v">${t.side}</div></div>
+          <div><div class="k">Количество</div><div class="v">${fmt(t.qty)}</div></div>
+          <div><div class="k">Цена</div><div class="v">${fmt(t.price)}</div></div>
+          <div><div class="k">Комиссия</div><div class="v">${fmt(t.fee)}</div></div>
+        </div>
+        <div class="choices">
+          <button class="choice" onclick="inboxStep(1)"><span>В конструкцию «Контртренд ETH под прикрытием путов»</span><span style="color:#a8a29e">открыта</span></button>
+          <button class="choice" onclick="inboxStep(1)"><span>В конструкцию «Диапазон SOL»</span><span style="color:#a8a29e">открыта</span></button>
+          <button class="choice" onclick="inboxStep(1)"><span>Создать новую конструкцию из этой сделки</span><span style="color:#a8a29e">→</span></button>
+        </div>
+      </div>
+      <div class="progress">${INBOX.map((_, i) => `<i class="${i <= state.inboxIndex ? "done" : ""}"></i>`).join("")}</div>
+      <div class="actions">
+        <button class="btn ghost" ${state.inboxIndex === 0 ? "disabled" : ""} onclick="inboxStep(-1)">Назад</button>
+        <button class="btn ghost" onclick="inboxStep(1)">Пропустить</button>
+      </div>`;
+  }
+
+  if (scr === "adjust") {
+    const steps = ["Конструкция и сумма", "Источник и описание", "Проверка"];
+    const stepBody = state.adjustStep === 1 ? `
+        <div class="field"><label>Конструкция</label><select>${CONSTRUCTIONS.map(c => `<option>${esc(c.name)}</option>`).join("")}</select></div>
+        <div class="field"><label>Дата</label><input type="date" value="2026-09-19"></div>
+        <div class="field"><label>Сумма, USDT (со знаком)</label><input type="text" value="+87.40"></div>`
+      : state.adjustStep === 2 ? `
+        <div class="field"><label>Источник</label><select><option>робот</option><option>ручная</option></select></div>
+        <div class="field"><label>Описание</label><textarea rows="3">PnL робота grid-ETH за сентябрь</textarea></div>`
+      : `
+        <div class="kv">
+          <div><div class="k">Конструкция</div><div class="v">Контртренд ETH под прикрытием путов</div></div>
+          <div><div class="k">Сумма</div><div class="v">+87,40 USDT</div></div>
+          <div><div class="k">Источник</div><div class="v">робот</div></div>
+          <div><div class="k">Описание</div><div class="v" style="font-weight:400">PnL робота grid-ETH за сентябрь</div></div>
+        </div>`;
+    body = `
+      <h1>Корректировка PnL</h1>
+      <div class="lede">Шаг ${state.adjustStep} из 3 — ${steps[state.adjustStep - 1]}. Результат конструкции изменится сразу после добавления.</div>
+      <div class="focus-card step-form">${stepBody}</div>
+      <div class="actions">
+        ${state.adjustStep > 1 ? `<button class="btn ghost" onclick="setAdjustStep(${state.adjustStep - 1})">Назад</button>` : ""}
+        ${state.adjustStep < 3 ? `<button class="btn" onclick="setAdjustStep(${state.adjustStep + 1})">Далее</button>`
+          : `<button class="btn" onclick="setAdjustStep(1)">Добавить корректировку</button>`}
+      </div>`;
+  }
+
+  if (scr === "settings") {
+    body = `
+      <h1>Настройки</h1>
+      <div class="lede">Подключение к Bybit, синхронизация истории и правила учёта.</div>
+      <div class="report-section"><h2>Подключение</h2>
+        <div class="focus-card">
+          <div class="kv">
+            <div><div class="k">API-ключ (read-only)</div><div class="v">abcd······wxyz</div></div>
+            <div><div class="k">Аккаунт</div><div class="v">Unified (UTA)</div></div>
+            <div style="grid-column:1/-1"><div class="k">Секрет</div><div class="v" style="font-weight:400;font-size:13px">в переменных окружения Bybit__ApiKey / Bybit__ApiSecret — внутри журнала не хранится</div></div>
+          </div>
+        </div></div>
+      <div class="report-section"><h2>Синхронизация</h2>
+        <div class="focus-card">
+          <div class="kv">
+            <div><div class="k">Последняя</div><div class="v">${SYNC.last}</div></div>
+            <div><div class="k">Режим</div><div class="v">${SYNC.mode}</div></div>
+            <div style="grid-column:1/-1"><div class="k">Результат</div><div class="v" style="font-weight:400;font-size:13px">${SYNC.result}</div></div>
+          </div>
+          <div class="actions" style="margin-top:22px"><button class="btn" onclick="fakeSync()">Синхронизировать сейчас</button></div>
+          <div class="kv" style="margin-top:18px"><div style="grid-column:1/-1"><div class="k">Предупреждение сверки</div><div class="v" style="font-weight:400;font-size:13px;color:#b45309">${SYNC.warning}</div></div></div>
+        </div></div>
+      <div class="report-section"><h2>Учёт</h2>
+        <div class="focus-card"><div class="kv">
+          <div><div class="k">Валюта</div><div class="v">USDT</div></div>
+          <div><div class="k">USDC</div><div class="v" style="font-weight:400;font-size:13px">≡ USDT 1:1 (ADR-0001)</div></div>
+        </div></div></div>`;
+  }
+
+  const nav = SCREENS.map((s, i) =>
+    `<button class="${scr === s.key ? "active" : ""}" onclick="go('${s.key}')"><span class="n">0${i + 1}</span><span>${s.label}${s.key === "inbox" ? ` · ${INBOX.length}` : ""}</span></button>`
+  ).join("");
+  return `<div class="vc">
+    <div class="rail">
+      <div class="brand">Журнал Bybit</div>
+      ${nav}
+      <div class="queue-hint">Проходите экраны сверху вниз:<br>разобрали входящие — загляните в результат.</div>
+    </div>
+    <div class="stage">${body}</div>
+  </div>`;
+}
+
+/* ================= Переключатель и корневой рендер ================= */
+
+const VARIANTS = [
+  { key: "A", name: "Терминал", render: renderA },
+  { key: "B", name: "Дашборд", render: renderB },
+  { key: "C", name: "Мастер", render: renderC },
+];
+
+function variantFromHash() {
+  const m = location.hash.match(/variant=([ABC])/);
+  return m ? m[1] : "A";
+}
+
+function render() {
+  const v = VARIANTS.find(v => v.key === state.variant);
+  document.getElementById("app").innerHTML = v.render();
+  document.getElementById("vlabel").textContent = `Вариант ${state.variant} — ${v.name}`;
+}
+
+function setVariant(key) {
+  state.variant = key;
+  location.hash = `variant=${key}`;
+  render();
+}
+
+document.getElementById("prev").onclick = () => {
+  const i = VARIANTS.findIndex(v => v.key === state.variant);
+  setVariant(VARIANTS[(i - 1 + VARIANTS.length) % VARIANTS.length].key);
+};
+document.getElementById("next").onclick = () => {
+  const i = VARIANTS.findIndex(v => v.key === state.variant);
+  setVariant(VARIANTS[(i + 1) % VARIANTS.length].key);
+};
+document.addEventListener("keydown", (e) => {
+  if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (e.key === "ArrowLeft") document.getElementById("prev").click();
+  if (e.key === "ArrowRight") document.getElementById("next").click();
+});
+window.addEventListener("hashchange", () => {
+  const h = variantFromHash();
+  if (h !== state.variant) { state.variant = h; render(); }
+});
+
+state.variant = variantFromHash();
+render();
+</script>
+</body>
+</html>
