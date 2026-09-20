@@ -23,9 +23,36 @@
 
 ## 5. Корректировки и комментарии
 
-- [ ] 5.1 Реализовать use-cases внешних корректировок PnL: добавить, править, удалить; проверить сценарии «корректировка робота входит в результат» и «правка и удаление свободны» (суммирование — через тестовую заглушку, сам расчёт — capability аналитики)
-- [ ] 5.2 Реализовать комментарии сделок, позиций и конструкций; проверить сценарии «комментарий позиции переживает пересчёт» и «комментарии не влияют на результат»
+- [x] 5.1 Реализовать use-cases внешних корректировок PnL: добавить, править, удалить; проверить сценарии «корректировка робота входит в результат» и «правка и удаление свободны» (суммирование — через тестовую заглушку, сам расчёт — capability аналитики)
+- [x] 5.2 Реализовать комментарии сделок, позиций и конструкций; проверить сценарии «комментарий позиции переживает пересчёт» и «комментарии не влияют на результат»
 
 ## 6. Приёмка
 
-- [ ] 6.1 Прогнать приёмочный чек-лист по всем сценариям `specs/domain/constructions/spec.md` и зафиксировать результат; считать change готовым к архивации при полном прохождении
+- [x] 6.1 Прогнать приёмочный чек-лист по всем сценариям `specs/domain/constructions/spec.md` и зафиксировать результат; считать change готовым к архивации при полном прохождении
+
+### Результат приёмочного чек-листа (полный прогон 319/319, 2026-09-20)
+
+| Сценарий | Проверка |
+|---|---|
+| scenario-new-construction-default-open | `ConstructionServiceTests.TryIfNewConstructionStartsOpenAndAppearsInActiveList` |
+| scenario-rename-preserves-everything | `ConstructionServiceTests.TryIfRenamePreservesBindingsCapitalStatusAndComment` |
+| scenario-archived-hidden-but-analyzed | `ConstructionServiceTests.TryIfArchivedConstructionHiddenFromActiveListButVisibleInAnalytics` |
+| scenario-delete-only-when-empty | `ConstructionServiceTests` (отказы со сделками/корректировками, удаление пустой), `DomainStorageTests` |
+| scenario-capital-change-affects-percent-only | `ConstructionServiceTests.TryIfCapitalChangeAffectsPercentOnly` — на приёмке закрыт пробел: добавлен `ConstructionService.UpdateAllocatedCapitalAsync` (требование «капитал правится пользователем» не был покрыт задачами 2.x) |
+| scenario-binding-removes-from-inbox | `TradeBindingServiceTests`, `InboxReadModelTests` |
+| scenario-rebind-recomputes-both | `TradeBindingServiceTests.TryIfTransferMovesTradeBetweenConstructionsWithoutTrace` |
+| scenario-return-to-inbox | `TradeBindingServiceTests.TryIfUnbindReturnsTradeToInboxAndKeepsComment`, `InboxReadModelTests` |
+| scenario-batch-binding | `TradeBindingServiceTests.TryIfBatchBindingPutsEveryTradeIntoSingleConstruction` |
+| scenario-residual-computed-from-trades | `PositionReadModelTests.TryIfResidualComputedFromTradesAtRead` |
+| scenario-position-not-directly-editable | `PositionReadModelTests.TryIfPositionExposesNoMutatingApi` |
+| scenario-close-by-offsetting-trades | `PositionReadModelTests.TryIfOffsettingTradesClosePosition` |
+| scenario-manual-mark-delistings | `PositionReadModelTests.TryIfManualMarkClosesPositionWithoutExchangeRecords` |
+| scenario-manual-mark-default-last-mark | `PositionReadModelTests.TryIfManualMarkTakesLastMarkPriceByDefault` |
+| scenario-mark-removal-reopens | `PositionReadModelTests` (удаление пометки возвращает позицию в открытую) |
+| scenario-robot-adjustment-in-result | `PnLAdjustmentServiceTests.TryIfRobotAdjustmentEntersConstructionResult` |
+| scenario-adjustment-attributes-stored | `PnLAdjustmentServiceTests.TryIfAdjustmentAttributesStoredAndReturnedWhole` |
+| scenario-adjustment-edit-delete-free | `PnLAdjustmentServiceTests.TryIfAdjustmentEditAndDeleteAreFree` |
+| scenario-position-comment-survives-recompute | `CommentServiceTests.TryIfPositionCommentSurvivesRecompute` |
+| scenario-comments-inert | `CommentServiceTests.TryIfCommentsDoNotAffectResult` |
+
+Все сценария пройдены, избыточная закрывающая запись покрыта задачей 4.3 (`PositionReadModelTests`, предупреждения). Change готов к архивации.

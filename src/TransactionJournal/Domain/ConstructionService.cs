@@ -94,6 +94,35 @@ public sealed class ConstructionService
 
 	#endregion
 
+	#region Выделенный капитал
+
+	/// <summary>
+	/// Меняет выделенный капитал конструкции в USDT. Капитал хранится как текущее
+	/// значение без истории изменений и служит базой процентов результата:
+	/// изменение меняет только процентные величины, абсолютные результаты и позиции
+	/// не затрагиваются.
+	/// </summary>
+	/// <param name="constructionId">Идентификатор конструкции.</param>
+	/// <param name="allocatedCapitalUsdt">Новое значение выделенного капитала в USDT.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	/// <exception cref="ConstructionNotFoundException">Конструкция не найдена.</exception>
+	public async Task UpdateAllocatedCapitalAsync(
+		long constructionId,
+		decimal allocatedCapitalUsdt,
+		CancellationToken cancellationToken = default)
+	{
+		// Капитал — текущее значение без истории: правка заменяет число, а проценты
+		// результата пересчитываются от нового значения ближайшим чтением аналитики;
+		// абсолютные величины и позиции от капитала не зависят.
+		// Traceability: openspec:domain/constructions#requirement-allocated-capital
+		using var db = CreateContext();
+		var construction = await FindConstructionAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
+		construction.AllocatedCapitalUsdt = allocatedCapitalUsdt;
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	#endregion
+
 	#region Статус и архивация
 
 	/// <summary>

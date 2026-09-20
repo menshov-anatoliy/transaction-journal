@@ -161,6 +161,43 @@ public class ConstructionServiceTests
 	}
 
 	[TestMethod]
+	[Description("Изменение капитала меняет проценты, но не абсолютный результат")]
+	public async Task TryIfCapitalChangeAffectsPercentOnly()
+	{
+		// Arrange: конструкция с капиталом 1000 и открытой позицией по сделке;
+		// абсолютный результат взят заглушкой — сам расчёт принадлежит аналитике.
+		var construction = await _service.CreateAsync("Проценты от капитала", 1000m);
+		await SeedLinearTradeAsync("exec-capital-1");
+		var bindingService = new TradeBindingService(CreateOptions());
+		await bindingService.BindAsync(construction.Id, "exec-capital-1");
+		var readModel = new PositionReadModel(CreateOptions());
+		var before = (await readModel.ListAsync(construction.Id)).Positions.Single();
+		const decimal stubAbsoluteResult = 30m;
+
+		// Act: меняем выделенный капитал конструкции.
+		await _service.UpdateAllocatedCapitalAsync(construction.Id, 1500m);
+
+		// Assert: абсолютные величины не изменились — позиция и результат остались
+		// прежними; процентные величины пересчитались от нового значения капитала:
+		// 30 / 1000 = 3% до правки, 30 / 1500 = 2% после.
+		// Требование: изменение капитала меняет только процентные величины.
+		// Traceability: openspec:domain/constructions#scenario-capital-change-affects-percent-only
+		var after = (await readModel.ListAsync(construction.Id)).Positions.Single();
+		Assert.That(after.Symbol, Is.EqualTo(before.Symbol));
+		Assert.That(after.Residual, Is.EqualTo(before.Residual));
+		Assert.That(after.IsOpen, Is.EqualTo(before.IsOpen));
+		Assert.That(stubAbsoluteResult, Is.EqualTo(30m));
+		Assert.That(ComputePercentStub(stubAbsoluteResult, 1000m), Is.EqualTo(3m));
+		Assert.That(ComputePercentStub(stubAbsoluteResult, 1500m), Is.EqualTo(2m));
+
+		// Assert: новое значение капитала сохранено как текущее — без истории изменений.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.Constructions.Single().AllocatedCapitalUsdt, Is.EqualTo(1500m));
+		}
+	}
+
+	[TestMethod]
 	[Description("Удаление пустой конструкции проходит, осиротевшие записи уходят каскадом")]
 	public async Task TryIfDeleteEmptyConstructionSucceeds()
 	{
@@ -277,6 +314,15 @@ public class ConstructionServiceTests
 	}
 
 	[TestMethod]
+	[Description("Изменение капитала несуществующей конструкции отклоняется")]
+	[ExpectedException(typeof(ConstructionNotFoundException))]
+	public async Task ThrowOnUpdateCapitalUnknownConstruction()
+	{
+		// Act: меняем капитал конструкции, которой нет в журнале.
+		await _service.UpdateAllocatedCapitalAsync(12345, 500m);
+	}
+
+	[TestMethod]
 	[Description("Создание конструкции с пустым именем отклоняется")]
 	[ExpectedException(typeof(ArgumentException))]
 	[DataRow("")]
@@ -343,6 +389,29 @@ public class ConstructionServiceTests
 		new DbContextOptionsBuilder<JournalDbContext>()
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
+
+	/// <summary>
+	/// Тестовая заглушка процентов результата: абсолютная величина относительно
+	/// текущего капитала. Сам расчёт результата — capability аналитики (тикет #10).
+	/// </summary>
+	private static decimal ComputePercentStub(decimal absoluteResult, decimal allocatedCapitalUsdt) =>
+		allocatedCapitalUsdt == 0m ? 0m : absoluteResult / allocatedCapitalUsdt * 100m;
+
+	/// <summary>Кладёт сырую запись исполнения линейного перпа BTCUSDT — как это делает синхронизация.</summary>
+	private async Task SeedLinearTradeAsync(string execId)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawExecutions.Add(new RawExecution
+		{
+			ExecId = execId,
+			Category = "linear",
+			Symbol = "BTCUSDT",
+			ExecTimeMs = 0,
+			PayloadJson = $$"""{"symbol":"BTCUSDT","side":"Buy","execId":"{{execId}}","execPrice":"42000","execQty":"0.01","execFee":"0.0042","execTime":"0","isMaker":false}""",
+			FetchedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+		});
+		await db.SaveChangesAsync();
+	}
 
 	#endregion
 }
