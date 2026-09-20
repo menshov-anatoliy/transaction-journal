@@ -99,6 +99,58 @@ body {
 
 .screen { padding: 14px 16px; max-width: 1280px; margin: 0 auto; }
 
+/* ===== Сводка-лента экранов: итог, марки, счётчики над таблицей ===== */
+.kstrip {
+	display: flex;
+	gap: 24px;
+	margin: 4px 0 12px;
+	font-size: 12px;
+	color: #8b949e;
+}
+
+	.kstrip b {
+		color: #f0f6fc;
+		font-family: ui-monospace, Consolas, monospace;
+		font-size: 14px;
+		display: block;
+		font-weight: 400;
+	}
+
+/* ===== Плотные таблицы экранов «Терминала» ===== */
+.screen table {
+	border-collapse: collapse;
+	width: 100%;
+	font-family: ui-monospace, Consolas, monospace;
+	font-size: 12px;
+}
+
+.screen th {
+	border-bottom: 1px solid #30363d;
+	color: #8b949e;
+	font-family: "Segoe UI", system-ui, sans-serif;
+	font-weight: 600;
+	padding: 6px 10px;
+	text-align: left;
+	white-space: nowrap;
+}
+
+.screen td {
+	border-bottom: 1px solid #21262d;
+	padding: 5px 10px;
+	white-space: nowrap;
+}
+
+.screen tbody tr:hover td { background: #161b22; }
+.screen tr.clickable { cursor: pointer; }
+.screen td.empty { color: #8b949e; text-align: center; }
+
+/* Ручной статус конструкции текстом в таблицах экранов. */
+.status { font-family: "Segoe UI", system-ui, sans-serif; }
+
+.status.status-open { color: #3fb950; }
+.status.status-closed { color: #8b949e; }
+.status.status-archived { color: #d29922; }
+
 .note {
 	background: #161b22;
 	border-left: 3px solid #1f6feb;

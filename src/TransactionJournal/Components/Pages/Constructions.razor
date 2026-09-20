@@ -2,13 +2,201 @@
 
 @rendermode InteractiveServer
 
+@using System.Globalization
+@using TransactionJournal.Components.Pages
+@using TransactionJournal.Data
+@inject IConstructionListReadModel List
+@inject NavigationManager Navigation
+
 <PageTitle>Конструкции — Журнал Bybit</PageTitle>
 
 <h1>Конструкции</h1>
 
-@* Каркас экрана «Конструкции»: содержимое (сводка журнала и таблица конструкций)
-   достраивается задачами списка конструкций поверх этого каркаса. *@
-<p class="note">
-	Список конструкций появится здесь: сводка журнала, таблица конструкций с метриками
-	аналитики и команды синхронизации.
-</p>
+@if (_unavailable)
+{
+	@* Явное состояние вместо пустого экрана: журнал не прочитан — сводка и таблица
+	   не показываются, пользователь видит причину дождаться или обновить экран. *@
+	<p class="note">Журнал недоступен: не удалось прочитать данные списка конструкций. Обновите экран.</p>
+}
+else if (_data is null)
+{
+	<p class="note">Чтение журнала…</p>
+}
+else
+{
+	@* Сводка журнала: итог, отметка времени марок оценки и счётчик видимых
+	   конструкций с числом открытых — ориентир над таблицей списка. *@
+	@* Traceability: openspec:ui/screens#requirement-construction-list-screen *@
+	<div class="kstrip">
+		<div>итог по журналу<b class="@SignClass(_data.TotalPnL)">@TotalLabel</b></div>
+		<div>марки на<b>@MarksLabel</b></div>
+		<div>конструкций<b>@CountLabel</b></div>
+	</div>
+
+	@* Таблица конструкций со столбцами метрик аналитики; клик по строке открывает
+	   детали конструкции. *@
+	<table>
+		<thead>
+			<tr>
+				<th>Конструкция</th>
+				<th>Статус</th>
+				<th>Капитал</th>
+				<th>Реализов.</th>
+				<th>Нереализов.</th>
+				<th>Коррект.</th>
+				<th>Итог</th>
+				<th>% капитала</th>
+				<th>Открыта</th>
+				<th>Закрыта</th>
+			</tr>
+		</thead>
+		<tbody>
+			@if (_data.Items.Count == 0)
+			{
+				@* Пустой список — явное сообщение об отсутствии, а не пустая разметка. *@
+				<tr><td colspan="10" class="empty">конструкций нет</td></tr>
+			}
+			@foreach (var item in _data.Items)
+			{
+				<tr class="clickable" title="Открыть детали конструкции" @onclick="() => OpenDetail(item.ConstructionId)">
+					<td>@item.Name</td>
+					<td><span class="@StatusClass(item.Status)">@StatusText(item.Status)</span></td>
+					<td>@FormatAmount(item.AllocatedCapitalUsdt)</td>
+					<td><span class="@SignClass(item.RealizedPnL)">@FormatPnL(item.RealizedPnL)</span></td>
+					<td><span class="@SignClass(item.UnrealizedPnL)">@FormatUnrealized(item.UnrealizedPnL)</span></td>
+					<td><span class="@SignClass(item.AdjustmentsPnL)">@FormatAdjustments(item.AdjustmentsPnL)</span></td>
+					<td><b><span class="@SignClass(item.TotalPnL)">@FormatTotal(item.TotalPnL)</span></b></td>
+					<td><span class="@SignClass(item.TotalPnLPercent)">@FormatPercent(item.TotalPnLPercent)</span></td>
+					<td>@FormatDate(item.OpenedAt)</td>
+					<td>@FormatDate(item.ClosedAt)</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+@code {
+	private ConstructionListData? _data;
+	private bool _unavailable;
+
+	protected override async Task OnInitializedAsync()
+	{
+		// Экран перечитывает read-модель при каждом открытии: сводка и строки всегда
+		// выведены из текущих данных журнала, устаревших значений экран не показывает.
+		// Traceability: change:add-ui-screens/design#d7
+		try
+		{
+			_data = await List.ReadAsync();
+		}
+		catch (Exception)
+		{
+			// Повреждённое сырьё или недоступная база не оставляют пользователя
+			// с пустым экраном: список показывает явное состояние недоступности.
+			_data = null;
+			_unavailable = true;
+		}
+	}
+
+	/// <summary>
+	/// Открывает детали конструкции: клик по строке списка ведёт на экран деталей,
+	/// где каркас откроет транзитную вкладку конструкции.
+	/// </summary>
+	// Клик по строке — способ перехода в детали, определённый требованием списка.
+	// Traceability: openspec:ui/screens#scenario-list-row-opens-detail
+	private void OpenDetail(long constructionId) =>
+		Navigation.NavigateTo($"/constructions/{constructionId}");
+
+	#region Форматирование
+
+	/// <summary>Итог журнала в сводке: со знаком при числе; неполный итог помечается, а не подменяется суммой.</summary>
+	private string TotalLabel
+	{
+		get
+		{
+			// Сбой марок обнуляет итог — сводка помечает его неполным.
+			// Traceability: change:add-ui-screens/design#d4
+			if (_data?.TotalPnL is not { } total)
+			{
+				return "неполный (сбой марок)";
+			}
+
+			return $"{FormatPnL(total)} USDT";
+		}
+	}
+
+	/// <summary>Отметка времени марок оценки; прочерк, когда марки были не нужны или недоступны.</summary>
+	private string MarksLabel => _data?.MarksAsOf is { } marks
+		? FormatDate(marks)
+		: "—";
+
+	/// <summary>Счётчик видимых конструкций с числом открытых, согласованный со строками таблицы.</summary>
+	private string CountLabel => _data is null
+		? "—"
+		: $"{_data.ConstructionCount} ({_data.OpenCount} {OpenForm(_data.OpenCount)})";
+
+	/// <summary>Знаковый класс величины: рост зелёным, падение красным, ноль без выделения.</summary>
+	private static string SignClass(decimal? value) => value > 0 ? "pos" : value < 0 ? "neg" : string.Empty;
+
+	/// <summary>Формат знаковой суммы USDT: «+214.32» / «-58.2» / «0».</summary>
+	private static string FormatPnL(decimal value) =>
+		value.ToString("+0.##;-0.##;0", CultureInfo.InvariantCulture);
+
+	/// <summary>Нереализованный PnL: недоступная оценка — прочерк (признак сбоя марок добавляется задачей тулбара), ноль не выделяется.</summary>
+	private static string FormatUnrealized(decimal? value) => value is null || value == 0m ? "—" : FormatPnL(value.Value);
+
+	/// <summary>Сумма корректировок: без корректировок — прочерк.</summary>
+	private static string FormatAdjustments(decimal value) => value == 0m ? "—" : FormatPnL(value);
+
+	/// <summary>Итог конструкции: недоступный итог — прочерк.</summary>
+	private static string FormatTotal(decimal? value) => value is null ? "—" : FormatPnL(value.Value);
+
+	/// <summary>Формат процента от капитала: «+8.6%» / «-3.1%» / «0%»; недоступный — прочерк.</summary>
+	private static string FormatPercent(decimal? value) => value is null
+		? "—"
+		: $"{value.Value.ToString("+0.#;-0.#;0", CultureInfo.InvariantCulture)}%";
+
+	/// <summary>Капитал без знака: «3000».</summary>
+	private static string FormatAmount(decimal value) =>
+		value.ToString("0.##", CultureInfo.InvariantCulture);
+
+	/// <summary>Дата-время записи: «2026-06-20 14:30»; отсутствие — прочерк.</summary>
+	private static string FormatDate(DateTimeOffset? moment) => moment is { } value
+		? value.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+		: "—";
+
+	/// <summary>Класс статуса конструкции в таблице — цвет текста по ручному статусу.</summary>
+	private static string StatusClass(ConstructionStatus status) => status switch
+	{
+		ConstructionStatus.Open => "status status-open",
+		ConstructionStatus.Closed => "status status-closed",
+		ConstructionStatus.Archived => "status status-archived",
+		_ => "status",
+	};
+
+	/// <summary>Ручной статус конструкции словами.</summary>
+	private static string StatusText(ConstructionStatus status) => status switch
+	{
+		ConstructionStatus.Open => "открыта",
+		ConstructionStatus.Closed => "закрыта",
+		ConstructionStatus.Archived => "архив",
+		_ => "неизвестен",
+	};
+
+	/// <summary>Форма слова «открыта» по числу открытых конструкций: открыта / открыты / открыто.</summary>
+	private static string OpenForm(int count)
+	{
+		if (count % 10 == 1 && count % 100 != 11)
+		{
+			return "открыта";
+		}
+
+		if (count % 10 is >= 2 and <= 4 && count % 100 is < 12 or > 14)
+		{
+			return "открыты";
+		}
+
+		return "открыто";
+	}
+
+	#endregion
+}

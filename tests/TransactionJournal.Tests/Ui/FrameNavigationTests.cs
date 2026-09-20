@@ -6,6 +6,7 @@ using Moq;
 using NUnit.Framework;
 using TransactionJournal.Analytics;
 using TransactionJournal.Components.Layout;
+using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using ConstructionDetailPage = TransactionJournal.Components.Pages.ConstructionDetail;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
@@ -38,6 +39,14 @@ public class FrameNavigationTests
 			.ReturnsAsync(0);
 		_context.Services.AddSingleton(_frame.Object);
 		_context.Services.AddSingleton(new Mock<IJournalMetricsReadModel>().Object);
+
+		// Экран «Конструкции» читает собственную read-модель списка: навигационным
+		// проверкам достаточно пустого списка.
+		var list = new Mock<IConstructionListReadModel>();
+		list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConstructionListData(0m, null, 0, 0, []));
+		_context.Services.AddSingleton(list.Object);
 	}
 
 	[TestCleanup]

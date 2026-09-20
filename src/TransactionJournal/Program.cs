@@ -3,6 +3,7 @@ using TransactionJournal.Analytics;
 using TransactionJournal.Bybit;
 using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
+using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Materialization;
@@ -114,6 +115,13 @@ builder.Services.AddSingleton(sp => new JournalMetricsReadModel(
 	sp.GetRequiredService<IFreshInstrumentMarkSource>(),
 	sp.GetRequiredService<IInstrumentMarkSource>()));
 builder.Services.AddSingleton<IJournalMetricsReadModel>(sp => sp.GetRequiredService<JournalMetricsReadModel>());
+
+// Read-модель экрана «Конструкции»: соединяет метрики аналитики журнала с именами
+// и ручными статусами конструкций, скрывая архивные из списка и его счётчика.
+builder.Services.AddSingleton(sp => new ConstructionListReadModel(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<IJournalMetricsReadModel>()));
+builder.Services.AddSingleton<IConstructionListReadModel>(sp => sp.GetRequiredService<ConstructionListReadModel>());
 
 var app = builder.Build();
 

@@ -7,6 +7,7 @@ using Moq;
 using NUnit.Framework;
 using TransactionJournal.Analytics;
 using TransactionJournal.Components.Layout;
+using TransactionJournal.Components.Pages;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
 using InboxPage = TransactionJournal.Components.Pages.Inbox;
 using SettingsPage = TransactionJournal.Components.Pages.Settings;
@@ -41,6 +42,14 @@ public class AppFrameTests
 			.Setup(model => model.CountInboxAsync(It.IsAny<CancellationToken>()))
 			.ReturnsAsync(0);
 		_context.Services.AddSingleton(frame.Object);
+
+		// Экран «Конструкции» читает собственную read-модель списка: каркасным
+		// проверкам достаточно пустого списка.
+		var list = new Mock<IConstructionListReadModel>();
+		list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConstructionListData(0m, null, 0, 0, []));
+		_context.Services.AddSingleton(list.Object);
 	}
 
 	[TestCleanup]
