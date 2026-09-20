@@ -8,19 +8,23 @@ namespace TransactionJournal.Bybit;
 /// Подписывает GET-запросы по официальной схеме HMAC-SHA256, сверяет часы с публичным
 /// эндпоинтом /v5/market/time и намеренно ограничена методами только на чтение:
 /// торговых операций в клиенте нет, поэтому хватает ключа с правами readonly.
+/// Каждый запрос проходит через подсистему устойчивости: минимальный интервал между
+/// запросами, учёт заголовков лимитов X-Bapi-Limit-* и повторы Polly по классам сбоев.
 /// Traceability: change:add-bybit-sync/design#d1
+/// Traceability: change:add-bybit-sync/design#d5
 /// Traceability: change:add-bybit-sync/design#d6
 /// Traceability: openspec:sync/bybit-history#requirement-read-only-access
+/// Traceability: openspec:sync/bybit-history#requirement-api-limits-and-error-handling
 /// </summary>
 public sealed class BybitApiClient
 {
 	private const string ServerTimePath = "/v5/market/time";
-		private const string ExecutionListPath = "/v5/execution/list";
-		private const string DeliveryRecordPath = "/v5/asset/delivery-record";
-		private const string InstrumentsInfoPath = "/v5/market/instruments-info";
-		private const string RetCodePropertyName = "retCode";
-		private const string RetMsgPropertyName = "retMsg";
-		private const string ResultPropertyName = "result";
+	private const string ExecutionListPath = "/v5/execution/list";
+	private const string DeliveryRecordPath = "/v5/asset/delivery-record";
+	private const string InstrumentsInfoPath = "/v5/market/instruments-info";
+	private const string RetCodePropertyName = "retCode";
+	private const string RetMsgPropertyName = "retMsg";
+	private const string ResultPropertyName = "result";
 	private const string ApiKeyHeaderName = "X-BAPI-API-KEY";
 	private const string TimestampHeaderName = "X-BAPI-TIMESTAMP";
 	private const string RecvWindowHeaderName = "X-BAPI-RECV-WINDOW";
@@ -33,14 +37,22 @@ public sealed class BybitApiClient
 	private readonly HttpClient _httpClient;
 	private readonly IBybitCredentialsProvider _credentialsProvider;
 	private readonly BybitClientOptions _options;
+	private readonly BybitResilience _resilience;
 	private long _serverTimeOffsetMs;
 
 	/// <summary>Создаёт обёртку над готовым HttpClient с поставщиком ключа и параметрами.</summary>
-	public BybitApiClient(HttpClient httpClient, IBybitCredentialsProvider credentialsProvider, BybitClientOptions? options = null)
+	public BybitApiClient(
+		HttpClient httpClient,
+		IBybitCredentialsProvider credentialsProvider,
+		BybitClientOptions? options = null,
+		BybitResilienceOptions? resilienceOptions = null,
+		TimeProvider? timeProvider = null)
 	{
 		_httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
 		_credentialsProvider = credentialsProvider ?? throw new ArgumentNullException(nameof(credentialsProvider));
 		_options = options ?? new BybitClientOptions();
+		// Устойчивость к лимитам и сбоям биржи включена всегда; тесты подменяют поставщик времени.
+		_resilience = new BybitResilience(resilienceOptions ?? new BybitResilienceOptions(), timeProvider);
 	}
 
 	/// <summary>Текущее смещение серверного времени относительно локного, мс; выставляется сверкой часов.</summary>
@@ -50,9 +62,11 @@ public sealed class BybitApiClient
 	/// Выполняет подписанный GET-запрос и возвращает тело ответа биржи как строку JSON.
 	/// Значения параметров запроса подставляются в URL и подпись как есть, поэтому
 	/// они должны быть готовы к использованию в URL (без символов, требующих кодирования).
+	/// Запрос проходит через устойчивость: минимальный интервал, учёт заголовков лимитов
+	/// и повторы по классам сбоев (сеть/5xx, retCode 10006, HTTP 403).
 	/// При ошибке класса 10003 сверяет часы с биржей и повторяет запрос один раз.
 	/// </summary>
-	/// <exception cref="BybitApiException">Биржа ответила ошибкой retCode или неудачным HTTP-статусом.</exception>
+	/// <exception cref="BybitApiException">Биржа ответила ошибкой retCode или неудачным HTTP-статусом после всех повторов.</exception>
 	public async Task<string> GetAsync(
 		string path,
 		IReadOnlyList<KeyValuePair<string, string>> query,
@@ -60,19 +74,18 @@ public sealed class BybitApiClient
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
-		var body = await SendSignedGetAsync(path, query, cancellationToken).ConfigureAwait(false);
-
-		// Ошибка 10003 чаще всего означает рассинхрон часов: сверяем время с /v5/market/time
-		// и повторяем подписанный запрос один раз с новым timestamp.
-		// Traceability: change:add-bybit-sync/design#d6
-		if (TryReadEnvelope(body, out var retCode, out _) && retCode == SignErrorRetCode)
+		try
 		{
-			await SynchronizeClockAsync(cancellationToken).ConfigureAwait(false);
-			body = await SendSignedGetAsync(path, query, cancellationToken).ConfigureAwait(false);
+			return await SendSignedGetAsync(path, query, cancellationToken).ConfigureAwait(false);
 		}
-
-		ThrowIfApiError(body);
-		return body;
+		catch (BybitApiException exception) when (exception.RetCode == SignErrorRetCode)
+		{
+			// Ошибка 10003 чаще всего означает рассинхрон часов: сверяем время с /v5/market/time
+			// и повторяем подписанный запрос один раз с новым timestamp.
+			// Traceability: change:add-bybit-sync/design#d6
+			await SynchronizeClockAsync(cancellationToken).ConfigureAwait(false);
+			return await SendSignedGetAsync(path, query, cancellationToken).ConfigureAwait(false);
+		}
 	}
 
 	#region Типизированные read-only эндпоинты
@@ -137,7 +150,8 @@ public sealed class BybitApiClient
 
 	/// <summary>
 	/// GET /v5/market/time — публичное серверное время биржи строками секунд и наносекунд.
-	/// Запрос не подписывается: эндпоинт публичный и доступен без ключа.
+	/// Запрос не подписывается: эндпоинт публичный и доступен без ключа, но проходит
+	/// через общий троттлинг интервала и лимитов.
 	/// </summary>
 	/// <remarks>
 	/// Серверное время используется для сверки часов перед подписью запросов.
@@ -146,9 +160,11 @@ public sealed class BybitApiClient
 	/// <exception cref="BybitApiException">Эндпоинт недоступен или вернул некорректное время.</exception>
 	public async Task<BybitServerTime> GetServerTimeAsync(CancellationToken cancellationToken = default)
 	{
-		using var timeRequest = new HttpRequestMessage(HttpMethod.Get, BuildUri(ServerTimePath, queryString: string.Empty));
-		var body = await ReadResponseBodyAsync(timeRequest, cancellationToken).ConfigureAwait(false);
-		ThrowIfApiError(body);
+		var body = await _resilience.SendAsync(
+			_httpClient,
+			() => new HttpRequestMessage(HttpMethod.Get, BuildUri(ServerTimePath, queryString: string.Empty)),
+			ThrowIfApiError,
+			cancellationToken).ConfigureAwait(false);
 
 		var serverTime = DeserializeResult<BybitServerTime>(body, ServerTimePath);
 		if (serverTime.TryGetMilliseconds(out _) == false)
@@ -176,7 +192,7 @@ public sealed class BybitApiClient
 
 	#region Вспомогательные методы
 
-	private async Task<string> SendSignedGetAsync(
+	private Task<string> SendSignedGetAsync(
 		string path,
 		IReadOnlyList<KeyValuePair<string, string>> query,
 		CancellationToken cancellationToken)
@@ -184,20 +200,30 @@ public sealed class BybitApiClient
 		// Строка запроса собирается вручную и побайтово совпадает в URL и подписи.
 		// Traceability: change:add-bybit-sync/design#d1
 		var queryString = BybitRequestSigner.BuildQueryString(query);
+		return _resilience.SendAsync(
+			_httpClient,
+			() => BuildSignedRequest(path, queryString),
+			ThrowIfApiError,
+			cancellationToken);
+	}
+
+	private HttpRequestMessage BuildSignedRequest(string path, string queryString)
+	{
+		// Запрос создаётся на каждую попытку: после длинных пауз повторов старый timestamp
+		// вышел бы за recv_window и был бы отвергнут биржей.
 		var credentials = _credentialsProvider.GetCredentials();
 		var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + ServerTimeOffsetMs;
 		var signature = BybitRequestSigner.ComputeSignature(
 			timestamp, credentials.ApiKey, _options.RecvWindowMs, queryString, credentials.ApiSecret);
 
-		using var request = new HttpRequestMessage(HttpMethod.Get, BuildUri(path, queryString));
+		var request = new HttpRequestMessage(HttpMethod.Get, BuildUri(path, queryString));
 		request.Headers.Add(ApiKeyHeaderName, credentials.ApiKey);
 		request.Headers.Add(TimestampHeaderName, timestamp.ToString(CultureInfo.InvariantCulture));
 		request.Headers.Add(RecvWindowHeaderName, _options.RecvWindowMs.ToString(CultureInfo.InvariantCulture));
 		request.Headers.Add(SignHeaderName, signature);
 		// Тип подписи 2 (HMAC) передаётся, как в официальном C#-примере Bybit.
 		request.Headers.Add(SignTypeHeaderName, "2");
-
-		return await ReadResponseBodyAsync(request, cancellationToken).ConfigureAwait(false);
+		return request;
 	}
 
 	private async Task<BybitPagedResponse<TItem>> GetPagedResultAsync<TItem>(
@@ -232,18 +258,6 @@ public sealed class BybitApiClient
 		{
 			throw BybitApiException.FromMalformedBody($"Ответ {path} не содержит поле result.", body);
 		}
-	}
-
-	private async Task<string> ReadResponseBodyAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-	{
-		using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-		var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-		if (response.IsSuccessStatusCode == false)
-		{
-			throw BybitApiException.FromHttpStatus((int)response.StatusCode, body);
-		}
-
-		return body;
 	}
 
 	private Uri BuildUri(string path, string queryString)

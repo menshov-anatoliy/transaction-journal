@@ -117,12 +117,14 @@ public class BybitApiClientTests
 
 	[TestMethod]
 	[DataRow(10001, "params error")]
-	[DataRow(10006, "Too many visits!")]
+	[DataRow(10002, "invalid request")]
 	[Description("Ошибка retCode в теле успешного ответа — исключение с кодом биржи")]
 	[ExpectedException(typeof(BybitApiException))]
 	public void ThrowOnApiErrorResponse(int retCode, string retMsg)
 	{
 		// Arrange: биржа отвечает ошибкой внутри конверта retCode/retMsg.
+		// Ошибки без собственного класса повторов (например, 10006 обрабатывается
+		// отдельной веткой устойчивости) прерывают запрос сразу.
 		_handler.EnqueueJson(
 			"{\"retCode\":" + retCode + ",\"retMsg\":\"" + retMsg + "\",\"result\":{}}");
 
@@ -145,8 +147,10 @@ public class BybitApiClientTests
 	[ExpectedException(typeof(BybitApiException))]
 	public void ThrowOnNonSuccessHttpStatus()
 	{
-		// Arrange: транспорт отдаёт 500 с телом, не являющимся конвертом V5.
-		_handler.EnqueueJson("Internal Server Error", HttpStatusCode.InternalServerError);
+		// Arrange: транспорт отдаёт 404 с телом, не являющимся конвертом V5.
+		// Статусы без собственного класса повторов (5xx и 403 повторяются устойчивостью)
+		// прерывают запрос сразу после первой попытки.
+		_handler.EnqueueJson("Not Found", HttpStatusCode.NotFound);
 
 		// Act — неудачный статус прерывается исключением обёртки.
 		_client.GetAsync("/v5/execution/list", new List<KeyValuePair<string, string>>()).GetAwaiter().GetResult();

@@ -32,6 +32,22 @@ public sealed class BybitApiException : Exception
 			httpStatusCode: statusCode);
 	}
 
+	/// <summary>
+	/// Создаёт понятную пользователю ошибку блокировки доступа по HTTP 403: исчерпан
+	/// IP-лимит, биржа блокирует доступ примерно на длительность паузы; повторите позже.
+	/// Traceability: openspec:sync/bybit-history#requirement-api-limits-and-error-handling
+	/// Traceability: change:add-bybit-sync/design#d5
+	/// </summary>
+	public static BybitApiException FromAccessBlocked(int statusCode, TimeSpan pause, string responseBody)
+	{
+		var pauseMinutes = (int)Math.Ceiling(pause.TotalMinutes);
+		return new BybitApiException(
+			$"Bybit отклонил запрос HTTP {statusCode} («access too frequent»): исчерпан IP-лимит, "
+			+ $"биржа блокирует доступ примерно на {pauseMinutes} минут. Запустите синхронизацию позже.",
+			responseBody,
+			httpStatusCode: statusCode);
+	}
+
 	/// <summary>Создаёт ошибку разбора ответа биржи без кода retCode.</summary>
 	public static BybitApiException FromMalformedBody(string message, string responseBody)
 	{
