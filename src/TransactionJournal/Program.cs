@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Bybit;
 using TransactionJournal.Components;
 using TransactionJournal.Data;
+using TransactionJournal.Materialization;
+using TransactionJournal.Sync;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +24,40 @@ builder.Services.AddDbContext<JournalDbContext>(options => options.UseSqlite(con
 // Поставщик ключа Bybit: dev-реализация из переменных окружения;
 // постоянное место хранения секрета определит тикет #4.
 builder.Services.AddSingleton<IBybitCredentialsProvider, EnvironmentBybitCredentialsProvider>();
+
+// Подсистема синхронизации с Bybit: подписанный read-only клиент с resilience,
+// шлюз истории и публичных спецификаций, движки категорий, пополнитель справочника
+// и оркестратор кнопки «Синхронизировать» на общей строке SyncRun.
+var bybitBaseUrl = builder.Configuration["Bybit:BaseUrl"];
+builder.Services.AddSingleton(new BybitClientOptions
+{
+	BaseUrl = string.IsNullOrWhiteSpace(bybitBaseUrl) ? BybitClientOptions.DefaultBaseUrl : bybitBaseUrl,
+});
+builder.Services.AddHttpClient<BybitApiClient>();
+builder.Services.AddTransient<BybitHistoryGateway>();
+builder.Services.AddTransient<IBybitHistoryGateway>(sp => sp.GetRequiredService<BybitHistoryGateway>());
+builder.Services.AddTransient<IBybitInstrumentSource>(sp => sp.GetRequiredService<BybitHistoryGateway>());
+builder.Services.AddTransient<ExecutionWindowPass>();
+builder.Services.AddTransient<DeliveryWindowPass>();
+builder.Services.AddTransient<ExecutionCategorySync>();
+builder.Services.AddTransient<DeliveryCategorySync>();
+builder.Services.AddTransient<InstrumentReferenceSync>();
+
+// Адаптер сырого хранилища живёт singleton-ом над собственными опциями контекста:
+// каждый вызов создаёт короткоживущий контекст, поэтому длительная сессия Blazor Server
+// не держит соединений между пачками записей.
+builder.Services.AddSingleton(sp => new JournalSyncStore(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton<IExecutionKnownIdProbe>(sp => sp.GetRequiredService<JournalSyncStore>());
+builder.Services.AddSingleton<IExecutionSyncStateStore>(sp => sp.GetRequiredService<JournalSyncStore>());
+builder.Services.AddSingleton<IRawExecutionBatchWriter>(sp => sp.GetRequiredService<JournalSyncStore>());
+builder.Services.AddSingleton<IDeliveryKnownKeyProbe>(sp => sp.GetRequiredService<JournalSyncStore>());
+builder.Services.AddSingleton<IRawDeliveryBatchWriter>(sp => sp.GetRequiredService<JournalSyncStore>());
+builder.Services.AddSingleton<IInstrumentReferenceStore>(sp => sp.GetRequiredService<JournalSyncStore>());
+builder.Services.AddSingleton<IJournalRawSnapshotStore>(sp => sp.GetRequiredService<JournalSyncStore>());
+builder.Services.AddSingleton<ISyncRunJournal>(sp => sp.GetRequiredService<JournalSyncStore>());
+builder.Services.AddSingleton<JournalMaterializer>();
+builder.Services.AddTransient<IJournalSyncService, JournalSyncService>();
 
 var app = builder.Build();
 

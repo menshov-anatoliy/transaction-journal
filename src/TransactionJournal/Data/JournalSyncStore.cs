@@ -24,6 +24,8 @@ public sealed class JournalSyncStore :
 	IRawExecutionBatchWriter,
 	IDeliveryKnownKeyProbe,
 	IRawDeliveryBatchWriter,
+	IInstrumentReferenceStore,
+	IJournalRawSnapshotStore,
 	ISyncRunJournal
 {
 	private readonly DbContextOptions<JournalDbContext> _options;
@@ -260,6 +262,122 @@ public sealed class JournalSyncStore :
 		{
 			InsertedKeys = insertedKeys,
 			SkippedKnownCount = knownKeys.Count,
+		};
+	}
+
+	#endregion
+
+	#region IInstrumentReferenceStore
+
+	/// <inheritdoc cref="IInstrumentReferenceStore.FindKnownSymbolsAsync" />
+	public async Task<IReadOnlySet<string>> FindKnownSymbolsAsync(
+		IReadOnlyCollection<string> symbols,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(symbols);
+		if (symbols.Count == 0)
+		{
+			return new HashSet<string>(StringComparer.Ordinal);
+		}
+
+		using var db = CreateContext();
+		var knownSymbols = await db.RawInstruments
+			.Where(instrument => symbols.Contains(instrument.Symbol))
+			.Select(instrument => instrument.Symbol)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+		return new HashSet<string>(knownSymbols, StringComparer.Ordinal);
+	}
+
+	/// <inheritdoc cref="IInstrumentReferenceStore.WriteAsync" />
+	public async Task<int> WriteAsync(
+		string category,
+		IReadOnlyCollection<BybitInstrumentInfo> instruments,
+		SyncRun? progressRun = null,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(category);
+		ArgumentNullException.ThrowIfNull(instruments);
+		if (instruments.Count == 0)
+		{
+			return 0;
+		}
+
+		// Известность спрашиваем у хранилища до вставки: повторная встреча инструмента
+		// в записях не обновляет спецификацию, а уникальный индекс по символу остаётся
+		// страховкой от гонок на уровне БД.
+		var knownSymbols = await FindKnownSymbolsAsync(
+			instruments.Select(instrument => instrument.Symbol).ToArray(), cancellationToken).ConfigureAwait(false);
+		var fetchedAt = _timeProvider.GetUtcNow();
+
+		using var db = CreateContext();
+		var insertedCount = 0;
+		foreach (var instrument in instruments)
+		{
+			if (knownSymbols.Contains(instrument.Symbol) || string.IsNullOrWhiteSpace(instrument.Symbol))
+			{
+				continue;
+			}
+
+			// Спецификация сохраняется целиком в сыром виде: JSON хранит канонические поля
+			// биржи и время загрузки — справочник строится из этого сырья при каждом переразборе.
+			// Traceability: openspec:sync/bybit-history#scenario-new-instrument-registered
+			db.RawInstruments.Add(new RawInstrument
+			{
+				Symbol = instrument.Symbol,
+				Category = category,
+				PayloadJson = JsonSerializer.Serialize(instrument, BybitJson.Options),
+				FetchedAt = fetchedAt,
+			});
+			insertedCount++;
+		}
+
+		// Счётчик запуска продвигается той же транзакцией SaveChanges, что и вставка:
+		// прогресс в SyncRun не расходится с фактически сохранёнными спецификациями.
+		if (progressRun is not null && insertedCount > 0)
+		{
+			var runRow = await FindRunRowAsync(db, progressRun.Id, cancellationToken).ConfigureAwait(false);
+			runRow.NewInstruments += insertedCount;
+			progressRun.NewInstruments = runRow.NewInstruments;
+		}
+
+		if (insertedCount > 0)
+		{
+			await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+		}
+
+		return insertedCount;
+	}
+
+	#endregion
+
+	#region IJournalRawSnapshotStore
+
+	/// <inheritdoc cref="IJournalRawSnapshotStore.LoadAsync" />
+	public async Task<JournalRawSnapshot> LoadAsync(CancellationToken cancellationToken = default)
+	{
+		// Снимок читается одним короткоживущим контекстом: полный переразбор работает
+		// только над локальным сырьём и не обращается к бирже.
+		using var db = CreateContext();
+		var instruments = await db.RawInstruments
+			.OrderBy(instrument => instrument.Symbol)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+		var executions = await db.RawExecutions
+			.OrderBy(execution => execution.ExecId)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+		var deliveries = await db.RawDeliveries
+			.OrderBy(delivery => delivery.Symbol)
+			.ThenBy(delivery => delivery.DeliveryTimeMs)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+
+		return new JournalRawSnapshot
+		{
+			Instruments = instruments,
+			Executions = executions,
+			Deliveries = deliveries,
 		};
 	}
 

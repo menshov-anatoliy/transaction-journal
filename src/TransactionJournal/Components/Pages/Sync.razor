@@ -1,0 +1,104 @@
+@page "/sync"
+@using System.Globalization
+@using TransactionJournal.Data
+@using TransactionJournal.Sync
+@rendermode InteractiveServer
+@inject IJournalSyncService SyncService
+
+<PageTitle>Синхронизация Bybit</PageTitle>
+
+<h1>Синхронизация Bybit</h1>
+
+<p>Ручная загрузка истории исполнения и экспираций из Bybit в журнал: первый запуск догружает всю доступную историю, повторные — только новые записи.</p>
+
+@if (_running)
+{
+	<p role="status">Синхронизация выполняется…</p>
+}
+else
+{
+	<button type="button" @onclick="RunSyncAsync">Синхронизировать</button>
+}
+
+@if (_error is not null)
+{
+	<div role="alert">
+		<strong>Синхронизация прервана:</strong> @_error
+	</div>
+}
+
+@if (_result is not null)
+{
+	<section>
+		<h2>Результат</h2>
+
+		@* Статус и режим одного запуска: счётчики новых записей приходят из строки SyncRun. *@
+		<p>Синхронизация завершена. Режим: @ModeLabel(_result.Mode).</p>
+		<ul>
+			<li>Новых записей исполнения: @_result.Run.NewExecutions</li>
+			<li>Новых delivery-записей: @_result.Run.NewDeliveries</li>
+			<li>Новых инструментов в справочнике: @_result.Run.NewInstruments</li>
+		</ul>
+	</section>
+
+	@if (_result.ProjectionError is not null)
+	{
+		<div role="alert">
+			<strong>Проекция журнала не построена:</strong> @_result.ProjectionError
+		</div>
+	}
+	else if (_result.Projection is { } projection)
+	{
+		@if (projection.ReconciliationWarnings.Count == 0)
+		{
+			<p>Расхождений сверки экспираций с биржей нет.</p>
+		}
+		else
+		{
+			@* Предупреждение сверки не блокирует синк: собственный расчёт остаётся источником результата. *@
+			<h2>Предупреждения сверки с биржей</h2>
+			<ul>
+				@foreach (var warning in projection.ReconciliationWarnings)
+				{
+					<li>
+						@warning.Symbol
+						(@warning.DeliveryTime.ToString("u", CultureInfo.InvariantCulture)):
+						расхождение @warning.Difference.ToString("0.0###", CultureInfo.InvariantCulture)
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
+@code {
+	private bool _running;
+	private JournalSyncResult? _result;
+	private string? _error;
+
+	// Единственная ручная команда синхронизации: запуск выполняется до конца, кнопка
+	// блокируется на время работы, результат и ошибка показываются на этой же странице.
+	private async Task RunSyncAsync()
+	{
+		_running = true;
+		_result = null;
+		_error = null;
+
+		try
+		{
+			_result = await SyncService.SyncAsync();
+		}
+		catch (Exception ex)
+		{
+			_error = ex.Message;
+		}
+		finally
+		{
+			_running = false;
+		}
+	}
+
+	private static string ModeLabel(SyncRunMode mode) => mode == SyncRunMode.Backfill
+		? "первичная загрузка (backfill)"
+		: "инкрементальная догрузка";
+}
