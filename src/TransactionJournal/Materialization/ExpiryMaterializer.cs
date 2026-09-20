@@ -17,8 +17,8 @@ namespace TransactionJournal.Materialization;
 /// </summary>
 public sealed class ExpiryMaterializer
 {
-	/// <summary>Допуск сверки по умолчанию: одна миллионная USDT покрывает округления строк биржи.</summary>
-	private const decimal DefaultReconciliationTolerance = 0.000001m;
+	/// <summary>Допуск сверки по умолчанию: одна миллионная USDT покрывает округления строк биржи. Публичен, чтобы фасад переразбора задавал тот же допуск по умолчанию.</summary>
+	public const decimal DefaultReconciliationTolerance = 0.000001m;
 
 	private readonly TradeMaterializer _tradeMaterializer;
 	private readonly InstrumentResolver _instrumentResolver;

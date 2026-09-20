@@ -23,12 +23,17 @@ public sealed class TradeMaterializer
 
 	private readonly InstrumentResolver _instrumentResolver;
 
+	/// <summary>Правило приведения валюты комиссии к валюте журнала; выделено в зависимость, чтобы смена правила разбора не требовала правок конвейера.</summary>
+	private readonly IFeeCurrencyRule _feeCurrencyRule;
+
 	/// <summary>Создаёт материализатор над сверщиком символов опционов со справочником.</summary>
 	/// <param name="instrumentResolver">Сверщик, связывающий символ опциона с канонической спецификацией биржи.</param>
+	/// <param name="feeCurrencyRule">Правило приведения валюты комиссии; по умолчанию — паритет USDC/USDT по ADR-0001.</param>
 	/// <exception cref="ArgumentNullException">Сверщик не задан.</exception>
-	public TradeMaterializer(InstrumentResolver instrumentResolver)
+	public TradeMaterializer(InstrumentResolver instrumentResolver, IFeeCurrencyRule? feeCurrencyRule = null)
 	{
 		_instrumentResolver = instrumentResolver ?? throw new ArgumentNullException(nameof(instrumentResolver));
+		_feeCurrencyRule = feeCurrencyRule ?? UsdcUsdtParityFeeCurrencyRule.Instance;
 	}
 
 	/// <summary>
@@ -127,7 +132,9 @@ public sealed class TradeMaterializer
 			Price = execution.ExecPrice.Value,
 			// Знак комиссии сохраняется знаком биржи: уплаченная положительна, rebate отрицателен.
 			Fee = execution.ExecFee ?? 0m,
-			FeeCurrency = CanonicalFeeCurrency(execution.FeeCurrency),
+			// Валюта комиссии приводится правилом разбора: по умолчанию USDC учитывается
+			// как USDT в паритете 1:1, смена правила применяется повторной материализацией.
+			FeeCurrency = _feeCurrencyRule.Canonicalize(execution.FeeCurrency),
 			IsMaker = execution.IsMaker,
 			Option = ResolveOptionAttributes(rawExecution, execution),
 		};
@@ -151,21 +158,6 @@ public sealed class TradeMaterializer
 				$"Полезная нагрузка записи исполнения {rawExecution.ExecId} содержит некорректный JSON: {exception.Message}",
 				exception);
 		}
-	}
-
-	/// <summary>
-	/// Приводит валюту комиссии к валюте журнала: USDC учитывается как USDT в паритете
-	/// 1:1 по ADR-0001, прочие валюты биржи (например, BTC у опционов) остаются как есть.
-	/// </summary>
-	// Traceability: adr:docs/adr/0001-usdc-usdt-parity.md#usdc-usdt-parity-1-1
-	private static string? CanonicalFeeCurrency(string? feeCurrency)
-	{
-		if (string.IsNullOrWhiteSpace(feeCurrency))
-		{
-			return null;
-		}
-
-		return string.Equals(feeCurrency, "USDC", StringComparison.Ordinal) ? "USDT" : feeCurrency;
 	}
 
 	/// <summary>
