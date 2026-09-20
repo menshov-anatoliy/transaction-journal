@@ -70,6 +70,13 @@ builder.Services.AddSingleton(sp => new TradeBindingService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton(sp => new InboxReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton(sp => new ManualCloseMarkService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+
+// Read-модель позиций — производный запрос остатков без мутирующего API; источник
+// последних марок для ручных пометок без цены подключит слой синхронизации/аналитики.
+builder.Services.AddSingleton(sp => new PositionReadModel(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 
 var app = builder.Build();
 
