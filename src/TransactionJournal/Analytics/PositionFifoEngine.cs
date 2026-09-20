@@ -15,6 +15,27 @@ public sealed class PositionFifoEngine
 	#region Сопоставление
 
 	/// <summary>
+	/// Упорядочивает записи потока позиции в единую хронологию: по моменту,
+	/// рангу вида и ключу источника. Порядок публичен, чтобы читающие слои
+	/// обходили ту же хронологию, что и сопоставление, — например, для вывода
+	/// дат позиции из её записей.
+	/// </summary>
+	/// <param name="entries">Записи потока позиции: сделки и закрывающие записи.</param>
+	/// <returns>Записи в порядке единой хронологии.</returns>
+	/// <exception cref="ArgumentNullException">Записи не заданы.</exception>
+	/// <exception cref="ArgumentOutOfRangeException">Вид записи потока неизвестен.</exception>
+	public static List<PositionFifoEntry> OrderByTimeline(IEnumerable<PositionFifoEntry> entries)
+	{
+		ArgumentNullException.ThrowIfNull(entries);
+
+		return entries
+			.OrderBy(entry => entry.At)
+			.ThenBy(entry => RankOf(entry.Kind))
+			.ThenBy(entry => entry.SourceKey, StringComparer.Ordinal)
+			.ToList();
+	}
+
+	/// <summary>
 	/// Сопоставляет записи потока позиции по FIFO: каждая встречная запись закрывает
 	/// старейшие ещё не закрытые части в порядке хронологии, комиссии записей
 	/// уменьшают результат, непокрытые части образуют остаток со средней ценой.
@@ -31,11 +52,7 @@ public sealed class PositionFifoEngine
 	{
 		ArgumentNullException.ThrowIfNull(entries);
 
-		var ordered = entries
-			.OrderBy(entry => entry.At)
-			.ThenBy(entry => RankOf(entry.Kind))
-			.ThenBy(entry => entry.SourceKey, StringComparer.Ordinal)
-			.ToList();
+		var ordered = OrderByTimeline(entries);
 
 		var layers = new Queue<FifoLayer>();
 		var matchedPnL = 0m;
