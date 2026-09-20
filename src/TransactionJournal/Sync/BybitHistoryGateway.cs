@@ -31,5 +31,18 @@ public sealed class BybitHistoryGateway : IBybitHistoryGateway
 		return _client.GetExecutionListAsync(query, cancellationToken);
 	}
 
+	/// <summary>
+	/// GET /v5/asset/delivery-record — страница delivery-записей экспираций категории
+	/// с курсором пагинации: источник закрывающих записей журнала.
+	/// </summary>
+	/// <exception cref="BybitApiException">Биржа ответила ошибкой retCode или неудачным HTTP-статусом после всех повторов.</exception>
+	public Task<BybitPagedResponse<BybitDeliveryRecord>> GetDeliveryRecordAsync(
+		BybitDeliveryRecordQuery query,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(query);
+		return _client.GetDeliveryRecordAsync(query, cancellationToken);
+	}
+
 	#endregion
 }

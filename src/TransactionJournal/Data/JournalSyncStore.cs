@@ -6,13 +6,14 @@ using TransactionJournal.Sync;
 namespace TransactionJournal.Data;
 
 /// <summary>
-/// EF-адаптер сырого хранилища журнала над JournalDbContext: проверка известных execId,
-/// идемпотентная пакетная вставка записей исполнения с продвижением счётчика запуска,
-/// хранение состояния категорий и журнал запусков синхронизации. Каждый вызов создаёт
-/// собственный короткоживущий контекст, поэтому адаптер не держит соединений между
-/// вызовами и безопасен в длительных сессиях Blazor Server.
+/// EF-адаптер сырого хранилища журнала над JournalDbContext: проверка известных execId
+/// и delivery-ключей, идемпотентная пакетная вставка записей исполнения и delivery-записей
+/// с продвижением счётчиков запуска, хранение состояния категорий и журнал запусков
+/// синхронизации. Каждый вызов создаёт собственный короткоживущий контекст, поэтому
+/// адаптер не держит соединений между вызовами и безопасен в длительных сессиях Blazor Server.
 /// Идемпотентность вставки двойная: известные записи отфильтровываются запросом до
-/// вставки, а уникальный индекс по execId отклоняет дубликат на уровне БД.
+/// вставки, а уникальные индексы (execId; symbol + deliveryTime) отклоняют дубликат
+/// на уровне БД.
 /// Traceability: openspec:sync/bybit-history#requirement-sync-idempotency
 /// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
 /// Traceability: change:add-bybit-sync/design#d2
@@ -21,6 +22,8 @@ public sealed class JournalSyncStore :
 	IExecutionKnownIdProbe,
 	IExecutionSyncStateStore,
 	IRawExecutionBatchWriter,
+	IDeliveryKnownKeyProbe,
+	IRawDeliveryBatchWriter,
 	ISyncRunJournal
 {
 	private readonly DbContextOptions<JournalDbContext> _options;
@@ -140,6 +143,123 @@ public sealed class JournalSyncStore :
 		{
 			InsertedExecIds = insertedExecIds,
 			SkippedKnownCount = knownExecIds.Count,
+		};
+	}
+
+	#endregion
+
+	#region IDeliveryKnownKeyProbe
+
+	/// <inheritdoc cref="IDeliveryKnownKeyProbe.FindKnownAsync" />
+	public async Task<IReadOnlySet<DeliveryRecordKey>> FindKnownAsync(
+		IReadOnlyCollection<DeliveryRecordKey> keys,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(keys);
+		if (keys.Count == 0)
+		{
+			return new HashSet<DeliveryRecordKey>();
+		}
+
+		// Один запрос по множеству символов пачки: пары symbol + deliveryTime сверяются
+		// в памяти после чтения строк кандидатов, чтобы результат содержал только
+		// запрошенные ключи, а не все строки найденных символов.
+		using var db = CreateContext();
+		var symbols = keys.Select(key => key.Symbol).Distinct(StringComparer.Ordinal).ToArray();
+		var candidateRows = await db.RawDeliveries
+			.Where(delivery => symbols.Contains(delivery.Symbol))
+			.Select(delivery => new { delivery.Symbol, delivery.DeliveryTimeMs })
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+		var requestedKeys = keys.ToHashSet();
+		return candidateRows
+			.Select(row => new DeliveryRecordKey(row.Symbol, row.DeliveryTimeMs))
+			.Where(requestedKeys.Contains)
+			.ToHashSet();
+	}
+
+	#endregion
+
+	#region IRawDeliveryBatchWriter
+
+	/// <inheritdoc cref="IRawDeliveryBatchWriter.WriteAsync" />
+	public async Task<RawDeliveryBatchResult> WriteAsync(
+		string category,
+		IReadOnlyCollection<BybitDeliveryRecord> deliveries,
+		SyncRun? progressRun = null,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(category);
+		ArgumentNullException.ThrowIfNull(deliveries);
+		if (deliveries.Count == 0)
+		{
+			return new RawDeliveryBatchResult { InsertedKeys = [], SkippedKnownCount = 0 };
+		}
+
+		// Внутри пачки один ключ symbol + deliveryTime вставляется один раз: защита
+		// дешевле расследования дублей.
+		var uniqueDeliveries = new List<BybitDeliveryRecord>(deliveries.Count);
+		var uniqueKeys = new HashSet<DeliveryRecordKey>();
+		foreach (var delivery in deliveries)
+		{
+			if (uniqueKeys.Add(new DeliveryRecordKey(delivery.Symbol, delivery.DeliveryTimeMs)))
+			{
+				uniqueDeliveries.Add(delivery);
+			}
+		}
+
+		// Известность спрашиваем у хранилища до вставки: повторный прогон после обрыва
+		// и пересекающиеся окна пропускают уже сохранённые записи, а уникальный индекс
+		// по symbol + deliveryTime остаётся страховкой от гонок на уровне БД.
+		// Traceability: openspec:sync/bybit-history#scenario-window-overlap-no-duplicates
+		var knownKeys = await FindKnownAsync(uniqueKeys.ToArray(), cancellationToken).ConfigureAwait(false);
+		var fetchedAt = _timeProvider.GetUtcNow();
+
+		using var db = CreateContext();
+		var insertedKeys = new List<DeliveryRecordKey>();
+		foreach (var delivery in uniqueDeliveries)
+		{
+			var key = new DeliveryRecordKey(delivery.Symbol, delivery.DeliveryTimeMs);
+			if (knownKeys.Contains(key))
+			{
+				continue;
+			}
+
+			// Запись сохраняется целиком в сыром виде: JSON хранит все поля биржи,
+			// идентификатор источника и время загрузки — этого достаточно для полного
+			// переразбора закрывающих записей без обращения к API.
+			// Traceability: openspec:sync/bybit-history#scenario-raw-records-persisted-for-reparse
+			db.RawDeliveries.Add(new RawDelivery
+			{
+				Symbol = delivery.Symbol,
+				DeliveryTimeMs = delivery.DeliveryTimeMs,
+				Category = category,
+				PayloadJson = JsonSerializer.Serialize(delivery, BybitJson.Options),
+				FetchedAt = fetchedAt,
+			});
+			insertedKeys.Add(key);
+		}
+
+		// Счётчик запуска продвигается той же транзакцией SaveChanges, что и вставка:
+		// прогресс в SyncRun не расходится с фактически сохранёнными записями даже
+		// при обрыве на середине запуска.
+		// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
+		if (progressRun is not null && insertedKeys.Count > 0)
+		{
+			var runRow = await FindRunRowAsync(db, progressRun.Id, cancellationToken).ConfigureAwait(false);
+			runRow.NewDeliveries += insertedKeys.Count;
+			progressRun.NewDeliveries = runRow.NewDeliveries;
+		}
+
+		if (insertedKeys.Count > 0)
+		{
+			await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+		}
+
+		return new RawDeliveryBatchResult
+		{
+			InsertedKeys = insertedKeys,
+			SkippedKnownCount = knownKeys.Count,
 		};
 	}
 

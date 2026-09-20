@@ -274,6 +274,13 @@ public class ExecutionWindowPassTests
 			var page = _pages.Count > 0 ? _pages.Dequeue() : new BybitPagedResponse<BybitExecution>();
 			return Task.FromResult(page);
 		}
+
+		public Task<BybitPagedResponse<BybitDeliveryRecord>> GetDeliveryRecordAsync(
+			BybitDeliveryRecordQuery query,
+			CancellationToken cancellationToken = default)
+		{
+			throw new NotSupportedException("Проход истории исполнения не запрашивает delivery-записи.");
+		}
 	}
 
 	/// <summary>

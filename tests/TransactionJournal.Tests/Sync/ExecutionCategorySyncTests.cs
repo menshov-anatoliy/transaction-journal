@@ -443,6 +443,13 @@ public class ExecutionCategorySyncTests
 				? Task.FromException<BybitPagedResponse<BybitExecution>>(error)
 				: Task.FromResult((BybitPagedResponse<BybitExecution>)response);
 		}
+
+		public Task<BybitPagedResponse<BybitDeliveryRecord>> GetDeliveryRecordAsync(
+			BybitDeliveryRecordQuery query,
+			CancellationToken cancellationToken = default)
+		{
+			throw new NotSupportedException("Движок синхронизации исполнения не запрашивает delivery-записи.");
+		}
 	}
 
 	/// <summary>

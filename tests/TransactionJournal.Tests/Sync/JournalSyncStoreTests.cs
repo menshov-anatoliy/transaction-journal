@@ -165,7 +165,7 @@ public class JournalSyncStoreTests
 	public async Task TryIfWriteAsyncWithEmptyBatchInsertsNothing()
 	{
 		// Act: пустое окно — частый случай на границах истории.
-		var result = await _store.WriteAsync("linear", []);
+		var result = await _store.WriteAsync("linear", Array.Empty<BybitExecution>());
 
 		// Assert: нулевой итог и пустое хранилище.
 		Assert.That(result.InsertedCount, Is.Zero);
@@ -240,6 +240,182 @@ public class JournalSyncStoreTests
 	}
 
 	[TestMethod]
+	[Description("Пакетная вставка delivery записывает только неизвестные ключи и пропускает известные")]
+	public async Task TryIfDeliveryWriteAsyncInsertsOnlyUnknownKeysAndSkipsKnownOnes()
+	{
+		// Arrange: первая пачка целиком новая.
+		// Требование: повторная загрузка известных delivery-записей не создаёт дубликатов —
+		// вставка идемпотентна по паре symbol + deliveryTime.
+		// Traceability: openspec:sync/bybit-history#requirement-sync-idempotency
+		// Traceability: openspec:sync/bybit-history#scenario-repeat-sync-no-duplicates
+		await _store.WriteAsync("option", [Delivery("BTC-2JAN26-100000-C", 1735296000000), Delivery("ETH-2JAN26-4000-P", 1735296000000)]);
+
+		// Act: вторая пачка повторяет первый ключ тем же символом, но другим временем
+		// доставки (новая запись), и приносит повтор уже сохранённого ключа ETH.
+		var secondResult = await _store.WriteAsync("option", [Delivery("BTC-2JAN26-100000-C", 1735382400000), Delivery("ETH-2JAN26-4000-P", 1735296000000)]);
+
+		// Assert: вставлена только новая пара symbol + deliveryTime, повтор признан известным и пропущен.
+		Assert.That(secondResult.InsertedKeys,
+			Is.EqualTo(new[] { new DeliveryRecordKey("BTC-2JAN26-100000-C", 1735382400000) }));
+		Assert.That(secondResult.SkippedKnownCount, Is.EqualTo(1));
+
+		// Assert: в хранилище ровно три записи — дублей нет.
+		Assert.That(LoadRawDeliveries(), Has.Count.EqualTo(3));
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка delivery сохраняет запись целиком в сыром виде с отметкой загрузки")]
+	public async Task TryIfDeliveryWriteAsyncStoresWholeRecordAsRawJsonWithFetchTime()
+	{
+		// Arrange: запись с типовыми полями биржи — сторона, позиция, цены, страйк, комиссия, PnL.
+		// Требование: каждая полученная биржевая запись сохраняется в необработанном виде
+		// с идентификатором источника и временем загрузки — сырьё доступно для переразбора.
+		// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
+		// Traceability: openspec:sync/bybit-history#scenario-raw-records-persisted-for-reparse
+		var delivery = new BybitDeliveryRecord
+		{
+			Symbol = "BTC-27DEC24-2800-C",
+			DeliveryTimeMs = 1735296000000,
+			Side = "Sell",
+			Position = 0.15m,
+			EntryPrice = 42000.5m,
+			DeliveryPrice = 41000m,
+			Strike = 28000m,
+			Fee = 0.0021m,
+			DeliveryRpl = 195.0m,
+		};
+
+		// Act
+		await _store.WriteAsync("option", [delivery]);
+
+		// Assert: строка сырья несёт ключ источника, категорию и отметку загрузки с виртуальных часов.
+		var row = LoadRawDeliveries().Single();
+		Assert.That(row.Symbol, Is.EqualTo("BTC-27DEC24-2800-C"));
+		Assert.That(row.DeliveryTimeMs, Is.EqualTo(1735296000000));
+		Assert.That(row.Category, Is.EqualTo("option"));
+		Assert.That(row.FetchedAt, Is.EqualTo(Now));
+
+		// Assert: сырой JSON разбирается обратно в запись биржи без потери полей.
+		var roundTripped = JsonSerializer.Deserialize<BybitDeliveryRecord>(row.PayloadJson);
+		Assert.That(roundTripped!.Symbol, Is.EqualTo("BTC-27DEC24-2800-C"));
+		Assert.That(roundTripped.DeliveryTimeMs, Is.EqualTo(1735296000000));
+		Assert.That(roundTripped.Side, Is.EqualTo("Sell"));
+		Assert.That(roundTripped.Position, Is.EqualTo(0.15m));
+		Assert.That(roundTripped.EntryPrice, Is.EqualTo(42000.5m));
+		Assert.That(roundTripped.DeliveryPrice, Is.EqualTo(41000m));
+		Assert.That(roundTripped.Strike, Is.EqualTo(28000m));
+		Assert.That(roundTripped.Fee, Is.EqualTo(0.0021m));
+		Assert.That(roundTripped.DeliveryRpl, Is.EqualTo(195.0m));
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка delivery не удваивает одинаковый ключ внутри одной пачки")]
+	public async Task TryIfDeliveryWriteAsyncDeduplicatesSameKeyInsideSingleBatch()
+	{
+		// Arrange: пачка дважды содержит одну пару symbol + deliveryTime.
+		var batch = new[]
+		{
+			Delivery("BTC-2JAN26-100000-C", 1735296000000),
+			Delivery("BTC-2JAN26-100000-C", 1735296000000),
+		};
+
+		// Act
+		var result = await _store.WriteAsync("option", batch);
+
+		// Assert: вставлена одна строка, вторая признана повтором внутри пачки.
+		Assert.That(result.InsertedCount, Is.EqualTo(1));
+		Assert.That(LoadRawDeliveries(), Has.Count.EqualTo(1));
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка delivery продвигает счётчик новых записей запуска на размер вставки")]
+	public async Task TryIfDeliveryWriteAsyncAdvancesProgressRunCounterWithEachBatch()
+	{
+		// Arrange: запуск открыт в журнале, счётчик delivery-записей пока нулевой.
+		// Требование: прогресс запуска пишется в SyncRun поэтапно — каждая пачка
+		// продвигает счётчик сохранённых delivery-записей.
+		// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
+		var run = await _store.StartAsync(SyncRunMode.Backfill);
+
+		// Act: две пачки по одной записи.
+		await _store.WriteAsync("option", [Delivery("BTC-2JAN26-100000-C", 1735296000000)], run);
+		await _store.WriteAsync("option", [Delivery("ETH-2JAN26-4000-P", 1735296000000)], run);
+
+		// Assert: строка запуска в базе и дескриптор в памяти несут согласованный счётчик.
+		Assert.That(LoadRun(run.Id)!.NewDeliveries, Is.EqualTo(2));
+		Assert.That(run.NewDeliveries, Is.EqualTo(2));
+	}
+
+	[TestMethod]
+	[Description("Пустая пачка delivery не меняет хранилище и не создаёт ошибок")]
+	public async Task TryIfDeliveryWriteAsyncWithEmptyBatchInsertsNothing()
+	{
+		// Act: пустое окно — частый случай на границах delivery-истории.
+		var result = await _store.WriteAsync("option", Array.Empty<BybitDeliveryRecord>());
+
+		// Assert: нулевой итог и пустое хранилище.
+		Assert.That(result.InsertedCount, Is.Zero);
+		Assert.That(result.SkippedKnownCount, Is.Zero);
+		Assert.That(LoadRawDeliveries(), Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Проверка известных delivery-ключей возвращает только сохранённые пары")]
+	public async Task TryIfDeliveryFindKnownAsyncReturnsOnlyStoredKeys()
+	{
+		// Arrange: в хранилище две записи с разным временем доставки одного символа.
+		await _store.WriteAsync("option", [Delivery("BTC-2JAN26-100000-C", 1735296000000)]);
+
+		// Act: пачка содержит известную пару, тот же символ с другим временем и новый символ.
+		var known = await _store.FindKnownAsync(new[]
+		{
+			new DeliveryRecordKey("BTC-2JAN26-100000-C", 1735296000000),
+			new DeliveryRecordKey("BTC-2JAN26-100000-C", 1735382400000),
+			new DeliveryRecordKey("ETH-2JAN26-4000-P", 1735296000000),
+		});
+
+		// Assert: известной признана только сохранённая пара symbol + deliveryTime.
+		Assert.That(known, Is.EqualTo(new HashSet<DeliveryRecordKey> { new("BTC-2JAN26-100000-C", 1735296000000) }));
+	}
+
+	[TestMethod]
+	[DataRow(" ")]
+	[Description("Пакетная вставка delivery отклоняет пустую категорию")]
+	[ExpectedException(typeof(ArgumentException))]
+	public async Task ThrowOnDeliveryWriteAsyncNullOrWhiteSpaceCategory(string category)
+	{
+		// Arrange — Act: категория — обязательный атрибут сырой delivery-записи.
+		await _store.WriteAsync(category, [Delivery("BTC-2JAN26-100000-C", 1735296000000)]);
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка delivery отклоняет null-категорию")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public async Task ThrowOnDeliveryWriteAsyncNullCategory()
+	{
+		// Arrange — Act: null-категория отвергается отдельной веткой проверки.
+		await _store.WriteAsync(null!, [Delivery("BTC-2JAN26-100000-C", 1735296000000)]);
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка delivery отклоняет null-пачку записей")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public async Task ThrowOnDeliveryWriteAsyncNullDeliveries()
+	{
+		// Arrange — Act: записи пачки обязательны.
+		await _store.WriteAsync("option", (IReadOnlyCollection<BybitDeliveryRecord>)null!);
+	}
+
+	[TestMethod]
+	[Description("Проверка известных delivery-ключей отклоняет null-пачку")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public async Task ThrowOnDeliveryFindKnownAsyncNullKeys()
+	{
+		// Arrange — Act: пачка ключей обязательна.
+		await _store.FindKnownAsync((IReadOnlyCollection<DeliveryRecordKey>)null!);
+	}
+
+	[TestMethod]
 	[DataRow(" ")]
 	[Description("Пакетная вставка отклоняет пустую категорию")]
 	[ExpectedException(typeof(ArgumentException))]
@@ -264,7 +440,7 @@ public class JournalSyncStoreTests
 	public async Task ThrowOnWriteAsyncNullExecutions()
 	{
 		// Arrange — Act: записи пачки обязательны.
-		await _store.WriteAsync("linear", null!);
+		await _store.WriteAsync("linear", (IReadOnlyCollection<BybitExecution>)null!);
 	}
 
 	[TestMethod]
@@ -326,6 +502,15 @@ public class JournalSyncStoreTests
 		return db.RawExecutions.OrderBy(execution => execution.ExecId).ToList();
 	}
 
+	private List<RawDelivery> LoadRawDeliveries()
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		return db.RawDeliveries
+			.OrderBy(delivery => delivery.Symbol)
+			.ThenBy(delivery => delivery.DeliveryTimeMs)
+			.ToList();
+	}
+
 	private SyncRun? LoadRun(long runId)
 	{
 		using var db = new JournalDbContext(CreateOptions());
@@ -338,6 +523,15 @@ public class JournalSyncStoreTests
 		ExecId = execId,
 		Side = "Buy",
 		ExecTimeMs = 1735296000000,
+	};
+
+	private static BybitDeliveryRecord Delivery(string symbol, long deliveryTimeMs) => new()
+	{
+		Symbol = symbol,
+		DeliveryTimeMs = deliveryTimeMs,
+		Side = "Sell",
+		Position = 0.1m,
+		Strike = 100000m,
 	};
 
 	#endregion
