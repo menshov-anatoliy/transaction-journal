@@ -1,0 +1,344 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NUnit.Framework;
+using TransactionJournal.Bybit;
+using TransactionJournal.Data;
+using TransactionJournal.Sync;
+using TransactionJournal.Tests.Bybit;
+using Assert = NUnit.Framework.Assert;
+using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
+
+namespace TransactionJournal.Tests.Sync;
+
+/// <summary>
+/// Проверки EF-адаптера сырого хранилища на временной SQLite-базе: идемпотентная
+/// пакетная вставка записей исполнения с пропуском известных execId, хранение сырого
+/// JSON целиком, продвижение счётчика запуска, состояние категорий и журнал запусков.
+/// </summary>
+[TestClass]
+public class JournalSyncStoreTests
+{
+	// Виртуальные часы фиксированы на 2026-01-01: отметки загрузки и запусков детерминированы.
+	private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+	private string _databasePath = null!;
+	private JournalSyncStore _store = null!;
+
+	[TestInitialize]
+	public void Initialize()
+	{
+		// Каждая проверка работает со своей пустой базой во временной папке.
+		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-store-tests-{Guid.NewGuid():N}.db");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate();
+		}
+
+		_store = new JournalSyncStore(CreateOptions(), new ManualTimeProvider());
+	}
+
+	[TestCleanup]
+	public void Cleanup()
+	{
+		// Пул соединений SQLite держит файл базы открытым — сбрасываем его перед удалением.
+		Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+		// Временная база и соседние WAL/SHM-файлы удаляются после каждой проверки.
+		foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
+		{
+			var file = _databasePath + suffix;
+			if (File.Exists(file))
+			{
+				File.Delete(file);
+			}
+		}
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка записывает только неизвестные execId и пропускает известные")]
+	public async Task TryIfWriteAsyncInsertsOnlyUnknownExecutionsAndSkipsKnownOnes()
+	{
+		// Arrange: первая пачка целиком новая, вторая содержит уже сохранённый идентификатор.
+		// Требование: повторная загрузка известных записей не создаёт дубликатов — вставка
+		// идемпотентна по биржевому идентификатору execId.
+		// Traceability: openspec:sync/bybit-history#requirement-sync-idempotency
+		// Traceability: openspec:sync/bybit-history#scenario-repeat-sync-no-duplicates
+		await _store.WriteAsync("linear", [Execution("exec-a"), Execution("exec-b")]);
+
+		// Act: вторая пачка повторяет exec-b и приносит новую exec-c.
+		var secondResult = await _store.WriteAsync("linear", [Execution("exec-b"), Execution("exec-c")]);
+
+		// Assert: вставлена только новая запись, повтор признан известным и пропущен.
+		Assert.That(secondResult.InsertedExecIds, Is.EqualTo(new[] { "exec-c" }));
+		Assert.That(secondResult.SkippedKnownCount, Is.EqualTo(1));
+
+		// Assert: в хранилище ровно три записи — дублей нет.
+		var storedIds = LoadRawExecutions().Select(execution => execution.ExecId).ToList();
+		Assert.That(storedIds, Is.EqualTo(new[] { "exec-a", "exec-b", "exec-c" }));
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка сохраняет запись исполнения целиком в сыром виде с отметкой загрузки")]
+	public async Task TryIfWriteAsyncStoresWholeRecordAsRawJsonWithFetchTime()
+	{
+		// Arrange: запись с типовыми полями биржи — цена, комиссия, валюта, сторона, мейкерство.
+		// Требование: каждая полученная биржевая запись сохраняется в необработанном виде
+		// с идентификатором источника и временем загрузки — сырьё доступно для переразбора.
+		// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
+		// Traceability: openspec:sync/bybit-history#scenario-raw-records-persisted-for-reparse
+		var execution = new BybitExecution
+		{
+			Symbol = "BTC-27DEC24-2800-C",
+			OrderId = "order-1",
+			Side = "Sell",
+			ExecFee = 0.0021m,
+			ExecId = "exec-raw-1",
+			ExecPrice = 42000.5m,
+			ExecQty = 0.15m,
+			ExecType = "Trade",
+			ExecTimeMs = 1735296000000,
+			FeeCurrency = "USDT",
+			IsMaker = true,
+		};
+
+		// Act
+		await _store.WriteAsync("option", [execution]);
+
+		// Assert: строка сырья несёт идентификатор источника, категорию, инструмент,
+		// время исполнения для проходов окнами и отметку загрузки с виртуальных часов.
+		var row = LoadRawExecutions().Single();
+		Assert.That(row.ExecId, Is.EqualTo("exec-raw-1"));
+		Assert.That(row.Category, Is.EqualTo("option"));
+		Assert.That(row.Symbol, Is.EqualTo("BTC-27DEC24-2800-C"));
+		Assert.That(row.ExecTimeMs, Is.EqualTo(1735296000000));
+		Assert.That(row.FetchedAt, Is.EqualTo(Now));
+
+		// Assert: сырой JSON разбирается обратно в запись биржи без потери полей.
+		var roundTripped = JsonSerializer.Deserialize<BybitExecution>(row.PayloadJson);
+		Assert.That(roundTripped!.ExecId, Is.EqualTo("exec-raw-1"));
+		Assert.That(roundTripped.Symbol, Is.EqualTo("BTC-27DEC24-2800-C"));
+		Assert.That(roundTripped.Side, Is.EqualTo("Sell"));
+		Assert.That(roundTripped.ExecPrice, Is.EqualTo(42000.5m));
+		Assert.That(roundTripped.ExecFee, Is.EqualTo(0.0021m));
+		Assert.That(roundTripped.FeeCurrency, Is.EqualTo("USDT"));
+		Assert.That(roundTripped.IsMaker, Is.True);
+		Assert.That(roundTripped.ExecTimeMs, Is.EqualTo(1735296000000));
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка не удваивает одинаковый execId внутри одной пачки")]
+	public async Task TryIfWriteAsyncDeduplicatesSameExecIdInsideSingleBatch()
+	{
+		// Arrange: пачка дважды содержит один идентификатор — защита от нестандартной выдачи биржи.
+		var batch = new[] { Execution("exec-dup"), Execution("exec-dup") };
+
+		// Act
+		var result = await _store.WriteAsync("linear", batch);
+
+		// Assert: вставлена одна строка, вторая признана повтором внутри пачки.
+		Assert.That(result.InsertedExecIds, Is.EqualTo(new[] { "exec-dup" }));
+		Assert.That(LoadRawExecutions(), Has.Count.EqualTo(1));
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка продвигает счётчик новых записей запуска на размер вставки")]
+	public async Task TryIfWriteAsyncAdvancesProgressRunCounterWithEachBatch()
+	{
+		// Arrange: запуск открыт в журнале, счётчик новых записей пока нулевой.
+		// Требование: прогресс запуска пишется в SyncRun поэтапно — каждая пачка
+		// продвигает счётчик сохранённых записей.
+		// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
+		var run = await _store.StartAsync(SyncRunMode.Backfill);
+
+		// Act: две пачки по одной записи.
+		await _store.WriteAsync("linear", [Execution("exec-1")], run);
+		await _store.WriteAsync("linear", [Execution("exec-2")], run);
+
+		// Assert: строка запуска в базе и дескриптор в памяти несут согласованный счётчик.
+		Assert.That(LoadRun(run.Id)!.NewExecutions, Is.EqualTo(2));
+		Assert.That(run.NewExecutions, Is.EqualTo(2));
+	}
+
+	[TestMethod]
+	[Description("Пустая пачка не меняет хранилище и не создаёт ошибок")]
+	public async Task TryIfWriteAsyncWithEmptyBatchInsertsNothing()
+	{
+		// Act: пустое окно — частый случай на границах истории.
+		var result = await _store.WriteAsync("linear", []);
+
+		// Assert: нулевой итог и пустое хранилище.
+		Assert.That(result.InsertedCount, Is.Zero);
+		Assert.That(result.SkippedKnownCount, Is.Zero);
+		Assert.That(LoadRawExecutions(), Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Проверка известных execId возвращает только сохранённые идентификаторы")]
+	public async Task TryIfFindKnownAsyncReturnsOnlyStoredExecIds()
+	{
+		// Arrange: в хранилище две записи.
+		await _store.WriteAsync("linear", [Execution("exec-a"), Execution("exec-b")]);
+
+		// Act: пачка содержит один известный и один новый идентификатор.
+		var known = await _store.FindKnownAsync(new[] { "exec-a", "exec-unknown" });
+
+		// Assert: известным признан только сохранённый идентификатор.
+		Assert.That(known, Is.EqualTo(new HashSet<string> { "exec-a" }));
+	}
+
+	[TestMethod]
+	[Description("Состояние категории сохраняется и читается обратно целиком")]
+	public async Task TryIfStateFindSaveRoundTripsCategoryState()
+	{
+		// Arrange: у категории ещё нет состояния — успешного синка не было.
+		Assert.That(await _store.FindAsync("option"), Is.Null);
+
+		// Act: повторное сохранение той же категории обновляет строку, а не плодит дубли.
+		await _store.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = 1000, BackfillBoundaryMs = 500 });
+		await _store.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = 2000, BackfillBoundaryMs = 500, LastSuccessAt = Now });
+
+		// Assert: чтение возвращает последние водяной знак и границу; строка состояния одна.
+		var state = await _store.FindAsync("option");
+		Assert.That(state!.ExecWatermarkMs, Is.EqualTo(2000));
+		Assert.That(state.BackfillBoundaryMs, Is.EqualTo(500));
+		Assert.That(state.LastSuccessAt, Is.EqualTo(Now));
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.SyncStates.Count(), Is.EqualTo(1));
+		}
+	}
+
+	[TestMethod]
+	[Description("Журнал запусков открывает запуск бегущим и закрывает успехом или ошибкой")]
+	public async Task TryIfRunJournalClosesRunWithSuccessOrFailure()
+	{
+		// Arrange: два запуска — один завершится успехом, второй ошибкой.
+		// Требование: прерванная синхронизация оставляет журнал согласованным — запуск
+		// закрывается со статусом и текстом ошибки, повторный запуск продолжает без дублей.
+		// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
+		var succeededRun = await _store.StartAsync(SyncRunMode.Backfill);
+		var failedRun = await _store.StartAsync(SyncRunMode.Incremental);
+
+		// Act
+		await _store.MarkSucceededAsync(succeededRun);
+		await _store.MarkFailedAsync(failedRun, "ошибка биржи");
+
+		// Assert: первый запуск закрыт успехом с моментом завершения и без ошибки.
+		var succeededRow = LoadRun(succeededRun.Id)!;
+		Assert.That(succeededRow.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(succeededRow.FinishedAt, Is.EqualTo(Now));
+		Assert.That(succeededRow.Error, Is.Null);
+		Assert.That(succeededRun.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+
+		// Assert: второй запуск закрыт ошибкой с текстом причины.
+		var failedRow = LoadRun(failedRun.Id)!;
+		Assert.That(failedRow.Status, Is.EqualTo(SyncRunStatus.Failed));
+		Assert.That(failedRow.FinishedAt, Is.EqualTo(Now));
+		Assert.That(failedRow.Error, Is.EqualTo("ошибка биржи"));
+		Assert.That(failedRun.Status, Is.EqualTo(SyncRunStatus.Failed));
+	}
+
+	[TestMethod]
+	[DataRow(" ")]
+	[Description("Пакетная вставка отклоняет пустую категорию")]
+	[ExpectedException(typeof(ArgumentException))]
+	public async Task ThrowOnWriteAsyncNullOrWhiteSpaceCategory(string category)
+	{
+		// Arrange — Act: категория — обязательный атрибут сырой записи.
+		await _store.WriteAsync(category, [Execution("exec-a")]);
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка отклоняет null-категорию")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public async Task ThrowOnWriteAsyncNullCategory()
+	{
+		// Arrange — Act: null-категория отвергается отдельной веткой проверки.
+		await _store.WriteAsync(null!, [Execution("exec-a")]);
+	}
+
+	[TestMethod]
+	[Description("Пакетная вставка отклоняет null-пачку записей")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public async Task ThrowOnWriteAsyncNullExecutions()
+	{
+		// Arrange — Act: записи пачки обязательны.
+		await _store.WriteAsync("linear", null!);
+	}
+
+	[TestMethod]
+	[Description("Закрытие успеха отклоняет запуск, которого нет в журнале")]
+	[ExpectedException(typeof(InvalidOperationException))]
+	public async Task ThrowOnMarkSucceededAsyncUnknownRun()
+	{
+		// Arrange: дескриптор запуска не проходит через StartAsync — строки в журнале нет.
+		var orphanRun = new SyncRun { Id = 404, StartedAt = Now, Mode = SyncRunMode.Backfill, Status = SyncRunStatus.Running };
+
+		// Act
+		await _store.MarkSucceededAsync(orphanRun);
+	}
+
+	[TestMethod]
+	[DataRow("")]
+	[Description("Закрытие ошибки отклоняет пустой текст ошибки")]
+	[ExpectedException(typeof(ArgumentException))]
+	public async Task ThrowOnMarkFailedAsyncEmptyError(string error)
+	{
+		// Arrange: запуск открыт корректно.
+		var run = await _store.StartAsync(SyncRunMode.Backfill);
+
+		// Act: текст ошибки обязателен для диагностики прерывания.
+		await _store.MarkFailedAsync(run, error);
+	}
+
+	[TestMethod]
+	[Description("Закрытие ошибки отклоняет null-текст ошибки")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public async Task ThrowOnMarkFailedAsyncNullError()
+	{
+		// Arrange: запуск открыт корректно.
+		var run = await _store.StartAsync(SyncRunMode.Backfill);
+
+		// Act: null-текст отвергается отдельной веткой проверки.
+		await _store.MarkFailedAsync(run, null!);
+	}
+
+	[TestMethod]
+	[Description("Адаптер отклоняет null-опции контекста")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public void ThrowOnNullConstructorOptions()
+	{
+		// Arrange — Act: опции контекста обязательны.
+		new JournalSyncStore(null!);
+	}
+
+	#region Помощники
+
+	private DbContextOptions<JournalDbContext> CreateOptions() =>
+		new DbContextOptionsBuilder<JournalDbContext>()
+			.UseSqlite($"Data Source={_databasePath}")
+			.Options;
+
+	private List<RawExecution> LoadRawExecutions()
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		return db.RawExecutions.OrderBy(execution => execution.ExecId).ToList();
+	}
+
+	private SyncRun? LoadRun(long runId)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		return db.SyncRuns.Find(runId);
+	}
+
+	private static BybitExecution Execution(string execId) => new()
+	{
+		Symbol = "BTCUSDT",
+		ExecId = execId,
+		Side = "Buy",
+		ExecTimeMs = 1735296000000,
+	};
+
+	#endregion
+}

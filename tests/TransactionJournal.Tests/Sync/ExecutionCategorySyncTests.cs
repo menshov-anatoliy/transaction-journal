@@ -222,6 +222,72 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
+	[Description("Свежие записи каждого окна передаются писателю пачками с прогрессом запуска")]
+	public async Task TryIfFreshWindowBatchesArePassedToRawWriterWithProgressRun()
+	{
+		// Arrange: движок с фиктивным писателем; два окна приносят по одной новой записи,
+		// третье окно пустое. Пустое окно не должно адресоваться писателю.
+		// Требование: загрузчик пишет сырые записи пачками по мере прохождения окон и
+		// продвигает счётчик запуска на размер каждой вставки.
+		// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
+		// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
+		var writer = new FakeRawWriter();
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, new ManualTimeProvider(), writer);
+		var progressRun = new SyncRun
+		{
+			StartedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+			Mode = SyncRunMode.Backfill,
+			Status = SyncRunStatus.Running,
+		};
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-1", NowMs - DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-2", NowMs - 8 * DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+
+		// Act
+		var result = await engine.RunAsync("linear", progressRun: progressRun);
+
+		// Assert: писателю ушли ровно две пачки — по свежим записям непустых окон.
+		Assert.That(writer.Batches, Has.Count.EqualTo(2));
+		Assert.That(writer.Batches[0].ExecIds, Is.EqualTo(new[] { "exec-1" }));
+		Assert.That(writer.Batches[1].ExecIds, Is.EqualTo(new[] { "exec-2" }));
+		Assert.That(writer.Batches[0].Category, Is.EqualTo("linear"));
+
+		// Assert: обе пачки несут дескриптор запуска для продвижения счётчика.
+		Assert.That(writer.Batches.All(batch => ReferenceEquals(batch.Run, progressRun)), Is.True);
+
+		// Assert: итог движка учитывает фактически вставленные строки.
+		Assert.That(result.NewExecutionsPersisted, Is.EqualTo(2));
+	}
+
+	[TestMethod]
+	[Description("Прогресс запуска отклоняется без писателя сырых записей")]
+	[ExpectedException(typeof(ArgumentException))]
+	public async Task ThrowOnProgressRunWithoutRawWriter()
+	{
+		// Arrange: движок без писателя не может продвигать счётчик запуска пачками.
+		var progressRun = new SyncRun
+		{
+			StartedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+			Mode = SyncRunMode.Backfill,
+			Status = SyncRunStatus.Running,
+		};
+
+		// Act — некорректная комбинация прерывается до чтения состояния и запросов.
+		try
+		{
+			await _engine.RunAsync("linear", progressRun: progressRun);
+		}
+		catch (ArgumentException)
+		{
+			// Assert: шлюз и хранилище не запрашивались.
+			Assert.That(_gateway.Queries, Is.Empty);
+			Assert.That(_stateStore.FindCalls, Is.Zero);
+			throw;
+		}
+	}
+
+	[TestMethod]
 	[Description("Ошибка биржи прерывает проход без фиксации состояния — повторный запуск продолжит с прежней отметки")]
 	[ExpectedException(typeof(BybitApiException))]
 	public async Task ThrowIfFailedWindowLeavesStateUnfixed()
@@ -435,6 +501,31 @@ public class ExecutionCategorySyncTests
 			_states[state.Category] = state;
 			Saved.Add(state);
 			return Task.CompletedTask;
+		}
+	}
+
+	/// <summary>
+	/// Фиктивный писатель сырых записей: помнит каждую пачку с дескриптором запуска
+	/// и отчитывается вставкой всех полученных записей.
+	/// </summary>
+	private sealed class FakeRawWriter : IRawExecutionBatchWriter
+	{
+		/// <summary>Все пачки в порядке вызова движка.</summary>
+		public List<(string Category, IReadOnlyList<string> ExecIds, SyncRun? Run)> Batches { get; } = [];
+
+		public Task<RawExecutionBatchResult> WriteAsync(
+			string category,
+			IReadOnlyCollection<BybitExecution> executions,
+			SyncRun? progressRun = null,
+			CancellationToken cancellationToken = default)
+		{
+			var execIds = executions.Select(execution => execution.ExecId).ToList();
+			Batches.Add((category, execIds, progressRun));
+			return Task.FromResult(new RawExecutionBatchResult
+			{
+				InsertedExecIds = execIds,
+				SkippedKnownCount = 0,
+			});
 		}
 	}
 

@@ -29,4 +29,11 @@ public sealed class ExecutionCategorySyncResult
 
 	/// <summary>Зафиксированный водяной знак успешного прохода: момент запуска, мс.</summary>
 	public required long ExecWatermarkMs { get; init; }
+
+	/// <summary>
+	/// Сколько новых записей запуска сохранено в хранилище сырых записей пачками по окнам.
+	/// Ноль, когда писатель сырых записей не подключён и записи собираются только в памяти.
+	/// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
+	/// </summary>
+	public required int NewExecutionsPersisted { get; init; }
 }

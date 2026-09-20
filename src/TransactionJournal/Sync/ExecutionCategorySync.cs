@@ -18,21 +18,25 @@ public sealed class ExecutionCategorySync
 	private readonly ExecutionWindowPass _windowPass;
 	private readonly IExecutionSyncStateStore _stateStore;
 	private readonly TimeProvider _timeProvider;
+		private readonly IRawExecutionBatchWriter? _rawWriter;
 
-	/// <summary>Создаёт движок над проходом окна и хранилищем состояния категории.</summary>
-	/// <param name="windowPass">Проход одного 7-дневного окна с курсорной пагинацией.</param>
-	/// <param name="stateStore">Хранилище состояния синхронизации категории.</param>
-	/// <param name="timeProvider">Поставщик времени; по умолчанию системные часы.</param>
-	/// <exception cref="ArgumentNullException">Проход или хранилище не заданы.</exception>
-	public ExecutionCategorySync(
-		ExecutionWindowPass windowPass,
-		IExecutionSyncStateStore stateStore,
-		TimeProvider? timeProvider = null)
-	{
-		_windowPass = windowPass ?? throw new ArgumentNullException(nameof(windowPass));
-		_stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
-		_timeProvider = timeProvider ?? TimeProvider.System;
-	}
+		/// <summary>Создаёт движок над проходом окна и хранилищем состояния категории.</summary>
+		/// <param name="windowPass">Проход одного 7-дневного окна с курсорной пагинацией.</param>
+		/// <param name="stateStore">Хранилище состояния синхронизации категории.</param>
+		/// <param name="timeProvider">Поставщик времени; по умолчанию системные часы.</param>
+		/// <param name="rawWriter">Писатель сырых записей пачками по окнам; null — записи не сохраняются, движок только собирает их в памяти.</param>
+		/// <exception cref="ArgumentNullException">Проход или хранилище не заданы.</exception>
+		public ExecutionCategorySync(
+			ExecutionWindowPass windowPass,
+			IExecutionSyncStateStore stateStore,
+			TimeProvider? timeProvider = null,
+			IRawExecutionBatchWriter? rawWriter = null)
+		{
+			_windowPass = windowPass ?? throw new ArgumentNullException(nameof(windowPass));
+			_stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
+			_timeProvider = timeProvider ?? TimeProvider.System;
+			_rawWriter = rawWriter;
+		}
 
 	/// <summary>
 	/// Выполняет синхронизацию категории: определяет режим по водяному знаку состояния,
@@ -40,13 +44,15 @@ public sealed class ExecutionCategorySync
 	/// </summary>
 	/// <param name="category">Торговая категория: linear или option.</param>
 	/// <param name="options">Параметры синхронизации: размер страницы и перекрытие инкремента.</param>
+	/// <param name="progressRun">Запуск, чей счётчик новых записей продвигается пачками по окнам; null — прогресс запуска не ведётся.</param>
 	/// <param name="cancellationToken">Токен отмены синхронизации.</param>
-	/// <exception cref="ArgumentException">Категория не задана.</exception>
+	/// <exception cref="ArgumentException">Категория не задана либо запуск прогресса передан без писателя сырых записей.</exception>
 	/// <exception cref="ArgumentOutOfRangeException">Перекрытие инкрементального окна отрицательно.</exception>
 	/// <exception cref="BybitApiException">Биржа ответила ошибкой после всех повторов; состояние категории не меняется.</exception>
 	public async Task<ExecutionCategorySyncResult> RunAsync(
 		string category,
 		ExecutionCategorySyncOptions? options = null,
+		SyncRun? progressRun = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(category);
@@ -55,6 +61,13 @@ public sealed class ExecutionCategorySync
 		{
 			throw new ArgumentOutOfRangeException(
 				nameof(options), options.IncrementalOverlapMs, "Перекрытие инкрементального окна не может быть отрицательным.");
+		}
+
+		if (progressRun is not null && _rawWriter is null)
+		{
+			throw new ArgumentException(
+				"Ведение прогресса запуска требует писателя сырых записей; передайте его в конструктор движка.",
+				nameof(progressRun));
 		}
 
 		var state = await _stateStore.FindAsync(category, cancellationToken).ConfigureAwait(false);
@@ -69,6 +82,7 @@ public sealed class ExecutionCategorySync
 
 		var newExecutions = new List<BybitExecution>();
 		var allSeenExecutions = new List<BybitExecution>();
+		var newExecutionsPersisted = 0;
 		var windowsProcessed = 0;
 		var historyExhausted = false;
 		var earlyStopped = false;
@@ -97,6 +111,7 @@ public sealed class ExecutionCategorySync
 				windowsProcessed++;
 				newExecutions.AddRange(passResult.NewExecutions);
 				allSeenExecutions.AddRange(passResult.AllExecutions);
+					newExecutionsPersisted += await PersistWindowBatchAsync(category, passResult, progressRun, cancellationToken).ConfigureAwait(false);
 
 				// Пустое окно при пролистывании назад — биржа исчерпала данные категории:
 				// проход завершён, достигнута граница доступной истории.
@@ -128,6 +143,7 @@ public sealed class ExecutionCategorySync
 				windowsProcessed++;
 				newExecutions.AddRange(passResult.NewExecutions);
 				allSeenExecutions.AddRange(passResult.AllExecutions);
+					newExecutionsPersisted += await PersistWindowBatchAsync(category, passResult, progressRun, cancellationToken).ConfigureAwait(false);
 
 				if (passResult.EarlyStopped)
 				{
@@ -168,10 +184,37 @@ public sealed class ExecutionCategorySync
 			EarlyStopped = earlyStopped,
 			BackfillBoundaryMs = state.BackfillBoundaryMs,
 			ExecWatermarkMs = fixedWatermarkMs,
+			NewExecutionsPersisted = newExecutionsPersisted,
 		};
 	}
 
 	#region Вспомогательные методы
+
+	/// <summary>
+	/// Сохраняет пачку новых записей одного окна в хранилище сырых записей и возвращает
+	/// число фактически вставленных строк. Пачка пишется сразу после прохождения окна,
+	/// поэтому обрыв на следующем окне не теряет уже прочитанные записи, а повторный
+	/// прогон продолжает с места остановки без дублей.
+	/// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
+	/// Traceability: openspec:sync/bybit-history#requirement-sync-idempotency
+	/// </summary>
+	private async Task<int> PersistWindowBatchAsync(
+		string category,
+		ExecutionWindowPassResult passResult,
+		SyncRun? progressRun,
+		CancellationToken cancellationToken)
+	{
+		// Пустая пачка не адресуется писателю: пустое окно не создаёт вызовов хранилища.
+		if (_rawWriter is null || passResult.NewExecutions.Count == 0)
+		{
+			return 0;
+		}
+
+		var writeResult = await _rawWriter
+			.WriteAsync(category, passResult.NewExecutions, progressRun, cancellationToken)
+			.ConfigureAwait(false);
+		return writeResult.InsertedCount;
+	}
 
 	private async Task<ExecutionWindowPassResult> RunWindowAsync(
 		string category,
