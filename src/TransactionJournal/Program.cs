@@ -66,6 +66,10 @@ builder.Services.AddTransient<IJournalSyncService, JournalSyncService>();
 // мутирующий API ограничен пользовательскими записями домена.
 builder.Services.AddSingleton(sp => new ConstructionService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton(sp => new TradeBindingService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton(sp => new InboxReadModel(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 
 var app = builder.Build();
 
