@@ -8,7 +8,7 @@
 
 ## 2. Bybit-клиент
 
-- [ ] 2.1 Реализовать HttpClient-обёртку с HMAC-SHA256 (hex lower, ручная сборка queryString, `recv_window`, timestamp, сверка с `/v5/market/time`); проверить unit-тестами подпись на примерах официального C#-примера Bybit
+- [x] 2.1 Реализовать HttpClient-обёртку с HMAC-SHA256 (hex lower, ручная сборка queryString, `recv_window`, timestamp, сверка с `/v5/market/time`); проверить unit-тестами подпись на примерах официального C#-примера Bybit
 - [ ] 2.2 Добавить read-only методы `GET /v5/execution/list`, `GET /v5/asset/delivery-record`, `GET /v5/market/instruments-info`, `GET /v5/market/time` с типизированными ответами; проверить интеграционными тестами против зафиксированных HTTP-ответов
 - [ ] 2.3 Настроить resilience: минимальный интервал между запросами, учёт `X-Bapi-Limit-*`, Polly-ретраи (сеть/5xx — короткий бэкофф; `retCode 10006` — пауза секунды; HTTP 403 — длинная пауза с ограничением попыток); проверить unit-тестами на фиктивном транспорте все четыре ветки
 
