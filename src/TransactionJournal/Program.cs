@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TransactionJournal.Analytics;
 using TransactionJournal.Bybit;
 using TransactionJournal.Components;
 using TransactionJournal.Data;
@@ -35,6 +36,7 @@ builder.Services.AddSingleton(new BybitClientOptions
 	BaseUrl = string.IsNullOrWhiteSpace(bybitBaseUrl) ? BybitClientOptions.DefaultBaseUrl : bybitBaseUrl,
 });
 builder.Services.AddHttpClient<BybitApiClient>();
+builder.Services.AddHttpClient<BybitTickersClient>();
 builder.Services.AddTransient<BybitHistoryGateway>();
 builder.Services.AddTransient<IBybitHistoryGateway>(sp => sp.GetRequiredService<BybitHistoryGateway>());
 builder.Services.AddTransient<IBybitInstrumentSource>(sp => sp.GetRequiredService<BybitHistoryGateway>());
@@ -73,10 +75,19 @@ builder.Services.AddSingleton(sp => new InboxReadModel(
 builder.Services.AddSingleton(sp => new ManualCloseMarkService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 
+// Провайдер марок аналитики: публичные тикеры без аутентификации и кэш последней
+// известной марки со временем получения. Read-модель позиций получает его как
+// источник дефолта цены ручных пометок закрытия без цены.
+builder.Services.AddSingleton(sp => new InstrumentMarkProvider(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<BybitTickersClient>()));
+builder.Services.AddSingleton<IInstrumentMarkSource>(sp => sp.GetRequiredService<InstrumentMarkProvider>());
+
 // Read-модель позиций — производный запрос остатков без мутирующего API; источник
-// последних марок для ручных пометок без цены подключит слой синхронизации/аналитики.
+// последних марок подставляет цену ручным пометкам, заданным без цены пользователя.
 builder.Services.AddSingleton(sp => new PositionReadModel(
-	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<IInstrumentMarkSource>()));
 
 var app = builder.Build();
 

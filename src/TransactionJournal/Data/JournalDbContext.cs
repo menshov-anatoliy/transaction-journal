@@ -40,6 +40,9 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 	/// <summary>Ручные пометки закрытия позиций — пользовательские закрывающие записи.</summary>
 	public DbSet<ManualCloseMark> ManualCloseMarks => Set<ManualCloseMark>();
 
+	/// <summary>Кэш последних известных марок инструментов — провайдер марок аналитики.</summary>
+	public DbSet<InstrumentMark> InstrumentMarks => Set<InstrumentMark>();
+
 	/// <inheritdoc />
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -154,6 +157,18 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 			.WithMany()
 			.HasForeignKey(mark => mark.ConstructionId)
 			.OnDelete(DeleteBehavior.Cascade);
+
+		#endregion
+
+		#region Кэш марок аналитики
+
+		// Символ уникален: марка одного инструмента хранится одной строкой, новое
+		// получение марки обновляет её, а не плодит историю — кэш хранит именно
+		// последнюю известную марку со временем получения.
+		// Traceability: openspec:analytics/performance#requirement-mark-provider
+		modelBuilder.Entity<InstrumentMark>()
+			.HasIndex(mark => mark.Symbol)
+			.IsUnique();
 
 		#endregion
 	}

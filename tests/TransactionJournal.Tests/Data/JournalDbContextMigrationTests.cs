@@ -61,6 +61,13 @@ public class JournalDbContextMigrationTests
 			Assert.That(tables, Does.Contain("RawInstruments"));
 			Assert.That(tables, Does.Contain("SyncRuns"));
 			Assert.That(tables, Does.Contain("SyncStates"));
+			Assert.That(tables, Does.Contain("Constructions"));
+			Assert.That(tables, Does.Contain("ManualCloseMarks"));
+
+			// Кэш последних известных марок — единственное новое хранилище аналитики:
+			// развернулся вместе с остальной схемой журнала.
+			// Traceability: openspec:analytics/performance#requirement-mark-provider
+			Assert.That(tables, Does.Contain("InstrumentMarks"));
 		}
 	}
 
