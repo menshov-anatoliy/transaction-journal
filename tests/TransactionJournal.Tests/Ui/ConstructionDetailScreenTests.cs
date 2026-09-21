@@ -25,6 +25,7 @@ namespace TransactionJournal.Tests.Ui;
 /// величин, недоступный журнал и отсутствующая конструкция — явные состояния.
 /// Traceability: openspec:ui/screens#requirement-construction-detail-screen
 /// Traceability: openspec:ui/screens#requirement-construction-actions
+/// Traceability: openspec:ui/screens#requirement-comments-inline-editing
 /// </summary>
 [TestClass]
 public class ConstructionDetailScreenTests
@@ -32,6 +33,7 @@ public class ConstructionDetailScreenTests
 	private Bunit.TestContext _context = null!;
 	private Mock<IConstructionDetailReadModel> _detail = null!;
 	private Mock<IConstructionService> _constructions = null!;
+	private Mock<ICommentService> _comments = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -47,6 +49,11 @@ public class ConstructionDetailScreenTests
 		// экрана достаточно заглушки интерфейса с контролем вызовов.
 		_constructions = new Mock<IConstructionService>();
 		_context.Services.AddSingleton(_constructions.Object);
+
+		// Комментарии сделки, позиции и конструкции сохраняются сервисом
+		// комментариев домена — экран проверяется против заглушки интерфейса.
+		_comments = new Mock<ICommentService>();
+		_context.Services.AddSingleton(_comments.Object);
 
 		// Сигнал изменений журнала оповещает каркас после действий экрана;
 		// без подписчиков в изолированном рендере он безопасно бездействует.
@@ -558,6 +565,118 @@ public class ConstructionDetailScreenTests
 		cut.WaitForAssertion(() => Assert.That(navigation.Uri, Does.EndWith("/")));
 	}
 
+	[TestMethod]
+	[Description("Комментарий сделки сохраняется из таблицы сделок и сразу виден в строке")]
+	public void TryIfTradeCommentSavesAndShowsImmediately()
+	{
+		// Arrange: у сделки e-1024 комментария нет; после сохранения read-модель
+		// возвращает снимок с новым комментарием сделки.
+		var trade = new ConstructionTradeRow(
+			"e-1024",
+			"BTCUSDT",
+			new DateTimeOffset(2026, 9, 19, 21, 32, 0, TimeSpan.Zero),
+			true,
+			0.008m,
+			63181m,
+			505.448m,
+			0.010m,
+			null);
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Trades = [trade] })
+			.ReturnsAsync(CreateData(MetricsOf()) with { Trades = [trade with { Comment = "вход половиной" }] });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[1].TextContent, Does.Contain("e-1024")));
+
+		// Act: пользователь правит комментарий сделки в строке таблицы сделок.
+		var tradesTable = cut.FindAll("table")[1];
+		FindRowButton(tradesTable, "изменить").Click();
+		tradesTable = cut.FindAll("table")[1];
+		tradesTable.QuerySelectorAll(".cell-input").Single().Change("вход половиной");
+		// Bind обновляет черновик и перерисовывает строку — кнопка берётся из
+		// свежего дерева после ре-рендера.
+		FindRowButton(cut.FindAll("table")[1], "Сохранить").Click();
+
+		// Assert: комментарий сохранён сервисом домена по ключу execId и сразу
+		// виден в строке сделки.
+		// Требование: новый текст сохраняется и сразу виден в строке сделки.
+		// Traceability: openspec:ui/screens#scenario-trade-comment-inline-edit
+		_comments.Verify(service =>
+			service.SetTradeCommentAsync("e-1024", "вход половиной", It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[1].QuerySelectorAll("tbody tr").Single().TextContent, Does.Contain("вход половиной")));
+	}
+
+	[TestMethod]
+	[Description("Правка комментария позиции не открывает правку остатка")]
+	public void TryIfPositionCommentEditLeavesResidualReadOnly()
+	{
+		// Arrange: у конструкции позиция BTCUSDT с остатком и комментарием.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(), positions:
+			[
+				new ConstructionPositionRow("BTCUSDT", 0.1m, 42000m, 42100m, 10m, true, "наблюдение"),
+			]));
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[0].TextContent, Does.Contain("BTCUSDT")));
+
+		// Act: пользователь начинает правку комментария позиции.
+		var positionsTable = cut.FindAll("table")[0];
+		FindRowButton(positionsTable, "изменить").Click();
+
+		// Assert: в строке появилось ровно одно текстовое поле — поле комментария
+		// в своей колонке; остаток и прочие величины позиции остаются текстом.
+		// Требование: доступно только текстовое поле комментария, остаток позиции
+		// не редактируется.
+		// Traceability: openspec:ui/screens#scenario-position-comment-without-residual-edit
+		var row = cut.FindAll("table")[0].QuerySelectorAll("tbody tr").Single();
+		Assert.That(row.QuerySelectorAll("input"), Has.Length.EqualTo(1));
+		Assert.That(row.QuerySelectorAll("td")[6].QuerySelectorAll("input"), Has.Length.EqualTo(1));
+		Assert.That(row.QuerySelectorAll("td")[1].QuerySelectorAll("input"), Is.Empty);
+		Assert.That(row.QuerySelectorAll("td")[1].TextContent.Trim(), Is.EqualTo("+0.1"));
+
+		// Act: пользователь сохраняет новый текст комментария позиции.
+		cut.FindAll("table")[0].QuerySelectorAll(".cell-input").Single().Change("переворот ближе к экспирации");
+		FindRowButton(cut.FindAll("table")[0], "Сохранить").Click();
+
+		// Assert: комментарий позиции сохранён по ключу «конструкция × инструмент».
+		_comments.Verify(service =>
+			service.SetPositionCommentAsync(7, "BTCUSDT", "переворот ближе к экспирации", It.IsAny<CancellationToken>()), Times.Once);
+	}
+
+	[TestMethod]
+	[Description("Комментарий конструкции сохраняется из шапки деталей")]
+	public void TryIfConstructionCommentSavesFromHeader()
+	{
+		// Arrange: после сохранения read-модель возвращает снимок с комментарием.
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Comment = "стратегия календаря" });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".detail-comment").TextContent, Does.Contain("—")));
+
+		// Act: пользователь правит комментарий конструкции в шапке деталей.
+		cut.Find(".detail-comment button").Click();
+		cut.Find(".detail-comment .cell-input").Change("стратегия календаря");
+		FindHeaderButton(cut, "Сохранить").Click();
+
+		// Assert: комментарий сохранён сервисом домена и сразу виден в шапке.
+		// Требование: комментарий конструкции редактируется в шапке деталей,
+		// сохранение не требует перезагрузки экрана.
+		// Traceability: openspec:ui/screens#requirement-comments-inline-editing
+		_comments.Verify(service =>
+			service.SetConstructionCommentAsync(7, "стратегия календаря", It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(
+			cut.Find(".detail-comment").TextContent, Does.Contain("стратегия календаря")));
+	}
+
 	#region Помощники
 
 	/// <summary>Рендерит экран деталей конструкции с идентификатором 7.</summary>
@@ -567,6 +686,14 @@ public class ConstructionDetailScreenTests
 	/// <summary>Находит кнопку экрана по точному тексту подписи.</summary>
 	private static IElement FindButton(IRenderedComponent<ConstructionDetail> cut, string text) =>
 		cut.FindAll("button").Single(button => button.TextContent.Trim() == text);
+
+	/// <summary>Находит кнопку внутри таблицы по точному тексту подписи.</summary>
+	private static IElement FindRowButton(IElement table, string text) =>
+		table.QuerySelectorAll("button").Single(button => button.TextContent.Trim() == text);
+
+	/// <summary>Находит кнопку inline-правки комментария конструкции в шапке деталей.</summary>
+	private static IElement FindHeaderButton(IRenderedComponent<ConstructionDetail> cut, string text) =>
+		cut.Find(".detail-comment").QuerySelectorAll("button").Single(button => button.TextContent.Trim() == text);
 
 	/// <summary>Данные деталей с пустыми таблицами по умолчанию.</summary>
 	private static ConstructionDetailData CreateData(

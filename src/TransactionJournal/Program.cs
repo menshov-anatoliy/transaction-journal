@@ -73,6 +73,11 @@ builder.Services.AddSingleton(sp => new ConstructionService(
 // Экран деталей выполняет действия конструкции по контракту сервиса: тонкий
 // слой UI зависит от интерфейса, тесты экрана подменяют его заглушкой.
 builder.Services.AddSingleton<IConstructionService>(sp => sp.GetRequiredService<ConstructionService>());
+// Комментарии сделок, позиций и конструкции правятся по месту своих экранов:
+// экран деталей зависит от интерфейса, тесты экрана подменяют его заглушкой.
+builder.Services.AddSingleton(sp => new CommentService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton<ICommentService>(sp => sp.GetRequiredService<CommentService>());
 builder.Services.AddSingleton(sp => new TradeBindingService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton(sp => new InboxReadModel(

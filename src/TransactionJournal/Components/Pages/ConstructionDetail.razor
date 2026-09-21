@@ -8,6 +8,7 @@
 @using TransactionJournal.Domain
 @inject IConstructionDetailReadModel Detail
 @inject IConstructionService Constructions
+@inject ICommentService Comments
 @inject JournalChangeSignal Changes
 @inject NavigationManager Navigation
 
@@ -175,12 +176,25 @@ else
 		<div>период<b>@PeriodLabel</b></div>
 	</div>
 
-	@* Комментарий конструкции — рядом со сводкой: свободный текст, правка
-	   комментариев достраивается отдельной задачей деталей. *@
-	@* Traceability: openspec:ui/screens#requirement-construction-detail-screen *@
+	@* Комментарий конструкции — в шапке деталей рядом со сводкой: правка
+	   по месту открывает текстовое поле, сохранение перечитывает снимок
+	   и сразу показывает новый текст без перезагрузки экрана. *@
+	@* Traceability: openspec:ui/screens#requirement-comments-inline-editing *@
 	<div class="detail-comment">
 		<span>комментарий</span>
-		<span class="detail-comment-text">@(_data.Comment ?? "—")</span>
+		@if (IsEditingComment(CommentTarget.Construction, null))
+		{
+			<span class="cell-editor">
+				<input class="cell-input" placeholder="комментарий конструкции" @bind="_commentDraft" />
+				<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="SaveConstructionCommentAsync">Сохранить</button>
+				<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
+			</span>
+		}
+		else
+		{
+			<span class="detail-comment-text">@(_data.Comment ?? "—")</span>
+			<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCommentEdit(CommentTarget.Construction, null, _data.Comment)">изменить</button>
+		}
 	</div>
 
 	<h2>Позиции</h2>
@@ -233,7 +247,25 @@ else
 						}
 					</td>
 					<td><span class="@(position.IsOpen ? "status status-open" : "status status-closed")">@(position.IsOpen ? "открыта" : "закрыта")</span></td>
-					<td>@(position.Comment ?? "—")</td>
+					@* Комментарий позиции правится по месту строки; доступно только
+					   текстовое поле комментария — остаток и прочие величины позиции
+					   вводом не редактируются. *@
+					@* Traceability: openspec:ui/screens#scenario-position-comment-without-residual-edit *@
+					<td>
+						@if (IsEditingComment(CommentTarget.Position, position.Symbol))
+						{
+							<span class="cell-editor">
+								<input class="cell-input" placeholder="комментарий позиции" @bind="_commentDraft" />
+								<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="() => SavePositionCommentAsync(position.Symbol)">Сохранить</button>
+								<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
+							</span>
+						}
+						else
+						{
+							<span>@(position.Comment ?? "—")</span>
+							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCommentEdit(CommentTarget.Position, position.Symbol, position.Comment)">изменить</button>
+						}
+					</td>
 				</tr>
 			}
 		</tbody>
@@ -271,7 +303,24 @@ else
 					<td>@FormatAmount(trade.Price)</td>
 					<td>@FormatAmount(trade.AmountUsdt)</td>
 					<td>@FormatQuantity(trade.Fee)</td>
-					<td>@(trade.Comment ?? "—")</td>
+					@* Комментарий сделки правится в строке таблицы сделок: сохранение
+					   перечитывает снимок и сразу показывает новый текст. *@
+					@* Traceability: openspec:ui/screens#scenario-trade-comment-inline-edit *@
+					<td>
+						@if (IsEditingComment(CommentTarget.Trade, trade.ExecId))
+						{
+							<span class="cell-editor">
+								<input class="cell-input" placeholder="комментарий сделки" @bind="_commentDraft" />
+								<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="() => SaveTradeCommentAsync(trade.ExecId)">Сохранить</button>
+								<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
+							</span>
+						}
+						else
+						{
+							<span>@(trade.Comment ?? "—")</span>
+							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCommentEdit(CommentTarget.Trade, trade.ExecId, trade.Comment)">изменить</button>
+						}
+					</td>
 				</tr>
 			}
 		</tbody>
@@ -370,6 +419,20 @@ else
 	private string _renameValue = string.Empty;
 	private string _capitalInput = string.Empty;
 	private bool _capitalInvalid;
+
+	/// <summary>Уровень редактируемого комментария: сделка, позиция или сама конструкция.</summary>
+	private enum CommentTarget
+	{
+		None,
+		Construction,
+		Trade,
+		Position,
+	}
+
+	/// <summary>Открытая inline-правка комментария: уровень и ключ строки (execId либо инструмент).</summary>
+	private CommentTarget _commentTarget = CommentTarget.None;
+	private string? _commentKey;
+	private string _commentDraft = string.Empty;
 
 	/// <summary>
 	/// Перечитывает данные экрана при каждом открытии деталей и смене конструкции:
@@ -583,6 +646,10 @@ else
 
 		_action = DetailAction.None;
 		_capitalInvalid = false;
+		// Успешное действие перечитало снимок целиком: открытая inline-правка
+		// комментария закрывается, строки показывают актуальный текст.
+		_commentTarget = CommentTarget.None;
+		_commentKey = null;
 		_busy = false;
 
 		// Действие меняет данные экрана и каркаса: снимок перечитывается целиком,
@@ -590,6 +657,67 @@ else
 		await ReloadAsync();
 		await Changes.RaiseAsync();
 	}
+
+	#endregion
+
+	#region Inline-правка комментариев
+
+	/// <summary>
+	/// Проверяет, открыта ли inline-правка комментария этого уровня и ключа:
+	/// редактируется один комментарий одновременно.
+	/// </summary>
+	private bool IsEditingComment(CommentTarget target, string? key) =>
+		_commentTarget == target && _commentKey == key;
+
+	/// <summary>
+	/// Открывает правку комментария своего уровня: сделка — в строке таблицы
+	/// сделок, позиция — в строке таблицы позиций, конструкция — в шапке деталей;
+	/// черновик стартует текущим текстом комментария.
+	/// </summary>
+	// Комментарии редактируются на месте своего уровня, без отдельных страниц.
+	// Traceability: openspec:ui/screens#requirement-comments-inline-editing
+	private void BeginCommentEdit(CommentTarget target, string? key, string? current)
+	{
+		_commentTarget = target;
+		_commentKey = key;
+		_commentDraft = current ?? string.Empty;
+		_actionError = null;
+	}
+
+	/// <summary>Закрывает правку комментария без сохранения — текст остаётся прежним.</summary>
+	private void CancelCommentEdit()
+	{
+		_commentTarget = CommentTarget.None;
+		_commentKey = null;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Сохраняет комментарий сделки: домен пишет текст по ключу execId, экран
+	/// перечитывает снимок и сразу показывает новый текст в строке сделки.
+	/// </summary>
+	// Новый текст сохраняется и сразу виден в строке сделки.
+	// Traceability: openspec:ui/screens#scenario-trade-comment-inline-edit
+	private Task SaveTradeCommentAsync(string execId) => RunActionAsync(
+		() => Comments.SetTradeCommentAsync(execId, _commentDraft),
+		"Комментарий сделки не сохранён");
+
+	/// <summary>
+	/// Сохраняет комментарий позиции по ключу «конструкция × инструмент»:
+	/// правится только текст комментария, остаток позиции не редактируется.
+	/// </summary>
+	// Доступно только текстовое поле комментария — остаток позиции вводом не меняется.
+	// Traceability: openspec:ui/screens#scenario-position-comment-without-residual-edit
+	private Task SavePositionCommentAsync(string symbol) => RunActionAsync(
+		() => Comments.SetPositionCommentAsync(ConstructionId, symbol, _commentDraft),
+		"Комментарий позиции не сохранён");
+
+	/// <summary>Сохраняет комментарий конструкции в шапке деталей конструкции.</summary>
+	// Комментарий конструкции редактируется в шапке деталей, рядом со сводкой.
+	// Traceability: openspec:ui/screens#requirement-comments-inline-editing
+	private Task SaveConstructionCommentAsync() => RunActionAsync(
+		() => Comments.SetConstructionCommentAsync(ConstructionId, _commentDraft),
+		"Комментарий конструкции не сохранён");
 
 	#endregion
 

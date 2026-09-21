@@ -196,6 +196,22 @@ body {
 
 .detail-comment .detail-comment-text { color: #c9d1d9; }
 
+/* ===== Inline-правка комментариев: шапка деталей и таблицы позиций/сделок ===== */
+.cell-editor { display: inline-flex; gap: 6px; align-items: center; }
+
+.cell-editor .cell-input {
+	background: #0d1117;
+	color: #c9d1d9;
+	border: 1px solid #30363d;
+	border-radius: 4px;
+	padding: 3px 8px;
+	font-size: 12px;
+	font-family: "Segoe UI", system-ui, sans-serif;
+	width: 220px;
+}
+
+.btn.cell-btn { padding: 2px 8px; font-size: 11px; margin-left: 6px; }
+
 /* ===== Плотные таблицы экранов «Терминала» ===== */
 .screen table {
 	border-collapse: collapse;
