@@ -23,14 +23,17 @@ namespace TransactionJournal.Tests.Ui;
 /// с подтверждением и причиной отказа; действия сделок — возврат во «Входящие»
 /// и перенос в другую конструкцию с выбором цели; ручная пометка закрытия —
 /// форма с дефолтом последней марки, правка и удаление из закрывающих записей
-/// и предупреждение об избыточной записи; пустые таблицы показывают явное
-/// сообщение об отсутствии, сбой марок — признак на месте нереализованных
-/// величин, недоступный журнал и отсутствующая конструкция — явные состояния.
+/// и предупреждение об избыточной записи; внешние корректировки PnL — форма
+/// добавления и inline-правка/удаление строкой таблицы; пустые таблицы
+/// показывают явное сообщение об отсутствии, сбой марок — признак на месте
+/// нереализованных величин, недоступный журнал и отсутствующая конструкция —
+/// явные состояния.
 /// Traceability: openspec:ui/screens#requirement-construction-detail-screen
 /// Traceability: openspec:ui/screens#requirement-construction-actions
 /// Traceability: openspec:ui/screens#requirement-comments-inline-editing
 /// Traceability: openspec:ui/screens#requirement-trade-actions-in-detail
 /// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+/// Traceability: openspec:ui/screens#requirement-adjustments-in-detail
 /// </summary>
 [TestClass]
 public class ConstructionDetailScreenTests
@@ -42,6 +45,7 @@ public class ConstructionDetailScreenTests
 	private Mock<ITradeBindingService> _bindings = null!;
 	private Mock<IManualCloseMarkService> _marks = null!;
 	private Mock<IInstrumentMarkSource> _markSource = null!;
+	private Mock<IPnLAdjustmentService> _adjustments = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -75,6 +79,11 @@ public class ConstructionDetailScreenTests
 		_context.Services.AddSingleton(_marks.Object);
 		_markSource = new Mock<IInstrumentMarkSource>();
 		_context.Services.AddSingleton(_markSource.Object);
+
+		// Внешние корректировки PnL добавляются, правятся и удаляются use-case
+		// сервисом корректировок домена — экран проверяется против заглушки.
+		_adjustments = new Mock<IPnLAdjustmentService>();
+		_context.Services.AddSingleton(_adjustments.Object);
 
 		// Сигнал изменений журнала оповещает каркас после действий экрана;
 		// без подписчиков в изолированном рендере он безопасно бездействует.
@@ -1049,6 +1058,167 @@ public class ConstructionDetailScreenTests
 			Is.False));
 	}
 
+	[TestMethod]
+	[Description("Корректировка добавляется формой из деталей и входит в таблицу и сводку")]
+	public void TryIfAdjustmentAddedFromDetailShowsInTableAndSummary()
+	{
+		// Arrange: конструкция без корректировок; после добавления read-модель
+		// возвращает снимок с корректировкой +87.4 от 2026-09-20 и суммой
+		// корректировок в метриках.
+		var withAdjustment = CreateData(
+			MetricsOf(adjustments: 87.4m),
+			adjustments:
+			[
+				new ConstructionAdjustmentRow(
+					3,
+					new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero),
+					"PnL робота grid-ETH за сентябрь",
+					PnLAdjustmentSource.Manual,
+					87.4m),
+			]);
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()))
+			.ReturnsAsync(withAdjustment);
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[3].TextContent, Does.Contain("корректировок нет")));
+
+		// Act: пользователь открывает форму и заполняет дату, источник, знаковую
+		// сумму и описание.
+		FindButton(cut, "Добавить корректировку…").Click();
+		var inputs = cut.FindAll(".action-form .action-input");
+		Assert.That(inputs.Count, Is.EqualTo(4));
+		inputs[0].Change("2026-09-20");
+		inputs = cut.FindAll(".action-form .action-input");
+		inputs[2].Change("+87.4");
+		inputs = cut.FindAll(".action-form .action-input");
+		inputs[3].Change("PnL робота grid-ETH за сентябрь");
+		FindButton(cut, "Добавить корректировку").Click();
+
+		// Assert: корректировка сохранена сервисом домена с атрибутами формы
+		// (дата без смещения разбирается как локальная, источник — «ручная»);
+		// после перечитывания строка видна в таблице, сумма — в сводке,
+		// форма закрыта успехом.
+		// Требование: корректировка добавляется из деталей конструкции.
+		// Traceability: openspec:ui/screens#scenario-adjustment-added-from-detail
+		_adjustments.Verify(service =>
+			service.AddAsync(
+				7,
+				new DateTimeOffset(2026, 9, 20, 0, 0, 0, LocalOffset),
+				PnLAdjustmentSource.Manual,
+				87.4m,
+				"PnL робота grid-ETH за сентябрь",
+				It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			var table = cut.FindAll("table")[3].TextContent;
+			Assert.That(table, Does.Contain("2026-09-20"));
+			Assert.That(table, Does.Contain("PnL робота grid-ETH за сентябрь"));
+			Assert.That(table, Does.Contain("ручная"));
+			Assert.That(table, Does.Contain("+87.4"));
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("+87.4"));
+		});
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("button").Any(button => button.TextContent.Trim() == "Добавить корректировку"),
+			Is.False));
+	}
+
+	[TestMethod]
+	[Description("Корректировка правится inline в таблице и удаляется без ограничений")]
+	public void TryIfAdjustmentEditedAndDeletedInline()
+	{
+		// Arrange: у конструкции корректировка −12 «старая поправка»; после
+		// правки read-модель возвращает строку +87.4 источником «робот», после
+		// удаления — пустую таблицу.
+		var original = CreateData(
+			MetricsOf(adjustments: -12m),
+			adjustments:
+			[
+				new ConstructionAdjustmentRow(
+					3,
+					new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero),
+					"старая поправка",
+					PnLAdjustmentSource.Manual,
+					-12m),
+			]);
+		var edited = CreateData(
+			MetricsOf(adjustments: 87.4m),
+			adjustments:
+			[
+				new ConstructionAdjustmentRow(
+					3,
+					new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero),
+					"новое описание",
+					PnLAdjustmentSource.Robot,
+					87.4m),
+			]);
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(original)
+			.ReturnsAsync(edited)
+			.ReturnsAsync(CreateData(MetricsOf()));
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[3].TextContent, Does.Contain("-12")));
+
+		// Act: пользователь открывает inline-правку строки — поля предзаполнены
+		// значениями строки.
+		FindRowButton(cut.FindAll("table")[3], "править").Click();
+		var rowInputs = cut.FindAll("table")[3].QuerySelectorAll("input.cell-input");
+		Assert.That(rowInputs.Count, Is.EqualTo(3));
+		Assert.That(rowInputs[0].GetAttribute("value"), Is.EqualTo("2026-09-20"));
+		Assert.That(rowInputs[1].GetAttribute("value"), Is.EqualTo("старая поправка"));
+		Assert.That(rowInputs[2].GetAttribute("value"), Is.EqualTo("-12"));
+
+		// Act: пользователь меняет дату, описание, источник и сумму, сохраняет.
+		rowInputs[0].Change("2026-09-21");
+		rowInputs = cut.FindAll("table")[3].QuerySelectorAll("input.cell-input");
+		rowInputs[1].Change("новое описание");
+		rowInputs = cut.FindAll("table")[3].QuerySelectorAll("input.cell-input");
+		rowInputs[2].Change("+87.4");
+		var sourceSelect = cut.FindAll("table")[3].QuerySelector("select");
+		Assert.That(sourceSelect, Is.Not.Null);
+		sourceSelect!.Change("Robot");
+		FindRowButton(cut.FindAll("table")[3], "Сохранить").Click();
+
+		// Assert: правка ушла сервису домена всеми атрибутами строки; таблица и
+		// сводка отражают новый набор корректировок без ограничений.
+		// Требование: корректировка правится и удаляется в таблице.
+		// Traceability: openspec:ui/screens#scenario-adjustment-edited-and-deleted-inline
+		_adjustments.Verify(service =>
+			service.EditAsync(
+				3,
+				new DateTimeOffset(2026, 9, 21, 0, 0, 0, LocalOffset),
+				PnLAdjustmentSource.Robot,
+				87.4m,
+				"новое описание",
+				It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			var table = cut.FindAll("table")[3].TextContent;
+			Assert.That(table, Does.Contain("+87.4"));
+			Assert.That(table, Does.Contain("робот"));
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("+87.4"));
+		});
+
+		// Act: пользователь удаляет строку корректировки.
+		FindRowButton(cut.FindAll("table")[3], "удалить").Click();
+
+		// Assert: удаление выполнено сервисом домена; таблица пуста с явным
+		// сообщением, сводка больше не показывает сумму корректировок.
+		// Traceability: openspec:ui/screens#scenario-adjustment-edited-and-deleted-inline
+		_adjustments.Verify(service =>
+			service.DeleteAsync(3, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll("table")[3].TextContent, Does.Contain("корректировок нет"));
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("—"));
+		});
+	}
+
 	#region Помощники
 
 	/// <summary>Рендерит экран деталей конструкции с идентификатором 7.</summary>
@@ -1090,7 +1260,8 @@ public class ConstructionDetailScreenTests
 		DateTimeOffset? marksAsOf = null,
 		IReadOnlyList<ConstructionPositionRow>? positions = null,
 		IReadOnlyList<ConstructionClosingEntryRow>? closingEntries = null,
-		IReadOnlyList<RedundantClosingEntryWarning>? closingWarnings = null) => new(
+		IReadOnlyList<RedundantClosingEntryWarning>? closingWarnings = null,
+		IReadOnlyList<ConstructionAdjustmentRow>? adjustments = null) => new(
 		7,
 		"Календарь сентябрь",
 		ConstructionStatus.Open,
@@ -1104,7 +1275,7 @@ public class ConstructionDetailScreenTests
 		[],
 		closingEntries ?? [],
 		closingWarnings ?? [],
-		[]);
+		adjustments ?? []);
 
 	/// <summary>Метрики конструкции с простыми значениями; сбойная нереализованная оценка оставляет итог null.</summary>
 	private static ConstructionMetrics MetricsOf(

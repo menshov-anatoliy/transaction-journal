@@ -11,6 +11,7 @@
 @inject ICommentService Comments
 @inject ITradeBindingService Bindings
 @inject IManualCloseMarkService Marks
+@inject IPnLAdjustmentService Adjustments
 @inject IInstrumentMarkSource MarkSource
 @inject JournalChangeSignal Changes
 @inject NavigationManager Navigation
@@ -510,6 +511,54 @@ else
 	</table>
 
 	<h2>Корректировки PnL</h2>
+	@* Корректировка всегда принадлежит конструкции: форма добавления и таблица
+	   с inline-правкой и удалением живут в деталях, отдельного экрана
+	   корректировок нет — правка облика прототипа. *@
+	@* Traceability: openspec:ui/screens#requirement-adjustments-in-detail *@
+	@if (_adjustFormOpen == false)
+	{
+		<div class="toolbar">
+			<button type="button" class="btn" disabled="@_busy" @onclick="BeginAdjustmentAdd">Добавить корректировку…</button>
+		</div>
+	}
+	else
+	{
+		@* Форма добавления: дата, источник «робот»/«ручная», знаковая сумма
+		   в USDT и описание; описание необязательно, знак суммы выбирает
+		   пользователь — ограничений нет. *@
+		@* Traceability: openspec:ui/screens#scenario-adjustment-added-from-detail *@
+		<div class="action-form">
+			<label class="action-label">
+				дата
+				<input class="action-input" placeholder="2026-09-20" @bind="_adjustDateInput" />
+			</label>
+			<label class="action-label">
+				источник
+				<select class="action-input" @bind="_adjustSource">
+					<option value="@PnLAdjustmentSource.Manual">ручная</option>
+					<option value="@PnLAdjustmentSource.Robot">робот</option>
+				</select>
+			</label>
+			<label class="action-label">
+				сумма, USDT
+				<input class="action-input" placeholder="+87.4 / -12" @bind="_adjustAmountInput" />
+			</label>
+			<label class="action-label">
+				описание
+				<input class="action-input" placeholder="PnL робота grid-ETH за сентябрь" @bind="_adjustDescriptionInput" />
+			</label>
+			<button type="button" class="btn primary" disabled="@_busy" @onclick="AddAdjustmentAsync">Добавить корректировку</button>
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelAdjustmentAdd">Отмена</button>
+			@if (_adjustDateInvalid)
+			{
+				<span class="validation-message">Введите дату в формате 2026-09-20</span>
+			}
+			@if (_adjustAmountInvalid)
+			{
+				<span class="validation-message">Введите сумму со знаком, например +87.4 или -12</span>
+			}
+		</div>
+	}
 	<table>
 		<thead>
 			<tr>
@@ -517,22 +566,72 @@ else
 				<th>Описание</th>
 				<th>Источник</th>
 				<th>Сумма</th>
+				<th>Действия</th>
 			</tr>
 		</thead>
 		<tbody>
 			@if (_data.Adjustments.Count == 0)
 			{
 				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
-				<tr><td colspan="4" class="empty">корректировок нет</td></tr>
+				<tr><td colspan="5" class="empty">корректировок нет</td></tr>
 			}
 			@foreach (var adjustment in _data.Adjustments)
 			{
-				<tr>
-					<td>@FormatDate(adjustment.Date)</td>
-					<td>@(adjustment.Description ?? "—")</td>
-					<td>@SourceText(adjustment.Source)</td>
-					<td><span class="@SignClass(adjustment.AmountUsdt)">@FormatPnL(adjustment.AmountUsdt)</span></td>
-				</tr>
+				@if (IsEditingAdjustment(adjustment.AdjustmentId))
+				{
+					@* Inline-правка корректировки в строке таблицы: дата, описание,
+					   источник и знаковая сумма правятся свободно, без ограничений. *@
+					@* Traceability: openspec:ui/screens#scenario-adjustment-edited-and-deleted-inline *@
+					<tr>
+						<td>
+							<span class="cell-editor"><input class="cell-input" placeholder="2026-09-20" @bind="_editAdjustDateInput" /></span>
+						</td>
+						<td>
+							<span class="cell-editor"><input class="cell-input" placeholder="описание" @bind="_editAdjustDescriptionInput" /></span>
+						</td>
+						<td>
+							<span class="cell-editor">
+								<select class="cell-input" @bind="_editAdjustSource">
+									<option value="@PnLAdjustmentSource.Manual">ручная</option>
+									<option value="@PnLAdjustmentSource.Robot">робот</option>
+								</select>
+							</span>
+						</td>
+						<td>
+							<span class="cell-editor"><input class="cell-input" placeholder="+87.4 / -12" @bind="_editAdjustAmountInput" /></span>
+						</td>
+						<td>
+							<span class="cell-editor">
+								<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="SaveAdjustmentEditAsync">Сохранить</button>
+								<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelAdjustmentEdit">Отмена</button>
+							</span>
+							@if (_editAdjustDateInvalid)
+							{
+								<span class="validation-message">Введите дату в формате 2026-09-20</span>
+							}
+							@if (_editAdjustAmountInvalid)
+							{
+								<span class="validation-message">Введите сумму со знаком</span>
+							}
+						</td>
+					</tr>
+				}
+				else
+				{
+					<tr>
+						<td>@FormatDay(adjustment.Date)</td>
+						<td>@(adjustment.Description ?? "—")</td>
+						<td>@SourceText(adjustment.Source)</td>
+						<td><span class="@SignClass(adjustment.AmountUsdt)">@FormatPnL(adjustment.AmountUsdt)</span></td>
+						@* Строки корректировок правятся и удаляются по месту таблицы:
+						   изменения свободны, сводка пересчитывается при чтении. *@
+						@* Traceability: openspec:ui/screens#scenario-adjustment-edited-and-deleted-inline *@
+						<td>
+							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginAdjustmentEdit(adjustment)">править</button>
+							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => DeleteAdjustmentAsync(adjustment.AdjustmentId)">удалить</button>
+						</td>
+					</tr>
+				}
 			}
 		</tbody>
 	</table>
@@ -616,6 +715,48 @@ else
 
 	/// <summary>Признак нечитаемого времени в форме правки пометки.</summary>
 	private bool _editTimeInvalid;
+
+	/// <summary>Открытая форма добавления корректировки PnL; false — форма закрыта.</summary>
+	private bool _adjustFormOpen;
+
+	/// <summary>Черновик даты добавления корректировки в формате «2026-09-20».</summary>
+	private string _adjustDateInput = string.Empty;
+
+	/// <summary>Черновик источника добавления: «робот» или «ручная».</summary>
+	private PnLAdjustmentSource _adjustSource = PnLAdjustmentSource.Manual;
+
+	/// <summary>Черновик знаковой суммы добавления в USDT.</summary>
+	private string _adjustAmountInput = string.Empty;
+
+	/// <summary>Черновик описания добавления; пустая строка — описания нет.</summary>
+	private string _adjustDescriptionInput = string.Empty;
+
+	/// <summary>Признак нечитаемой даты в форме добавления корректировки.</summary>
+	private bool _adjustDateInvalid;
+
+	/// <summary>Признак нечисловой суммы в форме добавления корректировки.</summary>
+	private bool _adjustAmountInvalid;
+
+	/// <summary>Открытая inline-правка корректировки: идентификатор строки; null — правки нет.</summary>
+	private long? _editAdjustmentId;
+
+	/// <summary>Черновик даты правки корректировки в формате «2026-09-20».</summary>
+	private string _editAdjustDateInput = string.Empty;
+
+	/// <summary>Черновик описания правки корректировки.</summary>
+	private string _editAdjustDescriptionInput = string.Empty;
+
+	/// <summary>Черновик источника правки корректировки.</summary>
+	private PnLAdjustmentSource _editAdjustSource = PnLAdjustmentSource.Manual;
+
+	/// <summary>Черновик знаковой суммы правки в USDT.</summary>
+	private string _editAdjustAmountInput = string.Empty;
+
+	/// <summary>Признак нечитаемой даты в inline-правке корректировки.</summary>
+	private bool _editAdjustDateInvalid;
+
+	/// <summary>Признак нечисловой суммы в inline-правке корректировки.</summary>
+	private bool _editAdjustAmountInvalid;
 
 	/// <summary>
 	/// Перечитывает данные экрана при каждом открытии деталей и смене конструкции:
@@ -1124,6 +1265,179 @@ else
 
 	#endregion
 
+	#region Корректировки PnL
+
+	/// <summary>Проверяет, открыта ли inline-правка этой строки корректировок.</summary>
+	private bool IsEditingAdjustment(long adjustmentId) => _editAdjustmentId == adjustmentId;
+
+	/// <summary>
+	/// Открывает форму добавления корректировки: дата предзаполнена текущим днём,
+	/// источник — «ручная», сумма и описание пусты.
+	/// </summary>
+	// Корректировка добавляется формой в деталях конструкции — отдельного
+	// экрана корректировок нет.
+	// Traceability: openspec:ui/screens#requirement-adjustments-in-detail
+	private void BeginAdjustmentAdd()
+	{
+		_adjustFormOpen = true;
+		_adjustDateInput = DateTimeOffset.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+		_adjustSource = PnLAdjustmentSource.Manual;
+		_adjustAmountInput = string.Empty;
+		_adjustDescriptionInput = string.Empty;
+		_adjustDateInvalid = false;
+		_adjustAmountInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>Закрывает форму добавления корректировки без выполнения команды.</summary>
+	private void CancelAdjustmentAdd()
+	{
+		_adjustFormOpen = false;
+		_adjustDateInvalid = false;
+		_adjustAmountInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Добавляет внешнюю корректировку PnL: дата, источник, знаковая сумма и
+	/// описание разбираются из формы и уходят сервису домена; экран перечитывает
+	/// снимок — корректировка входит в таблицу, итог и сумму корректировок
+	/// сводки ближайшим чтением.
+	/// </summary>
+	// Корректировка появляется в таблице и входит в итог и сумму корректировок
+	// сводки сразу после добавления — без отдельных действий пересчёта.
+	// Traceability: openspec:ui/screens#scenario-adjustment-added-from-detail
+	private async Task AddAdjustmentAsync()
+	{
+		if (TryParseAdjustmentDate(_adjustDateInput, out var date) == false)
+		{
+			_adjustDateInvalid = true;
+			return;
+		}
+
+		if (TryParseAdjustmentAmount(_adjustAmountInput, out var amount) == false)
+		{
+			_adjustAmountInvalid = true;
+			return;
+		}
+
+		_adjustDateInvalid = false;
+		_adjustAmountInvalid = false;
+		await RunActionAsync(
+			() => Adjustments.AddAsync(ConstructionId, date, _adjustSource, amount, NullableDescription(_adjustDescriptionInput)),
+			"Добавление корректировки не выполнено");
+
+		// Форма закрывается только успехом: отказ оставляет её открытой,
+		// пользователь видит причину и может исправить поля.
+		if (_actionError is null)
+		{
+			CancelAdjustmentAdd();
+		}
+	}
+
+	/// <summary>
+	/// Открывает inline-правку строки корректировки: дата, описание, источник
+	/// и сумма предзаполнены текущими значениями строки.
+	/// </summary>
+	// Строки таблицы корректировок правятся по месту — без отдельных страниц.
+	// Traceability: openspec:ui/screens#requirement-adjustments-in-detail
+	private void BeginAdjustmentEdit(ConstructionAdjustmentRow adjustment)
+	{
+		_editAdjustmentId = adjustment.AdjustmentId;
+		_editAdjustDateInput = FormatDay(adjustment.Date);
+		_editAdjustDescriptionInput = adjustment.Description ?? string.Empty;
+		_editAdjustSource = adjustment.Source;
+		_editAdjustAmountInput = FormatPnL(adjustment.AmountUsdt);
+		_editAdjustDateInvalid = false;
+		_editAdjustAmountInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>Закрывает inline-правку корректировки без сохранения — строка остаётся прежней.</summary>
+	private void CancelAdjustmentEdit()
+	{
+		_editAdjustmentId = null;
+		_editAdjustDateInvalid = false;
+		_editAdjustAmountInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Сохраняет правку строки корректировки: новые дата, источник, сумма и
+	/// описание уходят сервису домена, экран перечитывает снимок — таблица и
+	/// сводка отражают новый набор корректировок без ограничений.
+	/// </summary>
+	// Требование: корректировка правится и удаляется в таблице.
+	// Traceability: openspec:ui/screens#scenario-adjustment-edited-and-deleted-inline
+	private async Task SaveAdjustmentEditAsync()
+	{
+		if (_editAdjustmentId is not { } adjustmentId)
+		{
+			return;
+		}
+
+		if (TryParseAdjustmentDate(_editAdjustDateInput, out var date) == false)
+		{
+			_editAdjustDateInvalid = true;
+			return;
+		}
+
+		if (TryParseAdjustmentAmount(_editAdjustAmountInput, out var amount) == false)
+		{
+			_editAdjustAmountInvalid = true;
+			return;
+		}
+
+		_editAdjustDateInvalid = false;
+		_editAdjustAmountInvalid = false;
+		await RunActionAsync(
+			() => Adjustments.EditAsync(adjustmentId, date, _editAdjustSource, amount, NullableDescription(_editAdjustDescriptionInput)),
+			"Правка корректировки не выполнена");
+
+		// Правка закрывается только успехом: отказ оставляет строку открытой
+		// с причиной, введённые значения не теряются.
+		if (_actionError is null)
+		{
+			CancelAdjustmentEdit();
+		}
+	}
+
+	/// <summary>
+	/// Удаляет строку корректировки: удаление свободно и без подтверждения —
+	/// корректировка перестаёт быть слагаемым результата, таблица и сводка
+	/// перечитываются без неё.
+	/// </summary>
+	// Требование: корректировка правится и удаляется в таблице.
+	// Traceability: openspec:ui/screens#scenario-adjustment-edited-and-deleted-inline
+	private Task DeleteAdjustmentAsync(long adjustmentId) => RunActionAsync(
+		() => Adjustments.DeleteAsync(adjustmentId),
+		"Удаление корректировки не выполнено");
+
+	/// <summary>
+	/// Разбирает ввод даты корректировки: «2026-09-20» либо с временем
+	/// «2026-09-20 14:30»; время без смещения разбирается как локальное.
+	/// </summary>
+	private static bool TryParseAdjustmentDate(string input, out DateTimeOffset date) =>
+		DateTimeOffset.TryParseExact(
+			input.Trim(),
+			AdjustmentDateFormats,
+			CultureInfo.InvariantCulture,
+			DateTimeStyles.None,
+			out date);
+
+	/// <summary>Разбирает ввод знаковой суммы корректировки в USDT: «+87.4», «-12», «0».</summary>
+	private static bool TryParseAdjustmentAmount(string input, out decimal amount) =>
+		decimal.TryParse(input.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out amount);
+
+	/// <summary>Описание корректировки из формы: пустая строка превращается в null — описания нет.</summary>
+	private static string? NullableDescription(string input)
+	{
+		var description = input.Trim();
+		return description.Length == 0 ? null : description;
+	}
+
+	#endregion
+
 	#region Inline-правка комментариев
 
 	/// <summary>
@@ -1218,6 +1532,9 @@ else
 	/// <summary>Допустимые форматы ввода времени пометки закрытия.</summary>
 	private static readonly string[] MarkTimeFormats = ["yyyy-MM-dd HH:mm", "yyyy-MM-ddTHH:mm"];
 
+	/// <summary>Допустимые форматы ввода даты корректировки: день либо день со временем.</summary>
+	private static readonly string[] AdjustmentDateFormats = ["yyyy-MM-dd", "yyyy-MM-dd HH:mm"];
+
 	/// <summary>Знаковый класс величины: рост зелёным, падение красным, ноль без выделения.</summary>
 	private static string SignClass(decimal? value) => value > 0 ? "pos" : value < 0 ? "neg" : string.Empty;
 
@@ -1248,6 +1565,10 @@ else
 	/// <summary>Дата-время записи: «2026-06-20 14:30»; отсутствие — прочерк.</summary>
 	private static string FormatDate(DateTimeOffset moment) =>
 		moment.ToString(MarkTimeFormat, CultureInfo.InvariantCulture);
+
+	/// <summary>Дата корректировки без времени: «2026-09-20».</summary>
+	private static string FormatDay(DateTimeOffset moment) =>
+		moment.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
 	/// <summary>Длительность периода: «92 дн. 3 ч.» / «5 ч. 40 мин.»; отсутствие — прочерк.</summary>
 	private static string FormatDuration(TimeSpan? duration)

@@ -78,6 +78,10 @@ public class FrameNavigationTests
 		_context.Services.AddSingleton(new Mock<IManualCloseMarkService>().Object);
 		_context.Services.AddSingleton(new Mock<IInstrumentMarkSource>().Object);
 
+		// Внешние корректировки PnL добавляются и правятся сервисом корректировок
+		// домена: навигационным проверкам достаточно заглушки без мутаций.
+		_context.Services.AddSingleton(new Mock<IPnLAdjustmentService>().Object);
+
 		// Сигнал изменений журнала: экран оповещает каркас после действий,
 		// каркас перечитывает панель без навигации.
 		_context.Services.AddScoped<JournalChangeSignal>();

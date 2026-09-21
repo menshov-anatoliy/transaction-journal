@@ -92,6 +92,12 @@ builder.Services.AddSingleton(sp => new ManualCloseMarkService(
 // записях: экран деталей зависит от интерфейса, тесты экрана подменяют заглушкой.
 // Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
 builder.Services.AddSingleton<IManualCloseMarkService>(sp => sp.GetRequiredService<ManualCloseMarkService>());
+// Внешние корректировки PnL добавляются формой и правятся строкой таблицы в
+// деталях конструкции: экран зависит от интерфейса, тесты подменяют заглушкой.
+// Traceability: openspec:ui/screens#requirement-adjustments-in-detail
+builder.Services.AddSingleton(sp => new PnLAdjustmentService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton<IPnLAdjustmentService>(sp => sp.GetRequiredService<PnLAdjustmentService>());
 
 // Read-модель каркаса «Терминала»: счётчик непривязанных сделок для бейджа
 // «Входящих» и заголовок открытой конструкции для транзитной вкладки — тонкая
