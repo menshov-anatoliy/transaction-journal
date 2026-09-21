@@ -8,6 +8,7 @@ using TransactionJournal.Analytics;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
+using TransactionJournal.Domain;
 using TransactionJournal.Sync;
 using ConstructionDetailPage = TransactionJournal.Components.Pages.ConstructionDetail;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
@@ -52,6 +53,15 @@ public class FrameNavigationTests
 		// Тулбар списка выполняет синхронизацию через сервис единственной ручной
 		// команды: навигационным проверкам достаточно заглушки без запусков.
 		_context.Services.AddSingleton(new Mock<IJournalSyncService>().Object);
+
+		// Экран деталей конструкции читает собственную read-модель: навигационным
+		// проверкам достаточно ответа «конструкция не найдена» — содержимое экрана
+		// проверяется собственными тестами деталей.
+		var detail = new Mock<IConstructionDetailReadModel>();
+		detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ThrowsAsync(new ConstructionNotFoundException(7));
+		_context.Services.AddSingleton(detail.Object);
 	}
 
 	[TestCleanup]

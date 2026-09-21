@@ -1,19 +1,421 @@
 @page "/constructions/{ConstructionId:long}"
 @rendermode InteractiveServer
 
-<PageTitle>Конструкция — Журнал Bybit</PageTitle>
+@using System.Globalization
+@using TransactionJournal.Components.Pages
+@using TransactionJournal.Data
+@using TransactionJournal.Domain
+@inject IConstructionDetailReadModel Detail
 
-<h1>Конструкция</h1>
+<PageTitle>@(_data?.Name ?? "Конструкция") — Журнал Bybit</PageTitle>
 
-@* Транзитный экран деталей конструкции: адрес /constructions/{id} открывает
-   именованную вкладку каркаса. Сводка метрик, комментарий и таблицы записей
-   достраиваются задачами деталей конструкции поверх этого каркаса. *@
-<p class="note">
-	Детали конструкции @ConstructionId появятся здесь: сводка метрик с периодом,
-	таблицы позиций, сделок, закрывающих записей и корректировок PnL.
-</p>
+@if (_unavailable)
+{
+	<h1>Конструкция</h1>
+	@* Явное состояние вместо пустого экрана: журнал не прочитан — сводка и таблицы
+	   не показываются, пользователь видит причину обновить экран. *@
+	<p class="note">Журнал недоступен: не удалось прочитать данные конструкции. Обновите экран.</p>
+}
+else if (_notFound)
+{
+	<h1>Конструкция не найдена</h1>
+	<p class="note">Конструкция @ConstructionId не найдена — возможно, она удалена. Вернитесь к списку конструкций.</p>
+}
+else if (_data is null)
+{
+	<h1>Конструкция</h1>
+	<p class="note">Чтение журнала…</p>
+}
+else
+{
+	@* Транзитный экран деталей конструкции: адрес /constructions/{id} открывает
+	   именованную вкладку каркаса; заголовок повторяет имя и ручной статус. *@
+	<h1>@_data.Name <span class="@StatusClass(_data.Status)">@StatusText(_data.Status)</span></h1>
+
+	@* Сводка метрик конструкции: итог, процент от капитала, разбивка по
+	   реализованному и нереализованному результату, сумма корректировок,
+	   период с длительностью и отметка времени марок оценки. *@
+	@* Traceability: openspec:ui/screens#requirement-construction-detail-screen *@
+	<div class="kstrip">
+		<div>итог
+			@if (_data.Metrics.TotalPnL is null)
+			{
+				@* Итог без нереализованной части неполный — признак сбоя марок,
+				   а не прочерк «нулевого» итога. *@
+				@* Traceability: change:add-ui-screens/design#d4 *@
+				<b class="markfail" title="Итог неполный: нереализованная часть не оценена из-за сбоя марок">неполный (сбой марок)</b>
+			}
+			else
+			{
+				<b class="@SignClass(_data.Metrics.TotalPnL)">@FormatPnL(_data.Metrics.TotalPnL.Value) USDT</b>
+			}
+		</div>
+		<div>% капитала<b class="@SignClass(_data.Metrics.TotalPnLPercent)">@FormatPercent(_data.Metrics.TotalPnLPercent)</b></div>
+		<div>реализованный<b class="@SignClass(_data.Metrics.RealizedPnL)">@FormatPnL(_data.Metrics.RealizedPnL)</b></div>
+		<div>нереализованный
+			@if (_data.HasMarkFailure)
+			{
+				@* Сбой марок — видимое состояние: нереализованная оценка не построена,
+				   признак сбоя занимает её место; реализованный результат виден. *@
+				@* Traceability: change:add-ui-screens/design#d4 *@
+				<b class="markfail" title="Провайдер марок недоступен — нереализованный PnL не оценён">сбой марок</b>
+			}
+			else
+			{
+				<b>@FormatUnrealized(_data.Metrics.UnrealizedPnL)</b>
+			}
+		</div>
+		<div>корректировки<b class="@SignClass(_data.Metrics.AdjustmentsPnL)">@FormatAdjustments(_data.Metrics.AdjustmentsPnL)</b></div>
+		<div>марки на
+			@if (_data.HasMarkFailure)
+			{
+				@* Нереализованные величины сопровождаются отметкой времени марок;
+				   при сбое провайдера время получения марок неизвестно. *@
+				@* Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period *@
+				<b class="markfail" title="Провайдер марок недоступен — время получения марок неизвестно">сбой марок</b>
+			}
+			else if (_data.HasOpenResidual == false)
+			{
+				<b title="Открытых остатков нет — марки оценке не нужны">не нужны</b>
+			}
+			else
+			{
+				<b>@MarksLabel</b>
+			}
+		</div>
+		<div>период<b>@PeriodLabel</b></div>
+	</div>
+
+	@* Комментарий конструкции — рядом со сводкой: свободный текст, правка
+	   комментариев достраивается отдельной задачей деталей. *@
+	@* Traceability: openspec:ui/screens#requirement-construction-detail-screen *@
+	<div class="detail-comment">
+		<span>комментарий</span>
+		<span class="detail-comment-text">@(_data.Comment ?? "—")</span>
+	</div>
+
+	<h2>Позиции</h2>
+	<table>
+		<thead>
+			<tr>
+				<th>Инструмент</th>
+				<th>Остаток</th>
+				<th>Средняя</th>
+				<th>Марка</th>
+				<th>Нереализов.</th>
+				<th>Статус</th>
+				<th>Комментарий</th>
+			</tr>
+		</thead>
+		<tbody>
+			@if (_data.Positions.Count == 0)
+			{
+				@* Пустая таблица — явное сообщение об отсутствии, а не пустая разметка. *@
+				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
+				<tr><td colspan="7" class="empty">позиций нет</td></tr>
+			}
+			@foreach (var position in _data.Positions)
+			{
+				<tr>
+					<td>@position.Symbol</td>
+					<td>@FormatQuantity(position.Residual)</td>
+					<td>@FormatAmount(position.AverageOpenPrice)</td>
+					<td>
+						@if (position.IsOpen && position.MarkPrice is null)
+						{
+							@* Открытому остатку марка не досталась — признак сбоя марок
+							   на месте марки и нереализованной оценки позиции. *@
+							@* Traceability: change:add-ui-screens/design#d4 *@
+							<span class="markfail" title="Провайдер марок недоступен — марка не получена">сбой марок</span>
+						}
+						else
+						{
+							@FormatAmount(position.MarkPrice)
+						}
+					</td>
+					<td>
+						@if (position.IsOpen && position.UnrealizedPnL is null)
+						{
+							<span class="markfail" title="Провайдер марок недоступен — нереализованный PnL не оценён">сбой марок</span>
+						}
+						else
+						{
+							<span class="@SignClass(position.UnrealizedPnL)">@FormatUnrealized(position.UnrealizedPnL)</span>
+						}
+					</td>
+					<td><span class="@(position.IsOpen ? "status status-open" : "status status-closed")">@(position.IsOpen ? "открыта" : "закрыта")</span></td>
+					<td>@(position.Comment ?? "—")</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+
+	<h2>Сделки</h2>
+	<table>
+		<thead>
+			<tr>
+				<th>Время</th>
+				<th>execId</th>
+				<th>Инструмент</th>
+				<th>Направление</th>
+				<th>Кол-во</th>
+				<th>Цена</th>
+				<th>Сумма</th>
+				<th>Комиссия</th>
+				<th>Комментарий</th>
+			</tr>
+		</thead>
+		<tbody>
+			@if (_data.Trades.Count == 0)
+			{
+				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
+				<tr><td colspan="9" class="empty">сделок нет</td></tr>
+			}
+			@foreach (var trade in _data.Trades)
+			{
+				<tr>
+					<td>@FormatDate(trade.ExecutedAt)</td>
+					<td>@trade.ExecId</td>
+					<td>@trade.Symbol</td>
+					<td>@(trade.IsBuy ? "покупка" : "продажа")</td>
+					<td>@FormatQuantity(trade.Quantity)</td>
+					<td>@FormatAmount(trade.Price)</td>
+					<td>@FormatAmount(trade.AmountUsdt)</td>
+					<td>@FormatQuantity(trade.Fee)</td>
+					<td>@(trade.Comment ?? "—")</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+
+	<h2>Закрывающие записи</h2>
+	@* Единый поток закрывающих записей: delivery, экспирации OTM и ручные
+	   пометки перечисляются с типом, инструментом и суммой закрытия. *@
+	@* Traceability: openspec:ui/screens#scenario-detail-closing-entries-shown *@
+	<table>
+		<thead>
+			<tr>
+				<th>Время</th>
+				<th>Тип</th>
+				<th>Инструмент</th>
+				<th>Детали</th>
+				<th>Сумма</th>
+			</tr>
+		</thead>
+		<tbody>
+			@if (_data.ClosingEntries.Count == 0)
+			{
+				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
+				<tr><td colspan="5" class="empty">закрывающих записей нет</td></tr>
+			}
+			@foreach (var entry in _data.ClosingEntries)
+			{
+				<tr>
+					<td>@FormatDate(entry.ClosedAt)</td>
+					<td>@KindText(entry.Kind)</td>
+					<td>@entry.Symbol</td>
+					<td>@ClosingDetails(entry)</td>
+					<td>
+						@if (entry.AmountUsdt is null)
+						{
+							<span class="markfail" title="Марка инструмента неизвестна — сумма закрытия не вычислена">—</span>
+						}
+						else
+						{
+							<span class="@SignClass(entry.AmountUsdt)">@FormatPnL(entry.AmountUsdt.Value)</span>
+						}
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+
+	<h2>Корректировки PnL</h2>
+	<table>
+		<thead>
+			<tr>
+				<th>Дата</th>
+				<th>Описание</th>
+				<th>Источник</th>
+				<th>Сумма</th>
+			</tr>
+		</thead>
+		<tbody>
+			@if (_data.Adjustments.Count == 0)
+			{
+				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
+				<tr><td colspan="4" class="empty">корректировок нет</td></tr>
+			}
+			@foreach (var adjustment in _data.Adjustments)
+			{
+				<tr>
+					<td>@FormatDate(adjustment.Date)</td>
+					<td>@(adjustment.Description ?? "—")</td>
+					<td>@SourceText(adjustment.Source)</td>
+					<td><span class="@SignClass(adjustment.AmountUsdt)">@FormatPnL(adjustment.AmountUsdt)</span></td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
 
 @code {
 	/// <summary>Идентификатор открытой конструкции из адреса деталей.</summary>
 	[Parameter] public long ConstructionId { get; set; }
+
+	private ConstructionDetailData? _data;
+	private bool _unavailable;
+	private bool _notFound;
+
+	/// <summary>
+	/// Перечитывает данные экрана при каждом открытии деталей и смене конструкции:
+	/// сводка, таблицы и комментарии всегда выведены из текущего состояния журнала.
+	/// </summary>
+	// Данные перечитываются из read-моделей при каждом открытии экрана — устаревших
+	// значений UI не показывает.
+	// Traceability: change:add-ui-screens/design#d7
+	protected override async Task OnParametersSetAsync()
+	{
+		try
+		{
+			_data = await Detail.ReadAsync(ConstructionId);
+			_unavailable = false;
+			_notFound = false;
+		}
+		catch (ConstructionNotFoundException)
+		{
+			// Конструкция удалена или адрес указывает на несуществующую — экран
+			// сообщает об отсутствии, а не показывает пустые таблицы.
+			_data = null;
+			_notFound = true;
+			_unavailable = false;
+		}
+		catch (Exception)
+		{
+			// Повреждённое сырьё или недоступная база не оставляют пользователя
+			// с пустым экраном: детали показывают явное состояние недоступности.
+			_data = null;
+			_unavailable = true;
+			_notFound = false;
+		}
+	}
+
+	#region Форматирование
+
+	/// <summary>Отметка времени марок оценки; прочерк, когда оценка марок не оставила времени.</summary>
+	private string MarksLabel => _data?.MarksAsOf is { } marks
+		? FormatDate(marks)
+		: "—";
+
+	/// <summary>
+	/// Период конструкции: даты открытия и закрытия с длительностью; у открытой —
+	/// от первой сделки до сих пор, без сделок — прочерк.
+	/// </summary>
+	private string PeriodLabel
+	{
+		get
+		{
+			if (_data?.Metrics.OpenedAt is not { } openedAt)
+			{
+				return "—";
+			}
+
+			var right = _data.Metrics.ClosedAt is { } closedAt
+				? FormatDate(closedAt)
+				: "открыта";
+			return $"{FormatDate(openedAt)} — {right} · {FormatDuration(_data.Metrics.Duration)}";
+		}
+	}
+
+	/// <summary>Знаковый класс величины: рост зелёным, падение красным, ноль без выделения.</summary>
+	private static string SignClass(decimal? value) => value > 0 ? "pos" : value < 0 ? "neg" : string.Empty;
+
+	/// <summary>Формат знаковой суммы USDT: «+214.32» / «-58.2» / «0».</summary>
+	private static string FormatPnL(decimal value) =>
+		value.ToString("+0.##;-0.##;0", CultureInfo.InvariantCulture);
+
+	/// <summary>Нереализованный PnL: нулевая оценка — прочерк; признак сбоя марок выводится разметкой.</summary>
+	private static string FormatUnrealized(decimal? value) => value == 0m ? "—" : FormatPnL(value.GetValueOrDefault());
+
+	/// <summary>Сумма корректировок: без корректировок — прочерк.</summary>
+	private static string FormatAdjustments(decimal value) => value == 0m ? "—" : FormatPnL(value);
+
+	/// <summary>Формат процента от капитала: «+8.6%» / «-3.1%» / «0%»; недоступный — прочерк.</summary>
+	private static string FormatPercent(decimal? value) => value is null
+		? "—"
+		: $"{value.Value.ToString("+0.#;-0.#;0", CultureInfo.InvariantCulture)}%";
+
+	/// <summary>Количество или цена без знака: «0.0002» / «42000»; отсутствие — прочерк.</summary>
+	private static string FormatAmount(decimal? value) => value is null
+		? "—"
+		: value.Value.ToString("0.####", CultureInfo.InvariantCulture);
+
+	/// <summary>Знаковое количество остатка: «+0.0002» / «-0.0001» / «0».</summary>
+	private static string FormatQuantity(decimal value) =>
+		value.ToString("+0.####;-0.####;0", CultureInfo.InvariantCulture);
+
+	/// <summary>Дата-время записи: «2026-06-20 14:30»; отсутствие — прочерк.</summary>
+	private static string FormatDate(DateTimeOffset moment) =>
+		moment.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+
+	/// <summary>Длительность периода: «92 дн. 3 ч.» / «5 ч. 40 мин.»; отсутствие — прочерк.</summary>
+	private static string FormatDuration(TimeSpan? duration)
+	{
+		if (duration is not { } value)
+		{
+			return "—";
+		}
+
+		var days = (int)value.TotalDays;
+		if (days > 0)
+		{
+			return $"{days} дн. {value.Hours} ч.";
+		}
+
+		return value.Hours > 0
+			? $"{value.Hours} ч. {value.Minutes} мин."
+			: $"{value.Minutes} мин.";
+	}
+
+	/// <summary>Детали закрывающей записи: знаковое количество и цена закрытия; неизвестная цена названа словами.</summary>
+	private static string ClosingDetails(ConstructionClosingEntryRow entry) => entry.Price is { } price
+		? $"{FormatQuantity(entry.Quantity)} × {FormatAmount(price)}"
+		: $"{FormatQuantity(entry.Quantity)} × марка неизвестна";
+
+	/// <summary>Название вида закрывающей записи словами.</summary>
+	private static string KindText(PositionClosingKind kind) => kind switch
+	{
+		PositionClosingKind.Delivery => "delivery",
+		PositionClosingKind.OtmExpiry => "экспирация OTM",
+		PositionClosingKind.ManualMark => "ручная пометка",
+		_ => "неизвестен",
+	};
+
+	/// <summary>Название источника корректировки словами.</summary>
+	private static string SourceText(PnLAdjustmentSource source) => source switch
+	{
+		PnLAdjustmentSource.Robot => "робот",
+		PnLAdjustmentSource.Manual => "ручная",
+		_ => "неизвестен",
+	};
+
+	/// <summary>Класс статуса конструкции в заголовке — цвет текста по ручному статусу.</summary>
+	private static string StatusClass(ConstructionStatus status) => status switch
+	{
+		ConstructionStatus.Open => "status status-open",
+		ConstructionStatus.Closed => "status status-closed",
+		ConstructionStatus.Archived => "status status-archived",
+		_ => "status",
+	};
+
+	/// <summary>Ручной статус конструкции словами.</summary>
+	private static string StatusText(ConstructionStatus status) => status switch
+	{
+		ConstructionStatus.Open => "открыта",
+		ConstructionStatus.Closed => "закрыта",
+		ConstructionStatus.Archived => "архив",
+		_ => "неизвестен",
+	};
+
+	#endregion
 }

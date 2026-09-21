@@ -123,6 +123,15 @@ builder.Services.AddSingleton(sp => new ConstructionListReadModel(
 	sp.GetRequiredService<IJournalMetricsReadModel>()));
 builder.Services.AddSingleton<IConstructionListReadModel>(sp => sp.GetRequiredService<ConstructionListReadModel>());
 
+// Read-модель экрана деталей конструкции: сводка метрик с периодом и отметкой
+// марок, комментарий и таблицы позиций, сделок, закрывающих записей и корректировок —
+// тонкое соединение метрик аналитики, потока закрывающих записей позиций и хранилища.
+builder.Services.AddSingleton(sp => new ConstructionDetailReadModel(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<IJournalMetricsReadModel>(),
+	sp.GetRequiredService<PositionReadModel>()));
+builder.Services.AddSingleton<IConstructionDetailReadModel>(sp => sp.GetRequiredService<ConstructionDetailReadModel>());
+
 var app = builder.Build();
 
 // Журнал разворачивается сам: применяем миграции и включаем WAL-режим SQLite.

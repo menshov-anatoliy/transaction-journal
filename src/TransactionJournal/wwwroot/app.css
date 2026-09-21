@@ -146,6 +146,27 @@ body {
 		font-weight: 400;
 	}
 
+/* ===== Детали конструкции: секции таблиц и комментарий у сводки ===== */
+.screen h2 {
+	font-size: 13px;
+	font-weight: 600;
+	color: #f0f6fc;
+	margin: 16px 0 6px;
+}
+
+.screen h1 .status { font-size: 13px; font-weight: 400; margin-left: 8px; }
+
+.detail-comment {
+	display: flex;
+	gap: 10px;
+	align-items: baseline;
+	margin: 0 0 12px;
+	font-size: 12px;
+	color: #8b949e;
+}
+
+.detail-comment .detail-comment-text { color: #c9d1d9; }
+
 /* ===== Плотные таблицы экранов «Терминала» ===== */
 .screen table {
 	border-collapse: collapse;
