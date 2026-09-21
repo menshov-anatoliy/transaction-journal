@@ -4,13 +4,88 @@
 
 @using System.Globalization
 @using Microsoft.Extensions.DependencyInjection
+@using TransactionJournal.Components.Layout
+@using TransactionJournal.Data
 @using TransactionJournal.Domain
 @using TransactionJournal.Materialization
 @inject InboxReadModel InboxModel
+@inject IConstructionService Constructions
+@inject ITradeBindingService Bindings
+@inject JournalChangeSignal Changes
 
 <PageTitle>Входящие — Журнал Bybit</PageTitle>
 
 <h1>Входящие</h1>
+
+@if (_actionError is not null)
+{
+	@* Отказ команды разбора доходит причиной: формы и выбор остаются на месте,
+	   пользователь видит, что именно блокирует действие. *@
+	<p class="note note-error" role="alert">@_actionError</p>
+}
+
+@* Тулбар разбора выбранных: обе команды недоступны при пустом выборе —
+   действие без сделок не имеет смысла и блокируется, а не молчит. *@
+@* Traceability: openspec:ui/screens#requirement-inbox-screen *@
+<div class="toolbar">
+	<button type="button" class="btn" disabled="@(HasNoSelection || _busy)" @onclick="BeginBindAsync">Привязать к конструкции…</button>
+	<button type="button" class="btn" disabled="@(HasNoSelection || _busy)" @onclick="BeginCreateAsync">Создать конструкцию из выбранных…</button>
+</div>
+
+@if (_bindTargets is not null)
+{
+	@* Форма массовой привязки: целевая конструкция выбирается из активных;
+	   успешная привязка забирает все выбранные сделки в одну конструкцию. *@
+	@* Traceability: openspec:ui/screens#scenario-inbox-batch-bind-clears *@
+	<div class="action-form">
+		@if (_bindTargets.Count == 0)
+		{
+			<span class="action-warning">Нет активных конструкций — сначала создайте целевую конструкцию.</span>
+		}
+		else
+		{
+			<label class="action-label">
+				целевая конструкция
+				<select class="action-input" @bind="_bindTargetId">
+					@foreach (var target in _bindTargets)
+					{
+						<option value="@target.Id">@target.Name</option>
+					}
+				</select>
+			</label>
+			<button type="button" class="btn primary" disabled="@_busy" @onclick="ConfirmBindAsync">Привязать выбранное</button>
+		}
+		<button type="button" class="btn" disabled="@_busy" @onclick="CancelBind">Отмена</button>
+	</div>
+}
+
+@if (_createFormOpen)
+{
+	@* Форма создания конструкции из выбранных: имя и выделенный капитал;
+	   новая конструкция открывается со статусом «открыта» и забирает все
+	   выбранные сделки. *@
+	@* Traceability: openspec:ui/screens#scenario-inbox-create-construction-from-selected *@
+	<div class="action-form">
+		<label class="action-label">
+			имя конструкции
+			<input class="action-input" maxlength="200" @bind="_createNameInput" />
+		</label>
+		@if (_createNameInvalid)
+		{
+			<span class="validation-message">Введите имя конструкции</span>
+		}
+		<label class="action-label">
+			выделенный капитал, USDT
+			<input class="action-input" placeholder="3000" @bind="_createCapitalInput" />
+		</label>
+		@if (_createCapitalInvalid)
+		{
+			<span class="validation-message">Введите число в USDT, например 3000</span>
+		}
+		<button type="button" class="btn primary" disabled="@_busy" @onclick="ConfirmCreateAsync">Создать и привязать</button>
+		<button type="button" class="btn" disabled="@_busy" @onclick="CancelCreate">Отмена</button>
+	</div>
+}
 
 @if (_unavailable)
 {
@@ -31,8 +106,8 @@ else
 {
 	@* Таблица непривязанных сделок с атрибутами биржевой записи и чекбоксами
 	   выбора строк; переключатель в шапке выполняет «Выбрать всё» как «все или
-	   ничего». Команды разбора выбранных — массовая привязка и создание
-	   конструкции — достраиваются следующей задачей экрана. *@
+	   ничего». Разбор выбранных — массовая привязка и создание конструкции —
+	   выполняется use-case сервисами домена, UI собственных правил не вводит. *@
 	@* Traceability: openspec:ui/screens#requirement-inbox-screen *@
 	<table>
 		<thead>
@@ -148,6 +223,190 @@ else
 			_selectedExecIds.Remove(execId);
 		}
 	}
+
+	#region Разбор выбранных
+
+	// Активные конструкции для формы привязки; null — форма закрыта.
+	private List<Construction>? _bindTargets;
+	private long? _bindTargetId;
+	private bool _createFormOpen;
+	private string _createNameInput = string.Empty;
+	private string _createCapitalInput = string.Empty;
+	private bool _createNameInvalid;
+	private bool _createCapitalInvalid;
+	private string? _actionError;
+	private bool _busy;
+
+	/// <summary>Выбрана ли хотя бы одна сделка — доступность команд разбора.</summary>
+	private bool HasNoSelection => _selectedExecIds.Count == 0;
+
+	/// <summary>
+	/// Открывает форму массовой привязки: читает активные конструкции и
+	/// подставляет первую целевым выбором по умолчанию; форма создания
+	/// закрывается — одновременно открыта одна форма разбора.
+	/// </summary>
+	// Целевая привязка предлагается только среди активных конструкций: архив
+	// скрыт из списков, привязывать в него нельзя.
+	// Traceability: openspec:ui/screens#scenario-inbox-batch-bind-clears
+	private async Task BeginBindAsync()
+	{
+		if (_busy || HasNoSelection)
+		{
+			return;
+		}
+
+		try
+		{
+			_bindTargets = [.. await Constructions.ListActiveAsync()];
+			_bindTargetId = _bindTargets.Count > 0 ? _bindTargets[0].Id : null;
+			_createFormOpen = false;
+			_actionError = null;
+		}
+		catch (Exception ex)
+		{
+			// Список кандидатов недоступен — форма не открывается, причина видна
+			// пользователю вместо пустого выбора.
+			_actionError = $"Список конструкций недоступен: {ex.Message}";
+		}
+	}
+
+	/// <summary>Закрывает форму привязки без изменения принадлежности сделок.</summary>
+	private void CancelBind()
+	{
+		_bindTargets = null;
+		_bindTargetId = null;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Привязывает все выбранные сделки к выбранной конструкции: сделки исчезают
+	/// из «Входящих» и принадлежат ровно этой конструкции, выбор строк очищается,
+	/// бейдж вкладки уменьшается по сигналу каркасу.
+	/// </summary>
+	// Массовая привязка атомарна в домене: отказ на любой сделке откатывает
+	// всю пачку, форма остаётся открытой с причиной.
+	// Traceability: openspec:ui/screens#scenario-inbox-batch-bind-clears
+	private Task ConfirmBindAsync()
+	{
+		if (_busy || _bindTargetId is not { } targetId)
+		{
+			return Task.CompletedTask;
+		}
+
+		return RunBindingActionAsync(
+			() => Bindings.BindBatchAsync(targetId, _selectedExecIds),
+			"Привязка не выполнена",
+			CancelBind);
+	}
+
+	/// <summary>
+	/// Открывает форму создания конструкции из выбранных с пустыми полями имени
+	/// и капитала; форма привязки закрывается.
+	/// </summary>
+	// Traceability: openspec:ui/screens#scenario-inbox-create-construction-from-selected
+	private void BeginCreateAsync()
+	{
+		if (_busy || HasNoSelection)
+		{
+			return;
+		}
+
+		_createFormOpen = true;
+		_createNameInput = string.Empty;
+		_createCapitalInput = string.Empty;
+		_createNameInvalid = false;
+		_createCapitalInvalid = false;
+		_bindTargets = null;
+		_bindTargetId = null;
+		_actionError = null;
+	}
+
+	/// <summary>Закрывает форму создания без создания конструкции и привязки.</summary>
+	private void CancelCreate()
+	{
+		_createFormOpen = false;
+		_createNameInvalid = false;
+		_createCapitalInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Создаёт конструкцию из выбранных сделок: имя и капитал разбираются из
+	/// формы, конструкция создаётся со статусом «открыта» и забирает все
+	/// выбранные сделки одним атомарным действием.
+	/// </summary>
+	// Создание идёт use-case сервисом домена: стартовый статус «открыта»
+	// фиксирован доменом, UI собственных правил не вводит.
+	// Traceability: openspec:ui/screens#scenario-inbox-create-construction-from-selected
+	private Task ConfirmCreateAsync()
+	{
+		if (_busy || HasNoSelection)
+		{
+			return Task.CompletedTask;
+		}
+
+		if (string.IsNullOrWhiteSpace(_createNameInput))
+		{
+			_createNameInvalid = true;
+			return Task.CompletedTask;
+		}
+
+		if (decimal.TryParse(_createCapitalInput, NumberStyles.Number, CultureInfo.InvariantCulture, out var capital) == false)
+		{
+			_createCapitalInvalid = true;
+			return Task.CompletedTask;
+		}
+
+		_createNameInvalid = false;
+		_createCapitalInvalid = false;
+		var name = _createNameInput.Trim();
+
+		return RunBindingActionAsync(
+			async () =>
+			{
+				var created = await Constructions.CreateAsync(name, capital);
+				await Bindings.BindBatchAsync(created.Id, _selectedExecIds);
+			},
+			"Создание конструкции не выполнено",
+			CancelCreate);
+	}
+
+	/// <summary>
+	/// Выполняет команду разбора выбранных: успех закрывает форму, очищает выбор,
+	/// перечитывает «Входящие» и оповещает каркас — бейдж вкладки уменьшается;
+	/// отказ домена оставляет форму открытой с причиной, выбор не трогается.
+	/// </summary>
+	// Traceability: openspec:ui/screens#requirement-inbox-screen
+	private async Task RunBindingActionAsync(Func<Task> action, string errorPrefix, Action closeForm)
+	{
+		_busy = true;
+		try
+		{
+			await action();
+		}
+		catch (Exception ex)
+		{
+			_busy = false;
+			_actionError = $"{errorPrefix}: {ex.Message}";
+			return;
+		}
+
+		_busy = false;
+		closeForm();
+
+		// После действия выбор очищается, даже если часть выбранных сделок по
+		// какой-то причине осталась в списке — команда разбора завершена целиком.
+		// Traceability: openspec:ui/screens#requirement-inbox-screen
+		_selectedExecIds.Clear();
+		await RefreshAsync();
+
+		// Сделки покинули «Входящие»: каркас по сигналу перечитывает панель и
+		// уменьшает бейдж вкладки без навигации.
+		// Traceability: openspec:ui/screens#scenario-inbox-badge-counts-unassigned
+		await Changes.RaiseAsync();
+	}
+
+	#endregion
 
 	#region Форматирование
 

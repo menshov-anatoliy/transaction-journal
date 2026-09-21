@@ -68,6 +68,11 @@ public class AppFrameTests
 		// in-memory базы экран обрабатывает явным состоянием недоступности.
 		_context.Services.AddSingleton(new InboxReadModel(
 			new DbContextOptionsBuilder<JournalDbContext>().UseSqlite("Data Source=:memory:").Options));
+
+		// Разбор выбранных «Входящих» выполняется use-case сервисами домена:
+		// каркасным проверкам достаточно заглушек без мутаций.
+		_context.Services.AddSingleton(new Mock<IConstructionService>().Object);
+		_context.Services.AddSingleton(new Mock<ITradeBindingService>().Object);
 	}
 
 	[TestCleanup]
