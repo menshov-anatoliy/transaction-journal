@@ -2,12 +2,180 @@
 
 @rendermode InteractiveServer
 
+@using System.Globalization
+@using Microsoft.Extensions.DependencyInjection
+@using TransactionJournal.Domain
+@using TransactionJournal.Materialization
+@inject InboxReadModel InboxModel
+
 <PageTitle>Входящие — Журнал Bybit</PageTitle>
 
 <h1>Входящие</h1>
 
-@* Каркас экрана «Входящие»: содержимое (таблица непривязанных сделок с выбором
-   и привязкой) достраивается задачами экрана поверх этого каркаса. *@
-<p class="note">
-	Непривязанные сделки синхронизации появятся здесь: выбор строк и привязка к конструкциям.
-</p>
+@if (_unavailable)
+{
+	@* Повреждённое сырьё или недоступная база не оставляют пользователя с пустым
+	   экраном: «Входящие» показывают явное состояние недоступности. *@
+	<p class="note">Журнал недоступен: не удалось прочитать непривязанные сделки. Обновите экран.</p>
+}
+else if (_trades is null)
+{
+	<p class="note">Чтение журнала…</p>
+}
+else if (_trades.Count == 0)
+{
+	@* Пустые «Входящие» — явное сообщение об отсутствии, а не пустая разметка. *@
+	<p class="note">Входящие пусты: непривязанных сделок нет.</p>
+}
+else
+{
+	@* Таблица непривязанных сделок с атрибутами биржевой записи и чекбоксами
+	   выбора строк; переключатель в шапке выполняет «Выбрать всё» как «все или
+	   ничего». Команды разбора выбранных — массовая привязка и создание
+	   конструкции — достраиваются следующей задачей экрана. *@
+	@* Traceability: openspec:ui/screens#requirement-inbox-screen *@
+	<table>
+		<thead>
+			<tr>
+				<th class="col-check">
+					<label class="select-all" title="Выбрать все сделки или снять выбор">
+						<input type="checkbox" class="select-all" checked="@AllSelected" @onchange="ToggleSelectAll" />
+						Выбрать всё
+					</label>
+				</th>
+				<th>Время</th>
+				<th>execId</th>
+				<th>Инструмент</th>
+				<th>Направление</th>
+				<th>Количество</th>
+				<th>Цена</th>
+				<th>Сумма</th>
+				<th>Комиссия</th>
+			</tr>
+		</thead>
+		<tbody>
+			@foreach (var trade in _trades)
+			{
+				<tr>
+					<td><input type="checkbox" checked="@IsSelected(trade.ExecId)" @onchange="args => ToggleRow(trade.ExecId, args.Value is true)" /></td>
+					<td>@FormatTime(trade.ExecutedAt)</td>
+					<td>@trade.ExecId</td>
+					<td>@trade.Symbol</td>
+					<td class="@DirectionClass(trade.Quantity)">@DirectionText(trade.Quantity)</td>
+					<td>@FormatSigned(trade.Quantity)</td>
+					<td>@FormatAmount(trade.Price)</td>
+					<td>@FormatAmount(AmountOf(trade))</td>
+					<td>@FormatFee(trade.Fee, trade.FeeCurrency)</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+@code {
+	private IReadOnlyList<MaterializedTrade>? _trades;
+	private bool _unavailable;
+
+	// Выбор строк живёт в circuit-состоянии компонента: персистентность не
+	// требуется, потерянный при обрыве circuit выбор данных не теряет.
+	private readonly HashSet<string> _selectedExecIds = new(StringComparer.Ordinal);
+
+	protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+	/// <summary>
+	/// Перечитывает непривязанные сделки из read-модели «Входящих» при открытии
+	/// экрана: устаревших значений UI не показывает, а выбор чистит от сделок,
+	/// покинувших список.
+	/// </summary>
+	// Экран перечитывает read-модель при каждом открытии; выбор — circuit-состояние.
+	// Traceability: change:add-ui-screens/design#d7
+	private async Task RefreshAsync()
+	{
+		try
+		{
+			_trades = await InboxModel.ListAsync();
+			_unavailable = false;
+		}
+		catch (Exception)
+		{
+			_trades = null;
+			_unavailable = true;
+		}
+
+		// Выбор сделок, которых больше нет во «Входящих», теряет смысл.
+		_selectedExecIds.RemoveWhere(execId => _trades?.Any(trade => trade.ExecId == execId) == false);
+	}
+
+	/// <summary>Отмечены ли все сделки таблицы — состояние переключателя «Выбрать всё».</summary>
+	private bool AllSelected => _trades is { Count: > 0 } trades && _selectedExecIds.Count == trades.Count;
+
+	/// <summary>Выбрана ли сделка строки по её execId.</summary>
+	private bool IsSelected(string execId) => _selectedExecIds.Contains(execId);
+
+	/// <summary>
+	/// Переключатель «Выбрать всё» работает как «все или ничего»: когда выбраны
+	/// все сделки, нажатие снимает выбор полностью, иначе выбираются все
+	/// непривязанные сделки.
+	/// </summary>
+	// Traceability: openspec:ui/screens#scenario-inbox-select-all-or-none
+	private void ToggleSelectAll(ChangeEventArgs args)
+	{
+		if (AllSelected)
+		{
+			_selectedExecIds.Clear();
+			return;
+		}
+
+		if (_trades is not null)
+		{
+			foreach (var trade in _trades)
+			{
+				_selectedExecIds.Add(trade.ExecId);
+			}
+		}
+	}
+
+	/// <summary>Чекбокс строки выбирает или снимает одну сделку по её execId.</summary>
+	// Traceability: openspec:ui/screens#requirement-inbox-screen
+	private void ToggleRow(string execId, bool selected)
+	{
+		if (selected)
+		{
+			_selectedExecIds.Add(execId);
+		}
+		else
+		{
+			_selectedExecIds.Remove(execId);
+		}
+	}
+
+	#region Форматирование
+
+	/// <summary>Время исполнения: «2026-06-20 14:30».</summary>
+	private static string FormatTime(DateTimeOffset moment) =>
+		moment.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+
+	/// <summary>Направление по знаку количества: покупка положительна, продажа отрицательна.</summary>
+	private static string DirectionText(decimal quantity) => quantity > 0 ? "покупка" : "продажа";
+
+	/// <summary>Класс направления: покупка зелёным, продажа красным.</summary>
+	private static string DirectionClass(decimal quantity) => quantity > 0 ? "pos" : "neg";
+
+	/// <summary>Сумма сделки без направления: произведение модуля количества на цену.</summary>
+	private static decimal AmountOf(MaterializedTrade trade) => Math.Abs(trade.Quantity) * trade.Price;
+
+	/// <summary>Знаковый формат количества и комиссии: «+0.01» / «-0.0001» / «0».</summary>
+	private static string FormatSigned(decimal value) =>
+		value.ToString("+0.####;-0.####;0", CultureInfo.InvariantCulture);
+
+	/// <summary>Беззнаковый формат цены и суммы: «45000» / «4.5».</summary>
+	private static string FormatAmount(decimal value) =>
+		value.ToString("0.########", CultureInfo.InvariantCulture);
+
+	/// <summary>Комиссия со знаком и валютой биржи: «+0.01 USDT» / «-0.0001 BTC»; без валюты — только число.</summary>
+	private static string FormatFee(decimal fee, string? feeCurrency) => feeCurrency is null
+		? FormatSigned(fee)
+		: $"{FormatSigned(fee)} {feeCurrency}";
+
+	#endregion
+}

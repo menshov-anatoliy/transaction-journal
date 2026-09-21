@@ -1,6 +1,7 @@
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -8,6 +9,8 @@ using NUnit.Framework;
 using TransactionJournal.Analytics;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
+using TransactionJournal.Data;
+using TransactionJournal.Domain;
 using TransactionJournal.Sync;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
 using InboxPage = TransactionJournal.Components.Pages.Inbox;
@@ -59,6 +62,12 @@ public class AppFrameTests
 		// Каркас подписывается на сигнал изменений журнала после мутаций экранов:
 		// каркасным проверкам достаточно молчащего сигнала без подписчиков.
 		_context.Services.AddScoped<JournalChangeSignal>();
+
+		// Экран «Входящие» читает sealed-класс read-модели над своей базой:
+		// каркасным проверкам содержимое «Входящих» безразлично — чтение пустой
+		// in-memory базы экран обрабатывает явным состоянием недоступности.
+		_context.Services.AddSingleton(new InboxReadModel(
+			new DbContextOptionsBuilder<JournalDbContext>().UseSqlite("Data Source=:memory:").Options));
 	}
 
 	[TestCleanup]

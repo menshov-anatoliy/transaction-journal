@@ -240,6 +240,10 @@ body {
 .screen tr.clickable { cursor: pointer; }
 .screen td.empty { color: #8b949e; text-align: center; }
 
+/* ===== Экран «Входящие»: чекбоксы выбора строк и «Выбрать всё» в шапке ===== */
+.screen .col-check { width: 1%; }
+.select-all { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; white-space: nowrap; }
+
 /* Ручной статус конструкции текстом в таблицах экранов. */
 .status { font-family: "Segoe UI", system-ui, sans-serif; }
 
