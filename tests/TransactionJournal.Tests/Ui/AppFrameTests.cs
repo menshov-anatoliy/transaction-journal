@@ -80,6 +80,14 @@ public class AppFrameTests
 		// явное состояние без маски, значения ключа и секрета каркасу безразличны.
 		_context.Services.AddSingleton<IBybitCredentialsProvider>(new UnconfiguredCredentials());
 		_context.Services.AddSingleton<SettingsReadModel>();
+
+		// Журнал синхронизаций каркасным проверкам не нужен — экран рендерит
+		// явное пустое состояние поверх заглушки read-модели.
+		var syncJournal = new Mock<ISyncJournalReadModel>();
+		syncJournal
+			.Setup(model => model.ReadAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync([]);
+		_context.Services.AddSingleton(syncJournal.Object);
 	}
 
 	[TestCleanup]

@@ -35,6 +35,12 @@ builder.Services.AddSingleton<IBybitCredentialsProvider, EnvironmentBybitCredent
 // Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed
 builder.Services.AddSingleton<SettingsReadModel>();
 
+// Read-модель журнала синхронизаций «Настроек»: строки запусков SyncRun новыми
+// сверху — время, режим, результат и статус; предупреждения сверки дополняет экран.
+// Traceability: openspec:ui/screens#scenario-settings-sync-log-mode-warnings
+builder.Services.AddSingleton<SyncJournalReadModel>();
+builder.Services.AddSingleton<ISyncJournalReadModel>(sp => sp.GetRequiredService<SyncJournalReadModel>());
+
 // Подсистема синхронизации с Bybit: подписанный read-only клиент с resilience,
 // шлюз истории и публичных спецификаций, движки категорий, пополнитель справочника
 // и оркестратор кнопки «Синхронизировать» на общей строке SyncRun.

@@ -2,8 +2,13 @@
 
 @rendermode InteractiveServer
 
+@using System.Globalization
 @using TransactionJournal.Bybit
+@using TransactionJournal.Data
+@using TransactionJournal.Sync
 @inject SettingsReadModel Connection
+@inject IJournalSyncService SyncService
+@inject ISyncJournalReadModel SyncJournal
 
 <PageTitle>Настройки — Журнал Bybit</PageTitle>
 
@@ -37,8 +42,187 @@ else
 	</div>
 }
 
+<h2>Синхронизация</h2>
+
+@* Единственная кнопка синхронизации на «Настройках»: режим выбирает система сама —
+   backfill при первом запуске, инкремент далее — и виден строкой журнала ниже;
+   селект режима из прототипа не реализуется. *@
+@* Traceability: openspec:ui/screens#requirement-settings-screen *@
+@* Traceability: change:add-ui-screens/design#d3 *@
+<div class="toolbar">
+	<button type="button" class="btn" disabled="@_syncRunning" @onclick="RunSyncAsync">Синхронизировать сейчас</button>
+</div>
+
+@if (_syncRunning)
+{
+	<p class="note" role="status">Синхронизация выполняется…</p>
+}
+else if (_syncError is not null)
+{
+	@* Ошибка биржи не оставляет журнал несогласованным: прерванный запуск остался
+	   строкой журнала со статусом и причиной, повторный запуск продолжит без дублей. *@
+	<p class="note note-error" role="alert"><b>Синхронизация прервана:</b> @_syncError</p>
+}
+
+@* Журнал синхронизаций: строка на запуск — время, выбранный системой режим,
+   результат и статус. Предупреждения сверки показываются под журналом для
+   последнего завершившегося запуска и работу не блокируют. *@
+@* Traceability: openspec:ui/screens#scenario-settings-sync-log-mode-warnings *@
+@if (_journalUnavailable)
+{
+	@* Явное состояние вместо пустого экрана: журнал не прочитан — пользователь
+	   видит причину, повторное чтение произойдёт при следующем открытии экрана. *@
+	<p class="note note-error" role="alert">Журнал синхронизаций недоступен: не удалось прочитать запуски. Обновите экран.</p>
+}
+else if (_journal.Count == 0)
+{
+	<p class="note">Синхронизаций ещё не было: нажмите «Синхронизировать сейчас».</p>
+}
+else
+{
+	<table>
+		<thead>
+			<tr>
+				<th>Время</th>
+				<th>Режим</th>
+				<th>Результат</th>
+				<th>Статус</th>
+			</tr>
+		</thead>
+		<tbody>
+			@foreach (var run in _journal)
+			{
+				<tr>
+					<td>@FormatDate(run.StartedAt)</td>
+					<td>@ModeLabel(run.Mode)</td>
+					<td>@ResultLabel(run)</td>
+					<td>@StatusText(run.Status)</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+}
+
+@if (_syncResult is not null)
+{
+	@if (_syncResult.ProjectionError is not null)
+	{
+		@* Сырые записи синхронизация сохранила, проекция не построилась — причина
+		   видна, работа журнала продолжается. *@
+		<div role="alert">
+			<strong>Проекция журнала не построена:</strong> @_syncResult.ProjectionError
+		</div>
+	}
+	else if (_syncResult.Projection is { } projection)
+	{
+		@if (projection.ReconciliationWarnings.Count == 0)
+		{
+			<p class="note note-ok" role="status">Предупреждений сверки с биржей у последнего запуска нет.</p>
+		}
+		else
+		{
+			@* Предупреждение сверки не блокирует работу: собственный расчёт журнала
+			   остаётся источником результата, биржевая величина — только сигнал. *@
+			@* Traceability: openspec:sync/bybit-history#scenario-delivery-reconciliation-warning *@
+			<p class="note">Предупреждения сверки с биржей — последний запуск:</p>
+			<ul>
+				@foreach (var warning in projection.ReconciliationWarnings)
+				{
+					<li>
+						@warning.Symbol
+						(@warning.DeliveryTime.ToString("u", CultureInfo.InvariantCulture)):
+						расхождение @warning.Difference.ToString("0.0###", CultureInfo.InvariantCulture)
+					</li>
+				}
+			</ul>
+		}
+	}
+}
+
 @code {
 	private ConnectionInfo? _connection;
+	private IReadOnlyList<SyncRunRow> _journal = [];
+	private bool _journalUnavailable;
+	private bool _syncRunning;
+	private JournalSyncResult? _syncResult;
+	private string? _syncError;
 
-	protected override void OnInitialized() => _connection = Connection.GetConnection();
+	protected override async Task OnInitializedAsync()
+	{
+		_connection = Connection.GetConnection();
+		await RefreshJournalAsync();
+	}
+
+	/// <summary>
+	/// Выполняет единственную ручную команду синхронизации: запуск идёт до конца,
+	/// кнопка блокируется на время работы; после завершения журнал перечитывается —
+	/// новая строка со временем, режимом, результатом и статусом появляется в
+	/// журнале, предупреждения сверки показываются рядом, не блокируя работу.
+	/// </summary>
+	// Сценарий журнала: после завершения синка строка появляется в журнале,
+	// а предупреждения сверки видны и работу не блокируют.
+	// Traceability: openspec:ui/screens#scenario-settings-sync-log-mode-warnings
+	private async Task RunSyncAsync()
+	{
+		_syncRunning = true;
+		_syncResult = null;
+		_syncError = null;
+
+		try
+		{
+			_syncResult = await SyncService.SyncAsync();
+		}
+		catch (Exception ex)
+		{
+			// Ошибка биржи после всех повторов доходит до пользователя текстом —
+			// прерванный запуск остался строкой журнала со статусом «ошибка».
+			_syncError = ex.Message;
+		}
+		finally
+		{
+			_syncRunning = false;
+		}
+
+		await RefreshJournalAsync();
+	}
+
+	/// <summary>Перечитывает журнал синхронизаций из хранилища; сбой чтения — явное состояние.</summary>
+	private async Task RefreshJournalAsync()
+	{
+		try
+		{
+			_journal = await SyncJournal.ReadAsync();
+			_journalUnavailable = false;
+		}
+		catch (Exception)
+		{
+			_journal = [];
+			_journalUnavailable = true;
+		}
+	}
+
+	/// <summary>Дата-время запуска: «2026-01-01 14:30».</summary>
+	private static string FormatDate(DateTimeOffset moment) =>
+		moment.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+
+	/// <summary>Название режима запуска, выбранного системой: backfill при первом запуске, далее инкремент.</summary>
+	private static string ModeLabel(SyncRunMode mode) => mode == SyncRunMode.Backfill
+		? "первичная загрузка (backfill)"
+		: "инкрементальная догрузка";
+
+	/// <summary>Результат запуска: счётчики новых записей у успешного, причина у прерванного, прогресс у идущего.</summary>
+	private static string ResultLabel(SyncRunRow run) => run.Status switch
+	{
+		SyncRunStatus.Running => "выполняется…",
+		SyncRunStatus.Failed => $"прерван: {run.Error}",
+		_ => $"исполнений {run.NewExecutions} · delivery {run.NewDeliveries} · инструментов {run.NewInstruments}",
+	};
+
+	/// <summary>Статус запуска словами: выполняется / успех / ошибка.</summary>
+	private static string StatusText(SyncRunStatus status) => status switch
+	{
+		SyncRunStatus.Running => "выполняется",
+		SyncRunStatus.Succeeded => "успех",
+		_ => "ошибка",
+	};
 }
