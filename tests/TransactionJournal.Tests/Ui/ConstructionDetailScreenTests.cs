@@ -20,12 +20,14 @@ namespace TransactionJournal.Tests.Ui;
 /// марок, комментарий рядом со сводкой, четыре таблицы записей — позиции,
 /// сделки, закрывающие записи и корректировки PnL; действия конструкции —
 /// переименование, смена статуса с архивацией, изменение капитала и удаление
-/// с подтверждением и причиной отказа; пустые таблицы показывают явное
-/// сообщение об отсутствии, сбой марок — признак на месте нереализованных
+/// с подтверждением и причиной отказа; действия сделок — возврат во «Входящие»
+/// и перенос в другую конструкцию с выбором цели; пустые таблицы показывают
+/// явное сообщение об отсутствии, сбой марок — признак на месте нереализованных
 /// величин, недоступный журнал и отсутствующая конструкция — явные состояния.
 /// Traceability: openspec:ui/screens#requirement-construction-detail-screen
 /// Traceability: openspec:ui/screens#requirement-construction-actions
 /// Traceability: openspec:ui/screens#requirement-comments-inline-editing
+/// Traceability: openspec:ui/screens#requirement-trade-actions-in-detail
 /// </summary>
 [TestClass]
 public class ConstructionDetailScreenTests
@@ -34,6 +36,7 @@ public class ConstructionDetailScreenTests
 	private Mock<IConstructionDetailReadModel> _detail = null!;
 	private Mock<IConstructionService> _constructions = null!;
 	private Mock<ICommentService> _comments = null!;
+	private Mock<ITradeBindingService> _bindings = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -54,6 +57,11 @@ public class ConstructionDetailScreenTests
 		// комментариев домена — экран проверяется против заглушки интерфейса.
 		_comments = new Mock<ICommentService>();
 		_context.Services.AddSingleton(_comments.Object);
+
+		// Перенос сделки в другую конструкцию и возврат во «Входящие» выполняются
+		// use-case сервисом привязки домена — экран проверяется против заглушки.
+		_bindings = new Mock<ITradeBindingService>();
+		_context.Services.AddSingleton(_bindings.Object);
 
 		// Сигнал изменений журнала оповещает каркас после действий экрана;
 		// без подписчиков в изолированном рендере он безопасно бездействует.
@@ -677,6 +685,153 @@ public class ConstructionDetailScreenTests
 			cut.Find(".detail-comment").TextContent, Does.Contain("стратегия календаря")));
 	}
 
+	[TestMethod]
+	[Description("Возврат сделки во «Входящие» снимает привязку и убирает сделку из таблицы")]
+	public void TryIfReturnTradeToInboxUnbindsAndRemovesRowFromTable()
+	{
+		// Arrange: у конструкции одна привязанная сделка; после возврата
+		// read-модель возвращает снимок без сделок — таблица пустеет.
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Trades = [CreateTrade()] })
+			.ReturnsAsync(CreateData(MetricsOf()));
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[1].TextContent, Does.Contain("e-1024")));
+
+		// Act: пользователь возвращает сделку из таблицы деталей во «Входящие».
+		FindRowButton(cut.FindAll("table")[1], "Во «Входящие»").Click();
+
+		// Assert: привязка снята сервисом домена по ключу execId; сделка исчезла
+		// из таблицы — снимок перечитан, позиции и метрики конструкции берутся
+		// из нового чтения.
+		// Требование: возврат сделки из деталей во «Входящие» пересчитывает
+		// производные конструкции при очередном чтении.
+		// Traceability: openspec:ui/screens#scenario-detail-return-trade-to-inbox
+		_bindings.Verify(service =>
+			service.UnbindAsync("e-1024", It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[1].TextContent, Does.Contain("сделок нет")));
+	}
+
+	[TestMethod]
+	[Description("Перенос сделки предлагает выбор конструкции и привязывает к выбранной")]
+	public void TryIfMoveTradeOffersTargetChoiceAndBindsToChosen()
+	{
+		// Arrange: кроме текущей конструкции 7 активна целевая 9 «Плечо на
+		// октябрь»; после переноса read-модель возвращает снимок без сделки.
+		_constructions
+			.Setup(service => service.ListActiveAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new Construction[]
+			{
+				new() { Id = 7, Name = "Календарь сентябрь", Status = ConstructionStatus.Open },
+				new() { Id = 9, Name = "Плечо на октябрь", Status = ConstructionStatus.Open },
+			});
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Trades = [CreateTrade()] })
+			.ReturnsAsync(CreateData(MetricsOf()));
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[1].TextContent, Does.Contain("e-1024")));
+
+		// Act: пользователь открывает перенос сделки и выбирает целевую конструкцию.
+		FindRowButton(cut.FindAll("table")[1], "Перенести…").Click();
+		cut.WaitForAssertion(() =>
+		{
+			// Выбор предлагает только другие активные конструкции: текущая
+			// в список кандидатов не попадает.
+			var options = cut.FindAll(".action-form select option");
+			Assert.That(options, Has.Count.EqualTo(1));
+			Assert.That(options[0].TextContent, Is.EqualTo("Плечо на октябрь"));
+		});
+		cut.Find(".action-form select").Change("9");
+		FindButton(cut, "Перенести").Click();
+
+		// Assert: сделка привязана к целевой конструкции ровно один раз —
+		// принадлежность заменена, а не задвоена; форма закрыта, таблица сделок
+		// текущей конструкции опустела перечитанным снимком.
+		// Требование: после подтверждения сделка принадлежит ровно одной —
+		// целевой — конструкции.
+		// Traceability: openspec:ui/screens#scenario-detail-move-trade-choose-target
+		_bindings.Verify(service =>
+			service.BindAsync(9, "e-1024", It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll("table")[1].TextContent, Does.Contain("сделок нет"));
+			Assert.That(cut.FindAll(".action-form"), Has.Count.EqualTo(0));
+		});
+	}
+
+	[TestMethod]
+	[Description("Отмена переноса закрывает форму без вызова привязки")]
+	public void TryIfMoveCancelClosesFormWithoutBinding()
+	{
+		// Arrange: есть целевая конструкция, у текущей — одна сделка.
+		_constructions
+			.Setup(service => service.ListActiveAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new Construction[]
+			{
+				new() { Id = 9, Name = "Плечо на октябрь", Status = ConstructionStatus.Open },
+			});
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Trades = [CreateTrade()] });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[1].TextContent, Does.Contain("e-1024")));
+		FindRowButton(cut.FindAll("table")[1], "Перенести…").Click();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".action-form select"), Is.Not.Null));
+
+		// Act: пользователь отменяет перенос.
+		FindButton(cut, "Отмена").Click();
+
+		// Assert: команда привязки не запускалась, форма закрыта, сделка
+		// осталась в таблице текущей конструкции.
+		// Требование: без подтверждения перенос не выполняется.
+		// Traceability: openspec:ui/screens#requirement-trade-actions-in-detail
+		_bindings.Verify(service =>
+			service.BindAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll(".action-form"), Has.Count.EqualTo(0)));
+		Assert.That(cut.FindAll("table")[1].TextContent, Does.Contain("e-1024"));
+	}
+
+	[TestMethod]
+	[Description("Перенос без других активных конструкций показывает явное сообщение")]
+	public void TryIfMoveWithoutOtherConstructionsShowsExplicitMessage()
+	{
+		// Arrange: активна только текущая конструкция — кандидатов переноса нет.
+		_constructions
+			.Setup(service => service.ListActiveAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new Construction[]
+			{
+				new() { Id = 7, Name = "Календарь сентябрь", Status = ConstructionStatus.Open },
+			});
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Trades = [CreateTrade()] });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[1].TextContent, Does.Contain("e-1024")));
+
+		// Act: пользователь открывает перенос сделки.
+		FindRowButton(cut.FindAll("table")[1], "Перенести…").Click();
+
+		// Assert: форма называет причину невозможности переноса вместо пустого
+		// выбора; команды переноса нет, привязка не менялась.
+		// Требование: отсутствие данных — видимое состояние, а не пустой выбор.
+		// Traceability: change:add-ui-screens/design#goals-non-goals
+		cut.WaitForAssertion(() => Assert.That(
+			cut.Find(".action-form").TextContent,
+			Does.Contain("Нет других активных конструкций")));
+		Assert.That(cut.FindAll(".action-form select"), Has.Count.EqualTo(0));
+		Assert.That(cut.FindAll("button").Any(button => button.TextContent.Trim() == "Перенести"), Is.False);
+	}
+
 	#region Помощники
 
 	/// <summary>Рендерит экран деталей конструкции с идентификатором 7.</summary>
@@ -694,6 +849,18 @@ public class ConstructionDetailScreenTests
 	/// <summary>Находит кнопку inline-правки комментария конструкции в шапке деталей.</summary>
 	private static IElement FindHeaderButton(IRenderedComponent<ConstructionDetail> cut, string text) =>
 		cut.Find(".detail-comment").QuerySelectorAll("button").Single(button => button.TextContent.Trim() == text);
+
+	/// <summary>Сделка деталей с ключом e-1024 — строка для действий таблицы сделок.</summary>
+	private static ConstructionTradeRow CreateTrade() => new(
+		"e-1024",
+		"BTCUSDT",
+		new DateTimeOffset(2026, 9, 19, 21, 32, 0, TimeSpan.Zero),
+		true,
+		0.008m,
+		63181m,
+		505.448m,
+		0.010m,
+		null);
 
 	/// <summary>Данные деталей с пустыми таблицами по умолчанию.</summary>
 	private static ConstructionDetailData CreateData(

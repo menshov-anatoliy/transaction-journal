@@ -70,6 +70,7 @@ public class FrameNavigationTests
 		// Комментарии деталей правятся через сервис комментариев домена:
 		// навигационным проверкам достаточно заглушки без мутаций.
 		_context.Services.AddSingleton(new Mock<ICommentService>().Object);
+		_context.Services.AddSingleton(new Mock<ITradeBindingService>().Object);
 
 		// Сигнал изменений журнала: экран оповещает каркас после действий,
 		// каркас перечитывает панель без навигации.
@@ -224,6 +225,7 @@ public class FrameNavigationTests
 		var constructions = new Mock<IConstructionService>();
 		_context.Services.AddSingleton(constructions.Object);
 		_context.Services.AddSingleton(new Mock<ICommentService>().Object);
+		_context.Services.AddSingleton(new Mock<ITradeBindingService>().Object);
 
 		var navigation = _context.Services.GetRequiredService<NavigationManager>();
 		navigation.NavigateTo("/constructions/7");

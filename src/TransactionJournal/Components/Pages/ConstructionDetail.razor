@@ -9,6 +9,7 @@
 @inject IConstructionDetailReadModel Detail
 @inject IConstructionService Constructions
 @inject ICommentService Comments
+@inject ITradeBindingService Bindings
 @inject JournalChangeSignal Changes
 @inject NavigationManager Navigation
 
@@ -272,6 +273,35 @@ else
 	</table>
 
 	<h2>Сделки</h2>
+	@if (_moveTradeExecId is not null)
+	{
+		@* Форма переноса сделки над таблицей сделок: выбор целевой конструкции
+		   из активных без текущей; подтверждение переносит сделку, отмена
+		   закрывает форму без изменения принадлежности. *@
+		@* Traceability: openspec:ui/screens#scenario-detail-move-trade-choose-target *@
+		<div class="action-form">
+			@if (_moveTargets.Count == 0)
+			{
+				@* Переносить некуда — явное сообщение вместо пустого выбора:
+				   пользователь сначала создаёт целевую конструкцию. *@
+				<span class="action-warning">Нет других активных конструкций — сначала создайте целевую конструкцию.</span>
+			}
+			else
+			{
+				<label class="action-label">
+					целевая конструкция
+					<select class="action-input" @bind="_moveTargetId">
+						@foreach (var target in _moveTargets)
+						{
+							<option value="@target.Id">@target.Name</option>
+						}
+					</select>
+				</label>
+				<button type="button" class="btn primary" disabled="@_busy" @onclick="MoveTradeAsync">Перенести</button>
+			}
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelMoveTrade">Отмена</button>
+		</div>
+	}
 	<table>
 		<thead>
 			<tr>
@@ -284,13 +314,14 @@ else
 				<th>Сумма</th>
 				<th>Комиссия</th>
 				<th>Комментарий</th>
+				<th>Действия</th>
 			</tr>
 		</thead>
 		<tbody>
 			@if (_data.Trades.Count == 0)
 			{
 				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
-				<tr><td colspan="9" class="empty">сделок нет</td></tr>
+				<tr><td colspan="10" class="empty">сделок нет</td></tr>
 			}
 			@foreach (var trade in _data.Trades)
 			{
@@ -320,6 +351,14 @@ else
 							<span>@(trade.Comment ?? "—")</span>
 							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCommentEdit(CommentTarget.Trade, trade.ExecId, trade.Comment)">изменить</button>
 						}
+					</td>
+					@* Действия строки сделки: возврат во «Входящие» снимает привязку,
+					   перенос назначает целевую конструкцию; производные пересчитываются
+					   при очередном чтении, поэтому кнопки меняют только принадлежность. *@
+					@* Traceability: openspec:ui/screens#requirement-trade-actions-in-detail *@
+					<td>
+						<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => ReturnTradeAsync(trade.ExecId)">Во «Входящие»</button>
+						<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginMoveTradeAsync(trade.ExecId)">Перенести…</button>
 					</td>
 				</tr>
 			}
@@ -433,6 +472,15 @@ else
 	private CommentTarget _commentTarget = CommentTarget.None;
 	private string? _commentKey;
 	private string _commentDraft = string.Empty;
+
+	/// <summary>Открытая форма переноса сделки: execId переносимой сделки; null — форма закрыта.</summary>
+	private string? _moveTradeExecId;
+
+	/// <summary>Кандидаты переноса: активные конструкции без текущей, упорядоченные по созданию.</summary>
+	private IReadOnlyList<Construction> _moveTargets = [];
+
+	/// <summary>Выбранная целевая конструкция переноса; null — целевого выбора нет.</summary>
+	private long? _moveTargetId;
 
 	/// <summary>
 	/// Перечитывает данные экрана при каждом открытии деталей и смене конструкции:
@@ -632,7 +680,9 @@ else
 		catch (ConstructionNotFoundException)
 		{
 			// Конструкция исчезла между чтением и действием: экран перечитывает
-			// состояние и сообщает об отсутствии.
+			// состояние; причина видна и форме переноса, пока текущие данные
+			// остаются на экране.
+			_actionError = "Действие не выполнено: конструкция не найдена — возможно, удалена.";
 			_busy = false;
 			await ReloadAsync();
 			return;
@@ -656,6 +706,90 @@ else
 		// каркас обновляет панель по сигналу изменений журнала.
 		await ReloadAsync();
 		await Changes.RaiseAsync();
+	}
+
+	#endregion
+
+	#region Действия над сделками
+
+	/// <summary>
+	/// Возвращает сделку во «Входящие»: привязка снимается сервисом домена,
+	/// экран перечитывает снимок — сделка исчезает из таблицы, позиции и метрики
+	/// конструкции пересчитываются при очередном чтении.
+	/// </summary>
+	// Возврат во «Входящие» — действие строки таблицы сделок без подтверждения:
+	// оно обратимо повторной привязкой, комментарий сделки сохраняется.
+	// Traceability: openspec:ui/screens#scenario-detail-return-trade-to-inbox
+	private Task ReturnTradeAsync(string execId) => RunActionAsync(
+		() => Bindings.UnbindAsync(execId),
+		"Возврат во «Входящие» не выполнен");
+
+	/// <summary>
+	/// Открывает форму переноса сделки: читает активные конструкции, исключает
+	/// текущую и подставляет первую кандидатуру целевым выбором по умолчанию.
+	/// </summary>
+	// Перенос предлагает выбор целевой конструкции: архивные скрыты из активного
+	// списка, текущая исключена — сделка переносится только в другую конструкцию.
+	// Traceability: openspec:ui/screens#scenario-detail-move-trade-choose-target
+	private async Task BeginMoveTradeAsync(string execId)
+	{
+		if (_busy)
+		{
+			return;
+		}
+
+		try
+		{
+			var active = await Constructions.ListActiveAsync();
+			_moveTargets = active
+				.Where(construction => construction.Id != ConstructionId)
+				.ToList();
+			_moveTargetId = _moveTargets.Count > 0 ? _moveTargets[0].Id : null;
+			_moveTradeExecId = execId;
+			_actionError = null;
+		}
+		catch (Exception ex)
+		{
+			// Список кандидатов недоступен — форма не открывается, причина видна
+			// пользователю вместо пустого выбора.
+			_actionError = $"Список конструкций недоступен: {ex.Message}";
+		}
+	}
+
+	/// <summary>Закрывает форму переноса без изменения принадлежности сделки.</summary>
+	private void CancelMoveTrade()
+	{
+		_moveTradeExecId = null;
+		_moveTargets = [];
+		_moveTargetId = null;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Переносит сделку в выбранную конструкцию: после подтверждения сделка
+	/// принадлежит ровно одной — целевой — конструкции; успех закрывает форму
+	/// и перечитывает снимок, отказ домена оставляет форму открытой с причиной.
+	/// </summary>
+	// Привязка к цели заменяет прежнюю принадлежность: у сделки не появляется
+	// второй конструкции, обе затронутые перечитывают производные при чтении.
+	// Traceability: openspec:ui/screens#scenario-detail-move-trade-choose-target
+	private async Task MoveTradeAsync()
+	{
+		if (_moveTradeExecId is not { } execId || _moveTargetId is not { } targetId)
+		{
+			return;
+		}
+
+		await RunActionAsync(
+			() => Bindings.BindAsync(targetId, execId),
+			"Перенос сделки не выполнен");
+
+		// Форма закрывается только успехом: отказ оставляет её открытой,
+		// пользователь видит причину и может повторить или отменить перенос.
+		if (_actionError is null)
+		{
+			CancelMoveTrade();
+		}
 	}
 
 	#endregion

@@ -80,6 +80,10 @@ builder.Services.AddSingleton(sp => new CommentService(
 builder.Services.AddSingleton<ICommentService>(sp => sp.GetRequiredService<CommentService>());
 builder.Services.AddSingleton(sp => new TradeBindingService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+// Перенос сделки в другую конструкцию и возврат во «Входящие» выполняются
+// use-case сервисом привязки: экран деталей зависит от интерфейса, тесты
+// экрана подменяют его заглушкой.
+builder.Services.AddSingleton<ITradeBindingService>(sp => sp.GetRequiredService<TradeBindingService>());
 builder.Services.AddSingleton(sp => new InboxReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton(sp => new ManualCloseMarkService(
