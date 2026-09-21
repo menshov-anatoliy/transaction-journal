@@ -7,6 +7,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
 using TransactionJournal.Analytics;
+using TransactionJournal.Bybit;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
@@ -73,6 +74,12 @@ public class AppFrameTests
 		// каркасным проверкам достаточно заглушек без мутаций.
 		_context.Services.AddSingleton(new Mock<IConstructionService>().Object);
 		_context.Services.AddSingleton(new Mock<ITradeBindingService>().Object);
+
+		// Блок подключения «Настроек» читает учётные данные через read-модель:
+		// каркасным проверкам достаточно не настроенного ключа — экран показывает
+		// явное состояние без маски, значения ключа и секрета каркасу безразличны.
+		_context.Services.AddSingleton<IBybitCredentialsProvider>(new UnconfiguredCredentials());
+		_context.Services.AddSingleton<SettingsReadModel>();
 	}
 
 	[TestCleanup]
@@ -205,6 +212,13 @@ public class AppFrameTests
 		MarksAsOf = null,
 		HasMarkFailure = totalPnL is null,
 	};
+
+	/// <summary>Заглушка без настроенных переменных окружения: ключ и секрет недоступны.</summary>
+	private sealed class UnconfiguredCredentials : IBybitCredentialsProvider
+	{
+		public BybitCredentials GetCredentials() =>
+			throw new InvalidOperationException("Переменные окружения ключа не заданы.");
+	}
 
 	#endregion
 }

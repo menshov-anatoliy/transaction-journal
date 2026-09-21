@@ -29,6 +29,12 @@ builder.Services.AddDbContext<JournalDbContext>(options => options.UseSqlite(con
 // постоянное место хранения секрета определит тикет #4.
 builder.Services.AddSingleton<IBybitCredentialsProvider, EnvironmentBybitCredentialsProvider>();
 
+// Read-модель блока подключения «Настроек»: забирает учётные данные у поставщика
+// вместо компонента и отдаёт экрану только маску ключа — секрет не доходит до
+// состояния Blazor и не может быть показан или введён через интерфейс.
+// Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed
+builder.Services.AddSingleton<SettingsReadModel>();
+
 // Подсистема синхронизации с Bybit: подписанный read-only клиент с resilience,
 // шлюз истории и публичных спецификаций, движки категорий, пополнитель справочника
 // и оркестратор кнопки «Синхронизировать» на общей строке SyncRun.

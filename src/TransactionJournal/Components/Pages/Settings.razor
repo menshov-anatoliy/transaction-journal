@@ -2,13 +2,43 @@
 
 @rendermode InteractiveServer
 
+@using TransactionJournal.Bybit
+@inject SettingsReadModel Connection
+
 <PageTitle>Настройки — Журнал Bybit</PageTitle>
 
 <h1>Настройки</h1>
 
-@* Каркас экрана «Настройки»: содержимое (параметры подключения, журнал
-   синхронизаций, переразбор сырых записей) достраивается задачами экрана. *@
-<p class="note">
-	Параметры подключения и синхронизации появятся здесь: маскированный ключ,
-	журнал синхронизаций и переразбор сырых записей.
-</p>
+<h2>Подключение</h2>
+
+@if (_connection is null)
+{
+	@* Ключ не настроен: вместо маски — явное состояние с указанием переменных
+	   окружения, где пользователь задаёт ключ и секрет. *@
+	@* Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed *@
+	<p class="note">
+		Ключ не настроен: задайте переменные окружения
+		@EnvironmentBybitCredentialsProvider.ApiKeyVariableName и
+		@EnvironmentBybitCredentialsProvider.ApiSecretVariableName и перезапустите журнал.
+	</p>
+}
+else
+{
+	@* Блок подключения: ключ маскирован, секрет интерфейсу не передаётся и не
+	   вводится через экран — место его хранения только переменные окружения. *@
+	@* Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed *@
+	<div class="kv">
+		<div class="k">API-ключ (read-only)</div>
+		<div class="v">@_connection.MaskedApiKey</div>
+		<div class="k">Аккаунт</div>
+		<div class="v plain">@_connection.AccountDescription</div>
+		<div class="k">Секрет</div>
+		<div class="v plain">@_connection.SecretStorage</div>
+	</div>
+}
+
+@code {
+	private ConnectionInfo? _connection;
+
+	protected override void OnInitialized() => _connection = Connection.GetConnection();
+}
