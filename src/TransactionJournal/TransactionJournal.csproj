@@ -16,4 +16,8 @@
     <PackageReference Include="Polly.Core" Version="8.8.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="App_Data\" />
+  </ItemGroup>
+
 </Project>

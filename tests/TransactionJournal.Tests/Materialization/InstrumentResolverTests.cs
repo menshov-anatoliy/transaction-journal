@@ -9,16 +9,17 @@ namespace TransactionJournal.Tests.Materialization;
 
 /// <summary>
 /// Проверки сверки символа опциона со справочником инструментов: разбор
-/// {BASE}-{dMMMyy}-{strike}-{C|P} и сверка базового актива, типа опциона и даты
-/// экспирации с канонической спецификацией биржи.
+/// {BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}] и сверка базового актива, типа опциона
+/// и даты экспирации с канонической спецификацией биржи.
 /// </summary>
 [TestClass]
 public class InstrumentResolverTests
 {
-	// Канонические времена delivery реальных экспираций BTC/ETH: 08:00 UTC.
+	// Канонические времена delivery реальных экспираций BTC/ETH/XAUT: 08:00 UTC.
 	private const long Btc27Dec24DeliveryMs = 1735286400000L;
 	private const long Eth3Jan23DeliveryMs = 1672732800000L;
 	private const long Btc30Dec22DeliveryMs = 1672387200000L;
+	private const long Xaut30Oct26DeliveryMs = 1793347200000L;
 
 	private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -48,6 +49,27 @@ public class InstrumentResolverTests
 		Assert.That(resolved.OptionsType, Is.EqualTo(optionsType == "Call" ? OptionType.Call : OptionType.Put));
 		Assert.That(resolved.Strike, Is.EqualTo(strike));
 		Assert.That(resolved.DeliveryTime, Is.EqualTo(new DateTimeOffset(year, month, day, 8, 0, 0, TimeSpan.Zero)));
+	}
+
+	[TestMethod]
+	[Description("Символ с хвостовой котируемой валютой (реальная доска опционов Bybit) сверяется со справочником")]
+	public void TryIfSymbolWithQuoteCoinSuffixResolvesAgainstCatalog()
+	{
+		// Arrange: символ XAUT-30OCT26-4400-C-USDT пришёл из живого ответа
+		// execution-list категории option и есть в справочнике инструментов.
+		// Требование: парсинг символа сверяется со справочником, а не доверяет строке.
+		// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
+		var resolver = Resolver(Raw("XAUT-30OCT26-4400-C-USDT", "option", Payload("XAUT", "Call", Xaut30Oct26DeliveryMs)));
+
+		// Act
+		var resolved = resolver.ResolveOption("XAUT-30OCT26-4400-C-USDT");
+
+		// Assert: символ разобран вместе с суффиксом USDT, канонические значения — из справочника.
+		Assert.That(resolved.Symbol, Is.EqualTo("XAUT-30OCT26-4400-C-USDT"));
+		Assert.That(resolved.BaseCoin, Is.EqualTo("XAUT"));
+		Assert.That(resolved.OptionsType, Is.EqualTo(OptionType.Call));
+		Assert.That(resolved.Strike, Is.EqualTo(4400d));
+		Assert.That(resolved.DeliveryTime, Is.EqualTo(new DateTimeOffset(2026, 10, 30, 8, 0, 0, TimeSpan.Zero)));
 	}
 
 	[TestMethod]

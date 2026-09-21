@@ -2,7 +2,7 @@ namespace TransactionJournal.Materialization;
 
 /// <summary>
 /// Сверяет символы опционов со справочником инструментов: разбирает символ
-/// {BASE}-{dMMMyy}-{strike}-{C|P}, находит спецификацию в справочнике и проверяет,
+/// {BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}], находит спецификацию в справочнике и проверяет,
 /// что базовый актив, тип опциона и дата экспирации совпадают с каноническими
 /// значениями биржи. Канонические свойства результата берутся из справочника,
 /// а не из строки символа.
@@ -28,7 +28,7 @@ public sealed class InstrumentResolver
 	/// Разбирает символ опциона и сверяет его со справочником: несовпадение базового
 	/// актива, типа опциона или даты экспирации с канонической спецификацией биржи — ошибка.
 	/// </summary>
-	/// <param name="symbol">Символ опциона, например BTC-27DEC24-2800-C.</param>
+	/// <param name="symbol">Символ опциона, например BTC-27DEC24-2800-C или XAUT-30OCT26-4400-C-USDT.</param>
 	/// <exception cref="ArgumentException">Символ не задан.</exception>
 	/// <exception cref="InstrumentResolveException">Символ не разобран, неизвестен справочнику или расходится с ним.</exception>
 	public ResolvedOptionInstrument ResolveOption(string symbol)
@@ -40,7 +40,7 @@ public sealed class InstrumentResolver
 			throw new InstrumentResolveException(
 				InstrumentResolveFailureReason.MalformedOptionSymbol,
 				symbol,
-				$"Символ «{symbol}» не соответствует формату опциона Bybit {{BASE}}-{{dMMMyy}}-{{strike}}-{{C|P}}.");
+				$"Символ «{symbol}» не соответствует формату опциона Bybit {{BASE}}-{{dMMMyy}}-{{strike}}-{{C|P}}[-{{QUOTE}}].");
 		}
 
 		if (_catalog.TryGet(symbol, out var entry) == false)

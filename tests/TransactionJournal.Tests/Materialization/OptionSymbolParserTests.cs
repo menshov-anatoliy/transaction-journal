@@ -7,8 +7,9 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 namespace TransactionJournal.Tests.Materialization;
 
 /// <summary>
-/// Проверки разбора символа опциона Bybit формата {BASE}-{dMMMyy}-{strike}-{C|P}
-/// инвариантной культурой на реальных символах BTC/ETH из исследования API.
+/// Проверки разбора символа опциона Bybit формата {BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}]
+/// инвариантной культурой на реальных символах BTC/ETH/XAUT из исследования API
+/// и живой доски опционов.
 /// </summary>
 [TestClass]
 public class OptionSymbolParserTests
@@ -19,12 +20,18 @@ public class OptionSymbolParserTests
 	[DataRow("ETH-3JAN23-1250-P", "ETH", 2023, 1, 3, 1250d, OptionType.Put)]
 	[DataRow("ETH-26DEC22-1400-C", "ETH", 2022, 12, 26, 1400d, OptionType.Call)]
 	[DataRow("BTC-2JAN26-100000-P", "BTC", 2026, 1, 2, 100000d, OptionType.Put)]
-	[Description("Реальные символы опционов BTC/ETH разбираются на базовый актив, дату экспирации, страйк и тип")]
+	// Реальные символы живой доски опционов Bybit несут хвостовой сегмент котируемой валюты.
+	[DataRow("XAUT-30OCT26-4400-C-USDT", "XAUT", 2026, 10, 30, 4400d, OptionType.Call)]
+	[DataRow("BTC-25JUN27-106000-P-USDT", "BTC", 2027, 6, 25, 106000d, OptionType.Put)]
+	// Исторические USDC-опционы пишут ту же валюту в хвосте.
+	[DataRow("BTC-27DEC24-2800-C-USDC", "BTC", 2024, 12, 27, 2800d, OptionType.Call)]
+	[Description("Реальные символы опционов BTC/ETH/XAUT разбираются на базовый актив, дату экспирации, страйк и тип")]
 	public void TryIfParsesRealBybitOptionSymbols(
 		string symbol, string baseCoin, int year, int month, int day, double strike, OptionType type)
 	{
-		// Arrange: символы и их параметры взяты из исследования Bybit V5 API.
-		// Требование: парсинг символа опциона идёт по формату {BASE}-{dMMMyy}-{strike}-{C|P}
+		// Arrange: символы и их параметры взяты из исследования Bybit V5 API
+		// и живого ответа instruments-info (категория option).
+		// Требование: парсинг символа опциона идёт по формату {BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}]
 		// инвариантной культурой, но канонические значения определяет справочник.
 		// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
 		// Traceability: doc:docs/research/bybit-api.md#4-форматы-символов
@@ -71,7 +78,9 @@ public class OptionSymbolParserTests
 	[DataRow("BTCUSDT")]
 	[DataRow("BTC-2800-C")]
 	[DataRow("BTC-27DEC24-2800")]
+	// Хвостовой сегмент обязан быть котируемой валютой опционов Bybit: USDT или USDC.
 	[DataRow("BTC-27DEC24-2800-C-EXTRA")]
+	[DataRow("BTC-27DEC24-2800-C-USD")]
 	[DataRow("BTC-3XZY26-2800-C")]
 	[DataRow("BTC-27DEC24-28.00.0-C")]
 	[DataRow("BTC-27DEC24-abc-C")]

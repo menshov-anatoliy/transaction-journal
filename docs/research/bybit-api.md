@@ -103,11 +103,11 @@ Market-эндпоинты **отсутствуют в таблице per-UID API
 
 ## 4. Форматы символов
 
-Опционы: `{BASE}-{DDMMMYY}-{STRIKE}-{C|P}`, например `BTC-27DEC24-2800-C`, `BTC-30DEC22-18000-C`, `ETH-3JAN23-1250-P`, `ETH-26DEC22-1400-C`.
-Источники: примеры в [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers), [instrument](https://bybit-exchange.github.io/docs/v5/market/instrument), [delivery-price](https://bybit-exchange.github.io/docs/v5/market/delivery-price); формат даты `25DEC22`/`25MAR22` подтверждён параметрами `expDate` в [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers) и [delivery-record](https://bybit-exchange.github.io/docs/v5/asset/delivery).
+Опционы: `{BASE}-{DDMMMYY}-{STRIKE}-{C|P}[-{QUOTE}]`, например `BTC-27DEC24-2800-C`, `BTC-30DEC22-18000-C`, `ETH-3JAN23-1250-P`, `ETH-26DEC22-1400-C`; живая доска опционов пишет хвостовым сегментом котируемую валюту: `BTC-25JUN27-106000-P-USDT`, `XAUT-30OCT26-4400-C-USDT`.
+Источники: примеры в [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers), [instrument](https://bybit-exchange.github.io/docs/v5/market/instrument), [delivery-price](https://bybit-exchange.github.io/docs/v5/market/delivery-price); формат даты `25DEC22`/`25MAR22` подтверждён параметрами `expDate` в [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers) и [delivery-record](https://bybit-exchange.github.io/docs/v5/asset/delivery); суффикс котируемой валюты подтверждён живым ответом `GET /v5/market/instruments-info?category=option` (2026-09: 846 инструментов, `quoteCoin` USDT; исторические USDC-доски — суффикс `-USDC`).
 
 - Дата: день 1–2 цифры (без ведущего нуля: `3JAN23`), месяц — 3 заглавные английские буквы, год — 2 цифры. Дата экспирации в UTC; delivery-окно опционов 08:00–12:00 UTC (см. `DELIVERING` в [delivery-price](https://bybit-exchange.github.io/docs/v5/market/delivery-price)).
-- Парсинг: `symbol.Split('-')` → 4 части: базовый актив, дата (`DateTime.TryParseExact(ddMMMYY, "dMMMyy", InvariantCulture)`), страйк (`decimal`), тип (`C`/`P`). Надёжнее не верить строке на слово, а сверяться с `/v5/market/instruments-info?category=option` (`optionsType`, `baseCoin`, `deliveryTime`) — там же фильтры тика/лота.
+- Парсинг: `symbol.Split('-')` → 4 или 5 частей: базовый актив, дата (`DateTime.TryParseExact(ddMMMYY, "dMMMyy", InvariantCulture)`), страйк (`decimal`), тип (`C`/`P`), опционально валюта котировки (`USDT`/`USDC`) — примеры из старой документации без суффикса тоже валидны. Надёжнее не верить строке на слово, а сверяться с `/v5/market/instruments-info?category=option` (`optionsType`, `baseCoin`, `deliveryTime`) — там же фильтры тика/лота.
 - Страйк — целое/десятичное без форматирования (в примерах `2800`, `1250`, `16000`).
 
 Фьючерсы linear:
@@ -192,7 +192,7 @@ Market-эндпоинты **отсутствуют в таблице per-UID API
 2. **Delivery-закрытия**: отдельно тянуть `GET /v5/asset/delivery-record?category=option` (окно 30 дней, limit 50) для экспираций опционов и `category=linear` для датированных фьючерсов; дедуп по `symbol + deliveryTime`. Transaction log (`type=DELIVERY`) — контроль полноты и валютные движения, не основной источник.
 3. **Реализованный PnL**: не брать closedPnl Bybit как единственную истину — журнал считает свой «Реализованный результат» из сделок и комиссий (глоссарий CONTEXT.md); closed-pnl/deliveryRpl использовать для сверки.
 4. **Марки для нереализованного результата**: публичный `GET /v5/market/tickers` (option: `markPrice` + `underlyingPrice`; linear: `markPrice`) без API-ключа; кэшировать на стороне журнала.
-5. **Инструменты**: справочник инструментов строить из `/v5/market/instruments-info` (option: `optionsType`, `baseCoin`, `deliveryTime`, фильтры тика/лота; linear: `contractType`, `deliveryTime`), символ опциона парсить `{BASE}-{dMMMyy}-{strike}-{C|P}` с культурой InvariantCulture.
+5. **Инструменты**: справочник инструментов строить из `/v5/market/instruments-info` (option: `optionsType`, `baseCoin`, `deliveryTime`, фильтры тика/лота; linear: `contractType`, `deliveryTime`), символ опциона парсить `{BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}]` с культурой InvariantCulture.
 6. **Авторизация**: собственный тонкий HttpClient-клиент с HMAC-SHA256 (hex lower) по официальному C#-примеру; timestamp из `DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()`, `recv_window` 5000, NTP-синхронизация; ключ только с правами на чтение.
 7. **Rate limits**: вставить в клиент уважение `X-Bapi-Limit-Status` и бэкофф на `retCode 10006` и 403; для наших объёмов запас огромный.
 8. **Комиссии**: хранить сумму (`execFee`/`fee`), валюту (`feeCurrency`/`currency`) и признак maker (`isMaker`) на каждой сделке; знак: положительный = уплачено.

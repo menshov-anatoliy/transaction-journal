@@ -3,11 +3,12 @@ using System.Globalization;
 namespace TransactionJournal.Materialization;
 
 /// <summary>
-/// Разбор символа опциона Bybit формата {BASE}-{dMMMyy}-{strike}-{C|P} инвариантной
-/// культурой: день без ведущего нуля, три английские буквы месяца, две цифры года,
-/// страйк инвариантным десятичным разделителем. Канонические свойства опциона
-/// (тип, базовый актив, deliveryTime) определяет справочник инструментов, поэтому
-/// строка символа здесь только разбирается, а сверкой занимается InstrumentResolver.
+/// Разбор символа опциона Bybit формата {BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}]
+/// инвариантной культурой: день без ведущего нуля, три английские буквы месяца,
+/// две цифры года, страйк инвариантным десятичным разделителем, хвостовой сегмент
+/// котируемой валюты — USDT или USDC. Канонические свойства опциона (тип, базовый
+/// актив, deliveryTime) определяет справочник инструментов, поэтому строка символа
+/// здесь только разбирается, а сверкой занимается InstrumentResolver.
 /// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
 /// Traceability: change:add-bybit-sync/design#d7
 /// Traceability: doc:docs/research/bybit-api.md#4-форматы-символов
@@ -16,10 +17,13 @@ public static class OptionSymbolParser
 {
 	private static readonly CultureInfo SymbolCulture = CreateSymbolCulture();
 
+	/// <summary>Котируемые валюты опционов Bybit: живая доска котируется в USDT, исторические — в USDC.</summary>
+	private static readonly HashSet<string> QuoteCoins = new(StringComparer.Ordinal) { "USDT", "USDC" };
+
 	/// <summary>
 	/// Разбирает символ опциона; для строк вне формата возвращает false без исключений.
 	/// </summary>
-	/// <param name="symbol">Символ опциона, например BTC-27DEC24-2800-C.</param>
+	/// <param name="symbol">Символ опциона, например BTC-27DEC24-2800-C или XAUT-30OCT26-4400-C-USDT.</param>
 	/// <param name="parts">Разобранные части символа или null при неудаче.</param>
 	public static bool TryParse(string? symbol, out OptionSymbolParts? parts)
 	{
@@ -30,7 +34,17 @@ public static class OptionSymbolParser
 		}
 
 		var segments = symbol.Split('-');
-		if (segments.Length != 4)
+		if (segments.Length is not (4 or 5))
+		{
+			return false;
+		}
+
+		// Живая доска опционов Bybit пишет хвостовым сегментом котируемую валюту
+		// (XAUT-30OCT26-4400-C-USDT); исторические USDC-доски делали то же. На канонические
+		// свойства опциона валюта котировки не влияет — их определяет справочник, поэтому
+		// сегмент только проверяется на допустимость и дальше не разбирается.
+		// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
+		if (segments.Length == 5 && QuoteCoins.Contains(segments[4]) == false)
 		{
 			return false;
 		}
@@ -75,14 +89,14 @@ public static class OptionSymbolParser
 	/// Разбирает символ опциона или выбрасывает исключение формата — строгий вариант
 	/// для мест, где символ обязан быть опционом.
 	/// </summary>
-	/// <param name="symbol">Символ опциона, например BTC-27DEC24-2800-C.</param>
+	/// <param name="symbol">Символ опциона, например BTC-27DEC24-2800-C или XAUT-30OCT26-4400-C-USDT.</param>
 	/// <exception cref="FormatException">Символ не соответствует формату символа опциона Bybit.</exception>
 	public static OptionSymbolParts Parse(string symbol)
 	{
 		if (TryParse(symbol, out var parts) == false)
 		{
 			throw new FormatException(
-				$"Символ «{symbol}» не соответствует формату символа опциона Bybit {{BASE}}-{{dMMMyy}}-{{strike}}-{{C|P}}.");
+				$"Символ «{symbol}» не соответствует формату символа опциона Bybit {{BASE}}-{{dMMMyy}}-{{strike}}-{{C|P}}[-{{QUOTE}}].");
 		}
 
 		return parts!;
