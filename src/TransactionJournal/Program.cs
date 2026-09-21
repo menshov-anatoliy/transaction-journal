@@ -37,8 +37,11 @@ builder.Services.AddSingleton<SettingsReadModel>();
 
 // Read-модель журнала синхронизаций «Настроек»: строки запусков SyncRun новыми
 // сверху — время, режим, результат и статус; предупреждения сверки дополняет экран.
+// Модель живёт singleton-ом над собственными опциями контекста: каждый вызов создаёт
+// короткоживущий контекст и не тянет scoped-сервисы в singleton.
 // Traceability: openspec:ui/screens#scenario-settings-sync-log-mode-warnings
-builder.Services.AddSingleton<SyncJournalReadModel>();
+builder.Services.AddSingleton(sp => new SyncJournalReadModel(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton<ISyncJournalReadModel>(sp => sp.GetRequiredService<SyncJournalReadModel>());
 
 // Подсистема синхронизации с Bybit: подписанный read-only клиент с resilience,
