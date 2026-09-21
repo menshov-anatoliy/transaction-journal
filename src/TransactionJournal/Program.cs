@@ -76,6 +76,12 @@ builder.Services.AddSingleton<ISyncRunJournal>(sp => sp.GetRequiredService<Journ
 builder.Services.AddSingleton<JournalMaterializer>();
 builder.Services.AddTransient<IJournalSyncService, JournalSyncService>();
 
+// Команда «Переразобрать сырые записи заново» на «Настройках»: полная пересборка
+// доменных представлений из локального сырья без сетевых запросов; экран зависит
+// от интерфейса, тесты экрана подменяют её заглушкой.
+// Traceability: openspec:ui/screens#scenario-settings-reparse-confirmation
+builder.Services.AddSingleton<IJournalReparseService, JournalReparseService>();
+
 // Слой доменных операций: use-case сервисы над контекстом журнала; каждый вызов
 // создаёт короткоживущий контекст, поэтому длительные сессии Blazor Server
 // не держат соединений между операциями. Позиции и результаты — производные,

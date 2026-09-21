@@ -4,11 +4,15 @@
 
 @using System.Globalization
 @using TransactionJournal.Bybit
+@using TransactionJournal.Components.Layout
 @using TransactionJournal.Data
+@using TransactionJournal.Materialization
 @using TransactionJournal.Sync
 @inject SettingsReadModel Connection
 @inject IJournalSyncService SyncService
 @inject ISyncJournalReadModel SyncJournal
+@inject IJournalReparseService Reparse
+@inject JournalChangeSignal Changes
 
 <PageTitle>Настройки — Журнал Bybit</PageTitle>
 
@@ -139,6 +143,49 @@ else
 	}
 }
 
+<h2>Опасная зона</h2>
+
+@* Переразбор сырых записей — опасное действие: доменные представления журнала
+   перестраиваются из сырья заново. Команда запускается только после явного
+   подтверждения — первое нажатие кнопки лишь показывает вопрос, без
+   подтверждения переразбор не начинается. *@
+@* Traceability: openspec:ui/screens#scenario-settings-reparse-confirmation *@
+@if (_reparseConfirming == false)
+{
+	<div class="toolbar">
+		<button type="button" class="btn danger" disabled="@_reparseRunning" @onclick="BeginReparse">Переразобрать сырые записи заново</button>
+	</div>
+}
+else
+{
+	@* Подтверждение — отдельный шаг с объяснением последствий и выходом
+	   «Отмена»: отмена закрывает вопрос, ничего не запуская. *@
+	<div class="action-form">
+		<span class="action-warning">Переразобрать сырые записи журнала заново? Доменные представления будут перестроены из сырья.</span>
+		<button type="button" class="btn danger" disabled="@_reparseRunning" @onclick="RunReparseAsync">Переразобрать</button>
+		<button type="button" class="btn" disabled="@_reparseRunning" @onclick="CancelReparse">Отмена</button>
+	</div>
+}
+
+@if (_reparseRunning)
+{
+	<p class="note" role="status">Переразбор выполняется…</p>
+}
+else if (_reparseError is not null)
+{
+	@* Повреждённое сырьё доходит причиной: прежние проекции read-моделей
+	   продолжают показываться, повторная попытка доступна кнопкой. *@
+	<p class="note note-error" role="alert"><b>Переразбор не выполнен:</b> @_reparseError</p>
+}
+else if (_reparseResult is not null)
+{
+	@* Итог пересборки: счётчики доменных представлений и предупреждения сверки
+	   из локального сырья — подтверждение, что сырьё разбирается без ошибок. *@
+	<p class="note note-ok" role="status">
+		Переразбор завершён: сделок во «Входящих» @_reparseResult.InboxTrades.Count · закрывающих записей @_reparseResult.ExpiryClosingEntries.Count · предупреждений сверки @_reparseResult.ReconciliationWarnings.Count
+	</p>
+}
+
 @code {
 	private ConnectionInfo? _connection;
 	private IReadOnlyList<SyncRunRow> _journal = [];
@@ -146,6 +193,10 @@ else
 	private bool _syncRunning;
 	private JournalSyncResult? _syncResult;
 	private string? _syncError;
+	private bool _reparseConfirming;
+	private bool _reparseRunning;
+	private JournalMaterializationResult? _reparseResult;
+	private string? _reparseError;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -199,6 +250,55 @@ else
 			_journal = [];
 			_journalUnavailable = true;
 		}
+	}
+
+	/// <summary>
+	/// Открывает подтверждение опасного действия: переразбор запускается только
+	/// явным подтверждением — первое нажатие кнопки лишь показывает вопрос.
+	/// </summary>
+	// Требование: переразбор требует подтверждения опасного действия.
+	// Traceability: openspec:ui/screens#scenario-settings-reparse-confirmation
+	private void BeginReparse()
+	{
+		_reparseConfirming = true;
+		_reparseResult = null;
+		_reparseError = null;
+	}
+
+	/// <summary>Закрывает подтверждение без запуска: переразбор не начинается.</summary>
+	private void CancelReparse() => _reparseConfirming = false;
+
+	/// <summary>
+	/// Выполняет переразбор после подтверждения: сырые записи читаются целиком и
+	/// доменные представления строятся заново без сетевых запросов; итог со
+	/// счётчиками и предупреждениями сверки показывается под командой, каркас
+	/// оповещается о пересборке производных представлений.
+	/// </summary>
+	private async Task RunReparseAsync()
+	{
+		_reparseRunning = true;
+
+		try
+		{
+			_reparseResult = await Reparse.ReparseAsync();
+			_reparseError = null;
+		}
+		catch (Exception ex)
+		{
+			// Ошибка разбора доходит причиной: сырьё сохранилось, проекции
+			// read-моделей продолжают строиться, повторная попытка доступна.
+			_reparseError = ex.Message;
+			_reparseResult = null;
+		}
+		finally
+		{
+			_reparseRunning = false;
+			_reparseConfirming = false;
+		}
+
+		// Пересборка меняет производные представления: каркас перечитывает итог
+		// панели и бейдж «Входящих» без навигации.
+		await Changes.RaiseAsync();
 	}
 
 	/// <summary>Дата-время запуска: «2026-01-01 14:30».</summary>

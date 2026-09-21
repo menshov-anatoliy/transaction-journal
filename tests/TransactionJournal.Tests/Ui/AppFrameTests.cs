@@ -60,6 +60,10 @@ public class AppFrameTests
 		// команды: каркасным проверкам достаточно заглушки без запусков.
 		_context.Services.AddSingleton(new Mock<IJournalSyncService>().Object);
 
+		// «Настройки» выполняют переразбор через собственную команду: каркасным
+		// проверкам достаточно заглушки без запусков.
+		_context.Services.AddSingleton(new Mock<IJournalReparseService>().Object);
+
 		// Каркас подписывается на сигнал изменений журнала после мутаций экранов:
 		// каркасным проверкам достаточно молчащего сигнала без подписчиков.
 		_context.Services.AddScoped<JournalChangeSignal>();
