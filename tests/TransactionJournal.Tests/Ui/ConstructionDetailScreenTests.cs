@@ -1,3 +1,4 @@
+using AngleSharp.Dom;
 using Bunit;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -5,6 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
 using TransactionJournal.Analytics;
+using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
@@ -16,16 +18,20 @@ namespace TransactionJournal.Tests.Ui;
 /// <summary>
 /// Проверки экрана деталей конструкции: сводка метрик с периодом и отметкой
 /// марок, комментарий рядом со сводкой, четыре таблицы записей — позиции,
-/// сделки, закрывающие записи и корректировки PnL; пустые таблицы показывают
-/// явное сообщение об отсутствии, сбой марок — признак на месте нереализованных
+/// сделки, закрывающие записи и корректировки PnL; действия конструкции —
+/// переименование, смена статуса с архивацией, изменение капитала и удаление
+/// с подтверждением и причиной отказа; пустые таблицы показывают явное
+/// сообщение об отсутствии, сбой марок — признак на месте нереализованных
 /// величин, недоступный журнал и отсутствующая конструкция — явные состояния.
 /// Traceability: openspec:ui/screens#requirement-construction-detail-screen
+/// Traceability: openspec:ui/screens#requirement-construction-actions
 /// </summary>
 [TestClass]
 public class ConstructionDetailScreenTests
 {
 	private Bunit.TestContext _context = null!;
 	private Mock<IConstructionDetailReadModel> _detail = null!;
+	private Mock<IConstructionService> _constructions = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -36,6 +42,15 @@ public class ConstructionDetailScreenTests
 			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync(CreateData(MetricsOf()));
 		_context.Services.AddSingleton(_detail.Object);
+
+		// Действия конструкции выполняются use-case сервисом домена: проверкам
+		// экрана достаточно заглушки интерфейса с контролем вызовов.
+		_constructions = new Mock<IConstructionService>();
+		_context.Services.AddSingleton(_constructions.Object);
+
+		// Сигнал изменений журнала оповещает каркас после действий экрана;
+		// без подписчиков в изолированном рендере он безопасно бездействует.
+		_context.Services.AddScoped<JournalChangeSignal>();
 	}
 
 	[TestCleanup]
@@ -273,11 +288,285 @@ public class ConstructionDetailScreenTests
 		});
 	}
 
+	[TestMethod]
+	[Description("Переименование сохраняется сервисом домена и сразу видно в заголовке деталей")]
+	public void TryIfRenameSavesNewNameAndShowsItImmediately()
+	{
+		// Arrange: конструкция «Календарь сентябрь»; после переименования read-модель
+		// возвращает снимок с новым именем.
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Name = "Плечо на сентябрь" });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find("h1").TextContent, Does.Contain("Календарь сентябрь")));
+
+		// Act: пользователь открывает форму переименования и сохраняет новое имя.
+		FindButton(cut, "Переименовать").Click();
+		cut.Find(".action-input").Change("Плечо на сентябрь");
+		FindButton(cut, "Сохранить имя").Click();
+
+		// Assert: имя сохранено сервисом домена и немедленно видно в заголовке.
+		// Требование: свободное переименование доступно из деталей.
+		// Traceability: openspec:ui/screens#requirement-construction-actions
+		_constructions.Verify(service =>
+			service.RenameAsync(7, "Плечо на сентябрь", It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(cut.Find("h1").TextContent, Does.Contain("Плечо на сентябрь")));
+	}
+
+	[TestMethod]
+	[Description("Смена статуса обновляет статусный бейдж деталей немедленно")]
+	public void TryIfStatusChangeUpdatesBadgeImmediately()
+	{
+		// Arrange: открытая конструкция; после закрытия read-модель возвращает
+		// снимок со статусом «закрыта».
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Status = ConstructionStatus.Closed });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find("h1 .status").ClassList, Does.Contain("status-open")));
+
+		// Act: пользователь закрывает конструкцию командой статуса.
+		FindButton(cut, "Закрыть").Click();
+
+		// Assert: статус сменён сервисом домена; бейдж деталей отражает «закрыта»,
+		// команда статуса меняется на обратную.
+		// Требование: смена статуса меняет индикацию статуса.
+		// Traceability: openspec:ui/screens#scenario-detail-status-change-indicated
+		_constructions.Verify(service =>
+			service.ChangeStatusAsync(7, ConstructionStatus.Closed, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			var badge = cut.Find("h1 .status");
+			Assert.That(badge.TextContent, Is.EqualTo("закрыта"));
+			Assert.That(badge.ClassList, Does.Contain("status-closed"));
+		});
+		cut.WaitForAssertion(() => Assert.That(FindButton(cut, "Открыть"), Is.Not.Null));
+	}
+
+	[TestMethod]
+	[Description("Архивация и возврат из архива меняют индикацию и команды действий")]
+	public void TryIfArchiveAndReturnChangeIndicationAndCommands()
+	{
+		// Arrange: конструкция проходит путь «открыта» → «архив» → «закрыта».
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Status = ConstructionStatus.Archived })
+			.ReturnsAsync(CreateData(MetricsOf()) with { Status = ConstructionStatus.Closed });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find("h1 .status").TextContent, Is.EqualTo("открыта")));
+
+		// Act: пользователь переводит конструкцию в архив.
+		FindButton(cut, "В архив").Click();
+
+		// Assert: индикация — «архив», команда меняется на возврат из архива.
+		// Требование: перевод в архив и возврат из архива доступны из деталей.
+		// Traceability: openspec:ui/screens#requirement-construction-actions
+		_constructions.Verify(service =>
+			service.ChangeStatusAsync(7, ConstructionStatus.Archived, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Find("h1 .status").TextContent, Is.EqualTo("архив"));
+			Assert.That(cut.Find("h1 .status").ClassList, Does.Contain("status-archived"));
+		});
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll(".detail-actions button").Any(button => button.TextContent.Trim() == "Вернуть из архива"), Is.True);
+			Assert.That(cut.FindAll(".detail-actions button").Any(button => button.TextContent.Trim() == "В архив"), Is.False);
+		});
+
+		// Act: пользователь возвращает конструкцию из архива.
+		FindButton(cut, "Вернуть из архива").Click();
+
+		// Assert: возврат восстанавливает ручной статус «закрыта».
+		_constructions.Verify(service =>
+			service.ChangeStatusAsync(7, ConstructionStatus.Closed, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(cut.Find("h1 .status").TextContent, Is.EqualTo("закрыта")));
+	}
+
+	[TestMethod]
+	[Description("Изменение капитала обновляет только процентные величины сводки")]
+	public void TryIfCapitalChangeUpdatesOnlyPercentages()
+	{
+		// Arrange: конструкция с итогом +399 (13.3% от капитала 3000); после
+		// изменения капитала read-модель возвращает те же абсолютные величины
+		// с процентом от нового капитала 6000.
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(realized: -1m, unrealized: 400m, adjustments: 0m, percent: 13.3m)))
+			.ReturnsAsync(CreateData(MetricsOf(realized: -1m, unrealized: 400m, adjustments: 0m, percent: 6.5m)) with
+			{
+				AllocatedCapitalUsdt = 6000m,
+			});
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("+13.3%")));
+
+		// Act: пользователь меняет выделенный капитал с 3000 на 6000.
+		FindButton(cut, "Изменить капитал").Click();
+		var input = cut.Find(".action-input");
+		Assert.That(input.GetAttribute("value"), Is.EqualTo("3000"));
+		input.Change("6000");
+		FindButton(cut, "Сохранить капитал").Click();
+
+		// Assert: капитал сохранён; абсолютные величины не изменились, процент
+		// от капитала пересчитан немедленно.
+		// Требование: изменение капитала обновляет только проценты.
+		// Traceability: openspec:ui/screens#scenario-detail-capital-change-percent-only
+		_constructions.Verify(service =>
+			service.UpdateAllocatedCapitalAsync(7, 6000m, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			var summary = cut.Find(".kstrip").TextContent;
+			Assert.That(summary, Does.Contain("+6.5%"));
+			Assert.That(summary, Does.Contain("(6000)"));
+			Assert.That(summary, Does.Contain("+399 USDT"));
+			Assert.That(summary, Does.Contain("-1"));
+			Assert.That(summary, Does.Contain("+400"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Нечисловое значение капитала не уходит в домен, форма просит число")]
+	public void TryIfInvalidCapitalRejectedWithoutAction()
+	{
+		// Arrange: форма капитала открыта.
+		var cut = RenderDetail();
+		FindButton(cut, "Изменить капитал").Click();
+
+		// Act: пользователь вводит не число и сохраняет.
+		cut.Find(".action-input").Change("не число");
+		FindButton(cut, "Сохранить капитал").Click();
+
+		// Assert: команда в домен не ушла, форма показывает сообщение о числе.
+		_constructions.Verify(service =>
+			service.UpdateAllocatedCapitalAsync(It.IsAny<long>(), It.IsAny<decimal>(), It.IsAny<CancellationToken>()), Times.Never);
+		Assert.That(cut.Markup, Does.Contain("Введите число в USDT"));
+	}
+
+	[TestMethod]
+	[Description("Удаление не предлагается конструкции со сделками или корректировками")]
+	public void TryIfDeleteNotOfferedForNonEmptyConstruction()
+	{
+		// Arrange: у конструкции одна привязанная сделка.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with
+			{
+				Trades =
+				[
+					new ConstructionTradeRow(
+						"e-1024",
+						"BTCUSDT",
+						new DateTimeOffset(2026, 9, 19, 21, 32, 0, TimeSpan.Zero),
+						true,
+						0.008m,
+						63181m,
+						505.448m,
+						0.010m,
+						null),
+				],
+			});
+
+		var cut = RenderDetail();
+
+		// Assert: кнопки удаления у непустой конструкции нет.
+		// Требование: удаление предлагается только для конструкций без сделок
+		// и внешних корректировок PnL.
+		// Traceability: openspec:ui/screens#requirement-construction-actions
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll(".detail-actions button").Any(button => button.TextContent.Trim() == "Удалить…"),
+			Is.False));
+	}
+
+	[TestMethod]
+	[Description("Удаление требует явного подтверждения и не запускается без него")]
+	public void TryIfDeleteRequiresConfirmation()
+	{
+		// Arrange: пустая конструкция — кнопка удаления предложена.
+		var cut = RenderDetail();
+
+		// Act: пользователь открывает удаление, но не подтверждает его.
+		FindButton(cut, "Удалить…").Click();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".action-warning").TextContent, Does.Contain("Действие необратимо")));
+		FindButton(cut, "Отмена").Click();
+
+		// Assert: без подтверждения команда удаления не запускается, панель закрыта.
+		// Требование: удаление требует подтверждения.
+		// Traceability: openspec:ui/screens#requirement-construction-actions
+		_constructions.Verify(service => service.DeleteAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll(".action-warning"), Has.Count.EqualTo(0)));
+	}
+
+	[TestMethod]
+	[Description("Отказ удаления непустой конструкции показывает причину и сохраняет экран")]
+	public void TryIfDeleteRefusalShowsReasonAndKeepsConstruction()
+	{
+		// Arrange: снимок показывает пустую конструкцию, но домен отказывает —
+		// у конструкции появились привязанные сделки и корректировка.
+		_constructions
+			.Setup(service => service.DeleteAsync(7, It.IsAny<CancellationToken>()))
+			.ThrowsAsync(new ConstructionDeletionRefusedException(3, 1));
+
+		var cut = RenderDetail();
+
+		// Act: пользователь подтверждает удаление.
+		FindButton(cut, "Удалить…").Click();
+		FindButton(cut, "Удалить").Click();
+
+		// Assert: отказ объясняет причину — какие записи блокируют удаление;
+		// конструкция остаётся на экране без изменений.
+		// Требование: отказ в удалении показывает причину.
+		// Traceability: openspec:ui/screens#scenario-detail-delete-refused-with-reason
+		cut.WaitForAssertion(() =>
+		{
+			var error = cut.Find(".note-error").TextContent;
+			Assert.That(error, Does.Contain("Удаление конструкции невозможно"));
+			Assert.That(error, Does.Contain("привязанных сделок — 3"));
+			Assert.That(error, Does.Contain("внешних корректировок PnL — 1"));
+		});
+		Assert.That(cut.Find("h1").TextContent, Does.Contain("Календарь сентябрь"));
+		Assert.That(cut.FindAll("table"), Has.Count.EqualTo(4));
+	}
+
+	[TestMethod]
+	[Description("Успешное удаление возвращает пользователя к списку конструкций")]
+	public void TryIfDeleteSuccessNavigatesToList()
+	{
+		// Arrange: пустая конструкция; после удаления read-модель сообщает
+		// об отсутствии конструкции.
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()))
+			.ThrowsAsync(new ConstructionNotFoundException(7));
+
+		var navigation = _context.Services.GetRequiredService<NavigationManager>();
+		navigation.NavigateTo("/constructions/7");
+		var cut = RenderDetail();
+
+		// Act: пользователь подтверждает удаление.
+		FindButton(cut, "Удалить…").Click();
+		FindButton(cut, "Удалить").Click();
+
+		// Assert: удаление выполнено, экран закрывается переходом к списку.
+		_constructions.Verify(service => service.DeleteAsync(7, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(navigation.Uri, Does.EndWith("/")));
+	}
+
 	#region Помощники
 
 	/// <summary>Рендерит экран деталей конструкции с идентификатором 7.</summary>
 	private IRenderedComponent<ConstructionDetail> RenderDetail() =>
 		_context.RenderComponent<ConstructionDetail>(parameters => parameters.Add(detail => detail.ConstructionId, 7L));
+
+	/// <summary>Находит кнопку экрана по точному тексту подписи.</summary>
+	private static IElement FindButton(IRenderedComponent<ConstructionDetail> cut, string text) =>
+		cut.FindAll("button").Single(button => button.TextContent.Trim() == text);
 
 	/// <summary>Данные деталей с пустыми таблицами по умолчанию.</summary>
 	private static ConstructionDetailData CreateData(

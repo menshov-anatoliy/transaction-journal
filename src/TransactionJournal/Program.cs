@@ -70,6 +70,9 @@ builder.Services.AddTransient<IJournalSyncService, JournalSyncService>();
 // мутирующий API ограничен пользовательскими записями домена.
 builder.Services.AddSingleton(sp => new ConstructionService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+// Экран деталей выполняет действия конструкции по контракту сервиса: тонкий
+// слой UI зависит от интерфейса, тесты экрана подменяют его заглушкой.
+builder.Services.AddSingleton<IConstructionService>(sp => sp.GetRequiredService<ConstructionService>());
 builder.Services.AddSingleton(sp => new TradeBindingService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton(sp => new InboxReadModel(
@@ -84,6 +87,11 @@ builder.Services.AddSingleton(sp => new FrameReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
 	sp.GetRequiredService<InboxReadModel>()));
 builder.Services.AddSingleton<IFrameReadModel>(sp => sp.GetRequiredService<FrameReadModel>());
+
+// Сигнал изменений журнала в границах circuit: экраны оповещают его после мутаций
+// домена, каркас перечитывает панель — итог, бейдж «Входящих» и транзитную вкладку —
+// без навигации.
+builder.Services.AddScoped<JournalChangeSignal>();
 
 // Провайдер марок аналитики: публичные тикеры без аутентификации и кэш последней
 // известной марки со временем получения. Read-модель позиций получает его как

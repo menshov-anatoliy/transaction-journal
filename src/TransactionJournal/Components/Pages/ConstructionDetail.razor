@@ -2,10 +2,14 @@
 @rendermode InteractiveServer
 
 @using System.Globalization
+@using TransactionJournal.Components.Layout
 @using TransactionJournal.Components.Pages
 @using TransactionJournal.Data
 @using TransactionJournal.Domain
 @inject IConstructionDetailReadModel Detail
+@inject IConstructionService Constructions
+@inject JournalChangeSignal Changes
+@inject NavigationManager Navigation
 
 <PageTitle>@(_data?.Name ?? "Конструкция") — Журнал Bybit</PageTitle>
 
@@ -32,6 +36,91 @@ else
 	   именованную вкладку каркаса; заголовок повторяет имя и ручной статус. *@
 	<h1>@_data.Name <span class="@StatusClass(_data.Status)">@StatusText(_data.Status)</span></h1>
 
+	@* Действия над конструкцией: свободное переименование, смена ручного
+	   статуса между «открыта» и «закрыта», архивация с возвратом, изменение
+	   выделенного капитала и удаление пустой с подтверждением. Мутации идут
+	   сервисами домена, экран перечитывает снимок целиком после каждой. *@
+	@* Traceability: openspec:ui/screens#requirement-construction-actions *@
+	<div class="toolbar detail-actions">
+		<button type="button" class="btn" disabled="@_busy" @onclick="BeginRename">Переименовать</button>
+		@if (_data.Status == ConstructionStatus.Open)
+		{
+			@* Смена ручного статуса — свободный переход между «открыта» и «закрыта». *@
+			<button type="button" class="btn" disabled="@_busy" @onclick="() => ChangeStatusAsync(ConstructionStatus.Closed)">Закрыть</button>
+		}
+		else if (_data.Status == ConstructionStatus.Closed)
+		{
+			<button type="button" class="btn" disabled="@_busy" @onclick="() => ChangeStatusAsync(ConstructionStatus.Open)">Открыть</button>
+		}
+		@if (_data.Status == ConstructionStatus.Archived)
+		{
+			@* Возврат из архива восстанавливает ручной статус «закрыта»: статус
+			   до архивации журнал не хранит, а незаметное возвращение «открыта»
+			   сделало бы конструкцию операционно активной без решения пользователя;
+			   следующее «Открыть» переводит статус свободно. *@
+			<button type="button" class="btn" disabled="@_busy" @onclick="() => ChangeStatusAsync(ConstructionStatus.Closed)">Вернуть из архива</button>
+		}
+		else
+		{
+			<button type="button" class="btn" disabled="@_busy" @onclick="() => ChangeStatusAsync(ConstructionStatus.Archived)">В архив</button>
+		}
+		<button type="button" class="btn" disabled="@_busy" @onclick="BeginCapitalChange">Изменить капитал</button>
+		@if (CanDelete)
+		{
+			@* Удаление предлагается только конструкции без сделок и корректировок:
+			   кнопки у непустой нет, пользователь снимает записи прежде удаления. *@
+			<button type="button" class="btn danger" disabled="@_busy" @onclick="BeginDelete">Удалить…</button>
+		}
+	</div>
+
+	@if (_actionError is not null)
+	{
+		@* Отказ действия доходит причиной: пользователь видит, что именно
+		   блокирует изменение, экран и данные остаются без изменений. *@
+		<p class="note note-error" role="alert">@_actionError</p>
+	}
+
+	@if (_action == DetailAction.Rename)
+	{
+		@* Форма переименования: свободная правка имени, остальные данные
+		   конструкции не затрагиваются. *@
+		<div class="action-form">
+			<label class="action-label">
+				новое имя
+				<input class="action-input" maxlength="200" @bind="_renameValue" />
+			</label>
+			<button type="button" class="btn primary" disabled="@_busy" @onclick="RenameAsync">Сохранить имя</button>
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelAction">Отмена</button>
+		</div>
+	}
+	else if (_action == DetailAction.Capital)
+	{
+		@* Форма капитала: значение в USDT; правка капитала меняет только
+		   процентные величины, абсолютный результат не затрагивается. *@
+		<div class="action-form">
+			<label class="action-label">
+				выделенный капитал, USDT
+				<input class="action-input" @bind="_capitalInput" />
+			</label>
+			<button type="button" class="btn primary" disabled="@_busy" @onclick="ChangeCapitalAsync">Сохранить капитал</button>
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelAction">Отмена</button>
+			@if (_capitalInvalid)
+			{
+				<span class="validation-message">Введите число в USDT, например 3000</span>
+			}
+		</div>
+	}
+	else if (_action == DetailAction.Delete)
+	{
+		@* Удаление требует явного подтверждения: подтверждение — отдельный шаг,
+		   без него команда удаления не запускается. *@
+		<div class="action-form">
+			<span class="action-warning">Удалить пустую конструкцию «@_data.Name»? Действие необратимо.</span>
+			<button type="button" class="btn danger" disabled="@_busy" @onclick="DeleteAsync">Удалить</button>
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelAction">Отмена</button>
+		</div>
+	}
+
 	@* Сводка метрик конструкции: итог, процент от капитала, разбивка по
 	   реализованному и нереализованному результату, сумма корректировок,
 	   период с длительностью и отметка времени марок оценки. *@
@@ -50,7 +139,7 @@ else
 				<b class="@SignClass(_data.Metrics.TotalPnL)">@FormatPnL(_data.Metrics.TotalPnL.Value) USDT</b>
 			}
 		</div>
-		<div>% капитала<b class="@SignClass(_data.Metrics.TotalPnLPercent)">@FormatPercent(_data.Metrics.TotalPnLPercent)</b></div>
+		<div>% капитала (@FormatAmount(_data.AllocatedCapitalUsdt))<b class="@SignClass(_data.Metrics.TotalPnLPercent)">@FormatPercent(_data.Metrics.TotalPnLPercent)</b></div>
 		<div>реализованный<b class="@SignClass(_data.Metrics.RealizedPnL)">@FormatPnL(_data.Metrics.RealizedPnL)</b></div>
 		<div>нереализованный
 			@if (_data.HasMarkFailure)
@@ -263,9 +352,24 @@ else
 	/// <summary>Идентификатор открытой конструкции из адреса деталей.</summary>
 	[Parameter] public long ConstructionId { get; set; }
 
+	/// <summary>Открытая форма действия: пустая — действий не начато, удаление живёт до подтверждения.</summary>
+	private enum DetailAction
+	{
+		None,
+		Rename,
+		Capital,
+		Delete,
+	}
+
 	private ConstructionDetailData? _data;
 	private bool _unavailable;
 	private bool _notFound;
+	private DetailAction _action;
+	private string? _actionError;
+	private bool _busy;
+	private string _renameValue = string.Empty;
+	private string _capitalInput = string.Empty;
+	private bool _capitalInvalid;
 
 	/// <summary>
 	/// Перечитывает данные экрана при каждом открытии деталей и смене конструкции:
@@ -274,7 +378,23 @@ else
 	// Данные перечитываются из read-моделей при каждом открытии экрана — устаревших
 	// значений UI не показывает.
 	// Traceability: change:add-ui-screens/design#d7
-	protected override async Task OnParametersSetAsync()
+	protected override async Task OnParametersSetAsync() => await ReloadAsync();
+
+	/// <summary>
+	/// Удаление предлагается только конструкции без сделок и внешних корректировок
+	/// PnL: у конструкции с записями кнопки удаления нет.
+	/// </summary>
+	// Кнопка удаления присутствует только у пустой конструкции; окончательную
+	// гарантию даёт домен — его отказ доходит причиной.
+	// Traceability: openspec:ui/screens#requirement-construction-actions
+	private bool CanDelete => _data is { } data && data.Trades.Count == 0 && data.Adjustments.Count == 0;
+
+	/// <summary>
+	/// Читает снимок экрана из read-модели деталей: открытие, смена конструкции
+	/// и каждое выполненное действие перечитывают сводку и таблицы целиком —
+	/// устаревших значений экран не показывает.
+	/// </summary>
+	private async Task ReloadAsync()
 	{
 		try
 		{
@@ -299,6 +419,179 @@ else
 			_notFound = false;
 		}
 	}
+
+	#region Действия над конструкцией
+
+	/// <summary>Открывает форму переименования с текущим именем конструкции.</summary>
+	private void BeginRename()
+	{
+		if (_data is not { } data)
+		{
+			return;
+		}
+
+		_action = DetailAction.Rename;
+		_renameValue = data.Name;
+		_capitalInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>Открывает форму капитала с текущим значением выделенного капитала.</summary>
+	private void BeginCapitalChange()
+	{
+		if (_data is not { } data)
+		{
+			return;
+		}
+
+		_action = DetailAction.Capital;
+		_capitalInput = FormatAmount(data.AllocatedCapitalUsdt);
+		_capitalInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>Открывает подтверждение удаления; без подтверждения команда не запускается.</summary>
+	private void BeginDelete()
+	{
+		_action = DetailAction.Delete;
+		_capitalInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>Закрывает открытую форму действия без выполнения команды.</summary>
+	private void CancelAction()
+	{
+		_action = DetailAction.None;
+		_capitalInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Выполняет свободное переименование конструкции: сохраняется имя, экран
+	/// и транзитная вкладка перечитывают заголовок.
+	/// </summary>
+	// Переименование затрагивает только имя: привязки, капитал, статус и
+	// производные величины не изменяются.
+	// Traceability: openspec:ui/screens#requirement-construction-actions
+	private Task RenameAsync() => RunActionAsync(
+		() => Constructions.RenameAsync(ConstructionId, _renameValue.Trim()),
+		"Переименование не выполнено");
+
+	/// <summary>
+	/// Меняет ручной статус конструкции — «открыта», «закрыта» или «архив»:
+	/// экран и статусная точка транзитной вкладки отражают новый статус.
+	/// </summary>
+	// Статусный бейдж деталей и точка вкладки обновляются сразу после действия.
+	// Traceability: openspec:ui/screens#scenario-detail-status-change-indicated
+	private Task ChangeStatusAsync(ConstructionStatus status) => RunActionAsync(
+		() => Constructions.ChangeStatusAsync(ConstructionId, status),
+		"Смена статуса не выполнена");
+
+	/// <summary>
+	/// Меняет выделенный капитал: проценты результата пересчитываются при
+	/// следующем чтении, абсолютные величины и позиции не затрагиваются.
+	/// </summary>
+	// Капитал — база процентов: экран перечитывает снимок, процент от капитала
+	// в сводке пересчитывается немедленно, абсолютные величины остаются.
+	// Traceability: openspec:ui/screens#scenario-detail-capital-change-percent-only
+	private Task ChangeCapitalAsync()
+	{
+		// Нечисловое значение капитала не уходит в домен: форма просит
+		// корректное число, команда не выполняется.
+		if (decimal.TryParse(_capitalInput, NumberStyles.Number, CultureInfo.InvariantCulture, out var capital) == false)
+		{
+			_capitalInvalid = true;
+			return Task.CompletedTask;
+		}
+
+		_capitalInvalid = false;
+		return RunActionAsync(
+			() => Constructions.UpdateAllocatedCapitalAsync(ConstructionId, capital),
+			"Изменение капитала не выполнено");
+	}
+
+	/// <summary>
+	/// Удаляет пустую конструкцию после подтверждения и возвращает пользователя
+	/// к списку; отказ домена доходит причиной, конструкция остаётся на экране.
+	/// </summary>
+	// Отказ удаления показывает причину — какие записи блокируют удаление;
+	// успешное удаление закрывает экран деталей переходом к списку.
+	// Traceability: openspec:ui/screens#scenario-detail-delete-refused-with-reason
+	private async Task DeleteAsync()
+	{
+		await RunActionAsync(
+			() => Constructions.DeleteAsync(ConstructionId),
+			"Удаление не выполнено");
+
+		// Экран удалённой конструкции закрывается: пользователь возвращается
+		// к списку конструкций.
+		if (_actionError is null)
+		{
+			Navigation.NavigateTo("/");
+		}
+	}
+
+	/// <summary>
+	/// Выполняет команду действия через сервис домена: успех перечитывает снимок
+	/// экрана и оповещает каркас сигналом изменений; ошибки домена доходят
+	/// текстом причины, данные и экран остаются без изменений.
+	/// </summary>
+	private async Task RunActionAsync(Func<Task> action, string errorPrefix)
+	{
+		if (_busy)
+		{
+			return;
+		}
+
+		_busy = true;
+		_actionError = null;
+		try
+		{
+			await action();
+		}
+		catch (ArgumentException)
+		{
+			// Пустое имя и подобные ошибки ввода — повод исправить форму,
+			// команда в домен не прошла.
+			_actionError = "Действие не выполнено: проверьте заполненные поля.";
+			_busy = false;
+			return;
+		}
+		catch (ConstructionDeletionRefusedException ex)
+		{
+			// Отказ удаления объясняет причину: пользователь видит блокирующие
+			// записи, конструкция и её данные остаются неизменными.
+			_actionError = ex.Message;
+			_busy = false;
+			await ReloadAsync();
+			return;
+		}
+		catch (ConstructionNotFoundException)
+		{
+			// Конструкция исчезла между чтением и действием: экран перечитывает
+			// состояние и сообщает об отсутствии.
+			_busy = false;
+			await ReloadAsync();
+			return;
+		}
+		catch (Exception ex)
+		{
+			_actionError = $"{errorPrefix}: {ex.Message}";
+			_busy = false;
+			return;
+		}
+
+		_action = DetailAction.None;
+		_capitalInvalid = false;
+		_busy = false;
+
+		// Действие меняет данные экрана и каркаса: снимок перечитывается целиком,
+		// каркас обновляет панель по сигналу изменений журнала.
+		await ReloadAsync();
+		await Changes.RaiseAsync();
+	}
+
+	#endregion
 
 	#region Форматирование
 

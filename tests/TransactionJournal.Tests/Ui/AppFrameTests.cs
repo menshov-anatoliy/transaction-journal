@@ -55,6 +55,10 @@ public class AppFrameTests
 		// Тулбар списка выполняет синхронизацию через сервис единственной ручной
 		// команды: каркасным проверкам достаточно заглушки без запусков.
 		_context.Services.AddSingleton(new Mock<IJournalSyncService>().Object);
+
+		// Каркас подписывается на сигнал изменений журнала после мутаций экранов:
+		// каркасным проверкам достаточно молчащего сигнала без подписчиков.
+		_context.Services.AddScoped<JournalChangeSignal>();
 	}
 
 	[TestCleanup]

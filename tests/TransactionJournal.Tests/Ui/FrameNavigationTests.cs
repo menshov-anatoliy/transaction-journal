@@ -62,6 +62,14 @@ public class FrameNavigationTests
 			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
 			.ThrowsAsync(new ConstructionNotFoundException(7));
 		_context.Services.AddSingleton(detail.Object);
+
+		// Экран деталей выполняет действия конструкции через use-case сервис:
+		// навигационным проверкам достаточно заглушки без мутаций.
+		_context.Services.AddSingleton(new Mock<IConstructionService>().Object);
+
+		// Сигнал изменений журнала: экран оповещает каркас после действий,
+		// каркас перечитывает панель без навигации.
+		_context.Services.AddScoped<JournalChangeSignal>();
 	}
 
 	[TestCleanup]
@@ -192,11 +200,86 @@ public class FrameNavigationTests
 		Assert.That(navigation.Uri, Does.EndWith("/"));
 	}
 
+	[TestMethod]
+	[Description("Точка транзитной вкладки отражает новый статус сразу после смены в деталях")]
+	public void TryIfTransitTabStatusDotReflectsStatusChangeFromDetail()
+	{
+		// Arrange: каркас читает заголовок конструкции «открыта», после действия —
+		// «закрыта»; экран деталей возвращает те же статусы снимком, смена статуса
+		// выполняется заглушкой use-case сервиса.
+		_frame
+			.SetupSequence(model => model.FindConstructionHeaderAsync(7, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConstructionHeader(7, "Календарь сентябрь", ConstructionStatus.Open))
+			.ReturnsAsync(new ConstructionHeader(7, "Календарь сентябрь", ConstructionStatus.Closed));
+		var detail = new Mock<IConstructionDetailReadModel>();
+		detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(DetailDataOf(ConstructionStatus.Open))
+			.ReturnsAsync(DetailDataOf(ConstructionStatus.Closed));
+		_context.Services.AddSingleton(detail.Object);
+		var constructions = new Mock<IConstructionService>();
+		_context.Services.AddSingleton(constructions.Object);
+
+		var navigation = _context.Services.GetRequiredService<NavigationManager>();
+		navigation.NavigateTo("/constructions/7");
+		var cut = RenderFrame(DetailScreen(7));
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.Find(".transit-tab .status-dot").ClassList, Does.Contain("status-open")));
+
+		// Act: пользователь закрывает конструкцию командой статуса в деталях.
+		cut.FindAll(".detail-actions button")
+			.Single(button => button.TextContent.Trim() == "Закрыть")
+			.Click();
+
+		// Assert: статус сменён сервисом домена; точка транзитной вкладки
+		// отражает «закрыта» без навигации — каркас перечитал заголовок по сигналу.
+		// Требование: смена статуса меняет индикацию статуса — бейдж и точка вкладки.
+		// Traceability: openspec:ui/screens#scenario-detail-status-change-indicated
+		constructions.Verify(service =>
+			service.ChangeStatusAsync(7, ConstructionStatus.Closed, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.Find(".transit-tab .status-dot").ClassList, Does.Contain("status-closed")));
+	}
+
 	#region Помощники
 
 	/// <summary>Рендерит каркас с заданным экраном в теле страницы.</summary>
 	private IRenderedComponent<MainLayout> RenderFrame(RenderFragment screen) =>
 		_context.RenderComponent<MainLayout>(parameters => parameters.Add(layout => layout.Body, screen));
+
+	/// <summary>
+	/// Снимок деталей конструкции с ручным статусом и пустыми таблицами:
+	/// навигационной проверке достаточно заголовка со статусом.
+	/// </summary>
+	private static ConstructionDetailData DetailDataOf(ConstructionStatus status) => new(
+		7,
+		"Календарь сентябрь",
+		status,
+		3000m,
+		null,
+		new ConstructionMetrics
+		{
+			ConstructionId = 7,
+			AllocatedCapitalUsdt = 3000m,
+			RealizedPnL = 0m,
+			UnrealizedPnL = 0m,
+			AdjustmentsPnL = 0m,
+			TotalPnL = 0m,
+			RealizedPnLPercent = null,
+			UnrealizedPnLPercent = null,
+			AdjustmentsPnLPercent = null,
+			TotalPnLPercent = null,
+			OpenedAt = null,
+			ClosedAt = null,
+			Duration = null,
+		},
+		false,
+		false,
+		null,
+		[],
+		[],
+		[],
+		[]);
 
 	/// <summary>Фрагмент рендера экрана как тела каркаса.</summary>
 	private static RenderFragment Screen<TScreen>() where TScreen : IComponent => builder =>

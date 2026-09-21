@@ -122,6 +122,35 @@ body {
 .btn.primary:hover { background: #388bfd; }
 .btn:disabled { opacity: .45; cursor: default; }
 
+/* ===== Действия конструкции в деталях: формы переименования, капитала и подтверждения удаления ===== */
+.btn.danger { border-color: #f85149; color: #f85149; }
+.btn.danger:hover:not(:disabled) { background: #f85149; color: #f0f6fc; }
+
+.action-form {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	margin: 0 0 10px;
+	font-size: 12px;
+	color: #8b949e;
+	flex-wrap: wrap;
+}
+
+.action-form .action-label { display: inline-flex; gap: 6px; align-items: center; }
+
+.action-form .action-input {
+	background: #0d1117;
+	color: #c9d1d9;
+	border: 1px solid #30363d;
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 12px;
+	font-family: ui-monospace, Consolas, monospace;
+	width: 200px;
+}
+
+.action-form .action-warning { color: #d29922; }
+
 /* Признак сбоя марок: нереализованные величины и отметка времени марок
    показываются видимым состоянием деградации, а не пустым прочерком. */
 .markfail { color: #d29922; font-style: italic; }

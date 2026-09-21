@@ -6,6 +6,7 @@
 @implements IDisposable
 @inject IJournalMetricsReadModel Metrics
 @inject IFrameReadModel Frame
+@inject JournalChangeSignal Changes
 @inject NavigationManager Navigation
 
 @* Верхняя панель «Терминала»: бренд, текущий экран и постоянно видимый итог
@@ -64,6 +65,7 @@
 	private bool _journalUnavailable;
 	private int _inboxCount;
 	private ConstructionHeader? _transit;
+	private IDisposable? _changesSubscription;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -72,11 +74,38 @@
 		// текущего состояния журнала, устаревших значений каркас не показывает.
 		// Traceability: change:add-ui-screens/design#d7
 		Navigation.LocationChanged += OnLocationChanged;
+
+		// Действия экрана меняют данные панели без навигации: каркас подписан
+		// на сигнал изменений журнала и перечитывает панель после каждой мутации.
+		_changesSubscription = Changes.Subscribe(OnJournalChangedAsync);
 		await RefreshPanelAsync(Navigation.Uri);
 	}
 
 	private void OnLocationChanged(object? sender, LocationChangedEventArgs e) =>
 		_ = RefreshAfterNavigationAsync(e.Location);
+
+	/// <summary>
+	/// Перечитывает панель каркаса после мутации журнала на экране: экран
+	/// оповещает сигнал об изменении данных, каркас обновляет итог, бейдж
+	/// «Входящих» и заголовок транзитной вкладки без полной навигации.
+	/// </summary>
+	// Индикация статуса транзитной вкладки обновляется сразу после действия
+	// над конструкцией, а не при ближайшем переходе между экранами.
+	// Traceability: openspec:ui/screens#scenario-detail-status-change-indicated
+	private async Task OnJournalChangedAsync()
+	{
+		try
+		{
+			await RefreshPanelAsync(Navigation.Uri);
+		}
+		catch (Exception)
+		{
+			// Панель — ориентир, а не условие работы экранов: непредвиденный сбой
+			// чтения оставляет прежние значения вкладок, экран продолжает работать.
+		}
+
+		await InvokeAsync(StateHasChanged);
+	}
 
 	/// <summary>
 	/// Перечитывает панель каркаса после навигации и перерисовывает разметку:
@@ -253,5 +282,9 @@
 		}
 	}
 
-	public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+	public void Dispose()
+	{
+		Navigation.LocationChanged -= OnLocationChanged;
+		_changesSubscription?.Dispose();
+	}
 }

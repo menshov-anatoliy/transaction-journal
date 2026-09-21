@@ -4,6 +4,54 @@ using TransactionJournal.Data;
 namespace TransactionJournal.Domain;
 
 /// <summary>
+/// Контракт use-case сервиса управления конструкциями для тонких слоёв UI:
+/// экран деталей выполняет действия конструкции через этот интерфейс,
+/// не завися от конкретного сервиса и хранилища.
+/// </summary>
+// UI — тонкий слой над готовыми контрактами: мутации конструкции идут
+// через доменный use-case сервис, экранные тесты подменяют его заглушкой.
+// Traceability: openspec:ui/screens#requirement-construction-actions
+public interface IConstructionService
+{
+	/// <summary>Создаёт конструкцию с именем, капиталом и статусом «открыта».</summary>
+	Task<Construction> CreateAsync(
+		string name,
+		decimal allocatedCapitalUsdt,
+		string? comment = null,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>Свободно переименовывает конструкцию, не затрагивая прочие данные.</summary>
+	Task RenameAsync(
+		long constructionId,
+		string newName,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>Меняет выделенный капитал — базу процентов результата.</summary>
+	Task UpdateAllocatedCapitalAsync(
+		long constructionId,
+		decimal allocatedCapitalUsdt,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>Свободно меняет ручной статус конструкции, включая архив.</summary>
+	Task ChangeStatusAsync(
+		long constructionId,
+		ConstructionStatus status,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>Переводит конструкцию в статус «архив», скрывая её из активных списков.</summary>
+	Task ArchiveAsync(long constructionId, CancellationToken cancellationToken = default);
+
+	/// <summary>Удаляет только пустую конструкцию; непустая отказывает с причиной.</summary>
+	Task DeleteAsync(long constructionId, CancellationToken cancellationToken = default);
+
+	/// <summary>Возвращает активный список конструкций без архивных.</summary>
+	Task<IReadOnlyList<Construction>> ListActiveAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>Возвращает полный список конструкций для аналитики, включая архивные.</summary>
+	Task<IReadOnlyList<Construction>> ListAllAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 /// Use-case сервис управления конструкциями: создание с именем и выделенным
 /// капиталом, свободное переименование, ручная смена статуса с архивацией,
 /// чтение активных и полных списков и удаление только пустых конструкций.
@@ -13,7 +61,7 @@ namespace TransactionJournal.Domain;
 // Traceability: openspec:domain/constructions#requirement-construction-management
 /// Traceability: change:add-core-domain/design#d5
 /// </summary>
-public sealed class ConstructionService
+public sealed class ConstructionService : IConstructionService
 {
 	private readonly DbContextOptions<JournalDbContext> _options;
 
