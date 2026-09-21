@@ -99,6 +99,36 @@ body {
 
 .screen { padding: 14px 16px; max-width: 1280px; margin: 0 auto; }
 
+/* ===== Тулбар экрана «Конструкции»: команды «Синхронизировать» и «Разобрать входящие» ===== */
+.toolbar {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	margin: 0 0 10px;
+}
+
+.btn {
+	background: #21262d;
+	color: #c9d1d9;
+	border: 1px solid #30363d;
+	border-radius: 4px;
+	padding: 5px 12px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.btn:hover { background: #30363d; }
+.btn.primary { background: #1f6feb; border-color: #1f6feb; color: #f0f6fc; }
+.btn.primary:hover { background: #388bfd; }
+.btn:disabled { opacity: .45; cursor: default; }
+
+/* Признак сбоя марок: нереализованные величины и отметка времени марок
+   показываются видимым состоянием деградации, а не пустым прочерком. */
+.markfail { color: #d29922; font-style: italic; }
+
+.note-error { border-left-color: #f85149; }
+.note-ok { border-left-color: #3fb950; }
+
 /* ===== Сводка-лента экранов: итог, марки, счётчики над таблицей ===== */
 .kstrip {
 	display: flex;

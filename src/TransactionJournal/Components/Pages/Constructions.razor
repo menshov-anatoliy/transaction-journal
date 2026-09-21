@@ -3,14 +3,42 @@
 @rendermode InteractiveServer
 
 @using System.Globalization
+@using TransactionJournal.Components.Layout
 @using TransactionJournal.Components.Pages
 @using TransactionJournal.Data
+@using TransactionJournal.Sync
 @inject IConstructionListReadModel List
+@inject IFrameReadModel Frame
+@inject IJournalSyncService SyncService
 @inject NavigationManager Navigation
 
 <PageTitle>Конструкции — Журнал Bybit</PageTitle>
 
 <h1>Конструкции</h1>
+
+@* Тулбар списка: команды «Синхронизировать» и «Разобрать входящие» с текущим
+   числом непривязанных сделок. Тулбар доступен при любом состоянии журнала:
+   синхронизация — первый кандидат на лечение недоступного сырья. *@
+@* Traceability: openspec:ui/screens#requirement-construction-list-screen *@
+<div class="toolbar">
+	<button type="button" class="btn" disabled="@_syncRunning" @onclick="RunSyncAsync">Синхронизировать</button>
+	<button type="button" class="btn primary" disabled="@_syncRunning" @onclick="OpenInbox">Разобрать входящие @InboxCountLabel</button>
+</div>
+
+@if (_syncRunning)
+{
+	<p class="note" role="status">Синхронизация выполняется…</p>
+}
+else if (_syncError is not null)
+{
+	<p class="note note-error" role="alert"><b>Синхронизация прервана:</b> @_syncError</p>
+}
+else if (_syncResult is not null)
+{
+	@* Итог команды — строка уже закрытого запуска SyncRun: режим и счётчики
+	   новых записей; подробности и журнал синхронизаций живут на «Настройках». *@
+	<p class="note note-ok" role="status">Синхронизация завершена — @SyncResultLabel.</p>
+}
 
 @if (_unavailable)
 {
@@ -25,11 +53,24 @@ else if (_data is null)
 else
 {
 	@* Сводка журнала: итог, отметка времени марок оценки и счётчик видимых
-	   конструкций с числом открытых — ориентир над таблицей списка. *@
+	   конструкций с числом открытых — ориентир над таблицей списка. Сбой марок
+	   занимает ячейку отметки времени признаком сбоя, а не пустым прочерком. *@
 	@* Traceability: openspec:ui/screens#requirement-construction-list-screen *@
 	<div class="kstrip">
 		<div>итог по журналу<b class="@SignClass(_data.TotalPnL)">@TotalLabel</b></div>
-		<div>марки на<b>@MarksLabel</b></div>
+		<div>марки на
+			@if (_data.HasMarkFailure)
+			{
+				@* Отметка времени марок деградирует при сбое провайдера: сводка
+				   показывает признак сбоя, реализованные величины остаются видимыми. *@
+				@* Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated *@
+				<b class="markfail" title="Провайдер марок недоступен — время получения марок неизвестно">сбой марок</b>
+			}
+			else
+			{
+				<b>@MarksLabel</b>
+			}
+		</div>
 		<div>конструкций<b>@CountLabel</b></div>
 	</div>
 
@@ -63,9 +104,35 @@ else
 					<td><span class="@StatusClass(item.Status)">@StatusText(item.Status)</span></td>
 					<td>@FormatAmount(item.AllocatedCapitalUsdt)</td>
 					<td><span class="@SignClass(item.RealizedPnL)">@FormatPnL(item.RealizedPnL)</span></td>
-					<td><span class="@SignClass(item.UnrealizedPnL)">@FormatUnrealized(item.UnrealizedPnL)</span></td>
+					<td>
+						@if (item.UnrealizedPnL is null)
+						{
+							@* Сбой марок — видимое состояние строки: нереализованная оценка
+							   не построена, признак сбоя занимает её место; реализованный
+							   результат и корректировки строки остаются видимыми. *@
+							@* Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated *@
+							<span class="markfail" title="Провайдер марок недоступен — нереализованный PnL не оценён">сбой марок</span>
+						}
+						else
+						{
+							<span class="@SignClass(item.UnrealizedPnL)">@FormatUnrealized(item.UnrealizedPnL.Value)</span>
+						}
+					</td>
 					<td><span class="@SignClass(item.AdjustmentsPnL)">@FormatAdjustments(item.AdjustmentsPnL)</span></td>
-					<td><b><span class="@SignClass(item.TotalPnL)">@FormatTotal(item.TotalPnL)</span></b></td>
+					<td>
+						<b>
+							@if (item.TotalPnL is null)
+							{
+								@* Итог без нереализованной части неполный — признак сбоя марок,
+								   а не прочерк «нулевого» итога. *@
+								<span class="markfail" title="Итог неполный: нереализованная часть не оценена из-за сбоя марок">неполный</span>
+							}
+							else
+							{
+								<span class="@SignClass(item.TotalPnL)">@FormatTotal(item.TotalPnL.Value)</span>
+							}
+						</b>
+					</td>
 					<td><span class="@SignClass(item.TotalPnLPercent)">@FormatPercent(item.TotalPnLPercent)</span></td>
 					<td>@FormatDate(item.OpenedAt)</td>
 					<td>@FormatDate(item.ClosedAt)</td>
@@ -78,15 +145,28 @@ else
 @code {
 	private ConstructionListData? _data;
 	private bool _unavailable;
+	private int? _inboxCount;
+	private bool _syncRunning;
+	private JournalSyncResult? _syncResult;
+	private string? _syncError;
 
-	protected override async Task OnInitializedAsync()
+	protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+	/// <summary>
+	/// Перечитывает данные экрана из текущего состояния журнала: сводку и строки
+	/// списка, а также счётчик непривязанных сделок для команды «Разобрать
+	/// входящие». Вызывается при открытии экрана и после синхронизации — экран
+	/// не показывает устаревших значений.
+	/// </summary>
+	// Экран перечитывает read-модель при каждом открытии: сводка и строки всегда
+	// выведены из текущих данных журнала, устаревших значений экран не показывает.
+	// Traceability: change:add-ui-screens/design#d7
+	private async Task RefreshAsync()
 	{
-		// Экран перечитывает read-модель при каждом открытии: сводка и строки всегда
-		// выведены из текущих данных журнала, устаревших значений экран не показывает.
-		// Traceability: change:add-ui-screens/design#d7
 		try
 		{
 			_data = await List.ReadAsync();
+			_unavailable = false;
 		}
 		catch (Exception)
 		{
@@ -95,18 +175,83 @@ else
 			_data = null;
 			_unavailable = true;
 		}
+
+		try
+		{
+			_inboxCount = await Frame.CountInboxAsync();
+		}
+		catch (Exception)
+		{
+			// Счётчик непривязанных нечитаем — команда «Разобрать входящие»
+			// остаётся доступной без числа, сама навигация не зависит от счётчика.
+			_inboxCount = null;
+		}
 	}
 
 	/// <summary>
-	/// Открывает детали конструкции: клик по строке списка ведёт на экран деталей,
-	/// где каркас откроет транзитную вкладку конструкции.
+	/// Выполняет единственную ручную команду синхронизации: запуск идёт до конца,
+	/// кнопки тулбара блокируются на время работы, результат или ошибка показываются
+	/// под тулбаром; завершённый запуск меняет сырьё журнала — экран перечитывает
+	/// данные сразу после синка.
 	/// </summary>
+	// Кнопка «Синхронизировать» в тулбаре списка — та же единственная команда,
+	// что и на «Настройках»; режим выбирает система сама.
+	// Traceability: openspec:ui/screens#requirement-construction-list-screen
+	// Traceability: change:add-ui-screens/design#d3
+	private async Task RunSyncAsync()
+	{
+		_syncRunning = true;
+		_syncResult = null;
+		_syncError = null;
+
+		try
+		{
+			_syncResult = await SyncService.SyncAsync();
+		}
+		catch (Exception ex)
+		{
+			// Ошибка биржи после всех повторов доходит до пользователя текстом —
+			// прерванный запуск повторяется новым нажатием без дублей.
+			_syncError = ex.Message;
+		}
+		finally
+		{
+			_syncRunning = false;
+		}
+
+		// Даже прерванный запуск мог дописать сырые записи — экран перечитывает
+		// журнал и счётчик «Входящих» по факту завершения команды.
+		await RefreshAsync();
+	}
+
+	/// <summary>
+	/// Ведёт на экран «Входящие»: разбор непривязанных сделок — привязка к конструкциям
+	/// и создание новых — выполняется там; кнопка несёт текущее число непривязанных.
+	/// </summary>
+	// Traceability: openspec:ui/screens#requirement-construction-list-screen
+	private void OpenInbox() => Navigation.NavigateTo("/inbox");
+
+	/// <summary>Открывает детали конструкции: клик по строке списка ведёт на экран деталей,
+	/// где каркас откроет транзитную вкладку конструкции.</summary>
 	// Клик по строке — способ перехода в детали, определённый требованием списка.
 	// Traceability: openspec:ui/screens#scenario-list-row-opens-detail
 	private void OpenDetail(long constructionId) =>
 		Navigation.NavigateTo($"/constructions/{constructionId}");
 
 	#region Форматирование
+
+	/// <summary>Число непривязанных сделок в подписи команды «Разобрать входящие»; неизвестный счётчик опускается.</summary>
+	private string InboxCountLabel => _inboxCount is { } count ? $"({count})" : string.Empty;
+
+	/// <summary>Сводный итог завершённого запуска: режим и счётчики новых записей одной строкой.</summary>
+	private string SyncResultLabel => _syncResult is null
+		? string.Empty
+		: $"{ModeLabel(_syncResult.Mode)}: новых записей исполнения {_syncResult.Run.NewExecutions}, delivery-записей {_syncResult.Run.NewDeliveries}, инструментов {_syncResult.Run.NewInstruments}";
+
+	/// <summary>Название режима запуска, выбранного системой: backfill при первом запуске, далее инкремент.</summary>
+	private static string ModeLabel(SyncRunMode mode) => mode == SyncRunMode.Backfill
+		? "первичная загрузка (backfill)"
+		: "инкрементальная догрузка";
 
 	/// <summary>Итог журнала в сводке: со знаком при числе; неполный итог помечается, а не подменяется суммой.</summary>
 	private string TotalLabel
@@ -124,7 +269,7 @@ else
 		}
 	}
 
-	/// <summary>Отметка времени марок оценки; прочерк, когда марки были не нужны или недоступны.</summary>
+	/// <summary>Отметка времени марок оценки; прочерк, когда марки были не нужны.</summary>
 	private string MarksLabel => _data?.MarksAsOf is { } marks
 		? FormatDate(marks)
 		: "—";
@@ -141,14 +286,14 @@ else
 	private static string FormatPnL(decimal value) =>
 		value.ToString("+0.##;-0.##;0", CultureInfo.InvariantCulture);
 
-	/// <summary>Нереализованный PnL: недоступная оценка — прочерк (признак сбоя марок добавляется задачей тулбара), ноль не выделяется.</summary>
-	private static string FormatUnrealized(decimal? value) => value is null || value == 0m ? "—" : FormatPnL(value.Value);
+	/// <summary>Нереализованный PnL: нулевая оценка — прочерк; признак сбоя марок выводится разметкой строки.</summary>
+	private static string FormatUnrealized(decimal value) => value == 0m ? "—" : FormatPnL(value);
 
 	/// <summary>Сумма корректировок: без корректировок — прочерк.</summary>
 	private static string FormatAdjustments(decimal value) => value == 0m ? "—" : FormatPnL(value);
 
-	/// <summary>Итог конструкции: недоступный итог — прочерк.</summary>
-	private static string FormatTotal(decimal? value) => value is null ? "—" : FormatPnL(value.Value);
+	/// <summary>Итог конструкции; недоступный из-за сбоя марок итог выводится признаком разметкой строки.</summary>
+	private static string FormatTotal(decimal value) => FormatPnL(value);
 
 	/// <summary>Формат процента от капитала: «+8.6%» / «-3.1%» / «0%»; недоступный — прочерк.</summary>
 	private static string FormatPercent(decimal? value) => value is null

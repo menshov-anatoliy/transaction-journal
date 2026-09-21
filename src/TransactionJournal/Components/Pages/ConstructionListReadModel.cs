@@ -41,12 +41,14 @@ public sealed record ConstructionListItem(
 /// </summary>
 /// <param name="TotalPnL">Итог по журналу; null, пока сбой марок оставляет его неполным.</param>
 /// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое марок или без открытых остатков.</param>
+/// <param name="HasMarkFailure">Признак сбоя марок: провайдер не оценил хотя бы один открытый остаток журнала.</param>
 /// <param name="ConstructionCount">Число видимых конструкций списка.</param>
 /// <param name="OpenCount">Число конструкций со статусом «открыта» среди видимых.</param>
 /// <param name="Items">Строки таблицы конструкций, упорядоченные по идентификатору.</param>
 public sealed record ConstructionListData(
 	decimal? TotalPnL,
 	DateTimeOffset? MarksAsOf,
+	bool HasMarkFailure,
 	int ConstructionCount,
 	int OpenCount,
 	IReadOnlyList<ConstructionListItem> Items);
@@ -143,10 +145,13 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 		}
 
 		// Счётчик сводки описывает видимые конструкции: сколько в списке и сколько
-		// из них открыты — числа сходятся со строками таблицы.
+		// из них открыты — числа сходятся со строками таблицы. Признак сбоя марок
+		// проходит из аналитики без пересчёта: ему принадлежит решение, была ли
+		// недоступна оценка нереализованной части.
 		return new ConstructionListData(
 			metrics.TotalPnL,
 			metrics.MarksAsOf,
+			metrics.HasMarkFailure,
 			items.Count,
 			items.Count(item => item.Status == ConstructionStatus.Open),
 			items);
