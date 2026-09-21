@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TransactionJournal;
 using TransactionJournal.Analytics;
 using TransactionJournal.Bybit;
 using TransactionJournal.Components;
@@ -8,6 +9,12 @@ using TransactionJournal.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
+
+// Локальный .env загружается до создания хоста и любых регистраций: значения файла
+// попадают в переменные процесса раньше первого чтения конфигурации потребителями
+// (сейчас — поставщиком учётных данных Bybit), отсутствующий файл не является ошибкой.
+// Traceability: openspec:config/env-file#requirement-env-file-loaded-on-startup
+AppEnvFile.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 

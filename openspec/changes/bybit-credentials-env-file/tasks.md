@@ -2,13 +2,13 @@
 
 ## 1. Инфраструктура загрузки .env
 
-- [ ] 1.1 Добавить NuGet-пакет `DotNetEnv` в `src/TransactionJournal/TransactionJournal.csproj` (версию зафиксировать точечно) и убедиться, что `dotnet restore` и сборка решения проходят без ошибок
-- [ ] 1.2 Создать статический класс `AppEnvFile` в `src/TransactionJournal/AppEnvFile.cs` с методом `Load()`, инкапсулирующим `DotNetEnv.Env.TraversePath().NoClobber().Load()` (решение D3, D4): поиск `.env` от текущего каталога вверх, без перезаписи существующих переменных; убедиться, что сборка проходит
+- [x] 1.1 Добавить NuGet-пакет `DotNetEnv` в `src/TransactionJournal/TransactionJournal.csproj` (версию зафиксировать точечно) и убедиться, что `dotnet restore` и сборка решения проходят без ошибок
+- [x] 1.2 Создать статический класс `AppEnvFile` в `src/TransactionJournal/AppEnvFile.cs` с методом `Load()`, инкапсулирующим `DotNetEnv.Env.TraversePath().NoClobber().Load()` (решение D3, D4): поиск `.env` от текущего каталога вверх, без перезаписи существующих переменных; убедиться, что сборка проходит
 
 ## 2. Интеграция и шаблон репозитория
 
-- [ ] 2.1 Вызвать `AppEnvFile.Load()` первой строкой логики `Program.cs` до `WebApplication.CreateBuilder` (решение D2) с комментарием о смысле и меткой `Traceability: openspec:config/env-file#requirement-env-file-loaded-on-startup`; убедиться, что приложение запускается
-- [ ] 2.2 Создать `.env.example` в корне репозитория с заглушками `BYBIT_API_KEY=` и `BYBIT_API_SECRET=` и русскими комментариями о назначении, размещении и приоритете системных переменных (требование `requirement-env-file-stays-local`); проверить `git status -- .env.example` видит файл, а `git check-ignore .env` подтверждает игнор реального `.env`
+- [x] 2.1 Вызвать `AppEnvFile.Load()` первой строкой логики `Program.cs` до `WebApplication.CreateBuilder` (решение D2) с комментарием о смысле и меткой `Traceability: openspec:config/env-file#requirement-env-file-loaded-on-startup`; убедиться, что приложение запускается
+- [x] 2.2 Создать `.env.example` в корне репозитория с заглушками `BYBIT_API_KEY=` и `BYBIT_API_SECRET=` и русскими комментариями о назначении, размещении и приоритете системных переменных (требование `requirement-env-file-stays-local`); проверить `git status -- .env.example` видит файл, а `git check-ignore .env` подтверждает игнор реального `.env`
 
 ## 3. Модульные тесты загрузчика
 
