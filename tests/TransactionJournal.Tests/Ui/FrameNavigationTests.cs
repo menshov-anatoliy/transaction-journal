@@ -72,6 +72,12 @@ public class FrameNavigationTests
 		_context.Services.AddSingleton(new Mock<ICommentService>().Object);
 		_context.Services.AddSingleton(new Mock<ITradeBindingService>().Object);
 
+		// Ручные пометки закрытия ставятся сервисом пометок домена с дефолтом
+		// цены у источника последних марок: навигационным проверкам достаточно
+		// заглушек без мутаций.
+		_context.Services.AddSingleton(new Mock<IManualCloseMarkService>().Object);
+		_context.Services.AddSingleton(new Mock<IInstrumentMarkSource>().Object);
+
 		// Сигнал изменений журнала: экран оповещает каркас после действий,
 		// каркас перечитывает панель без навигации.
 		_context.Services.AddScoped<JournalChangeSignal>();
@@ -283,6 +289,7 @@ public class FrameNavigationTests
 		false,
 		false,
 		null,
+		[],
 		[],
 		[],
 		[],

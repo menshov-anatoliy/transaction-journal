@@ -10,6 +10,8 @@
 @inject IConstructionService Constructions
 @inject ICommentService Comments
 @inject ITradeBindingService Bindings
+@inject IManualCloseMarkService Marks
+@inject IInstrumentMarkSource MarkSource
 @inject JournalChangeSignal Changes
 @inject NavigationManager Navigation
 
@@ -199,6 +201,34 @@ else
 	</div>
 
 	<h2>Позиции</h2>
+	@if (_markFormSymbol is not null)
+	{
+		@* Форма ручной пометки закрытия над таблицей позиций: цена по умолчанию —
+		   последняя известная марка инструмента из кэша провайдера, пустое поле
+		   оставляет цену домену (марка подставится при чтении), время — текущее. *@
+		@* Traceability: openspec:ui/screens#scenario-mark-form-defaults-last-mark *@
+		<div class="action-form">
+			<span class="action-warning">Закрыть позицию «@_markFormSymbol» пометкой</span>
+			<label class="action-label">
+				цена закрытия
+				<input class="action-input" placeholder="пусто — последняя марка при чтении" @bind="_markPriceInput" />
+			</label>
+			@if (_markPriceInvalid)
+			{
+				<span class="validation-message">Введите число или оставьте поле пустым</span>
+			}
+			<label class="action-label">
+				время пометки
+				<input class="action-input" placeholder="2026-09-20 14:30" @bind="_markTimeInput" />
+			</label>
+			@if (_markTimeInvalid)
+			{
+				<span class="validation-message">Введите время в формате 2026-09-20 14:30</span>
+			}
+			<button type="button" class="btn primary" disabled="@_busy" @onclick="AddMarkAsync">Поставить пометку</button>
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelMarkForm">Отмена</button>
+		</div>
+	}
 	<table>
 		<thead>
 			<tr>
@@ -209,6 +239,7 @@ else
 				<th>Нереализов.</th>
 				<th>Статус</th>
 				<th>Комментарий</th>
+				<th>Действия</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -216,7 +247,7 @@ else
 			{
 				@* Пустая таблица — явное сообщение об отсутствии, а не пустая разметка. *@
 				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
-				<tr><td colspan="7" class="empty">позиций нет</td></tr>
+				<tr><td colspan="8" class="empty">позиций нет</td></tr>
 			}
 			@foreach (var position in _data.Positions)
 			{
@@ -265,6 +296,20 @@ else
 						{
 							<span>@(position.Comment ?? "—")</span>
 							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCommentEdit(CommentTarget.Position, position.Symbol, position.Comment)">изменить</button>
+						}
+					</td>
+					@* Позиция производная и вводом не редактируется: единственное действие
+					   открытой строки — «закрыть пометкой», ставящее пользовательскую
+					   закрывающую запись с формой цены и времени. *@
+					@* Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position *@
+					<td>
+						@if (position.IsOpen)
+						{
+							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCloseMarkAsync(position.Symbol)">закрыть пометкой…</button>
+						}
+						else
+						{
+							<span>—</span>
 						}
 					</td>
 				</tr>
@@ -366,6 +411,48 @@ else
 	</table>
 
 	<h2>Закрывающие записи</h2>
+	@if (_data.ClosingWarnings.Count > 0)
+	{
+		@* Избыточная закрывающая запись не применяется и не блокирует чтение:
+		   пометка к уже нулевому остатку либо запись, конкурирующая с delivery,
+		   доходит до пользователя предупреждением о расхождении. *@
+		@* Traceability: openspec:ui/screens#scenario-redundant-closing-entry-warned *@
+		@foreach (var warning in _data.ClosingWarnings)
+		{
+			<p class="note note-error" role="alert">
+				Избыточная закрывающая запись: @KindText(warning.Kind) «@warning.Symbol» на @FormatDate(warning.ClosedAt) —
+				остаток позиции уже нулевой, запись не применена.
+			</p>
+		}
+	}
+	@if (_editMarkId is not null)
+	{
+		@* Форма правки ручной пометки над таблицей закрывающих записей: правятся
+		   цена и время, значения предзаполнены эффективной ценой и временем записи;
+		   пустая цена возвращает пометку к последней марке при чтении. *@
+		@* Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position *@
+		<div class="action-form">
+			<span class="action-warning">Правка ручной пометки «@_editMarkSymbol»</span>
+			<label class="action-label">
+				цена закрытия
+				<input class="action-input" placeholder="пусто — последняя марка при чтении" @bind="_editPriceInput" />
+			</label>
+			@if (_editPriceInvalid)
+			{
+				<span class="validation-message">Введите число или оставьте поле пустым</span>
+			}
+			<label class="action-label">
+				время пометки
+				<input class="action-input" placeholder="2026-09-20 14:30" @bind="_editTimeInput" />
+			</label>
+			@if (_editTimeInvalid)
+			{
+				<span class="validation-message">Введите время в формате 2026-09-20 14:30</span>
+			}
+			<button type="button" class="btn primary" disabled="@_busy" @onclick="SaveMarkEditAsync">Сохранить пометку</button>
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelMarkEdit">Отмена</button>
+		</div>
+	}
 	@* Единый поток закрывающих записей: delivery, экспирации OTM и ручные
 	   пометки перечисляются с типом, инструментом и суммой закрытия. *@
 	@* Traceability: openspec:ui/screens#scenario-detail-closing-entries-shown *@
@@ -377,13 +464,14 @@ else
 				<th>Инструмент</th>
 				<th>Детали</th>
 				<th>Сумма</th>
+				<th>Действия</th>
 			</tr>
 		</thead>
 		<tbody>
 			@if (_data.ClosingEntries.Count == 0)
 			{
 				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
-				<tr><td colspan="5" class="empty">закрывающих записей нет</td></tr>
+				<tr><td colspan="6" class="empty">закрывающих записей нет</td></tr>
 			}
 			@foreach (var entry in _data.ClosingEntries)
 			{
@@ -400,6 +488,20 @@ else
 						else
 						{
 							<span class="@SignClass(entry.AmountUsdt)">@FormatPnL(entry.AmountUsdt.Value)</span>
+						}
+					</td>
+					@* Поставленная пометка живёт среди закрывающих записей и правится
+					   либо удаляется прямо отсюда; биржевые записи действий не имеют. *@
+					@* Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position *@
+					<td>
+						@if (entry.ManualMarkId is { } markId)
+						{
+							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => DeleteMarkAsync(markId)">удалить</button>
+							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginMarkEdit(entry)">править</button>
+						}
+						else
+						{
+							<span>—</span>
 						}
 					</td>
 				</tr>
@@ -481,6 +583,39 @@ else
 
 	/// <summary>Выбранная целевая конструкция переноса; null — целевого выбора нет.</summary>
 	private long? _moveTargetId;
+
+	/// <summary>Открытая форма пометки закрытия: инструмент открытой позиции; null — форма закрыта.</summary>
+	private string? _markFormSymbol;
+
+	/// <summary>Черновик цены пометки закрытия: пустая строка — цена не задана.</summary>
+	private string _markPriceInput = string.Empty;
+
+	/// <summary>Черновик времени пометки закрытия в формате «2026-09-20 14:30».</summary>
+	private string _markTimeInput = string.Empty;
+
+	/// <summary>Признак нечисловой цены в форме пометки закрытия.</summary>
+	private bool _markPriceInvalid;
+
+	/// <summary>Признак нечитаемого времени в форме пометки закрытия.</summary>
+	private bool _markTimeInvalid;
+
+	/// <summary>Открытая форма правки пометки: идентификатор правимой записи; null — форма закрыта.</summary>
+	private long? _editMarkId;
+
+	/// <summary>Инструмент правимой ручной пометки.</summary>
+	private string? _editMarkSymbol;
+
+	/// <summary>Черновик цены правки пометки: пустая строка — вернуться к марке при чтении.</summary>
+	private string _editPriceInput = string.Empty;
+
+	/// <summary>Черновик времени правки пометки в формате «2026-09-20 14:30».</summary>
+	private string _editTimeInput = string.Empty;
+
+	/// <summary>Признак нечисловой цены в форме правки пометки.</summary>
+	private bool _editPriceInvalid;
+
+	/// <summary>Признак нечитаемого времени в форме правки пометки.</summary>
+	private bool _editTimeInvalid;
 
 	/// <summary>
 	/// Перечитывает данные экрана при каждом открытии деталей и смене конструкции:
@@ -794,6 +929,201 @@ else
 
 	#endregion
 
+	#region Ручные пометки закрытия позиций
+
+	/// <summary>
+	/// Открывает форму ручной пометки закрытия позиции: цена предзаполняется
+	/// последней известной маркой инструмента из кэша провайдера, время —
+	/// текущим моментом.
+	/// </summary>
+	// Пометка ставится из строки открытой позиции; дефолт цены — последняя
+	// известная марка, чтобы закрытие по умолчанию считалось актуальной оценкой.
+	// Traceability: openspec:ui/screens#scenario-mark-form-defaults-last-mark
+	private async Task BeginCloseMarkAsync(string symbol)
+	{
+		if (_busy)
+		{
+			return;
+		}
+
+		try
+		{
+			var lastMark = await MarkSource.GetLastMarkAsync(symbol);
+			_markPriceInput = lastMark is { } mark ? FormatAmount(mark) : string.Empty;
+			_markTimeInput = DateTimeOffset.Now.ToString(MarkTimeFormat, CultureInfo.InvariantCulture);
+			_markFormSymbol = symbol;
+			_markPriceInvalid = false;
+			_markTimeInvalid = false;
+			_actionError = null;
+		}
+		catch (Exception ex)
+		{
+			// Марка для предзаполнения не получена — форма не открывается,
+			// пользователь видит причину вместо пустого поля по умолчанию.
+			_actionError = $"Марки недоступны: {ex.Message}";
+		}
+	}
+
+	/// <summary>Закрывает форму пометки закрытия без выполнения команды.</summary>
+	private void CancelMarkForm()
+	{
+		_markFormSymbol = null;
+		_markPriceInvalid = false;
+		_markTimeInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Ставит ручную пометку закрытия позиции: цена и время разбираются из формы
+	/// (пустая цена уходит домену — марка подставится при чтении), команда
+	/// выполняется сервисом домена, экран перечитывает снимок; избыточная пометка
+	/// не запрещается — она станет предупреждением при чтении.
+	/// </summary>
+	// Пометка — пользовательская закрывающая запись: домен не проверяет остаток,
+	// избыточная запись превращается в предупреждение read-модели.
+	// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+	private async Task AddMarkAsync()
+	{
+		if (_markFormSymbol is not { } symbol)
+		{
+			return;
+		}
+
+		if (TryParseMarkPrice(_markPriceInput, out var price) == false)
+		{
+			_markPriceInvalid = true;
+			return;
+		}
+
+		if (TryParseMarkTime(_markTimeInput, out var markedAt) == false)
+		{
+			_markTimeInvalid = true;
+			return;
+		}
+
+		_markPriceInvalid = false;
+		_markTimeInvalid = false;
+		await RunActionAsync(
+			() => Marks.AddAsync(ConstructionId, symbol, markedAt, price),
+			"Пометка закрытия не поставлена");
+
+		// Форма закрывается только успехом: отказ оставляет её открытой с причиной.
+		if (_actionError is null)
+		{
+			CancelMarkForm();
+		}
+	}
+
+	/// <summary>
+	/// Открывает правку ручной пометки из закрывающих записей: цена и время
+	/// предзаполнены эффективными значениями записи.
+	/// </summary>
+	// Поставленная пометка правится из таблицы закрывающих записей — правка
+	// свободна и подхватывается ближайшим чтением позиций.
+	// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+	private void BeginMarkEdit(ConstructionClosingEntryRow entry)
+	{
+		_editMarkId = entry.ManualMarkId;
+		_editMarkSymbol = entry.Symbol;
+		_editPriceInput = FormatAmount(entry.Price);
+		_editTimeInput = FormatDate(entry.ClosedAt);
+		_editPriceInvalid = false;
+		_editTimeInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>Закрывает форму правки пометки без выполнения команды.</summary>
+	private void CancelMarkEdit()
+	{
+		_editMarkId = null;
+		_editMarkSymbol = null;
+		_editPriceInvalid = false;
+		_editTimeInvalid = false;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Сохраняет правку ручной пометки: новые цена и время уходят сервису домена,
+	/// экран перечитывает снимок — запись занимает новое место в хронологии.
+	/// </summary>
+	// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+	private async Task SaveMarkEditAsync()
+	{
+		if (_editMarkId is not { } markId || _editMarkSymbol is not { } symbol)
+		{
+			return;
+		}
+
+		if (TryParseMarkPrice(_editPriceInput, out var price) == false)
+		{
+			_editPriceInvalid = true;
+			return;
+		}
+
+		if (TryParseMarkTime(_editTimeInput, out var markedAt) == false)
+		{
+			_editTimeInvalid = true;
+			return;
+		}
+
+		_editPriceInvalid = false;
+		_editTimeInvalid = false;
+		await RunActionAsync(
+			() => Marks.EditAsync(markId, symbol, markedAt, price),
+			"Правка пометки не выполнена");
+
+		// Форма закрывается только успехом: отказ оставляет её открытой с причиной.
+		if (_actionError is null)
+		{
+			CancelMarkEdit();
+		}
+	}
+
+	/// <summary>
+	/// Удаляет ручную пометку из закрывающих записей: закрывающая запись исчезает
+	/// из хронологии, позиция возвращается в открытое состояние с прежним
+	/// остатком ближайшим чтением — без синхронных правок производных.
+	/// </summary>
+	// Traceability: openspec:ui/screens#scenario-mark-removal-reflects-open
+	private Task DeleteMarkAsync(long markId) => RunActionAsync(
+		() => Marks.DeleteAsync(markId),
+		"Удаление пометки не выполнено");
+
+	/// <summary>
+	/// Разбирает ввод цены пометки: пустая строка — цена не задана (домен
+	/// подставит последнюю марку при чтении), иначе — число в USDT.
+	/// </summary>
+	private static bool TryParseMarkPrice(string input, out decimal? price)
+	{
+		price = null;
+		if (string.IsNullOrWhiteSpace(input))
+		{
+			return true;
+		}
+
+		if (decimal.TryParse(input.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value) == false)
+		{
+			return false;
+		}
+
+		price = value;
+		return true;
+	}
+
+	/// <summary>
+	/// Разбирает ввод времени пометки в форматах «2026-09-20 14:30»
+	/// и «2026-09-20T14:30».
+	/// </summary>
+	private static bool TryParseMarkTime(string input, out DateTimeOffset markedAt) =>
+		DateTimeOffset.TryParseExact(
+			input.Trim(),
+			MarkTimeFormats,
+			CultureInfo.InvariantCulture,
+			DateTimeStyles.None,
+			out markedAt);
+
+	#endregion
+
 	#region Inline-правка комментариев
 
 	/// <summary>
@@ -882,6 +1212,12 @@ else
 		}
 	}
 
+	/// <summary>Формат ввода и отображения времени пометки закрытия.</summary>
+	private const string MarkTimeFormat = "yyyy-MM-dd HH:mm";
+
+	/// <summary>Допустимые форматы ввода времени пометки закрытия.</summary>
+	private static readonly string[] MarkTimeFormats = ["yyyy-MM-dd HH:mm", "yyyy-MM-ddTHH:mm"];
+
 	/// <summary>Знаковый класс величины: рост зелёным, падение красным, ноль без выделения.</summary>
 	private static string SignClass(decimal? value) => value > 0 ? "pos" : value < 0 ? "neg" : string.Empty;
 
@@ -911,7 +1247,7 @@ else
 
 	/// <summary>Дата-время записи: «2026-06-20 14:30»; отсутствие — прочерк.</summary>
 	private static string FormatDate(DateTimeOffset moment) =>
-		moment.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+		moment.ToString(MarkTimeFormat, CultureInfo.InvariantCulture);
 
 	/// <summary>Длительность периода: «92 дн. 3 ч.» / «5 ч. 40 мин.»; отсутствие — прочерк.</summary>
 	private static string FormatDuration(TimeSpan? duration)

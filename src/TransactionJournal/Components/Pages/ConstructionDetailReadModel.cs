@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Analytics;
 using TransactionJournal.Data;
@@ -62,13 +63,15 @@ public sealed record ConstructionTradeRow(
 /// <param name="Quantity">Знаковое количество, обнулившее остаток на момент применения.</param>
 /// <param name="Price">Эффективная цена закрытия; null — марка инструмента неизвестна.</param>
 /// <param name="AmountUsdt">Сумма закрытия — денежный поток записи со знаком; null при неизвестной цене.</param>
+/// <param name="ManualMarkId">Идентификатор ручной пометки для правки и удаления из таблицы; null у биржевых записей.</param>
 public sealed record ConstructionClosingEntryRow(
 	DateTimeOffset ClosedAt,
 	PositionClosingKind Kind,
 	string Symbol,
 	decimal Quantity,
 	decimal? Price,
-	decimal? AmountUsdt);
+	decimal? AmountUsdt,
+	long? ManualMarkId = null);
 
 /// <summary>
 /// Строка таблицы внешних корректировок PnL деталей конструкции.
@@ -103,6 +106,7 @@ public sealed record ConstructionAdjustmentRow(
 /// <param name="Positions">Строки таблицы позиций, упорядоченные по инструменту.</param>
 /// <param name="Trades">Строки таблицы сделок в хронологическом порядке.</param>
 /// <param name="ClosingEntries">Строки таблицы закрывающих записей в хронологическом порядке.</param>
+/// <param name="ClosingWarnings">Предупреждения об избыточных закрывающих записях конструкции.</param>
 /// <param name="Adjustments">Строки таблицы корректировок, упорядоченные по дате.</param>
 public sealed record ConstructionDetailData(
 	long ConstructionId,
@@ -117,6 +121,7 @@ public sealed record ConstructionDetailData(
 	IReadOnlyList<ConstructionPositionRow> Positions,
 	IReadOnlyList<ConstructionTradeRow> Trades,
 	IReadOnlyList<ConstructionClosingEntryRow> ClosingEntries,
+	IReadOnlyList<RedundantClosingEntryWarning> ClosingWarnings,
 	IReadOnlyList<ConstructionAdjustmentRow> Adjustments);
 
 /// <summary>
@@ -152,6 +157,9 @@ public interface IConstructionDetailReadModel
 /// </summary>
 public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 {
+	/// <summary>Префикс ключа источника ручной пометки в едином потоке закрывающих записей.</summary>
+	private const string ManualMarkKeyPrefix = "manual:";
+
 	private readonly DbContextOptions<JournalDbContext> _options;
 
 	private readonly IJournalMetricsReadModel _metrics;
@@ -196,7 +204,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 
 		var positions = await ReadPositionsAsync(db, constructionId, metrics, cancellationToken).ConfigureAwait(false);
 		var trades = await ReadTradesAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
-		var closingEntries = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
+		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 
 		// Открытый остаток требует марок своей нереализованной оценке: без него
@@ -216,7 +224,8 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			metrics.MarksAsOf,
 			positions,
 			trades,
-			closingEntries,
+			closing.Rows,
+			closing.Warnings,
 			adjustments);
 	}
 
@@ -303,26 +312,51 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// <summary>
 	/// Строки таблицы закрывающих записей: единый поток закрывающих записей
 	/// read-модели позиций — delivery, экспирации OTM и ручные пометки —
-	/// с суммой закрытия как денежным потоком записи.
+	/// с суммой закрытия как денежным потоком записи; ручные пометки несут
+	/// идентификатор для правки и удаления из таблицы. Предупреждения об
+	/// избыточных записях того же чтения передаются экрану.
 	/// </summary>
 	// Сумма закрытия — денежный поток знакового количества по эффективной цене:
 	// продажа остатка приносит средства, выкуп короткого — тратит; неизвестная
 	// цена оставляет сумму без значения.
 	// Traceability: openspec:ui/screens#scenario-detail-closing-entries-shown
-	private async Task<List<ConstructionClosingEntryRow>> ReadClosingEntriesAsync(
+	// Идентификатор пометки и предупреждения доносят до экрана действие строки
+	// позиции и предупреждение об избыточной закрывающей записи.
+	// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+	private async Task<(List<ConstructionClosingEntryRow> Rows, List<RedundantClosingEntryWarning> Warnings)> ReadClosingEntriesAsync(
 		long constructionId,
 		CancellationToken cancellationToken)
 	{
 		var result = await _positions.ListAsync(constructionId, cancellationToken).ConfigureAwait(false);
-		return result.ClosingEntries
-			.Select(entry => new ConstructionClosingEntryRow(
-				entry.ClosedAt,
-				entry.Kind,
-				entry.Symbol,
-				entry.Quantity,
-				entry.Price,
-				entry.Price is null ? null : -entry.Quantity * entry.Price.Value))
-			.ToList();
+		return (
+			result.ClosingEntries
+				.Select(entry => new ConstructionClosingEntryRow(
+					entry.ClosedAt,
+					entry.Kind,
+					entry.Symbol,
+					entry.Quantity,
+					entry.Price,
+					entry.Price is null ? null : -entry.Quantity * entry.Price.Value,
+					ManualMarkIdOf(entry)))
+				.ToList(),
+			result.Warnings.ToList());
+	}
+
+	/// <summary>
+	/// Извлекает идентификатор ручной пометки из ключа источника «manual:{id}»
+	/// единого потока закрывающих записей; у биржевых записей идентификатора нет.
+	/// </summary>
+	private static long? ManualMarkIdOf(PositionClosingEntry entry)
+	{
+		if (entry.Kind != PositionClosingKind.ManualMark
+			|| entry.SourceKey.StartsWith(ManualMarkKeyPrefix, StringComparison.Ordinal) == false)
+		{
+			return null;
+		}
+
+		return long.TryParse(entry.SourceKey[ManualMarkKeyPrefix.Length..], CultureInfo.InvariantCulture, out var markId)
+			? markId
+			: null;
 	}
 
 	/// <summary>Строки таблицы внешних корректировок PnL, упорядоченные по дате.</summary>

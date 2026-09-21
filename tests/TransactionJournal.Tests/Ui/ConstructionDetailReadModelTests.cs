@@ -310,6 +310,66 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Строка ручной пометки несёт идентификатор для правки и удаления из закрывающих записей")]
+	public async Task TryIfManualMarkRowCarriesMarkId()
+	{
+		// Arrange: конструкция с покупкой 0.01 BTC и ручной пометкой закрытия
+		// по цене пользователя.
+		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
+		await AddLinearTradeAsync("exec-linear-buy", "Buy", "0.01", "42000", "0", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(construction.Id, "exec-linear-buy");
+		var mark = await _markService.AddAsync(
+			construction.Id,
+			LinearSymbol,
+			new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero),
+			42100m);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: строка закрывающих записей с ручной пометкой несёт её
+		// идентификатор — экран правит и удаляет пометку из таблицы по нему.
+		// Требование: поставленная пометка правится и удаляется из закрывающих записей.
+		// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+		var row = data.ClosingEntries.Single();
+		Assert.That(row.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
+		Assert.That(row.ManualMarkId, Is.EqualTo(mark.Id));
+	}
+
+	[TestMethod]
+	[Description("Пометка к нулевому остатку доходит предупреждением об избыточной записи")]
+	public async Task TryIfRedundantMarkWarningSurfacedToDetail()
+	{
+		// Arrange: позиция BTCUSDT закрыта встречными сделками (остаток 0);
+		// поверх поставлена ручная пометка — остаток на её момент уже нулевой.
+		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
+		await AddLinearTradeAsync("exec-buy", "Buy", "0.01", "42000", "0", ExecMs(2023, 12, 28, 10, 0));
+		await AddLinearTradeAsync("exec-sell", "Sell", "0.01", "42500", "0", ExecMs(2023, 12, 28, 11, 0));
+		await _bindingService.BindBatchAsync(construction.Id, ["exec-buy", "exec-sell"]);
+		await _markService.AddAsync(
+			construction.Id,
+			LinearSymbol,
+			new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero),
+			42100m);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: избыточная пометка не попала в таблицу закрывающих записей,
+		// а дошла предупреждением — экран показывает его пользователю.
+		// Требование: избыточная закрывающая запись предупреждает.
+		// Traceability: openspec:ui/screens#scenario-redundant-closing-entry-warned
+		Assert.That(data.ClosingEntries, Is.Empty);
+		var warning = data.ClosingWarnings.Single();
+		Assert.That(warning.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
+		Assert.That(warning.Symbol, Is.EqualTo(LinearSymbol));
+		Assert.That(warning.ClosedAt, Is.EqualTo(new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero)));
+		Assert.That(warning.SourceKey, Does.StartWith("manual:"));
+	}
+
+	[TestMethod]
 	[Description("Чтение деталей неизвестной конструкции отказывает")]
 	[ExpectedException(typeof(ConstructionNotFoundException))]
 	public async Task ThrowOnUnknownConstruction()

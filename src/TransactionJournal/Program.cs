@@ -88,6 +88,10 @@ builder.Services.AddSingleton(sp => new InboxReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton(sp => new ManualCloseMarkService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+// Ручная пометка закрытия ставится из строки позиции и правится в закрывающих
+// записях: экран деталей зависит от интерфейса, тесты экрана подменяют заглушкой.
+// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+builder.Services.AddSingleton<IManualCloseMarkService>(sp => sp.GetRequiredService<ManualCloseMarkService>());
 
 // Read-модель каркаса «Терминала»: счётчик непривязанных сделок для бейджа
 // «Входящих» и заголовок открытой конструкции для транзитной вкладки — тонкая

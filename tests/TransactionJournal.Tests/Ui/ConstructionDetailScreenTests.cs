@@ -21,13 +21,16 @@ namespace TransactionJournal.Tests.Ui;
 /// сделки, закрывающие записи и корректировки PnL; действия конструкции —
 /// переименование, смена статуса с архивацией, изменение капитала и удаление
 /// с подтверждением и причиной отказа; действия сделок — возврат во «Входящие»
-/// и перенос в другую конструкцию с выбором цели; пустые таблицы показывают
-/// явное сообщение об отсутствии, сбой марок — признак на месте нереализованных
+/// и перенос в другую конструкцию с выбором цели; ручная пометка закрытия —
+/// форма с дефолтом последней марки, правка и удаление из закрывающих записей
+/// и предупреждение об избыточной записи; пустые таблицы показывают явное
+/// сообщение об отсутствии, сбой марок — признак на месте нереализованных
 /// величин, недоступный журнал и отсутствующая конструкция — явные состояния.
 /// Traceability: openspec:ui/screens#requirement-construction-detail-screen
 /// Traceability: openspec:ui/screens#requirement-construction-actions
 /// Traceability: openspec:ui/screens#requirement-comments-inline-editing
 /// Traceability: openspec:ui/screens#requirement-trade-actions-in-detail
+/// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
 /// </summary>
 [TestClass]
 public class ConstructionDetailScreenTests
@@ -37,6 +40,8 @@ public class ConstructionDetailScreenTests
 	private Mock<IConstructionService> _constructions = null!;
 	private Mock<ICommentService> _comments = null!;
 	private Mock<ITradeBindingService> _bindings = null!;
+	private Mock<IManualCloseMarkService> _marks = null!;
+	private Mock<IInstrumentMarkSource> _markSource = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -62,6 +67,14 @@ public class ConstructionDetailScreenTests
 		// use-case сервисом привязки домена — экран проверяется против заглушки.
 		_bindings = new Mock<ITradeBindingService>();
 		_context.Services.AddSingleton(_bindings.Object);
+
+		// Ручная пометка закрытия ставится, правится и удаляется use-case сервисом
+		// пометок домена, а её дефолт цены читается у источника последних марок —
+		// экран проверяется против заглушек обоих контрактов.
+		_marks = new Mock<IManualCloseMarkService>();
+		_context.Services.AddSingleton(_marks.Object);
+		_markSource = new Mock<IInstrumentMarkSource>();
+		_context.Services.AddSingleton(_markSource.Object);
 
 		// Сигнал изменений журнала оповещает каркас после действий экрана;
 		// без подписчиков в изолированном рендере он безопасно бездействует.
@@ -832,6 +845,210 @@ public class ConstructionDetailScreenTests
 		Assert.That(cut.FindAll("button").Any(button => button.TextContent.Trim() == "Перенести"), Is.False);
 	}
 
+	[TestMethod]
+	[Description("Форма пометки закрытия предзаполнена последней маркой и доступна только открытой позиции")]
+	public void TryIfCloseMarkFormDefaultsToLastKnownMark()
+	{
+		// Arrange: открытая позиция BTCUSDT и закрытая ETHUSDT; последняя известная
+		// марка BTCUSDT в кэше провайдера — 44000.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(), hasOpenResidual: true, positions:
+			[
+				new ConstructionPositionRow("BTCUSDT", 0.1m, 42000m, 44000m, 20m, true, null),
+				new ConstructionPositionRow("ETHUSDT", 0m, null, null, 0m, false, null),
+			]));
+		_markSource
+			.Setup(source => source.GetLastMarkAsync("BTCUSDT", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(44000m);
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[0].TextContent, Does.Contain("BTCUSDT")));
+
+		// Assert: действие «закрыть пометкой» предложено только открытой позиции —
+		// у закрытой строки действия нет.
+		// Требование: действие доступно из строки открытой позиции.
+		// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+		Assert.That(
+			cut.FindAll("button").Count(button => button.TextContent.Trim() == "закрыть пометкой…"),
+			Is.EqualTo(1));
+
+		// Act: пользователь открывает форму пометки из строки BTCUSDT.
+		FindRowButton(cut.FindAll("table")[0], "закрыть пометкой…").Click();
+
+		// Assert: поле цены предзаполнено последней известной маркой инструмента,
+		// поле времени заполнено.
+		// Требование: форма пометки подставляет последнюю марку.
+		// Traceability: openspec:ui/screens#scenario-mark-form-defaults-last-mark
+		var inputs = cut.FindAll(".action-form .action-input");
+		Assert.That(inputs.Count, Is.EqualTo(2));
+		Assert.That(inputs[0].GetAttribute("value"), Is.EqualTo("44000"));
+		Assert.That(inputs[1].GetAttribute("value"), Is.Not.Empty);
+
+		// Act: пользователь задаёт время и подтверждает пометку.
+		inputs[1].Change("2026-09-20 14:30");
+		FindButton(cut, "Поставить пометку").Click();
+
+		// Assert: пометка сохранена сервисом домена с ценой по умолчанию и временем
+		// из формы (время без смещения разбирается как локальное); форма закрыта
+		// после успеха.
+		_marks.Verify(service =>
+			service.AddAsync(
+				7,
+				"BTCUSDT",
+				new DateTimeOffset(2026, 9, 20, 14, 30, 0, LocalOffset),
+				44000m,
+				It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("button").Any(button => button.TextContent.Trim() == "Поставить пометку"),
+			Is.False));
+	}
+
+	[TestMethod]
+	[Description("Удаление ручной пометки возвращает позиции открытый статус с прежним остатком")]
+	public void TryIfMarkRemovalReopensPositionWithFormerResidual()
+	{
+		// Arrange: позиция BTCUSDT закрыта ручной пометкой (остаток 0); после
+		// удаления read-модель возвращает снимок с открытой позицией прежнего
+		// остатка и пустой таблицей закрывающих записей.
+		var closedByMark = CreateData(MetricsOf(), positions:
+		[
+			new ConstructionPositionRow("BTCUSDT", 0m, null, null, 0m, false, null),
+		], closingEntries:
+		[
+			new ConstructionClosingEntryRow(
+				new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero),
+				PositionClosingKind.ManualMark,
+				"BTCUSDT",
+				-0.01m,
+				42100m,
+				421m,
+				5),
+		]);
+		var reopened = CreateData(MetricsOf(), hasOpenResidual: true, positions:
+		[
+			new ConstructionPositionRow("BTCUSDT", 0.01m, 42000m, 42100m, 1m, true, null),
+		]);
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(closedByMark)
+			.ReturnsAsync(reopened);
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[2].TextContent, Does.Contain("ручная пометка")));
+
+		// Act: пользователь удаляет пометку из таблицы закрывающих записей.
+		FindRowButton(cut.FindAll("table")[2], "удалить").Click();
+
+		// Assert: пометка удалена сервисом домена по идентификатору; позиция снова
+		// открыта с прежним остатком, закрывающих записей больше нет.
+		// Требование: удаление пометки отражается на статусе позиции.
+		// Traceability: openspec:ui/screens#scenario-mark-removal-reflects-open
+		_marks.Verify(service => service.DeleteAsync(5, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			var positionRow = cut.FindAll("table")[0].QuerySelectorAll("tbody tr").Single();
+			Assert.That(positionRow.TextContent, Does.Contain("открыта"));
+			Assert.That(positionRow.TextContent, Does.Contain("+0.01"));
+			Assert.That(cut.FindAll("table")[2].TextContent, Does.Contain("закрывающих записей нет"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Избыточная закрывающая запись показывается предупреждением")]
+	public void TryIfRedundantClosingEntryWarningShown()
+	{
+		// Arrange: пометка поставлена на позицию с уже нулевым остатком — read-модель
+		// возвращает предупреждение об избыточной закрывающей записи.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(), positions:
+			[
+				new ConstructionPositionRow("BTCUSDT", 0m, null, null, 0m, false, null),
+			], closingWarnings:
+			[
+				new RedundantClosingEntryWarning
+				{
+					ConstructionId = 7,
+					Symbol = "BTCUSDT",
+					Kind = PositionClosingKind.ManualMark,
+					ClosedAt = new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero),
+					SourceKey = "manual:9",
+				},
+			]));
+
+		var cut = RenderDetail();
+
+		// Assert: экран показывает предупреждение об избыточной записи с видом,
+		// инструментом и временем — запись не применена, позиция не перевёрнута.
+		// Требование: избыточная закрывающая запись предупреждает.
+		// Traceability: openspec:ui/screens#scenario-redundant-closing-entry-warned
+		cut.WaitForAssertion(() =>
+		{
+			var warning = cut.Find(".note-error");
+			Assert.That(warning.TextContent, Does.Contain("Избыточная закрывающая запись"));
+			Assert.That(warning.TextContent, Does.Contain("ручная пометка"));
+			Assert.That(warning.TextContent, Does.Contain("BTCUSDT"));
+			Assert.That(warning.TextContent, Does.Contain("2026-09-20 14:30"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Ручная пометка правится из таблицы закрывающих записей")]
+	public void TryIfManualMarkEditedFromClosingEntries()
+	{
+		// Arrange: у конструкции ручная пометка BTCUSDT по цене 42100
+		// от 2026-09-20 14:30.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(), closingEntries:
+			[
+				new ConstructionClosingEntryRow(
+					new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero),
+					PositionClosingKind.ManualMark,
+					"BTCUSDT",
+					-0.01m,
+					42100m,
+					421m,
+					5),
+			]));
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[2].TextContent, Does.Contain("ручная пометка")));
+
+		// Act: пользователь открывает правку пометки из закрывающих записей.
+		FindRowButton(cut.FindAll("table")[2], "править").Click();
+
+		// Assert: форма предзаполнена ценой и временем существующей записи.
+		var inputs = cut.FindAll(".action-form .action-input");
+		Assert.That(inputs[0].GetAttribute("value"), Is.EqualTo("42100"));
+		Assert.That(inputs[1].GetAttribute("value"), Is.EqualTo("2026-09-20 14:30"));
+
+		// Act: пользователь меняет цену и время и сохраняет.
+		inputs[0].Change("42300");
+		inputs = cut.FindAll(".action-form .action-input");
+		inputs[1].Change("2026-09-20 15:00");
+		FindButton(cut, "Сохранить пометку").Click();
+
+		// Assert: новые цена и время ушли сервису домена (время без смещения
+		// разбирается как локальное), форма закрыта после успеха.
+		// Требование: поставленная пометка правится из закрывающих записей.
+		// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+		_marks.Verify(service =>
+			service.EditAsync(
+				5,
+				"BTCUSDT",
+				new DateTimeOffset(2026, 9, 20, 15, 0, 0, LocalOffset),
+				42300m,
+				It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("button").Any(button => button.TextContent.Trim() == "Сохранить пометку"),
+			Is.False));
+	}
+
 	#region Помощники
 
 	/// <summary>Рендерит экран деталей конструкции с идентификатором 7.</summary>
@@ -841,6 +1058,9 @@ public class ConstructionDetailScreenTests
 	/// <summary>Находит кнопку экрана по точному тексту подписи.</summary>
 	private static IElement FindButton(IRenderedComponent<ConstructionDetail> cut, string text) =>
 		cut.FindAll("button").Single(button => button.TextContent.Trim() == text);
+
+	/// <summary>Смещение локального времени: ввод времени в форме разбирается как локальное.</summary>
+	private static TimeSpan LocalOffset => DateTimeOffset.Now.Offset;
 
 	/// <summary>Находит кнопку внутри таблицы по точному тексту подписи.</summary>
 	private static IElement FindRowButton(IElement table, string text) =>
@@ -869,7 +1089,8 @@ public class ConstructionDetailScreenTests
 		bool hasMarkFailure = false,
 		DateTimeOffset? marksAsOf = null,
 		IReadOnlyList<ConstructionPositionRow>? positions = null,
-		IReadOnlyList<ConstructionClosingEntryRow>? closingEntries = null) => new(
+		IReadOnlyList<ConstructionClosingEntryRow>? closingEntries = null,
+		IReadOnlyList<RedundantClosingEntryWarning>? closingWarnings = null) => new(
 		7,
 		"Календарь сентябрь",
 		ConstructionStatus.Open,
@@ -882,6 +1103,7 @@ public class ConstructionDetailScreenTests
 		positions ?? [],
 		[],
 		closingEntries ?? [],
+		closingWarnings ?? [],
 		[]);
 
 	/// <summary>Метрики конструкции с простыми значениями; сбойная нереализованная оценка оставляет итог null.</summary>
