@@ -18,10 +18,10 @@
 
 ## 4. Видимость пропуска пользователю
 
-- [ ] 4.1 В `Sync.razor` показать рядом с результатом запуска заметку с перечнем пропущенных областей, когда он непуст; проверить тестами `SyncPageTests`: перечень виден при непустом перечне (scenario-skipped-areas-reported-to-user), заметки нет при пустом, запуск не отображается как ошибка
-- [ ] 4.2 Снабдить UI-обработчик traceability-меткой `openspec:sync/bybit-history#scenario-skipped-areas-reported-to-user` с человекочитаемым комментарием; проверить разрешение ссылки rg-поиском
+- [x] 4.1 В `Sync.razor` показать рядом с результатом запуска заметку с перечнем пропущенных областей, когда он непуст; проверить тестами `SyncPageTests`: перечень виден при непустом перечне (scenario-skipped-areas-reported-to-user), заметки нет при пустом, запуск не отображается как ошибка
+- [x] 4.2 Снабдить UI-обработчик traceability-меткой `openspec:sync/bybit-history#scenario-skipped-areas-reported-to-user` с человекочитаемым комментарием; проверить разрешение ссылки rg-поиском
 
 ## 5. Документация и сквозная проверка
 
-- [ ] 5.1 Обновить `docs/research/bybit-api.md`: задокументировать отказ 110023 с фактическим текстом биржи «The contract is not available for trades» (расхождение с текстом официальной таблицы кодов) и graceful-пропуск области движками; проверить чтением секции
-- [ ] 5.2 Запустить `dotnet test` по всем тестам проекта и убедиться в зелёном прогоне; выполнить `openspec validate --change add-bybit-contract-unavailable-guard --strict`
+- [x] 5.1 Обновить `docs/research/bybit-api.md`: задокументировать отказ 110023 с фактическим текстом биржи «The contract is not available for trades» (расхождение с текстом официальной таблицы кодов) и graceful-пропуск области движками; проверить чтением секции
+- [x] 5.2 Запустить `dotnet test` по всем тестам проекта и убедиться в зелёном прогоне; выполнить `openspec validate --change add-bybit-contract-unavailable-guard --strict`

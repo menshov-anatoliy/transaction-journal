@@ -40,6 +40,17 @@ else
 			<li>Новых delivery-записей: @_result.Run.NewDeliveries</li>
 			<li>Новых инструментов в справочнике: @_result.Run.NewInstruments</li>
 		</ul>
+
+		@if (SkippedAreasOf(_result) is { Count: > 0 } skippedAreas)
+		{
+			@* Заметка стоит рядом с результатом запуска: пропуск области не помечает
+				запуск ошибкой, но данные области не загружены — перечень не должен
+				остаться незамеченным, в том числе при нулевых счётчиках записей. *@
+			<p role="note">
+				Пропущенные области (биржа отказала в истории: контракт недоступен для торговли):
+				@string.Join(", ", skippedAreas)
+			</p>
+		}
 	</section>
 
 	@if (_result.ProjectionError is not null)
@@ -141,6 +152,21 @@ else
 	private static string ModeLabel(SyncRunMode mode) => mode == SyncRunMode.Backfill
 		? "первичная загрузка (backfill)"
 		: "инкрементальная догрузка";
+
+	// Перечень пропущенных областей сводится из результатов обоих движков: метки
+	// формируют движки категорий, страница только показывает их пользователю —
+	// сначала области исполнения, затем delivery, в стабильном порядке по категориям.
+	// Traceability: openspec:sync/bybit-history#scenario-skipped-areas-reported-to-user
+	private static IReadOnlyList<string> SkippedAreasOf(JournalSyncResult result)
+	{
+		var executionAreas = result.Executions
+			.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+			.SelectMany(pair => pair.Value.SkippedAreas);
+		var deliveryAreas = result.Deliveries
+			.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+			.SelectMany(pair => pair.Value.SkippedAreas);
+		return executionAreas.Concat(deliveryAreas).ToList();
+	}
 
 	// Команда сброса требует подтверждения: выбор категории лишь показывает запрос
 	// подтверждения, фактический сброс состояния выполняет только явное подтверждение.

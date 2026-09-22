@@ -152,6 +152,63 @@ public class SyncPageTests
 	}
 
 	[TestMethod]
+	[Description("Завершённый запуск с пропущенными областями показывает заметку с перечнем и не помечается ошибкой")]
+	public void TryIfSkippedAreasNoteShownWhenRunSkippedUnavailableAreas()
+	{
+		// Arrange: запуск завершён успешно, но биржа отказала в истории двух областей:
+		// option-области исполнения (категория плюс базовый актив) и безфильтровой
+		// delivery-области (только категория).
+		// Требование: перечень пропущенных областей виден пользователю рядом с
+		// результатом запуска, при этом запуск не отображается как ошибка.
+		var service = new Mock<IJournalSyncService>();
+		service
+			.Setup(svc => svc.SyncAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateResultWithSkippedAreas());
+		_context.Services.AddSingleton(service.Object);
+
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Act: нажатие «Синхронизировать» запускает синк.
+		cut.Find("button").Click();
+
+		// Assert: заметка с перечнем меток пропущенных областей видна, статус запуска
+		// остаётся успешным — без блока прерывания.
+		// Traceability: openspec:sync/bybit-history#scenario-skipped-areas-reported-to-user
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("Синхронизация завершена"));
+			Assert.That(cut.Markup, Does.Not.Contain("Синхронизация прервана"));
+			Assert.That(cut.Find("p[role='note']").TextContent, Does.Contain("Пропущенные области"));
+			Assert.That(cut.Find("p[role='note']").TextContent, Does.Contain("контракт недоступен"));
+			Assert.That(cut.Find("p[role='note']").TextContent, Does.Contain("option:BTC"));
+			Assert.That(cut.Find("p[role='note']").TextContent, Does.Contain("linear"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Завершённый запуск без пропусков областей не показывает заметку о пропусках")]
+	public void TryIfNoSkippedAreasNoteWhenNothingWasSkipped()
+	{
+		// Arrange: обычный успешный запуск — все области загружены, пропусков нет.
+		var service = new Mock<IJournalSyncService>();
+		service
+			.Setup(svc => svc.SyncAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateCompletedResult());
+		_context.Services.AddSingleton(service.Object);
+
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Act: нажатие «Синхронизировать» запускает синк.
+		cut.Find("button").Click();
+
+		// Assert: результат показан, но заметки о пропущенных областях нет —
+		// пустой перечень не отображается.
+		cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Синхронизация завершена")));
+		Assert.That(cut.Markup, Does.Not.Contain("Пропущенные области"));
+		Assert.That(cut.Markup, Does.Not.Contain("Синхронизация прервана"));
+	}
+
+	[TestMethod]
 	[Description("Ошибка синка показывается на странице, кнопка остаётся доступной для повторного запуска")]
 	public void TryIfFailedSyncShowsErrorAndKeepsButtonForRetry()
 	{
@@ -239,6 +296,60 @@ public class SyncPageTests
 					SourceKey = "BTC-29DEC23-45000-C|1703846400000",
 				},
 			],
+		},
+	};
+
+	/// <summary>
+	/// Завершённый успешный запуск с пропуском двух областей из-за отказа биржи
+	/// «контракт недоступен для торговли»: option-область исполнения и безфильтровая
+	/// delivery-область. Счётчики новых записей нулевые — заметка о пропуске должна
+	/// быть видна и без новых записей.
+	/// </summary>
+	private static JournalSyncResult CreateResultWithSkippedAreas() => new()
+	{
+		Mode = SyncRunMode.Incremental,
+		Run = new SyncRun
+		{
+			StartedAt = new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero),
+			FinishedAt = new DateTimeOffset(2026, 1, 2, 0, 1, 0, TimeSpan.Zero),
+			Mode = SyncRunMode.Incremental,
+			Status = SyncRunStatus.Succeeded,
+			NewExecutions = 0,
+			NewDeliveries = 0,
+			NewInstruments = 0,
+		},
+		Executions = new Dictionary<string, ExecutionCategorySyncResult>(StringComparer.Ordinal)
+		{
+			["linear"] = new ExecutionCategorySyncResult
+			{
+				Mode = SyncRunMode.Incremental,
+				NewExecutions = [],
+				WindowsProcessed = 1,
+				HistoryExhausted = false,
+				EarlyStopped = true,
+				ExecWatermarkMs = 2,
+				NewExecutionsPersisted = 0,
+				SkippedAreas = ["option:BTC"],
+			},
+		},
+		Deliveries = new Dictionary<string, DeliveryCategorySyncResult>(StringComparer.Ordinal)
+		{
+			["linear"] = new DeliveryCategorySyncResult
+			{
+				Mode = SyncRunMode.Incremental,
+				NewDeliveries = [],
+				WindowsProcessed = 0,
+				HistoryExhausted = false,
+				DeliveryWatermarkMs = 2,
+				NewDeliveriesPersisted = 0,
+				SkippedAreas = ["linear"],
+			},
+		},
+		Projection = new JournalMaterializationResult
+		{
+			InboxTrades = [],
+			ExpiryClosingEntries = [],
+			ReconciliationWarnings = [],
 		},
 	};
 
