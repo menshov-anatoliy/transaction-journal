@@ -13,4 +13,13 @@ public sealed record ExecutionCategorySyncOptions
 	/// Traceability: change:add-bybit-sync/design#d4
 	/// </summary>
 	public long IncrementalOverlapMs { get; init; } = 86_400_000L;
+
+	/// <summary>
+	/// Глубина первичного backfill от момента запуска, мс; по умолчанию 730 дней — порядок
+	/// глубины хранения истории биржи. Окна листаются назад до этой границы, последнее окно
+	/// усекается до неё; пустое окно проход не завершает — перерыв в торговле не означает
+	/// отсутствие более старой истории.
+	/// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
+	/// </summary>
+	public long MaxBackfillDepthMs { get; init; } = 730 * 86_400_000L;
 }

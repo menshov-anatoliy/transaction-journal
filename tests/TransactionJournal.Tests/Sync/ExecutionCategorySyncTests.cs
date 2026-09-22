@@ -26,6 +26,7 @@ public class ExecutionCategorySyncTests
 	private ScriptedGateway _gateway = null!;
 	private FakeKnownIdProbe _knownIdProbe = null!;
 	private FakeStateStore _stateStore = null!;
+	private FakeOptionBaseCoinSource _optionBaseCoins = null!;
 	private ExecutionCategorySync _engine = null!;
 
 	[TestInitialize]
@@ -34,20 +35,24 @@ public class ExecutionCategorySyncTests
 		_gateway = new ScriptedGateway();
 		_knownIdProbe = new FakeKnownIdProbe();
 		_stateStore = new FakeStateStore();
-		_engine = new ExecutionCategorySync(new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, new ManualTimeProvider());
+		_optionBaseCoins = new FakeOptionBaseCoinSource("BTC");
+		_engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, _optionBaseCoins, new ManualTimeProvider());
 	}
 
 	[TestMethod]
 	[Description("Первый запуск без водяного знака выбирает backfill и фиксирует водяной знак с границей")]
 	public async Task TryIfFirstRunWithoutWatermarkChoosesBackfillAndFixesWatermarkAndBoundary()
 	{
-		// Arrange: состояние категории пустое — успешного синка ещё не было. Биржа отдаёт
-		// записи в двух окнах, третье окно пустое: глубже данных нет.
+		// Arrange: состояние категории пустое — успешного синка ещё не было. Глубина backfill
+		// ограничена тремя неделями: биржа отдаёт записи в двух окнах, третье окно пустое,
+		// но проход завершается только на полу глубины.
 		// Требование: при отсутствии отметки о завершённой синхронизации выполняется первичный
 		// backfill, по завершении фиксируются водяной знак и достигнутая граница истории.
 		// Traceability: openspec:sync/bybit-history#requirement-manual-sync-modes
 		// Traceability: openspec:sync/bybit-history#scenario-first-run-backfill
 		// Traceability: openspec:sync/bybit-history#scenario-backfill-depth-boundary
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 3 * WeekMs };
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
 		{
 			List = [Execution("exec-new-1", NowMs - 1_000)],
@@ -59,12 +64,15 @@ public class ExecutionCategorySyncTests
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 
 		// Act
-		var result = await _engine.RunAsync("linear");
+		var result = await _engine.RunAsync("linear", options);
 
-		// Assert: режим — первичный backfill, окна идут назад от момента запуска семидневным шагом.
+		// Assert: режим — первичный backfill, окна идут назад от момента запуска семидневным шагом
+		// до пола глубины; линейная категория запрашивается целиком, без фильтра по активу.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
 		Assert.That(result.Mode, Is.EqualTo(SyncRunMode.Backfill));
 		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
 		Assert.That(_gateway.Queries[0].Category, Is.EqualTo("linear"));
+		Assert.That(_gateway.Queries[0].BaseCoin, Is.Null);
 		Assert.That(_gateway.Queries[0].StartTimeMs, Is.EqualTo(NowMs - WeekMs));
 		Assert.That(_gateway.Queries[0].EndTimeMs, Is.EqualTo(NowMs));
 		Assert.That(_gateway.Queries[0].Limit, Is.EqualTo(100));
@@ -73,7 +81,7 @@ public class ExecutionCategorySyncTests
 		Assert.That(_gateway.Queries[2].StartTimeMs, Is.EqualTo(NowMs - 3 * WeekMs));
 		Assert.That(_gateway.Queries[2].EndTimeMs, Is.EqualTo(NowMs - 2 * WeekMs));
 
-		// Assert: обе записи новые, пустое окно означило исчерпание истории.
+		// Assert: обе записи новые, перебор дошёл до пола глубины.
 		Assert.That(result.NewExecutions.Select(execution => execution.ExecId),
 			Is.EqualTo(new[] { "exec-new-1", "exec-new-2" }));
 		Assert.That(result.WindowsProcessed, Is.EqualTo(3));
@@ -89,6 +97,121 @@ public class ExecutionCategorySyncTests
 		Assert.That(saved.LastSuccessAt, Is.EqualTo(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)));
 		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
 		Assert.That(result.BackfillBoundaryMs, Is.EqualTo(NowMs - 8 * DayMs));
+	}
+
+	[TestMethod]
+	[Description("Пустое окно не завершает backfill: записи за перерывом торговли загружаются")]
+	public async Task TryIfEmptyWindowDoesNotFinishBackfillPass()
+	{
+		// Arrange: глубина три недели; второе окно пустое — перерыв в торговле, третье окно
+		// за перерывом снова приносит запись.
+		// Требование: пустое окно не завершает проход — окна листаются назад до пола глубины,
+		// записи старее перерыва загружаются.
+		// Traceability: openspec:sync/bybit-history#scenario-trading-gap-does-not-truncate-history
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 3 * WeekMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-1", NowMs - DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-2", NowMs - 15 * DayMs)] });
+
+		// Act
+		var result = await _engine.RunAsync("linear", options);
+
+		// Assert: все три окна запрошены — пустое окно не остановило перебор.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId),
+			Is.EqualTo(new[] { "exec-1", "exec-2" }));
+		Assert.That(result.HistoryExhausted, Is.True);
+
+		// Assert: граница backfill — самая ранняя запись за перерывом торговли.
+		Assert.That(_stateStore.Find("linear")!.BackfillBoundaryMs, Is.EqualTo(NowMs - 15 * DayMs));
+	}
+
+	[TestMethod]
+	[Description("Backfill останавливается на полу глубины, последнее окно усекается до пола")]
+	public async Task TryIfBackfillWalkStopsAtDepthFloor()
+	{
+		// Arrange: глубина десять дней — пол между границами окон. Второе окно усекается
+		// до пола, третьего запроса быть не должно.
+		// Требование: backfill листает окна назад до границы максимальной глубины истории,
+		// после неё перебор исчерпан.
+		// Traceability: openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 10 * DayMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-1", NowMs - DayMs)] });
+
+		// Act
+		var result = await _engine.RunAsync("linear", options);
+
+		// Assert: ровно два окна, начало второго срезано полом глубины.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
+		Assert.That(_gateway.Queries[1].StartTimeMs, Is.EqualTo(NowMs - 10 * DayMs));
+		Assert.That(_gateway.Queries[1].EndTimeMs, Is.EqualTo(NowMs - WeekMs));
+		Assert.That(result.WindowsProcessed, Is.EqualTo(2));
+		Assert.That(result.HistoryExhausted, Is.True);
+	}
+
+	[TestMethod]
+	[Description("Backfill option отправляет запросы с каждым базовым активом из источника")]
+	public async Task TryIfOptionBackfillQueriesEveryBaseCoinFromSource()
+	{
+		// Arrange: источник доски отдаёт три актива, глубина одного окна — по области на актив.
+		// Требование: опционная доска проходится по каждому базовому активу отдельно, потому
+		// что без явного фильтра биржа отдаёт записи только одного актива.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH", "SOL");
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, optionBaseCoins, new ManualTimeProvider());
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-btc", NowMs - DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+
+		// Act
+		var result = await engine.RunAsync("option", options);
+
+		// Assert: по одному окну на каждый актив в порядке источника, фильтр проставлен во всех запросах.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		Assert.That(_gateway.Queries.Select(query => query.Category),
+			Is.EqualTo(new[] { "option", "option", "option" }));
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin),
+			Is.EqualTo(new[] { "BTC", "ETH", "SOL" }));
+		Assert.That(optionBaseCoins.Calls, Is.EqualTo(1));
+
+		// Assert: записи разных активов собираются в один проход, перебор исчерпан на полу.
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-btc" }));
+		Assert.That(result.WindowsProcessed, Is.EqualTo(3));
+		Assert.That(result.HistoryExhausted, Is.True);
+		Assert.That(_stateStore.Find("option")!.ExecWatermarkMs, Is.EqualTo(NowMs));
+	}
+
+	[TestMethod]
+	[Description("Инкремент option обходит область каждого актива, ранняя остановка не отменяет остальные")]
+	public async Task TryIfOptionIncrementalWalksEveryBaseCoinScope()
+	{
+		// Arrange: водяной знак трёхдневной давности, доска из двух активов. Страница BTC
+		// целиком известна — ранняя остановка, страница ETH приносит новую запись.
+		// Требование: области прохода обходятся и в инкрементальном режиме; остановка одной
+		// области не отменяет обход остальных.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		// Traceability: openspec:sync/bybit-history#scenario-subsequent-run-incremental
+		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, optionBaseCoins, new ManualTimeProvider());
+		await _stateStore.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = NowMs - 3 * DayMs });
+		_knownIdProbe.Know("exec-known");
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-known", NowMs - 2 * DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - 2 * DayMs)] });
+
+		// Act
+		var result = await engine.RunAsync("option");
+
+		// Assert: каждая область получила своё окно от знака минус перекрытие до момента запуска.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin), Is.EqualTo(new[] { "BTC", "ETH" }));
+		Assert.That(_gateway.Queries.All(query => query.StartTimeMs == NowMs - 3 * DayMs - DayMs), Is.True);
+		Assert.That(_gateway.Queries.All(query => query.EndTimeMs == NowMs), Is.True);
+
+		// Assert: BTC остановился рано на известной странице, ETH принёс новую запись.
+		Assert.That(result.EarlyStopped, Is.True);
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth" }));
 	}
 
 	[TestMethod]
@@ -162,30 +285,33 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
-	[Description("Повторный полный проход не запрашивает окна старее зафиксированной границы backfill")]
-	public async Task TryIfBackfillStopsAtFixedBoundaryOnRepeatedFullPass()
+	[Description("Зафиксированная граница backfill не ограничивает повторный полный проход")]
+	public async Task TryIfFixedBoundaryDoesNotClampRepeatedBackfill()
 	{
-		// Arrange: граница backfill уже зафиксирована десять дней назад, водяного знака нет —
-		// полный проход. Второе окно обрезается границей, третьего запроса не должно быть.
-		// Требование: достигнутая граница доступности фиксируется, повторные полные проходы
-		// не запрашивают данные старше границы.
+		// Arrange: граница backfill зафиксирована десять дней назад, водяного знака нет —
+		// полный проход глубиной три недели. Граница — только факт о самой ранней увиденной
+		// записи: окна листаются до пола глубины, а не до границы.
+		// Требование: граница фиксируется как факт синхронизации и не ограничивает глубину
+		// последующих проходов — повторные полные проходы листают окна до границы глубины.
 		// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
 		// Traceability: openspec:sync/bybit-history#scenario-backfill-depth-boundary
 		await _stateStore.SaveAsync(new SyncState { Category = "linear", BackfillBoundaryMs = NowMs - 10 * DayMs });
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 3 * WeekMs };
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-1", NowMs - DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-2", NowMs - 8 * DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 
 		// Act
-		var result = await _engine.RunAsync("linear");
+		var result = await _engine.RunAsync("linear", options);
 
-		// Assert: два окна, начало второго обрезано границей; глубже границы запросов нет.
+		// Assert: три окна до пола глубины — второе окно началось глубже зафиксированной границы.
 		Assert.That(result.Mode, Is.EqualTo(SyncRunMode.Backfill));
-		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
-		Assert.That(_gateway.Queries[1].StartTimeMs, Is.EqualTo(NowMs - 10 * DayMs));
-		Assert.That(_gateway.Queries[1].EndTimeMs, Is.EqualTo(NowMs - WeekMs));
-		Assert.That(result.HistoryExhausted, Is.False);
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		Assert.That(_gateway.Queries[1].StartTimeMs, Is.EqualTo(NowMs - 2 * WeekMs));
+		Assert.That(_gateway.Queries[2].StartTimeMs, Is.EqualTo(NowMs - 3 * WeekMs));
+		Assert.That(result.HistoryExhausted, Is.True);
 
-		// Assert: граница не откатилась — проход не читал глубже уже известной глубины.
+		// Assert: граница не откатилась — проход не увидел записей старше уже известной глубины.
 		Assert.That(_stateStore.Find("linear")!.BackfillBoundaryMs, Is.EqualTo(NowMs - 10 * DayMs));
 	}
 
@@ -194,23 +320,28 @@ public class ExecutionCategorySyncTests
 	public async Task TryIfBackfillBoundaryTrackedPerCategoryIndependently()
 	{
 		// Arrange: обе категории синхронизируются впервые, история разной глубины —
-		// linear заканчивается двумя днями назад, option пятью.
-		// Требование: backfill выполняется по каждой торговой категории отдельным проходом.
+		// linear заканчивается двумя днями назад, option пятью. Глубина двух окон.
+		// Требование: backfill выполняется по каждой торговой категории отдельным проходом,
+		// опционная категория — с фильтром по базовому активу области.
 		// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 2 * WeekMs };
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-linear", NowMs - 2 * DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-option", NowMs - 5 * DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 
 		// Act
-		var linearResult = await _engine.RunAsync("linear");
-		var optionResult = await _engine.RunAsync("option");
+		var linearResult = await _engine.RunAsync("linear", options);
+		var optionResult = await _engine.RunAsync("option", options);
 
-		// Assert: каждый проход запрашивал только свою категорию.
+		// Assert: каждый проход запрашивал только свою категорию; опционные окна несут
+		// фильтр актива из источника доски, линейные — без фильтра.
 		Assert.That(linearResult.Mode, Is.EqualTo(SyncRunMode.Backfill));
 		Assert.That(optionResult.Mode, Is.EqualTo(SyncRunMode.Backfill));
 		Assert.That(_gateway.Queries.Select(query => query.Category),
 			Is.EqualTo(new[] { "linear", "linear", "option", "option" }));
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin),
+			Is.EqualTo(new[] { null, null, "BTC", "BTC" }));
 
 		// Assert: состояния категорий независимы — своя граница и свой водяной знак.
 		var linearState = _stateStore.Find("linear");
@@ -233,19 +364,20 @@ public class ExecutionCategorySyncTests
 		// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
 		var writer = new FakeRawWriter();
 		var engine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, new ManualTimeProvider(), writer);
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, _optionBaseCoins, new ManualTimeProvider(), writer);
 		var progressRun = new SyncRun
 		{
 			StartedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
 			Mode = SyncRunMode.Backfill,
 			Status = SyncRunStatus.Running,
 		};
+		// Глубина двух окон: оба окна приносят по одной новой записи.
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 2 * WeekMs };
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-1", NowMs - DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-2", NowMs - 8 * DayMs)] });
-		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 
 		// Act
-		var result = await engine.RunAsync("linear", progressRun: progressRun);
+		var result = await engine.RunAsync("linear", options, progressRun);
 
 		// Assert: писателю ушли ровно две пачки — по свежим записям непустых окон.
 		Assert.That(writer.Batches, Has.Count.EqualTo(2));
@@ -315,26 +447,6 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
-	[DataRow(" ")]
-	[Description("Пустая категория отклоняется до обращения к шлюзу и хранилищу")]
-	[ExpectedException(typeof(ArgumentException))]
-	public async Task ThrowOnEmptyCategory(string category)
-	{
-		// Arrange — Act: категория — ключ состояния и обязательный параметр эндпоинта.
-		try
-		{
-			await _engine.RunAsync(category);
-		}
-		catch (ArgumentException)
-		{
-			// Assert: шлюз и хранилище не запрашивались.
-			Assert.That(_gateway.Queries, Is.Empty);
-			Assert.That(_stateStore.Saved, Is.Empty);
-			throw;
-		}
-	}
-
-	[TestMethod]
 	[Description("Нулевая категория отклоняется до обращения к шлюзу и хранилищу")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public async Task ThrowOnNullCategory()
@@ -376,20 +488,51 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
+	[Description("Неположительная глубина backfill отклоняется до обращения к шлюзу и хранилищу")]
+	[ExpectedException(typeof(ArgumentOutOfRangeException))]
+	public async Task ThrowOnNonPositiveMaxBackfillDepth()
+	{
+		// Arrange: неположительный пол глубины сделал бы backfill пустым или бесконечным.
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 0 };
+
+		// Act — некорректная глубина прерывается до чтения состояния и запросов.
+		try
+		{
+			await _engine.RunAsync("linear", options);
+		}
+		catch (ArgumentOutOfRangeException)
+		{
+			// Assert: шлюз и хранилище не запрашивались.
+			Assert.That(_gateway.Queries, Is.Empty);
+			Assert.That(_stateStore.FindCalls, Is.Zero);
+			throw;
+		}
+	}
+
+	[TestMethod]
 	[DataRow(true)]
 	[DataRow(false)]
+	[DataRow(false, false)]
+	[DataRow(false, false, false)]
 	[Description("Нулевая зависимость конструктора отклоняется")]
 	[ExpectedException(typeof(ArgumentNullException))]
-	public void ThrowOnNullConstructorDependency(bool nullWindowPass)
+	public void ThrowOnNullConstructorDependency(
+		bool nullWindowPass,
+		bool nullStateStore = true,
+		bool nullOptionBaseCoins = true)
 	{
-		// Arrange — Act: проход окна и хранилище состояния обязательны для движка.
+		// Arrange — Act: проход окна, хранилище состояния и источник активов обязательны движку.
 		if (nullWindowPass)
 		{
-			new ExecutionCategorySync(null!, _stateStore);
+			new ExecutionCategorySync(null!, _stateStore, _optionBaseCoins);
+		}
+		else if (nullStateStore)
+		{
+			new ExecutionCategorySync(new ExecutionWindowPass(_gateway, _knownIdProbe), null!, _optionBaseCoins);
 		}
 		else
 		{
-			new ExecutionCategorySync(new ExecutionWindowPass(_gateway, _knownIdProbe), null!);
+			new ExecutionCategorySync(new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, null!);
 		}
 	}
 
@@ -406,6 +549,29 @@ public class ExecutionCategorySyncTests
 	#endregion
 
 	#region Фиктивные зависимости
+
+	/// <summary>
+	/// Фиктивный источник базовых активов опционной доски: возвращает заготовленный
+	/// список активов и помнит число обращений за списком.
+	/// </summary>
+	private sealed class FakeOptionBaseCoinSource : IOptionBaseCoinSource
+	{
+		private readonly IReadOnlyList<string> _baseCoins;
+
+		public FakeOptionBaseCoinSource(params string[] baseCoins)
+		{
+			_baseCoins = baseCoins;
+		}
+
+		/// <summary>Сколько раз движок запрашивал список активов.</summary>
+		public int Calls { get; private set; }
+
+		public Task<IReadOnlyList<string>> GetBaseCoinsAsync(CancellationToken cancellationToken = default)
+		{
+			Calls++;
+			return Task.FromResult(_baseCoins);
+		}
+	}
 
 	/// <summary>
 	/// Фиктивный шлюз биржи: раздаёт заготовленные страницы и ошибки по порядку и помнит

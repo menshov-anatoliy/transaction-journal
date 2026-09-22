@@ -23,6 +23,7 @@ public class ExecutionHistorySyncTests
 	private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 	private static readonly long NowMs = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
 	private static readonly long DayMs = 86_400_000L;
+	private static readonly long WeekMs = ExecutionWindowPass.MaxWindowMs;
 
 	private string _databasePath = null!;
 	private JournalSyncStore _store = null!;
@@ -44,7 +45,7 @@ public class ExecutionHistorySyncTests
 		_store = new JournalSyncStore(CreateOptions(), new ManualTimeProvider());
 		_gateway = new ScriptedGateway();
 		var engine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _store), _store, new ManualTimeProvider(), _store);
+			new ExecutionWindowPass(_gateway, _store), _store, new FakeOptionBaseCoinSource("BTC"), new ManualTimeProvider(), _store);
 		_orchestrator = new ExecutionHistorySync(engine, _store, _store);
 	}
 
@@ -100,13 +101,15 @@ public class ExecutionHistorySyncTests
 		Assert.That(LoadState("linear"), Is.Null);
 
 		// Arrange (прогон 2): биржа снова отдаёт те же два окна (повторное чтение с места
-		// остановки) и пустое третье окно — история исчерпана.
+		// остановки), третье окно пустое, пол глубины трёх недель завершает перебор.
 		_gateway.Enqueue(Page(Execution("exec-1", NowMs - DayMs)));
 		_gateway.Enqueue(Page(Execution("exec-2", NowMs - 8 * DayMs)));
 		_gateway.Enqueue(Page());
 
 		// Act (прогон 2): повторный запуск завершается успешно.
-		var result = await _orchestrator.RunAsync(categories: new[] { "linear" });
+		var result = await _orchestrator.RunAsync(
+			categories: new[] { "linear" },
+			options: new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 3 * WeekMs });
 
 		// Assert (прогон 2): сохранённые записи распознаны известными и не задублированы —
 		// в хранилище по-прежнему ровно две записи.
@@ -142,7 +145,8 @@ public class ExecutionHistorySyncTests
 	[Description("Успешный первый запуск пишет сырые пачки, ведёт счётчик и фиксирует состояние")]
 	public async Task TryIfSuccessfulFirstRunWritesBatchesAndCounts()
 	{
-		// Arrange: первый запуск — backfill; первое окно приносит две записи, второе пустое.
+		// Arrange: первый запуск — backfill глубиной двух окон; первое окно приносит две
+		// записи, второе пустое, на полу глубины перебор исчерпан.
 		// Требование: первичный backfill сохраняет все полученные записи исполнения
 		// и по завершении фиксирует водяной знак успешной синхронизации.
 		// Traceability: openspec:sync/bybit-history#scenario-first-run-backfill
@@ -151,7 +155,9 @@ public class ExecutionHistorySyncTests
 		_gateway.Enqueue(Page());
 
 		// Act
-		var result = await _orchestrator.RunAsync(categories: new[] { "linear" });
+		var result = await _orchestrator.RunAsync(
+			categories: new[] { "linear" },
+			options: new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 2 * WeekMs });
 
 		// Assert: обе записи сохранены в хранилище с сырым JSON и отметкой загрузки.
 		var saved = LoadRawExecutions();
@@ -171,18 +177,21 @@ public class ExecutionHistorySyncTests
 	[Description("Категории одного запуска делят общую строку SyncRun и сумму счётчиков")]
 	public async Task TryIfBothCategoriesShareSingleRunWithCommonCounters()
 	{
-		// Arrange: обе категории синхронизируются впервые, по одной записи и пустому окну каждая.
+		// Arrange: обе категории синхронизируются впервые, по одной записи и пустому окну
+		// каждая; глубина backfill ограничена двумя окнами. Опционная категория проходится
+		// областью единственного актива заглушки источника.
 		// Требование: backfill выполняется по каждой торговой категории отдельным проходом,
 		// а запуск синхронизации у общей кнопки один.
 		// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
 		// Traceability: openspec:sync/bybit-history#requirement-manual-sync-modes
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 2 * WeekMs };
 		_gateway.Enqueue(Page(Execution("exec-linear", NowMs - DayMs)));
 		_gateway.Enqueue(Page());
 		_gateway.Enqueue(Page(Execution("exec-option", NowMs - 3 * DayMs)));
 		_gateway.Enqueue(Page());
 
 		// Act: запуск по категориям по умолчанию — linear и option.
-		var result = await _orchestrator.RunAsync();
+		var result = await _orchestrator.RunAsync(options: options);
 
 		// Assert: каждая категория запрашивалась своим проходом.
 		Assert.That(_gateway.Queries.Select(query => query.Category),
@@ -264,7 +273,7 @@ public class ExecutionHistorySyncTests
 	#region Помощники
 
 	private ExecutionCategorySync CreateEngine() =>
-		new(new ExecutionWindowPass(_gateway, _store), _store, new ManualTimeProvider(), _store);
+		new(new ExecutionWindowPass(_gateway, _store), _store, new FakeOptionBaseCoinSource("BTC"), new ManualTimeProvider(), _store);
 
 	private static BybitExecution Execution(string execId, long execTimeMs) => new()
 	{
@@ -305,6 +314,23 @@ public class ExecutionHistorySyncTests
 	#endregion
 
 	#region Фиктивные зависимости
+
+	/// <summary>
+	/// Фиктивный источник базовых активов опционной доски: возвращает заготовленный
+	/// список активов без обращений к бирже.
+	/// </summary>
+	private sealed class FakeOptionBaseCoinSource : IOptionBaseCoinSource
+	{
+		private readonly IReadOnlyList<string> _baseCoins;
+
+		public FakeOptionBaseCoinSource(params string[] baseCoins)
+		{
+			_baseCoins = baseCoins;
+		}
+
+		public Task<IReadOnlyList<string>> GetBaseCoinsAsync(CancellationToken cancellationToken = default) =>
+			Task.FromResult(_baseCoins);
+	}
 
 	/// <summary>
 	/// Фиктивный шлюз биржи: раздаёт заготовленные страницы и ошибки по порядку и помнит

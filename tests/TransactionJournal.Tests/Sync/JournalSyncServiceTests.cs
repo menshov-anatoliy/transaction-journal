@@ -27,6 +27,7 @@ public class JournalSyncServiceTests
 	private static readonly DateTimeOffset Now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 	private static readonly long NowMs = Now.ToUnixTimeMilliseconds();
 	private static readonly long DayMs = 86_400_000L;
+	private static readonly long WeekMs = ExecutionWindowPass.MaxWindowMs;
 
 	/// <summary>Каноническое время delivery опциона: 15DEC25 08:00 UTC.</summary>
 	private static readonly long OptionDeliveryMs =
@@ -51,9 +52,14 @@ public class JournalSyncServiceTests
 		_gateway = new ScriptedExchangeGateway();
 
 		// Полный стек оркестратора: движки категорий с писателями сырых записей,
-		// пополнитель справочника и материализатор над одним хранилищем.
+		// пополнитель справочника и материализатор над одним хранилищем. Список активов
+		// опционной доски отдаёт заглушка: один базовый актив, без обращения к справочнику.
 		var executionEngine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _store), _store, new ManualTimeProvider(), _store);
+			new ExecutionWindowPass(_gateway, _store),
+			_store,
+			new FakeOptionBaseCoinSource("BTC"),
+			new ManualTimeProvider(),
+			_store);
 		var deliveryEngine = new DeliveryCategorySync(
 			new DeliveryWindowPass(_gateway, _store), _store, new ManualTimeProvider(), _store);
 		_service = new JournalSyncService(
@@ -88,17 +94,16 @@ public class JournalSyncServiceTests
 	public async Task TryIfFirstRunBackfillsAllCategoriesAndBuildsProjection()
 	{
 		// Arrange: биржа отдаёт по категориям линейную сделку перпа и покупку колла,
-		// delivery-запись экспирации колла и спецификации обоих инструментов.
+		// delivery-запись экспирации колла и спецификации обоих инструментов. Окна старее
+		// первого шлюз отвечает пустыми страницами без расходования сценария.
 		// Требование: по единственной команде система сама выполняет первичный backfill
 		// всей доступной истории и экспираций, новые записи попадают во «Входящие»,
 		// а расхождение с deliveryRpl показывается предупреждением.
 		// Traceability: openspec:sync/bybit-history#scenario-first-run-backfill
 		// Traceability: openspec:sync/bybit-history#scenario-delivery-reconciliation-warning
 		_gateway.EnqueueExecution(ExecutionPage(LinearExecution()));
-		_gateway.EnqueueExecution(ExecutionPage());
-		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.EnqueueExecution(ExecutionPage(OptionExecution()));
-		_gateway.EnqueueExecution(ExecutionPage());
+		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.EnqueueDelivery(DeliveryPage(OptionDelivery()));
 		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.AddInstrument(LinearInstrument());
@@ -213,16 +218,15 @@ public class JournalSyncServiceTests
 	[Description("Сбой материализации не рушит запуск: сырые записи сохранены, причина показывается текстом")]
 	public async Task TryIfProjectionFailureKeepsSuccessfulRunWithErrorText()
 	{
-		// Arrange: биржа отдаёт сделку опциона, чью спецификацию не знает и эндпоинт
-		// справочника — символ остаётся без канонических данных, материализация
-		// останавливается на сверке со справочником.
+		// Arrange: первое окно исполнения linear пусто, опционное окно отдаёт сделку
+		// пута, чью спецификацию не знает и эндпоинт справочника — символ остаётся без
+		// канонических данных, материализация останавливается на сверке со справочником.
 		// Требование: сырые записи сохраняются целиком и достаточны для переразбора,
 		// поэтому сбой проекции не отменяет синхронизацию.
 		// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
 		_gateway.EnqueueExecution(ExecutionPage());
-		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.EnqueueExecution(ExecutionPage(OptionExecution("BTC-15DEC25-45000-P")));
-		_gateway.EnqueueExecution(ExecutionPage());
+		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.EnqueueDelivery(DeliveryPage());
 
 		// Act
@@ -245,14 +249,14 @@ public class JournalSyncServiceTests
 	/// <summary>Прогон первичного backfill тех же данных, что в первом сценарии.</summary>
 	private async Task RunFirstBackfillAsync()
 	{
-		// Порядок заготовок повторяет порядок запросов оркестратора: линейная категория
-		// проходит исполнение и доставку, затем опционная; пустое окно останавливает
-		// backfill-проход одной категории одним запросом.
+		// Порядок заготовок повторяет порядок «свежих» окон оркестратора: первое окно
+		// исполнения linear, затем первое окно option; окна глубже пола первой недели
+		// шлюз отвечает пустыми страницами без расходования сценария. Delivery-страницы
+		// раздаются по порядку: linear завершается на пустом окне, option — на записи
+		// и пустом окне.
 		_gateway.EnqueueExecution(ExecutionPage(LinearExecution()));
-		_gateway.EnqueueExecution(ExecutionPage());
-		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.EnqueueExecution(ExecutionPage(OptionExecution()));
-		_gateway.EnqueueExecution(ExecutionPage());
+		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.EnqueueDelivery(DeliveryPage(OptionDelivery()));
 		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.AddInstrument(LinearInstrument());
@@ -354,6 +358,23 @@ public class JournalSyncServiceTests
 	#region Фиктивная биржа
 
 	/// <summary>
+	/// Фиктивный источник базовых активов опционной доски: возвращает заготовленный
+	/// список активов без обращений к бирже.
+	/// </summary>
+	private sealed class FakeOptionBaseCoinSource : IOptionBaseCoinSource
+	{
+		private readonly IReadOnlyList<string> _baseCoins;
+
+		public FakeOptionBaseCoinSource(params string[] baseCoins)
+		{
+			_baseCoins = baseCoins;
+		}
+
+		public Task<IReadOnlyList<string>> GetBaseCoinsAsync(CancellationToken cancellationToken = default) =>
+			Task.FromResult(_baseCoins);
+	}
+
+	/// <summary>
 	/// Фиктивная биржа: раздаёт заготовленные страницы истории исполнения, delivery-записей
 	/// и спецификаций инструментов по порядку и помнит все запросы. При исчерпании
 	/// сценария отвечает пустой страницей без курсора, а спецификации — фильтром по символу.
@@ -398,6 +419,14 @@ public class JournalSyncServiceTests
 			CancellationToken cancellationToken = default)
 		{
 			ExecutionQueries.Add(query);
+			// Окно старее первого отвечает пустой страницей без расходования сценария:
+			// backfill листает окна до пола глубины, и заготовленных страниц на каждое
+			// окно перебора не существует — содержательны только самые свежие окна.
+			if (query.StartTimeMs < NowMs - WeekMs)
+			{
+				return Task.FromResult(new BybitPagedResponse<BybitExecution>());
+			}
+
 			return Task.FromResult(DequeuePage<BybitExecution>(_executionResponses));
 		}
 

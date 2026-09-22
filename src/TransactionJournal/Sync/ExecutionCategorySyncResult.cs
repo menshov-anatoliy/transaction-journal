@@ -15,7 +15,7 @@ public sealed class ExecutionCategorySyncResult
 	/// <summary>Сколько 7-дневных окон обработано запуском.</summary>
 	public required int WindowsProcessed { get; init; }
 
-	/// <summary>Backfill дошёл до исчерпания данных биржи: очередное окно вернулось пустым.</summary>
+	/// <summary>Backfill дошёл до пола глубины: перебор окон истории категории исчерпан.</summary>
 	public required bool HistoryExhausted { get; init; }
 
 	/// <summary>Инкрементальная догрузка остановилась на целиком известной странице.</summary>

@@ -12,9 +12,9 @@
 
 ## 3. Движок синхронизации исполнений
 
-- [ ] 3.1 Научить `ExecutionCategorySync` строить области прохода: linear — одна область без фильтра, option — область на каждый актив из `IOptionBaseCoinSource`; обойти области в режимах backfill и инкремента, водяной знак фиксировать после успешного прохода всех активов; проверить тестом `ExecutionCategorySyncTests`: backfill option отправляет запросы с каждым активом из заглушки источника, линейная категория — без `baseCoin`
-- [ ] 3.2 Добавить `MaxBackfillDepthMs` в `ExecutionCategorySyncOptions` (дефолт 730 дней): backfill листает окна назад до пола глубины, последнее окно усекается до пола; удалить остановку по пустому окну и кламп окна по `BackfillBoundaryMs`, границу продолжать записывать как факт; проверить тестами: пустые окна не завершают проход (scenario-trading-gap-does-not-truncate-history), проход останавливается на полу (scenario-backfill-pages-until-exhaustion), короткая `MaxBackfillDepthMs` в опциях ускоряет тесты
-- [ ] 3.3 Обновить существующие тесты `ExecutionCategorySync`/`ExecutionHistorySync` под новую семантику остановки (тесты «исчерпание пустым окном» заменить на «пол глубины»); проверить `dotnet test` без падений
+- [x] 3.1 Научить `ExecutionCategorySync` строить области прохода: linear — одна область без фильтра, option — область на каждый актив из `IOptionBaseCoinSource`; обойти области в режимах backfill и инкремента, водяной знак фиксировать после успешного прохода всех активов; проверить тестом `ExecutionCategorySyncTests`: backfill option отправляет запросы с каждым активом из заглушки источника, линейная категория — без `baseCoin`
+- [x] 3.2 Добавить `MaxBackfillDepthMs` в `ExecutionCategorySyncOptions` (дефолт 730 дней): backfill листает окна назад до пола глубины, последнее окно усекается до пола; удалить остановку по пустому окну и кламп окна по `BackfillBoundaryMs`, границу продолжать записывать как факт; проверить тестами: пустые окна не завершают проход (scenario-trading-gap-does-not-truncate-history), проход останавливается на полу (scenario-backfill-pages-until-exhaustion), короткая `MaxBackfillDepthMs` в опциях ускоряет тесты
+- [x] 3.3 Обновить существующие тесты `ExecutionCategorySync`/`ExecutionHistorySync` под новую семантику остановки (тесты «исчерпание пустым окном» заменить на «пол глубины»); проверить `dotnet test` без падений
 
 ## 4. Delivery-движок
 

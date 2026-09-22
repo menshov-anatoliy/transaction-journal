@@ -104,10 +104,17 @@ public class ReadOnlyAccessAcceptanceTests
 			timeProvider: new ManualTimeProvider());
 		var gateway = new BybitHistoryGateway(client);
 
-		// Полный стек оркестратора на production-шлюзе и реальном хранилище.
+		// Полный стек оркестратора на production-шлюзе и реальном хранилище; список
+		// активов опционной доски отдаёт заглушка — приёмочная проверка читает только
+		// read-only эндпоинты истории, доставки и справочника.
 		var store = new JournalSyncStore(CreateOptions(), new ManualTimeProvider());
 		var service = new JournalSyncService(
-			new ExecutionCategorySync(new ExecutionWindowPass(gateway, store), store, new ManualTimeProvider(), store),
+			new ExecutionCategorySync(
+				new ExecutionWindowPass(gateway, store),
+				store,
+				new FakeOptionBaseCoinSource("BTC"),
+				new ManualTimeProvider(),
+				store),
 			new DeliveryCategorySync(new DeliveryWindowPass(gateway, store), store, new ManualTimeProvider(), store),
 			new InstrumentReferenceSync(gateway, store),
 			store,
@@ -290,6 +297,23 @@ public class ReadOnlyAccessAcceptanceTests
 		new DbContextOptionsBuilder<JournalDbContext>()
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
+
+	/// <summary>
+	/// Фиктивный источник базовых активов опционной доски: возвращает заготовленный
+	/// список активов без обращений к бирже.
+	/// </summary>
+	private sealed class FakeOptionBaseCoinSource : IOptionBaseCoinSource
+	{
+		private readonly IReadOnlyList<string> _baseCoins;
+
+		public FakeOptionBaseCoinSource(params string[] baseCoins)
+		{
+			_baseCoins = baseCoins;
+		}
+
+		public Task<IReadOnlyList<string>> GetBaseCoinsAsync(CancellationToken cancellationToken = default) =>
+			Task.FromResult(_baseCoins);
+	}
 
 	#endregion
 }
