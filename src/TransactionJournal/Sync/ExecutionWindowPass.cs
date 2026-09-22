@@ -65,10 +65,13 @@ public sealed class ExecutionWindowPass
 			cancellationToken.ThrowIfCancellationRequested();
 
 			// Каждая страница запрашивается границами окна и курсором предыдущего ответа;
-			// первый запрос уходит без курсора.
+			// первый запрос уходит без курсора. Фильтр базового актива окна переносится в
+			// запрос: без него опционная доска отдаёт записи только одного актива по умолчанию.
+			// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
 			var query = new BybitExecutionListQuery
 			{
 				Category = window.Category,
+				BaseCoin = window.BaseCoin,
 				StartTimeMs = window.StartMs,
 				EndTimeMs = window.EndMs,
 				Limit = options.PageSize,

@@ -2,13 +2,13 @@
 
 ## 1. Окно прохода с базовым активом
 
-- [ ] 1.1 Добавить nullable-поле `BaseCoin` в `ExecutionWindow` и прокладывать его в `BybitExecutionListQuery.BaseCoin` внутри `ExecutionWindowPass`; проверить тестом `ExecutionWindowPassTests`: запрос содержит `baseCoin` когда поле задано и не содержит когда null
-- [ ] 1.2 Снабдить затронутые смысловые блоки traceability-метками `openspec:sync/bybit-history#requirement-option-base-coin-coverage`; проверить rg-поиском, что каждая ссылка разрешается в `Traceability ID` delta-spec
+- [x] 1.1 Добавить nullable-поле `BaseCoin` в `ExecutionWindow` и прокладывать его в `BybitExecutionListQuery.BaseCoin` внутри `ExecutionWindowPass`; проверить тестом `ExecutionWindowPassTests`: запрос содержит `baseCoin` когда поле задано и не содержит когда null
+- [x] 1.2 Снабдить затронутые смысловые блоки traceability-метками `openspec:sync/bybit-history#requirement-option-base-coin-coverage`; проверить rg-поиском, что каждая ссылка разрешается в `Traceability ID` delta-spec
 
 ## 2. Источник списка базовых активов
 
-- [ ] 2.1 Создать `IOptionBaseCoinSource` и реализацию над `IBybitInstrumentSource`: листать `instruments-info?category=option` страницами `limit=1000` курсором до исчерпания, собрать distinct `baseCoin`, объединить с конфигурируемым списком дополнительных активов, вернуть в детерминированном порядке; проверить тестами: несколько страниц курсором, пустая доска, дедуп повторных активов, доп. актив из конфигурации попадает в список
-- [ ] 2.2 Провести зависимость в DI (`Program.cs`) как transient-реализацию над шлюзом; проверить сборкой `dotnet build`
+- [x] 2.1 Создать `IOptionBaseCoinSource` и реализацию над `IBybitInstrumentSource`: листать `instruments-info?category=option` страницами `limit=1000` курсором до исчерпания, собрать distinct `baseCoin`, объединить с конфигурируемым списком дополнительных активов, вернуть в детерминированном порядке; проверить тестами: несколько страниц курсором, пустая доска, дедуп повторных активов, доп. актив из конфигурации попадает в список
+- [x] 2.2 Провести зависимость в DI (`Program.cs`) как transient-реализацию над шлюзом; проверить сборкой `dotnet build`
 
 ## 3. Движок синхронизации исполнений
 

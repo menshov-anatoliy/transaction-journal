@@ -144,6 +144,52 @@ public class ExecutionWindowPassTests
 	}
 
 	[TestMethod]
+	[Description("Окно с базовым активом уходит в запрос с фильтром baseCoin")]
+	public async Task TryIfWindowBaseCoinIsSentInQuery()
+	{
+		// Arrange: опционное окно с фильтром базового актива — без явного baseCoin биржа
+		// отдаёт записи только одного актива доски, поэтому фильтр обязан дойти до запроса.
+		// Требование: история исполнения option запрашивается по каждому базовому активу.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("exec-opt-1", WindowEndMs - 1)],
+		});
+
+		// Act
+		var result = await _pass.RunAsync(Window("option") with { BaseCoin = "ETH" });
+
+		// Assert: запрос несёт категорию, фильтр базового актива и границы окна.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(1));
+		Assert.That(_gateway.Queries[0].Category, Is.EqualTo("option"));
+		Assert.That(_gateway.Queries[0].BaseCoin, Is.EqualTo("ETH"));
+		Assert.That(_gateway.Queries[0].StartTimeMs, Is.EqualTo(WindowStartMs));
+		Assert.That(_gateway.Queries[0].EndTimeMs, Is.EqualTo(WindowEndMs));
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-opt-1" }));
+	}
+
+	[TestMethod]
+	[Description("Окно без базового актива уходит в запрос без фильтра baseCoin")]
+	public async Task TryIfWindowWithoutBaseCoinSendsNoBaseCoinFilter()
+	{
+		// Arrange: линейная доска отдаёт все символы категории без фильтров —
+		// окно без baseCoin обязано уйти в запрос без параметра baseCoin.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("exec-1", WindowEndMs - 1)],
+		});
+
+		// Act
+		var result = await _pass.RunAsync(Window());
+
+		// Assert: фильтр базового актива в запросе не задан.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(1));
+		Assert.That(_gateway.Queries[0].BaseCoin, Is.Null);
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-1" }));
+	}
+
+	[TestMethod]
 	[DataRow(0L)]
 	[DataRow(-1L)]
 	[DataRow(604800001L)]

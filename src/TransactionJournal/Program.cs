@@ -64,6 +64,12 @@ builder.Services.AddHttpClient<BybitTickersClient>();
 builder.Services.AddTransient<BybitHistoryGateway>();
 builder.Services.AddTransient<IBybitHistoryGateway>(sp => sp.GetRequiredService<BybitHistoryGateway>());
 builder.Services.AddTransient<IBybitInstrumentSource>(sp => sp.GetRequiredService<BybitHistoryGateway>());
+// Список базовых активов опционной доски строится над тем же шлюзом спецификаций;
+// конфигурируемые дополнения (делистнутые доски) подключит задача 6.1 при чтении
+// Sync:ExtraOptionBaseCoins из конфигурации.
+// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+builder.Services.AddTransient<IOptionBaseCoinSource>(sp => new OptionBaseCoinSource(
+	sp.GetRequiredService<IBybitInstrumentSource>()));
 builder.Services.AddTransient<ExecutionWindowPass>();
 builder.Services.AddTransient<DeliveryWindowPass>();
 builder.Services.AddTransient<ExecutionCategorySync>();
