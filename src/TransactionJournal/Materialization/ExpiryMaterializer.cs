@@ -58,7 +58,7 @@ public sealed class ExpiryMaterializer
 	/// <exception cref="ArgumentNullException">Сырые записи не заданы.</exception>
 	/// <exception cref="ExpiryMaterializationException">Delivery-запись повреждена, неполна или конфликтует с другой записью того же ключа.</exception>
 	/// <exception cref="TradeMaterializationException">Сырая запись исполнения повреждена.</exception>
-	/// <exception cref="InstrumentResolveException">Символ опциона delivery-записи не прошёл сверку со справочником инструментов.</exception>
+	/// <exception cref="InstrumentResolveException">Символ опциона delivery-записи расходится со справочником инструментов.</exception>
 	public ExpiryMaterializationResult Materialize(
 		IEnumerable<RawExecution> rawExecutions,
 		IEnumerable<RawDelivery> rawDeliveries,
@@ -68,7 +68,17 @@ public sealed class ExpiryMaterializer
 		ArgumentNullException.ThrowIfNull(rawExecutions);
 		ArgumentNullException.ThrowIfNull(rawDeliveries);
 
-		var trades = _tradeMaterializer.Materialize(rawExecutions);
+		// Записи исполнения без спецификации в справочнике откладываются вместе со
+		// сделками: остатков по таким символам здесь нет, значит закрывающие записи
+		// и OTM-автозакрытие по ним не строятся — деградация едина для всего слоя.
+		var tradeResult = _tradeMaterializer.Materialize(rawExecutions);
+		var trades = tradeResult.Trades;
+		var unresolvedSymbols = new SortedSet<string>(StringComparer.Ordinal);
+		foreach (var symbol in tradeResult.UnresolvedSymbols)
+		{
+			unresolvedSymbols.Add(symbol);
+		}
+
 		var assignments = tradeAssignments ?? new Dictionary<string, string?>();
 
 		// Остаток конструкции по инструменту — чистая сумма знаковых количеств сделок;
@@ -121,8 +131,25 @@ public sealed class ExpiryMaterializer
 				continue;
 			}
 
+			ResolvedOptionInstrument resolved;
+			try
+			{
+				resolved = _instrumentResolver.ResolveOption(delivery.Record.Symbol);
+			}
+			catch (InstrumentResolveException exception)
+				when (exception.Reason == InstrumentResolveFailureReason.UnknownSymbol)
+			{
+				// Delivery-запись делистнутого инструмента откладывается: закрывающая
+				// запись по ней не строится, символ попадает в перечень неразрешённых,
+				// материализация остальных записей продолжается. Сделки того же символа
+				// уже отложены, поэтому и OTM-автозакрытие не выводится.
+				// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+				unresolvedSymbols.Add(exception.Symbol);
+				continue;
+			}
+
 			deliveredSymbols.Add(delivery.Record.Symbol);
-			AppendDeliveryClosingEntries(delivery, residualsBySymbol, tradeFlowBySymbol, closingEntries, warnings);
+			AppendDeliveryClosingEntries(delivery, resolved, residualsBySymbol, tradeFlowBySymbol, closingEntries, warnings);
 		}
 
 		AppendOtmExpiryClosingEntries(residualsBySymbol, optionBySymbol, deliveredSymbols, asOf, closingEntries);
@@ -138,6 +165,7 @@ public sealed class ExpiryMaterializer
 				.OrderBy(warning => warning.DeliveryTime)
 				.ThenBy(warning => warning.Symbol, StringComparer.Ordinal)
 				.ToList(),
+			UnresolvedSymbols = unresolvedSymbols.ToList(),
 		};
 	}
 
@@ -155,13 +183,13 @@ public sealed class ExpiryMaterializer
 	// Traceability: adr:docs/adr/0002-option-expiry-closing-entries.md#option-expiry-closing-entries
 	private void AppendDeliveryClosingEntries(
 		ParsedDelivery delivery,
+		ResolvedOptionInstrument resolved,
 		Dictionary<string, List<ConstructionResidual>> residualsBySymbol,
 		Dictionary<string, decimal> tradeFlowBySymbol,
 		List<ExpiryClosingEntry> closingEntries,
 		List<ExpiryReconciliationWarning> warnings)
 	{
 		var record = delivery.Record;
-		var resolved = _instrumentResolver.ResolveOption(record.Symbol);
 
 		// Каноническое deliveryTime хранит справочник; запись биржи может нести миллисекунды
 		// внутри минуты доставки, поэтому сверяются даты, а моментом закрытия остаётся

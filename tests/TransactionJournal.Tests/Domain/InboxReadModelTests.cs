@@ -154,6 +154,35 @@ public class InboxReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Исполнение опциона без спецификации не роняет «Входящие»: сделка отложена, остальные выведены")]
+	public async Task TryIfUnknownSymbolTradesAreSkippedAndOthersListed()
+	{
+		// Arrange: среди сырых исполнений есть опцион ETH, чьей спецификации нет
+		// в справочнике, и разрешимые записи — опцион BTC и линейный перп.
+		// Требование: read-модель деградирует вместе с материализатором — сделки
+		// без спецификации не попадают во «Входящие» и не роняют чтение исключением.
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbols-reported-to-user
+		var firstMs = ExecMs(2023, 12, 28, 10, 0);
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawExecutions.Add(Raw("exec-eth", "option", "ETH-29DEC23-2000-C", firstMs,
+				ExecutionPayload("exec-eth", "ETH-29DEC23-2000-C", "Buy", "200", "1", "0.02", "USDC", firstMs)));
+			db.RawExecutions.Add(RawOption("exec-opt-buy", "Buy", firstMs));
+			db.RawExecutions.Add(Raw("exec-linear-sell", "linear", "BTCUSDT", ExecMs(2023, 12, 28, 10, 30),
+				ExecutionPayload("exec-linear-sell", "BTCUSDT", "Sell", "42000", "0.01", "-0.0001", "BTC", ExecMs(2023, 12, 28, 10, 30))));
+			await db.SaveChangesAsync();
+		}
+
+		// Act: чтение «Входящих» не бросает исключения сверки по неизвестному символу.
+		var inbox = await _readModel.ListAsync();
+
+		// Assert: сделка отложенного символа во «Входящих» не появилась, остальные
+		// сделки выведены в полном составе.
+		Assert.That(inbox.Select(trade => trade.ExecId).ToList(),
+			Is.EqualTo(new[] { "exec-opt-buy", "exec-linear-sell" }));
+	}
+
+	[TestMethod]
 	[Description("Пустое хранилище даёт пустые «Входящие»")]
 	public async Task TryIfEmptyStorageGivesEmptyInbox()
 	{

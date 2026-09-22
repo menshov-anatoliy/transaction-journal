@@ -51,6 +51,18 @@ else
 				@string.Join(", ", skippedAreas)
 			</p>
 		}
+
+		@if (UnresolvedInstrumentsOf(_result) is { Count: > 0 } unresolvedInstruments)
+		{
+			@* Инструменты без спецификации не роняют запуск и проекцию: их записи
+				отложены до появления спецификации, поэтому перечень отложенных символов
+				должен быть виден рядом с результатом запуска — иначе пропажа сделок
+				останется незамеченной. *@
+			<p role="note">
+				Неразрешённые инструменты (спецификация не получена: контракт недоступен для торговли;
+				сделки по ним отложены): @string.Join(", ", unresolvedInstruments)
+			</p>
+		}
 	</section>
 
 	@if (_result.ProjectionError is not null)
@@ -166,6 +178,20 @@ else
 			.OrderBy(pair => pair.Key, StringComparer.Ordinal)
 			.SelectMany(pair => pair.Value.SkippedAreas);
 		return executionAreas.Concat(deliveryAreas).ToList();
+	}
+
+	// Перечень неразрешённых инструментов сводится из итога пополнения справочника
+	// и перестроенной проекции: спецификация могла быть не получена и в этом запуске,
+	// и в прежних — пользователь видит все отложенные символы единым списком.
+	// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbols-reported-to-user
+	private static IReadOnlyList<string> UnresolvedInstrumentsOf(JournalSyncResult result)
+	{
+		var projectionSymbols = result.Projection?.UnresolvedInstruments ?? [];
+		return result.UnresolvedInstruments
+			.Concat(projectionSymbols)
+			.Distinct(StringComparer.Ordinal)
+			.OrderBy(symbol => symbol, StringComparer.Ordinal)
+			.ToList();
 	}
 
 	// Команда сброса требует подтверждения: выбор категории лишь показывает запрос

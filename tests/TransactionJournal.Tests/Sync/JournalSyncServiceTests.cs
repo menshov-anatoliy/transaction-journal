@@ -262,6 +262,43 @@ public class JournalSyncServiceTests
 	}
 
 	[TestMethod]
+	[Description("Отказ 110023 в пополнении справочника не прерывает запуск: статус Succeeded, водяной знак зафиксирован, перечень символов в итоге")]
+	public async Task TryIfInstrumentSpecUnavailableRunSucceedsWithUnresolvedList()
+	{
+		// Arrange: backfill обеих категорий — линейная сделка и покупка опциона
+		// BTC; спецификация опциона ETH биржа отвергает отказом 110023 «контракт
+		// недоступен для торговли» (делистнутый инструмент).
+		// Требование: отказ 110023 при запросе спецификации не оставляет запуск
+		// неуспешным — водяные знаки зафиксированы, символ в перечне неразрешённых.
+		// Traceability: openspec:sync/bybit-history#scenario-unavailable-instrument-spec-skipped
+		_gateway.EnqueueExecution(ExecutionPage(LinearExecution()));
+		_gateway.EnqueueExecution(ExecutionPage(OptionExecution(), OptionExecution("ETH-15DEC25-45000-P")));
+		_gateway.EnqueueDelivery(DeliveryPage());
+		_gateway.EnqueueDelivery(DeliveryPage());
+		_gateway.AddInstrument(LinearInstrument());
+		_gateway.AddInstrument(OptionInstrument());
+		_gateway.AddUnavailableInstrument("ETH-15DEC25-45000-P");
+
+		// Act
+		var result = await _service.SyncAsync();
+
+		// Assert: запуск успешен, состояние категорий зафиксировано водяными знаками —
+		// отказ спецификации одного инструмента не отменил фиксацию пройденных категорий.
+		Assert.That(result.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		var optionState = LoadState("option");
+		Assert.That(optionState, Is.Not.Null);
+		Assert.That(optionState!.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(optionState.DeliveryWatermarkMs, Is.EqualTo(NowMs));
+
+		// Assert: перечень неразрешённых символов проведён в итог запуска; доступная
+		// спецификация при этом сохранена в справочник.
+		Assert.That(result.UnresolvedInstruments, Is.EqualTo(new[] { "ETH-15DEC25-45000-P" }));
+		using var db = new JournalDbContext(CreateOptions());
+		Assert.That(db.RawInstruments.Select(instrument => instrument.Symbol).ToList(),
+			Does.Contain(OptionSymbol));
+	}
+
+	[TestMethod]
 	[Description("Ошибка биржи закрывает запуск со статусом Failed и не фиксирует состояние категорий")]
 	public void ThrowOnExchangeErrorClosesRunFailedWithoutStateFixation()
 	{
@@ -286,16 +323,16 @@ public class JournalSyncServiceTests
 	}
 
 	[TestMethod]
-	[Description("Сбой материализации не рушит запуск: сырые записи сохранены, причина показывается текстом")]
-	public async Task TryIfProjectionFailureKeepsSuccessfulRunWithErrorText()
+	[Description("Символ опциона без спецификации не рушит запуск: сырые записи сохранены, проекция построена с перечнем неразрешённых")]
+	public async Task TryIfUnknownInstrumentSymbolKeepsRunWithProjectionAndUnresolvedList()
 	{
-		// Arrange: первое окно исполнения linear пусто, опционное окно отдаёт сделку
-		// пута, чью спецификацию не знает и эндпоинт справочника — символ остаётся без
-		// канонических данных, материализация останавливается на сверке со справочником.
-		// Требование: сырые записи сохраняются целиком и достаточны для переразбора,
-		// поэтому сбой проекции не отменяет синхронизацию.
-		// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
-		_gateway.EnqueueExecution(ExecutionPage());
+		// Arrange: первое окно исполнения linear отдаёт линейную сделку, опционное —
+		// сделку пута, чью спецификацию не знает и эндпоинт справочника, — символ
+		// остаётся без канонических данных. Требование: материализация деградирует
+		// по неразрешённым символам — проекция строится из разрешимых записей,
+		// символ перечислен, запуск не помечен ошибкой.
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+		_gateway.EnqueueExecution(ExecutionPage(LinearExecution()));
 		_gateway.EnqueueExecution(ExecutionPage(OptionExecution("BTC-15DEC25-45000-P")));
 		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.EnqueueDelivery(DeliveryPage());
@@ -303,16 +340,18 @@ public class JournalSyncServiceTests
 		// Act
 		var result = await _service.SyncAsync();
 
-		// Assert: запуск успешен и запись сохранена, проекция не построена — причина
-		// передана текстом для показа на странице.
+		// Assert: запуск успешен и записи сохранены; проекция построена из разрешимой
+		// линейной сделки, символ без спецификации перечислен в неразрешённых.
 		Assert.That(result.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
-		Assert.That(result.Run.NewExecutions, Is.EqualTo(1));
-		Assert.That(result.Projection, Is.Null);
-		Assert.That(result.ProjectionError, Is.Not.Null);
-		Assert.That(result.ProjectionError, Does.Contain("BTC-15DEC25-45000-P"));
+		Assert.That(result.Run.NewExecutions, Is.EqualTo(2));
+		Assert.That(result.ProjectionError, Is.Null);
+		Assert.That(result.Projection, Is.Not.Null);
+		Assert.That(result.Projection!.InboxTrades.Select(trade => trade.ExecId).ToList(),
+			Is.EqualTo(new[] { "exec-lin" }));
+		Assert.That(result.Projection.UnresolvedInstruments, Is.EqualTo(new[] { "BTC-15DEC25-45000-P" }));
 
 		using var db = new JournalDbContext(CreateOptions());
-		Assert.That(db.RawExecutions.Count(), Is.EqualTo(1));
+		Assert.That(db.RawExecutions.Count(), Is.EqualTo(2));
 	}
 
 	#region Помощники
@@ -455,6 +494,7 @@ public class JournalSyncServiceTests
 		private readonly Queue<object> _executionResponses = new();
 		private readonly Queue<object> _deliveryResponses = new();
 		private readonly Dictionary<string, BybitInstrumentInfo> _instruments = new(StringComparer.Ordinal);
+		private readonly HashSet<string> _unavailableSymbols = new(StringComparer.Ordinal);
 
 		/// <summary>Все запросы истории исполнения в порядке отправления.</summary>
 		public List<BybitExecutionListQuery> ExecutionQueries { get; } = [];
@@ -483,6 +523,12 @@ public class JournalSyncServiceTests
 		public void AddInstrument(BybitInstrumentInfo instrument)
 		{
 			_instruments[instrument.Symbol] = instrument;
+		}
+
+		/// <summary>Настраивает отказ биржи 110023 на запрос спецификации символа: контракт недоступен.</summary>
+		public void AddUnavailableInstrument(string symbol)
+		{
+			_unavailableSymbols.Add(symbol);
 		}
 
 		public Task<BybitPagedResponse<BybitExecution>> GetExecutionListAsync(
@@ -522,6 +568,13 @@ public class JournalSyncServiceTests
 			CancellationToken cancellationToken = default)
 		{
 			InstrumentQueries.Add(query);
+			if (query.Symbol is not null && _unavailableSymbols.Contains(query.Symbol))
+			{
+				// Делистнутый инструмент: биржа отвергает запрос спецификации отказом
+				// 110023 «контракт недоступен для торговли».
+				throw new BybitApiException(110023, "The contract is not available for trades");
+			}
+
 			IReadOnlyList<BybitInstrumentInfo> list = query.Symbol is not null && _instruments.TryGetValue(query.Symbol, out var instrument)
 				? [instrument]
 				: [];

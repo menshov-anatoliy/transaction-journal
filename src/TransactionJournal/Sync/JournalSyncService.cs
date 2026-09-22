@@ -88,6 +88,7 @@ public sealed class JournalSyncService : IJournalSyncService
 
 		var executionResults = new Dictionary<string, ExecutionCategorySyncResult>(StringComparer.Ordinal);
 		var deliveryResults = new Dictionary<string, DeliveryCategorySyncResult>(StringComparer.Ordinal);
+		InstrumentSyncResult? instrumentSync = null;
 		try
 		{
 			foreach (var category in ExecutionHistorySync.DefaultCategories)
@@ -107,7 +108,7 @@ public sealed class JournalSyncService : IJournalSyncService
 			// материализация сделок опциона требует канонической спецификации биржи.
 			// Traceability: openspec:sync/bybit-history#scenario-new-instrument-registered
 			var seenInstruments = CollectSeenInstruments(executionResults, deliveryResults);
-			await _instrumentSync.SyncAsync(seenInstruments, run, cancellationToken).ConfigureAwait(false);
+			instrumentSync = await _instrumentSync.SyncAsync(seenInstruments, run, cancellationToken).ConfigureAwait(false);
 
 			await _runJournal.MarkSucceededAsync(run, cancellationToken).ConfigureAwait(false);
 		}
@@ -149,6 +150,10 @@ public sealed class JournalSyncService : IJournalSyncService
 			Deliveries = deliveryResults,
 			Projection = projection,
 			ProjectionError = projectionError,
+			// Отказ 110023 на запросе спецификации не прерывает запуск: перечень
+			// неполученных спецификаций проходит в итог запуска для показа пользователю.
+			// Traceability: openspec:sync/bybit-history#scenario-unavailable-instrument-spec-skipped
+			UnresolvedInstruments = instrumentSync?.UnresolvedSymbols ?? [],
 		};
 	}
 

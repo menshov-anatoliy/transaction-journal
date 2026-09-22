@@ -51,7 +51,7 @@ public sealed class JournalMaterializer
 	/// <exception cref="FormatException">JSON-спецификация инструмента некорректна.</exception>
 	/// <exception cref="TradeMaterializationException">Сырая запись исполнения повреждена или конфликтует с другой записью того же execId.</exception>
 	/// <exception cref="ExpiryMaterializationException">Delivery-запись повреждена, неполна или конфликтует с другой записью того же ключа.</exception>
-	/// <exception cref="InstrumentResolveException">Символ опциона не прошёл сверку со справочником инструментов.</exception>
+	/// <exception cref="InstrumentResolveException">Символ опциона расходится со справочником инструментов; отсутствие символа в справочнике деградирует перечнем в результате, а не исключением.</exception>
 	public JournalMaterializationResult Materialize(
 		IEnumerable<RawInstrument> rawInstruments,
 		IEnumerable<RawExecution> rawExecutions,
@@ -71,14 +71,23 @@ public sealed class JournalMaterializer
 		var tradeMaterializer = new TradeMaterializer(resolver, _feeCurrencyRule);
 		var expiryMaterializer = new ExpiryMaterializer(tradeMaterializer, resolver, _reconciliationTolerance);
 
-		var inboxTrades = tradeMaterializer.Materialize(rawExecutions);
+		var tradeResult = tradeMaterializer.Materialize(rawExecutions);
 		var expiry = expiryMaterializer.Materialize(rawExecutions, rawDeliveries, tradeAssignments, asOf);
 
 		return new JournalMaterializationResult
 		{
-			InboxTrades = inboxTrades,
+			InboxTrades = tradeResult.Trades,
 			ExpiryClosingEntries = expiry.ClosingEntries,
 			ReconciliationWarnings = expiry.Warnings,
+			// Перечни неразрешённых символов сделок и экспираций сходятся в один
+			// список проекции в стабильном порядке без повторов: пользователь видит
+			// все отложенные инструменты одним предупреждением, а не ошибкой.
+			// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+			UnresolvedInstruments = tradeResult.UnresolvedSymbols
+				.Concat(expiry.UnresolvedSymbols)
+				.Distinct(StringComparer.Ordinal)
+				.OrderBy(symbol => symbol, StringComparer.Ordinal)
+				.ToList(),
 		};
 	}
 }

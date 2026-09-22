@@ -383,17 +383,54 @@ public class ExpiryMaterializerTests
 	}
 
 	[TestMethod]
-	[Description("Символ delivery-записи вне справочника останавливает материализацию ошибкой сверки")]
-	[ExpectedException(typeof(InstrumentResolveException))]
-	public void ThrowOnUnknownDeliverySymbol()
+	[Description("Delivery-запись символа без спецификации откладывается, символ перечислен в неразрешённых")]
+	public void TryIfUnknownDeliverySymbolSkipsClosingAndReportsSymbol()
 	{
-		// Arrange: справочник — канонический источник свойств опциона; символ без
-		// спецификации не допускается до закрывающих записей.
+		// Arrange: delivery-запись делистнутого опциона ETH, чьей спецификации нет
+		// в справочнике, и разрешимая ITM-запись колла BTC.
+		// Требование: символ без спецификации не прерывает материализацию — закрывающая
+		// запись по нему не строится, символ перечислен, остальные записи строятся.
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
 		var materializer = CreateMaterializer();
 		var unknown = Delivery("ETH-29DEC23-2000-C", OptionDeliveryMs, deliveryPrice: "2400", strike: "2000", fee: "0", deliveryRpl: "0.4");
+		var known = Delivery(CallSymbol, OptionDeliveryMs, deliveryPrice: "46000", strike: "45000", fee: "0", deliveryRpl: "0.4");
+		var rawExecutions = new[] { RawOption("exec-a1", "Buy", "0.0001", "100") };
 
-		// Act — Assert
-		materializer.Materialize(Array.Empty<RawExecution>(), new[] { unknown }, null, AfterDelivery());
+		// Act
+		var result = materializer.Materialize(rawExecutions, new[] { unknown, known }, null, AfterDelivery());
+
+		// Assert: закрывающая запись построена только по разрешимому коллу; символ
+		// делистнутого опциона перечислен, сверка по нему не выполнялась.
+		Assert.That(result.UnresolvedSymbols, Is.EqualTo(new[] { "ETH-29DEC23-2000-C" }));
+		Assert.That(result.ClosingEntries.Select(entry => entry.Symbol).Distinct().ToList(),
+			Is.EqualTo(new[] { CallSymbol }));
+		Assert.That(result.Warnings.Where(warning => warning.Symbol == "ETH-29DEC23-2000-C"), Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("OTM-автозакрытие по символу без спецификации не строится")]
+	public void TryIfOtmAutoCloseSkippedForUnknownSymbol()
+	{
+		// Arrange: покупки делистнутого опциона ETH без delivery-записи, deliveryTime
+		// уже наступил; спецификации символа в справочнике нет.
+		// Требование: OTM-автозакрытие выводит каноническое время delivery из
+		// справочника — без спецификации позиция не закрывается нулевой записью,
+		// а остаётся отложенной вместе с записями символа.
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+		var materializer = CreateMaterializer();
+		var rawExecutions = new[]
+		{
+			Raw("exec-eth-1", "option", "ETH-29DEC23-2000-C", ExecMs(2023, 12, 28, 10, 0),
+				ExecutionPayload("exec-eth-1", "ETH-29DEC23-2000-C", "Buy", "200", "0.0002", "0", "USDC", ExecMs(2023, 12, 28, 10, 0))),
+		};
+
+		// Act
+		var result = materializer.Materialize(rawExecutions, Array.Empty<RawDelivery>(), null, AfterDelivery());
+
+		// Assert: закрывающих записей нет — сделка отложена, OTM-закрытие не выведено;
+		// символ перечислен в неразрешённых.
+		Assert.That(result.ClosingEntries, Is.Empty);
+		Assert.That(result.UnresolvedSymbols, Is.EqualTo(new[] { "ETH-29DEC23-2000-C" }));
 	}
 
 	#region Помощники

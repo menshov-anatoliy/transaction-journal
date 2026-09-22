@@ -35,11 +35,11 @@ public sealed class InstrumentReferenceSync
 	/// <param name="instruments">Пары категория-символ из новых записей исполнения и delivery-записей.</param>
 	/// <param name="progressRun">Запуск, чей счётчик новых инструментов продвигается; null — прогресс не ведётся.</param>
 	/// <param name="cancellationToken">Токен отмены синхронизации.</param>
-	/// <returns>Число фактически вставленных спецификаций.</returns>
+	/// <returns>Число вставленных спецификаций и перечень неразрешённых символов.</returns>
 	/// <exception cref="ArgumentNullException">Коллекция пар не задана.</exception>
 	/// <exception cref="ArgumentException">Категория или символ какой-либо пары не заданы.</exception>
 	/// <exception cref="BybitApiException">Биржа ответила ошибкой после всех повторов.</exception>
-	public async Task<int> SyncAsync(
+	public async Task<InstrumentSyncResult> SyncAsync(
 		IReadOnlyCollection<(string Category, string Symbol)> instruments,
 		SyncRun? progressRun = null,
 		CancellationToken cancellationToken = default)
@@ -63,7 +63,7 @@ public sealed class InstrumentReferenceSync
 
 		if (uniquePairs.Count == 0)
 		{
-			return 0;
+			return new InstrumentSyncResult { InsertedCount = 0, UnresolvedSymbols = [] };
 		}
 
 		// Неизвестными остаются только символы, которых нет в справочнике: повторные синки
@@ -76,6 +76,7 @@ public sealed class InstrumentReferenceSync
 			.ToList();
 
 		var insertedCount = 0;
+		var unresolvedSymbols = new SortedSet<string>(StringComparer.Ordinal);
 		foreach (var categoryGroups in unknownPairs.GroupBy(pair => pair.Category, StringComparer.Ordinal))
 		{
 			var fetched = new List<BybitInstrumentInfo>();
@@ -86,9 +87,25 @@ public sealed class InstrumentReferenceSync
 				// Фильтр по символу запрашивает спецификацию одного инструмента: биржа
 				// отвечает одной страницей без курсора продолжения.
 				// Traceability: openspec:sync/bybit-history#scenario-new-instrument-registered
-				var page = await _source.GetInstrumentInfoAsync(
-					new BybitInstrumentInfoQuery { Category = categoryGroups.Key, Symbol = pair.Symbol },
-					cancellationToken).ConfigureAwait(false);
+				BybitPagedResponse<BybitInstrumentInfo> page;
+				try
+				{
+					page = await _source.GetInstrumentInfoAsync(
+						new BybitInstrumentInfoQuery { Category = categoryGroups.Key, Symbol = pair.Symbol },
+						cancellationToken).ConfigureAwait(false);
+				}
+				catch (BybitApiException exception)
+					when (BybitApiException.IsContractUnavailableError(exception))
+				{
+					// Делистнутый инструмент биржа отвергает отказом 110023 «контракт
+					// недоступен для торговли»: спецификация пропускается без ретрая,
+					// символ фиксируется в перечне неразрешённых, пополнение остальных
+					// инструментов продолжается — запуск не должен падать целиком из-за
+					// одного делистнутого опциона.
+					// Traceability: openspec:sync/bybit-history#scenario-unavailable-instrument-spec-skipped
+					unresolvedSymbols.Add(pair.Symbol);
+					continue;
+				}
 
 				// Ответ фильтра сверяется с запрошенным символом: посторонние записи выдачи
 				// в справочник не попадают.
@@ -98,6 +115,10 @@ public sealed class InstrumentReferenceSync
 			insertedCount += await _store.WriteAsync(categoryGroups.Key, fetched, progressRun, cancellationToken).ConfigureAwait(false);
 		}
 
-		return insertedCount;
+		return new InstrumentSyncResult
+		{
+			InsertedCount = insertedCount,
+			UnresolvedSymbols = unresolvedSymbols.ToList(),
+		};
 	}
 }

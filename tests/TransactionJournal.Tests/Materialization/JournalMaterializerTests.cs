@@ -97,6 +97,44 @@ public class JournalMaterializerTests
 	}
 
 	[TestMethod]
+	[Description("Проекция с символом без спецификации строится из разрешимых записей и несёт перечень, запуск не помечен ошибкой")]
+	public void TryIfProjectionBuildsWithUnresolvedSymbolsListed()
+	{
+		// Arrange: сырьё содержит исполнение и delivery-запись делистнутого опциона ETH
+		// без спецификации в справочнике и разрешимые записи колла BTC.
+		// Требование: материализация строится из записей разрешимых инструментов,
+		// неразрешённые символы перечислены в результате единым перечнем без повторов.
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+		var materializer = new JournalMaterializer();
+		var unknownSymbol = "ETH-29DEC23-2000-C";
+		var rawInstruments = CreateRawInstruments();
+		var rawExecutions = CreateRawExecutions()
+			.Append(Raw(
+				"exec-eth-1", "option", unknownSymbol, ExecMs(2023, 12, 28, 12, 0),
+				ExecutionPayload("exec-eth-1", unknownSymbol, "Buy", "200", "0.0002", "0", "USDC", ExecMs(2023, 12, 28, 12, 0))))
+			.ToArray();
+		var rawDeliveries = CreateRawDeliveries()
+			.Append(new RawDelivery
+			{
+				Symbol = unknownSymbol,
+				DeliveryTimeMs = OptionDeliveryMs,
+				Category = "option",
+				PayloadJson = DeliveryPayload(unknownSymbol, OptionDeliveryMs, "2400", "2000", "0", "0.4"),
+				FetchedAt = FetchedAt,
+			})
+			.ToArray();
+
+		// Act
+		var result = materializer.Materialize(rawInstruments, rawExecutions, rawDeliveries, null, AfterDelivery());
+
+		// Assert: проекция построена по разрешимым записям; оба источника дают один
+		// и тот же символ — перечень без повторов; признака ошибки в результате нет.
+		Assert.That(result.InboxTrades.Count, Is.EqualTo(3));
+		Assert.That(result.ExpiryClosingEntries.All(entry => entry.Symbol != unknownSymbol), Is.True);
+		Assert.That(result.UnresolvedInstruments, Is.EqualTo(new[] { unknownSymbol }));
+	}
+
+	[TestMethod]
 	[Description("Полный переразбор пустого хранилища даёт пустую проекцию")]
 	public void TryIfEmptyRawStoreGivesEmptyProjection()
 	{

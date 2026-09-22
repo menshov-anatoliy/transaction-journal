@@ -35,7 +35,7 @@ public class TradeMaterializerTests
 			RawOption("exec-1", "Buy", ExecMs(2023, 12, 28, 10, 0)),
 			RawOption("exec-2", "Sell", ExecMs(2023, 12, 28, 11, 0)),
 		};
-		var inboxAfterFirstSync = materializer.Materialize(firstSyncExecutions);
+		var inboxAfterFirstSync = materializer.Materialize(firstSyncExecutions).Trades;
 		Assert.That(inboxAfterFirstSync.Count, Is.EqualTo(2));
 
 		// Act: инкрементальная догрузка принесла одну новую сделку — материализатор
@@ -43,7 +43,7 @@ public class TradeMaterializerTests
 		var secondSyncExecutions = firstSyncExecutions
 			.Append(RawOption("exec-3", "Buy", ExecMs(2023, 12, 28, 12, 0)))
 			.ToArray();
-		var inboxAfterSecondSync = materializer.Materialize(secondSyncExecutions);
+		var inboxAfterSecondSync = materializer.Materialize(secondSyncExecutions).Trades;
 
 		// Assert: во «Входящих» появились только новые сделки; прежние не изменились
 		// и не задвоились.
@@ -73,7 +73,7 @@ public class TradeMaterializerTests
 		};
 
 		// Act
-		var trades = materializer.Materialize(rawExecutions);
+		var trades = materializer.Materialize(rawExecutions).Trades;
 
 		// Assert: каждый атрибут повторяет биржевую запись; канонические атрибуты
 		// опциона взяты из справочника инструментов.
@@ -109,7 +109,7 @@ public class TradeMaterializerTests
 		};
 
 		// Act
-		var trades = materializer.Materialize(rawExecutions);
+		var trades = materializer.Materialize(rawExecutions).Trades;
 
 		// Assert
 		Assert.That(trades.Count, Is.EqualTo(1));
@@ -135,8 +135,8 @@ public class TradeMaterializerTests
 		};
 
 		// Act: вторая материализация получает те же записи, включая идентичный дубликат.
-		var firstPass = materializer.Materialize(rawExecutions);
-		var secondPass = materializer.Materialize(rawExecutions.Append(rawExecutions[0]));
+		var firstPass = materializer.Materialize(rawExecutions).Trades;
+		var secondPass = materializer.Materialize(rawExecutions.Append(rawExecutions[0])).Trades;
 
 		// Assert: количество и состав сделок не изменились.
 		Assert.That(secondPass.Count, Is.EqualTo(2));
@@ -157,7 +157,7 @@ public class TradeMaterializerTests
 		};
 
 		// Act
-		var trades = materializer.Materialize(rawExecutions);
+		var trades = materializer.Materialize(rawExecutions).Trades;
 
 		// Assert
 		Assert.That(trades.Count, Is.EqualTo(1));
@@ -180,7 +180,7 @@ public class TradeMaterializerTests
 		};
 
 		// Act
-		var trades = materializer.Materialize(rawExecutions);
+		var trades = materializer.Materialize(rawExecutions).Trades;
 
 		// Assert: порядок результата не зависит от порядка входных записей.
 		Assert.That(
@@ -307,23 +307,85 @@ public class TradeMaterializerTests
 	}
 
 	[TestMethod]
-	[Description("Символ опциона вне справочника останавливает материализацию ошибкой сверки")]
-	[ExpectedException(typeof(InstrumentResolveException))]
-	public void ThrowOnUnknownOptionSymbol()
+	[Description("Символ опциона без спецификации откладывает запись и попадает в перечень неразрешённых")]
+	public void TryIfUnknownSymbolSkipsTradeAndReportsSymbol()
 	{
-		// Arrange: спека требует пополнять справочник до материализации сделок —
-		// неизвестный символ должен останавливать проекцию явной ошибкой сверки.
-		// Traceability: openspec:sync/bybit-history#scenario-new-instrument-registered
+		// Arrange: запись исполнения опциона ETH, чьей спецификации нет в справочнике,
+		// и записи разрешимых инструментов; справочник — канонический источник свойств,
+		// разбор строки символа с доверием ему запрещён.
+		// Требование: символ без спецификации не прерывает материализацию — сделка
+		// откладывается, символ перечислен в результате, остальные сделки строятся.
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
 		var materializer = CreateMaterializer();
 		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
 		var rawExecutions = new[]
 		{
 			Raw("exec-eth", "option", "ETH-29DEC23-2000-C", execTimeMs,
 				ExecutionPayload("exec-eth", "ETH-29DEC23-2000-C", "Buy", "200", "1", "0.02", "USDC", execTimeMs)),
+			RawOption("exec-btc", "Buy", execTimeMs),
 		};
 
+		// Act
+		var result = materializer.Materialize(rawExecutions);
+
+		// Assert: сделка с неизвестным символом не материализована, символ перечислен
+		// в стабильной форме; сделка разрешимого инструмента построена как обычно.
+		Assert.That(result.UnresolvedSymbols, Is.EqualTo(new[] { "ETH-29DEC23-2000-C" }));
+		Assert.That(result.Trades.Select(trade => trade.ExecId).ToList(), Is.EqualTo(new[] { "exec-btc" }));
+	}
+
+	[TestMethod]
+	[Description("Повторные записи с тем же неизвестным символом не дублируют перечень")]
+	public void TryIfRepeatedUnknownSymbolsReportedOnce()
+	{
+		// Arrange: две записи одного делистнутого опциона — перечень символов
+		// не должен содержать повторов.
+		var materializer = CreateMaterializer();
+		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
+		var rawExecutions = new[]
+		{
+			Raw("exec-eth-1", "option", "ETH-29DEC23-2000-C", execTimeMs,
+				ExecutionPayload("exec-eth-1", "ETH-29DEC23-2000-C", "Buy", "200", "1", "0.02", "USDC", execTimeMs)),
+			Raw("exec-eth-2", "option", "ETH-29DEC23-2000-C", execTimeMs,
+				ExecutionPayload("exec-eth-2", "ETH-29DEC23-2000-C", "Sell", "210", "1", "0.02", "USDC", execTimeMs)),
+		};
+
+		// Act
+		var result = materializer.Materialize(rawExecutions);
+
+		// Assert: символ перечислен один раз, сделок по нему нет.
+		Assert.That(result.UnresolvedSymbols, Is.EqualTo(new[] { "ETH-29DEC23-2000-C" }));
+		Assert.That(result.Trades, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Расхождение базового актива со справочником по-прежнему останавливает материализацию ошибкой сверки")]
+	public void ThrowOnBaseCoinMismatchStillFails()
+	{
+		// Arrange: справочник хранит для символа чужой базовый актив — это конфликт
+		// записи со справочником, а не отсутствие спецификации: замалчивание
+		// расхождения скрыло бы подмену инструмента.
+		// Требование: расхождение символа со справочником остаётся ошибкой сверки,
+		// а не предупреждением деградации.
+		// Traceability: openspec:sync/bybit-history#scenario-instrument-mismatch-still-fails
+		var deliveryMs = OptionDelivery.ToUnixTimeMilliseconds();
+		var mismatchedPayload =
+			$$"""{"symbol":"BTC-29DEC23-45000-C","baseCoin":"ETH","quoteCoin":"USD","settleCoin":"USDC","status":"Trading","optionsType":"Call","deliveryTime":"{{deliveryMs}}","deliveryFeeRate":"0.00015"}""";
+		var resolver = new InstrumentResolver(new InstrumentCatalog(new[]
+		{
+			new RawInstrument
+			{
+				Symbol = "BTC-29DEC23-45000-C",
+				Category = "option",
+				PayloadJson = mismatchedPayload,
+				FetchedAt = FetchedAt,
+			},
+		}));
+		var materializer = new TradeMaterializer(resolver);
+
 		// Act — Assert
-		materializer.Materialize(rawExecutions);
+		Assert.Throws<InstrumentResolveException>(
+			() => materializer.Materialize(new[] { RawOption("exec-btc", "Buy", ExecMs(2023, 12, 28, 10, 0)) }));
 	}
 
 	#region Помощники

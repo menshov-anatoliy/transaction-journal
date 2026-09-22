@@ -2,9 +2,10 @@ namespace TransactionJournal.Materialization;
 
 /// <summary>
 /// Полный результат переразбора доменных представлений журнала из сырых записей:
-/// сделки «Входящих», закрывающие записи экспираций и предупреждения сверки.
-/// Все части выводятся только из локального сырья, поэтому пересборка после изменения
-/// правила разбора заменяет проекцию целиком и не оставляет следов прежних правил.
+/// сделки «Входящих», закрывающие записи экспираций, предупреждения сверки и перечень
+/// неразрешённых символов. Все части выводятся только из локального сырья, поэтому
+/// пересборка после изменения правила разбора заменяет проекцию целиком и не оставляет
+/// следов прежних правил.
 // Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
 /// </summary>
 public sealed record JournalMaterializationResult
@@ -17,4 +18,12 @@ public sealed record JournalMaterializationResult
 
 	/// <summary>Предупреждения сверки собственного расчёта с биржевым deliveryRpl.</summary>
 	public required IReadOnlyList<ExpiryReconciliationWarning> ReconciliationWarnings { get; init; }
+
+	/// <summary>
+	/// Неразрешённые символы проекции — инструменты без спецификации в справочнике,
+	/// объединённый перечень сделок и экспираций в стабильном порядке без повторов.
+	/// Проекция при этом построена из разрешимых записей и ошибкой не помечена.
+	/// Traceability: openspec:sync/bybit-history#requirement-unresolved-instrument-degradation
+	/// </summary>
+	public IReadOnlyList<string> UnresolvedInstruments { get; init; } = [];
 }

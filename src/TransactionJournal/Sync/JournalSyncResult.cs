@@ -32,4 +32,12 @@ public sealed record JournalSyncResult
 
 	/// <summary>Текст ошибки построения проекции; null при успешной материализации.</summary>
 	public string? ProjectionError { get; init; }
+
+	/// <summary>
+	/// Перечень неразрешённых символов запуска: инструменты, чьи спецификации биржа
+	/// отвергла отказом «контракт недоступен для торговли» при пополнении справочника.
+	/// Запуск при этом успешен; повторный запуск заново пробует запросить спецификации.
+	/// Traceability: openspec:sync/bybit-history#scenario-unavailable-instrument-spec-skipped
+	/// </summary>
+	public IReadOnlyList<string> UnresolvedInstruments { get; init; } = [];
 }

@@ -292,7 +292,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			.ConfigureAwait(false);
 
 		var materializer = new TradeMaterializer(new InstrumentResolver(new InstrumentCatalog(rawInstruments)));
-		return materializer.Materialize(rawExecutions)
+		return materializer.Materialize(rawExecutions).Trades
 			.Where(trade => boundExecIds.Contains(trade.ExecId))
 			.OrderBy(trade => trade.ExecutedAt)
 			.ThenBy(trade => trade.ExecId, StringComparer.Ordinal)

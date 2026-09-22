@@ -128,7 +128,7 @@ public sealed class PositionReadModel
 		// записи экспираций выводятся из одного и того же сырья детерминированно.
 		var resolver = new InstrumentResolver(new InstrumentCatalog(rawInstruments));
 		var tradeMaterializer = new TradeMaterializer(resolver);
-		var trades = tradeMaterializer.Materialize(rawExecutions);
+		var trades = tradeMaterializer.Materialize(rawExecutions).Trades;
 
 		// Привязки передаются материализатору экспираций в строковой форме его контракта;
 		// непривязанные сделки образуют остаток «Входящих» и в позициях не участвуют.

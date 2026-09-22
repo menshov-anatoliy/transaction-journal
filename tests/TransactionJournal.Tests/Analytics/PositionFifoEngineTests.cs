@@ -161,7 +161,7 @@ public class PositionFifoEngineTests
 		};
 
 		// Act: сделки материализуются и превращаются в записи потока позиции «как есть».
-		var trades = materializer.Materialize(rawExecutions);
+		var trades = materializer.Materialize(rawExecutions).Trades;
 		var entries = trades.Select(trade => new PositionFifoEntry
 		{
 			At = trade.ExecutedAt,
@@ -228,7 +228,7 @@ public class PositionFifoEngineTests
 
 		// Act: материализатор даёт сделки и закрывающие записи с предупреждением
 		// сверки; движок считает результат по собственным записям.
-		var trades = tradeMaterializer.Materialize(rawExecutions);
+		var trades = tradeMaterializer.Materialize(rawExecutions).Trades;
 		var expiry = expiryMaterializer.Materialize(rawExecutions, rawDeliveries, assignments, AfterDelivery());
 		var entries = trades.Select(trade => new PositionFifoEntry
 		{

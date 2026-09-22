@@ -39,19 +39,39 @@ public sealed class TradeMaterializer
 	/// <summary>
 	/// Выводит сделки «Входящих» из сырых записей исполнения. Результат упорядочен
 	/// по времени исполнения, затем по execId, и не зависит от порядка входных записей.
+	/// Символ опциона, отсутствующий в справочнике, откладывает запись: сделка
+	/// не материализуется, символ попадает в перечень неразрешённых результата;
+	/// прочие причины сверки и повреждённые записи остаются ошибками.
 	/// </summary>
 	/// <param name="rawExecutions">Сырые записи исполнения из хранилища журнала.</param>
 	/// <exception cref="ArgumentNullException">Записи не заданы.</exception>
 	/// <exception cref="TradeMaterializationException">Запись повреждена или конфликтует с другой записью того же execId.</exception>
-	/// <exception cref="InstrumentResolveException">Символ опциона не прошёл сверку со справочником инструментов.</exception>
-	public IReadOnlyList<MaterializedTrade> Materialize(IEnumerable<RawExecution> rawExecutions)
+	/// <exception cref="InstrumentResolveException">Символ опциона расходится со справочником инструментов — не отсутствует, а противоречит ему.</exception>
+	public TradeMaterializationResult Materialize(IEnumerable<RawExecution> rawExecutions)
 	{
 		ArgumentNullException.ThrowIfNull(rawExecutions);
 
 		var trades = new Dictionary<string, MaterializedTrade>(StringComparer.Ordinal);
+		var unresolvedSymbols = new SortedSet<string>(StringComparer.Ordinal);
 		foreach (var rawExecution in rawExecutions)
 		{
-			var trade = ParseTrade(rawExecution);
+			MaterializedTrade trade;
+			try
+			{
+				trade = ParseTrade(rawExecution);
+			}
+			catch (InstrumentResolveException exception)
+				when (exception.Reason == InstrumentResolveFailureReason.UnknownSymbol)
+			{
+				// Символ без спецификации в справочнике откладывает запись, а не роняет
+				// проекцию: сделка не материализуется, символ собирается в перечень
+				// неразрешённых — деградация видна предупреждением, остальные записи
+				// строятся, повреждение сырья и расхождения со справочником остаются
+				// жёсткими ошибками.
+				// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+				unresolvedSymbols.Add(exception.Symbol);
+				continue;
+			}
 
 			// Один execId — одна сделка «Входящих»: идентичная повторная запись пропускается,
 			// а конфликтующая останавливает материализацию, потому что источник записей
@@ -73,10 +93,14 @@ public sealed class TradeMaterializer
 
 		// Хронологический порядок «Входящих» стабилен: при равном времени исполнения
 		// записи упорядочиваются по execId, поэтому результат детерминирован.
-		return trades.Values
-			.OrderBy(trade => trade.ExecutedAt)
-			.ThenBy(trade => trade.ExecId, StringComparer.Ordinal)
-			.ToList();
+		return new TradeMaterializationResult
+		{
+			Trades = trades.Values
+				.OrderBy(trade => trade.ExecutedAt)
+				.ThenBy(trade => trade.ExecId, StringComparer.Ordinal)
+				.ToList(),
+			UnresolvedSymbols = unresolvedSymbols.ToList(),
+		};
 	}
 
 	#region Вспомогательные методы

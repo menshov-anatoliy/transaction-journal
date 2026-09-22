@@ -57,7 +57,7 @@ public sealed class InboxReadModel
 		// атрибуты сделки берутся из биржевой записи, а не из пользовательских данных.
 		// Traceability: openspec:sync/bybit-history#requirement-new-records-land-in-inbox
 		var materializer = new TradeMaterializer(new InstrumentResolver(new InstrumentCatalog(rawInstruments)));
-		var inbox = materializer.Materialize(rawExecutions)
+		var inbox = materializer.Materialize(rawExecutions).Trades
 			// Привязанная сделка покидает «Входящие», пока привязка не снята возвратом.
 			// Traceability: openspec:domain/constructions#scenario-binding-removes-from-inbox
 			.Where(trade => boundExecIds.Contains(trade.ExecId) == false)

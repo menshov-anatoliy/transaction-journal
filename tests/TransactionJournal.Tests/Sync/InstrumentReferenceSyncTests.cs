@@ -72,7 +72,7 @@ public class InstrumentReferenceSyncTests
 		_source.Add("linear", Instrument("linear", "BTCUSDT"));
 
 		// Act
-		var inserted = await _sync.SyncAsync(
+		var result = await _sync.SyncAsync(
 			[
 				("option", "BTC-29DEC23-45000-C"),
 				("linear", "BTCUSDT"),
@@ -81,7 +81,8 @@ public class InstrumentReferenceSyncTests
 			run);
 
 		// Assert: обе спецификации вставлены, повтор пары не дал третьей строки.
-		Assert.That(inserted, Is.EqualTo(2));
+		Assert.That(result.InsertedCount, Is.EqualTo(2));
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
 
 		// Биржа опрошена фильтром по символу: по одному запросу на каждый инструмент,
 		// категория передана параметром запроса.
@@ -108,7 +109,7 @@ public class InstrumentReferenceSyncTests
 
 		// Повторный вызов с теми же символами не перечитывает биржу и не дублирует строки.
 		var repeated = await _sync.SyncAsync([("option", "BTC-29DEC23-45000-C"), ("linear", "BTCUSDT")], run);
-		Assert.That(repeated, Is.Zero);
+		Assert.That(repeated.InsertedCount, Is.Zero);
 		Assert.That(_source.Queries, Has.Count.EqualTo(2));
 	}
 
@@ -121,10 +122,11 @@ public class InstrumentReferenceSyncTests
 		var run = await _store.StartAsync(SyncRunMode.Incremental);
 
 		// Act
-		var inserted = await _sync.SyncAsync([("linear", "BTCUSDT")], run);
+		var result = await _sync.SyncAsync([("linear", "BTCUSDT")], run);
 
 		// Assert: источник спецификаций не опрошен, строка не вставлена, счётчик не продвинут.
-		Assert.That(inserted, Is.Zero);
+		Assert.That(result.InsertedCount, Is.Zero);
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
 		Assert.That(_source.Queries, Is.Empty);
 		Assert.That(run.NewInstruments, Is.Zero);
 	}
@@ -134,11 +136,66 @@ public class InstrumentReferenceSyncTests
 	public async Task TryIfEmptyCollectionIsNoOp()
 	{
 		// Arrange — Act
-		var inserted = await _sync.SyncAsync([]);
+		var result = await _sync.SyncAsync([]);
 
 		// Assert
-		Assert.That(inserted, Is.Zero);
+		Assert.That(result.InsertedCount, Is.Zero);
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
 		Assert.That(_source.Queries, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Отказ 110023 по одному символу не прерывает пополнение остальных инструментов")]
+	public async Task TryIfContractUnavailableSkipsSymbolWithoutBreakingOthers()
+	{
+		// Arrange: биржа отвергает спецификацию делистнутого опциона отказом 110023
+		// «контракт недоступен для торговли», спецификации двух других инструментов
+		// доступны; запуск открыт для счётчика новых инструментов.
+		// Требование: отказ 110023 пропускает спецификацию без ретрая, фиксирует символ
+		// в перечне неразрешённых и не прерывает пополнение остальных инструментов.
+		// Traceability: openspec:sync/bybit-history#scenario-unavailable-instrument-spec-skipped
+		var run = await _store.StartAsync(SyncRunMode.Backfill);
+		_source.Add("option", Instrument("option", "BTC-29DEC23-45000-C"));
+		_source.Add("linear", Instrument("linear", "BTCUSDT"));
+		_source.Fail("ETH-29DEC23-2000-C", new BybitApiException(110023, "The contract is not available for trades"));
+
+		// Act
+		var result = await _sync.SyncAsync(
+			[
+				("option", "BTC-29DEC23-45000-C"),
+				("option", "ETH-29DEC23-2000-C"),
+				("linear", "BTCUSDT"),
+			],
+			run);
+
+		// Assert: две доступные спецификации вставлены, счётчик продвинут только ими;
+		// делистнутый символ перечислен без повторов.
+		Assert.That(result.InsertedCount, Is.EqualTo(2));
+		Assert.That(result.UnresolvedSymbols, Is.EqualTo(new[] { "ETH-29DEC23-2000-C" }));
+		Assert.That(run.NewInstruments, Is.EqualTo(2));
+
+		// Биржа опрошена по всем трём символам, но отказавший запрос не повторялся.
+		Assert.That(_source.Queries, Has.Count.EqualTo(3));
+		Assert.That(_source.Queries.Count(query => query.Symbol == "ETH-29DEC23-2000-C"), Is.EqualTo(1));
+
+		// Спецификация делистнутого инструмента в справочник не попала.
+		using var db = new JournalDbContext(CreateOptions());
+		Assert.That(db.RawInstruments.Select(instrument => instrument.Symbol).ToList(),
+			Is.EquivalentTo(new[] { "BTC-29DEC23-45000-C", "BTCUSDT" }));
+	}
+
+	[TestMethod]
+	[Description("Посторонний код ошибки биржи на запросе спецификации пробрасывается как раньше")]
+	public void ThrowOnForeignErrorCodeDuringSpecRequest()
+	{
+		// Arrange: биржа отвечает отказом с кодом, отличным от 110023, — этот отказ
+		// не относится к недоступным контрактам и обязан прервать пополнение.
+		_source.Fail("BTC-29DEC23-45000-C", new BybitApiException(10006, "превышение частоты запросов"));
+
+		// Act — Assert
+		var interruption = Assert.ThrowsAsync<BybitApiException>(
+			() => _sync.SyncAsync([("option", "BTC-29DEC23-45000-C")]));
+		Assert.That(interruption!.RetCode, Is.EqualTo(10006));
 	}
 
 	[TestMethod]
@@ -210,6 +267,7 @@ public class InstrumentReferenceSyncTests
 	private sealed class ScriptedInstrumentSource : IBybitInstrumentSource
 	{
 		private readonly Dictionary<string, BybitInstrumentInfo> _instruments = new(StringComparer.Ordinal);
+		private readonly Dictionary<string, BybitApiException> _failures = new(StringComparer.Ordinal);
 
 		/// <summary>Все запросы источника в порядке отправления.</summary>
 		public List<BybitInstrumentInfoQuery> Queries { get; } = [];
@@ -219,11 +277,22 @@ public class InstrumentReferenceSyncTests
 			_instruments[instrument.Symbol] = instrument;
 		}
 
+		/// <summary>Настраивает отказ биржи на запрос спецификации конкретного символа.</summary>
+		public void Fail(string symbol, BybitApiException error)
+		{
+			_failures[symbol] = error;
+		}
+
 		public Task<BybitPagedResponse<BybitInstrumentInfo>> GetInstrumentInfoAsync(
 			BybitInstrumentInfoQuery query,
 			CancellationToken cancellationToken = default)
 		{
 			Queries.Add(query);
+			if (query.Symbol is not null && _failures.TryGetValue(query.Symbol, out var error))
+			{
+				throw error;
+			}
+
 			IReadOnlyList<BybitInstrumentInfo> list = query.Symbol is not null && _instruments.TryGetValue(query.Symbol, out var instrument)
 				? [instrument]
 				: [];

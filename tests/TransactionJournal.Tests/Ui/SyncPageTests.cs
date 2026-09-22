@@ -209,6 +209,70 @@ public class SyncPageTests
 	}
 
 	[TestMethod]
+	[Description("Завершённый запуск с неразрешёнными инструментами показывает заметку с перечнем")]
+	public void TryIfUnresolvedInstrumentsNoteShownWhenListIsNotEmpty()
+	{
+		// Arrange: запуск завершён успешно, но спецификации двух инструментов не
+		// получены — одна отвергнута биржей в пополнении справочника, другая осталась
+		// неразрешённой в перестроенной проекции.
+		// Требование: перечень неразрешённых символов виден пользователю рядом
+		// с результатом запуска, при этом запуск не отображается как ошибка.
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbols-reported-to-user
+		var service = new Mock<IJournalSyncService>();
+		var result = CreateCompletedResult() with
+		{
+			UnresolvedInstruments = ["ETH-29DEC23-2000-C"],
+			Projection = CreateCompletedResult().Projection! with
+			{
+				UnresolvedInstruments = ["XAUT-30OCT26-4400-C"],
+			},
+		};
+		service
+			.Setup(svc => svc.SyncAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(result);
+		_context.Services.AddSingleton(service.Object);
+
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Act: нажатие «Синхронизировать» запускает синк.
+		cut.Find("button").Click();
+
+		// Assert: заметка с объединённым перечнем видна, статус запуска остаётся
+		// успешным — без блока прерывания.
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("Синхронизация завершена"));
+			Assert.That(cut.Markup, Does.Not.Contain("Синхронизация прервана"));
+			var unresolvedNote = cut.Find("p[role='note']");
+			Assert.That(unresolvedNote.TextContent, Does.Contain("Неразрешённые инструменты"));
+			Assert.That(unresolvedNote.TextContent, Does.Contain("ETH-29DEC23-2000-C"));
+			Assert.That(unresolvedNote.TextContent, Does.Contain("XAUT-30OCT26-4400-C"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Завершённый запуск с пустым перечнем неразрешённых инструментов не показывает заметку")]
+	public void TryIfNoUnresolvedInstrumentsNoteWhenListIsEmpty()
+	{
+		// Arrange: обычный успешный запуск — все спецификации получены, отложенных
+		// символов нет ни в пополнении справочника, ни в проекции.
+		var service = new Mock<IJournalSyncService>();
+		service
+			.Setup(svc => svc.SyncAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateCompletedResult());
+		_context.Services.AddSingleton(service.Object);
+
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Act: нажатие «Синхронизировать» запускает синк.
+		cut.Find("button").Click();
+
+		// Assert: результат показан, заметки о неразрешённых инструментах нет.
+		cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Синхронизация завершена")));
+		Assert.That(cut.Markup, Does.Not.Contain("Неразрешённые инструменты"));
+	}
+
+	[TestMethod]
 	[Description("Ошибка синка показывается на странице, кнопка остаётся доступной для повторного запуска")]
 	public void TryIfFailedSyncShowsErrorAndKeepsButtonForRetry()
 	{
