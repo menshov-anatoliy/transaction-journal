@@ -111,11 +111,12 @@ public class ReadOnlyAccessAcceptanceTests
 		var service = new JournalSyncService(
 			new ExecutionCategorySync(
 				new ExecutionWindowPass(gateway, store),
+				gateway,
 				store,
 				new FakeOptionBaseCoinSource("BTC"),
 				new ManualTimeProvider(),
 				store),
-			new DeliveryCategorySync(new DeliveryWindowPass(gateway, store), store, new ManualTimeProvider(), store),
+			new DeliveryCategorySync(new DeliveryWindowPass(gateway, store), gateway, store, new ManualTimeProvider(), store),
 			new InstrumentReferenceSync(gateway, store),
 			store,
 			store,
@@ -169,6 +170,7 @@ public class ReadOnlyAccessAcceptanceTests
 			"/v5/execution/list" => ExecutionListBody(query),
 			"/v5/asset/delivery-record" => EmptyPageBody(),
 			"/v5/market/instruments-info" => InstrumentsInfoBody(query),
+			"/v5/market/time" => ServerTimeBody(),
 			_ => EmptyPageBody(),
 		};
 
@@ -224,6 +226,21 @@ public class ReadOnlyAccessAcceptanceTests
 
 	/// <summary>Пустая страница без курсора: окно не дало записей.</summary>
 	private static string EmptyPageBody() => PageBody(category: null);
+
+	/// <summary>
+	/// Ответ эндпоинта серверного времени: время виртуальных часов тестов строками
+	/// секунд и наносекунд — движки рассчитывают по нему границу хранения истории.
+	/// </summary>
+	private static string ServerTimeBody() => JsonSerializer.Serialize(new
+	{
+		retCode = 0,
+		retMsg = "OK",
+		result = new
+		{
+			timeSecond = (NowMs / 1000).ToString(CultureInfo.InvariantCulture),
+			timeNano = NowMs.ToString(CultureInfo.InvariantCulture) + "000000000",
+		},
+	});
 
 	/// <summary>Страница конверта Bybit со списком записей result.list.</summary>
 	private static string PageBody(string? category, params object[] items) =>

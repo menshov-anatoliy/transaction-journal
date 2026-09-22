@@ -45,7 +45,7 @@ public class ExecutionHistorySyncTests
 		_store = new JournalSyncStore(CreateOptions(), new ManualTimeProvider());
 		_gateway = new ScriptedGateway();
 		var engine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _store), _store, new FakeOptionBaseCoinSource("BTC"), new ManualTimeProvider(), _store);
+			new ExecutionWindowPass(_gateway, _store), _gateway, _store, new FakeOptionBaseCoinSource("BTC"), new ManualTimeProvider(), _store);
 		_orchestrator = new ExecutionHistorySync(engine, _store, _store);
 	}
 
@@ -273,7 +273,7 @@ public class ExecutionHistorySyncTests
 	#region Помощники
 
 	private ExecutionCategorySync CreateEngine() =>
-		new(new ExecutionWindowPass(_gateway, _store), _store, new FakeOptionBaseCoinSource("BTC"), new ManualTimeProvider(), _store);
+		new(new ExecutionWindowPass(_gateway, _store), _gateway, _store, new FakeOptionBaseCoinSource("BTC"), new ManualTimeProvider(), _store);
 
 	private static BybitExecution Execution(string execId, long execTimeMs) => new()
 	{
@@ -335,6 +335,7 @@ public class ExecutionHistorySyncTests
 	/// <summary>
 	/// Фиктивный шлюз биржи: раздаёт заготовленные страницы и ошибки по порядку и помнит
 	/// все запросы движка. При исчерпании сценария отвечает пустой страницей без курсора.
+	/// Серверное время по умолчанию совпадает с виртуальными часами движка.
 	/// </summary>
 	private sealed class ScriptedGateway : IBybitHistoryGateway
 	{
@@ -342,6 +343,9 @@ public class ExecutionHistorySyncTests
 
 		/// <summary>Все запросы движка в порядке отправления.</summary>
 		public List<BybitExecutionListQuery> Queries { get; } = [];
+
+		/// <summary>Серверное время биржи, отдаваемое шлюзом; по умолчанию — момент запуска.</summary>
+		public long ServerTimeMs { get; set; } = NowMs;
 
 		public void Enqueue(BybitPagedResponse<BybitExecution> page)
 		{
@@ -378,7 +382,7 @@ public class ExecutionHistorySyncTests
 
 		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
 		{
-			throw new NotSupportedException("Оркестратор истории исполнения не запрашивает серверное время.");
+			return Task.FromResult(ServerTimeMs);
 		}
 	}
 

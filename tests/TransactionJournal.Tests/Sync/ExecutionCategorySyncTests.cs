@@ -37,7 +37,7 @@ public class ExecutionCategorySyncTests
 		_stateStore = new FakeStateStore();
 		_optionBaseCoins = new FakeOptionBaseCoinSource("BTC");
 		_engine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, _optionBaseCoins, new ManualTimeProvider());
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, _optionBaseCoins, new ManualTimeProvider());
 	}
 
 	[TestMethod]
@@ -159,7 +159,7 @@ public class ExecutionCategorySyncTests
 		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
 		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH", "SOL");
 		var engine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, optionBaseCoins, new ManualTimeProvider());
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
 		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-btc", NowMs - DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
@@ -194,7 +194,7 @@ public class ExecutionCategorySyncTests
 		// Traceability: openspec:sync/bybit-history#scenario-subsequent-run-incremental
 		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
 		var engine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, optionBaseCoins, new ManualTimeProvider());
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
 		await _stateStore.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = NowMs - 3 * DayMs });
 		_knownIdProbe.Know("exec-known");
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-known", NowMs - 2 * DayMs)] });
@@ -364,7 +364,7 @@ public class ExecutionCategorySyncTests
 		// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
 		var writer = new FakeRawWriter();
 		var engine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, _optionBaseCoins, new ManualTimeProvider(), writer);
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, _optionBaseCoins, new ManualTimeProvider(), writer);
 		var progressRun = new SyncRun
 		{
 			StartedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
@@ -521,19 +521,175 @@ public class ExecutionCategorySyncTests
 		bool nullStateStore = true,
 		bool nullOptionBaseCoins = true)
 	{
-		// Arrange — Act: проход окна, хранилище состояния и источник активов обязательны движку.
+		// Arrange — Act: проход окна, шлюз биржи, хранилище состояния и источник активов обязательны движку.
 		if (nullWindowPass)
 		{
-			new ExecutionCategorySync(null!, _stateStore, _optionBaseCoins);
+			new ExecutionCategorySync(null!, _gateway, _stateStore, _optionBaseCoins);
 		}
 		else if (nullStateStore)
 		{
-			new ExecutionCategorySync(new ExecutionWindowPass(_gateway, _knownIdProbe), null!, _optionBaseCoins);
+			new ExecutionCategorySync(new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, null!, _optionBaseCoins);
 		}
 		else
 		{
-			new ExecutionCategorySync(new ExecutionWindowPass(_gateway, _knownIdProbe), _stateStore, null!);
+			new ExecutionCategorySync(new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, null!);
 		}
+	}
+
+	[TestMethod]
+	[Description("Конфигурация глубже границы хранения биржи зажимает пол backfill — запросы окон не заходят в запретную зону")]
+	public async Task TryIfConfigFloorDeeperThanBoundaryClampedToExchangeBoundary()
+	{
+		// Arrange: глубина backfill 730 дней пробивает границу хранения: серверное время
+		// биржи даёт самую раннюю запрашиваемую дату на 723 дня позади, пол зажимается до неё.
+		// Требование: пол backfill ограничивается границей хранения истории биржи, вычисленной
+		// по серверному времени с запасом; запросы окон раньше границы не отправляются.
+		// Traceability: openspec:sync/bybit-history#scenario-floor-clamped-to-exchange-boundary
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 730 * DayMs };
+		var allowedEarliestMs = NowMs - 723 * DayMs;
+
+		// Act: перебор идёт до зажатого пола; незаготовленные окна шлюз отвечает пустыми страницами.
+		var result = await _engine.RunAsync("linear", options);
+
+		// Assert: все запросы — не раньше зажатого пола, последнее окно началось ровно на границе.
+		Assert.That(_gateway.Queries, Is.Not.Empty);
+		Assert.That(_gateway.Queries.All(query => query.StartTimeMs >= allowedEarliestMs), Is.True);
+		Assert.That(_gateway.Queries.Last().StartTimeMs, Is.EqualTo(allowedEarliestMs));
+
+		// Assert: окно полноты семи дней укладывается 104 раза в 723 дня, последнее — усечено до пола.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(104));
+		Assert.That(result.Mode, Is.EqualTo(SyncRunMode.Backfill));
+		Assert.That(result.HistoryExhausted, Is.True);
+	}
+
+	[TestMethod]
+	[Description("Отказ серверного времени не роняет запуск — пол считается по локальным часам")]
+	public async Task TryIfServerTimeFailureFallsBackToLocalTime()
+	{
+		// Arrange: эндпоинт серверного времени недоступен; глубина backfill мала и границы
+		// хранения не пробивает ни по каким часам.
+		// Требование: недоступность серверного времени не прерывает синхронизацию —
+		// fallback на локальное время, а запас границы покрывает дрейф часов.
+		// Traceability: openspec:sync/bybit-history#scenario-floor-clamped-to-exchange-boundary
+		_gateway.ServerTimeError = new BybitApiException(10006, "Too many visits!");
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 3 * WeekMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-1", NowMs - DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+
+		// Act
+		var result = await _engine.RunAsync("linear", options);
+
+		// Assert: серверное время запрошено один раз, запуск успешен, окна идут по локальным часам.
+		Assert.That(_gateway.ServerTimeCalls, Is.EqualTo(1));
+		Assert.That(result.Mode, Is.EqualTo(SyncRunMode.Backfill));
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		Assert.That(_gateway.Queries[0].StartTimeMs, Is.EqualTo(NowMs - WeekMs));
+		Assert.That(_stateStore.Find("linear")!.ExecWatermarkMs, Is.EqualTo(NowMs));
+	}
+
+	[TestMethod]
+	[Description("Инкрементальная догрузка с водяным знаком старше границы зажимает нижнюю границу перебора")]
+	public async Task TryIfIncrementalTargetOlderThanBoundaryClamped()
+	{
+		// Arrange: водяной знак 800-дневной давности — за границей хранения биржи;
+		// нижняя граница инкремента зажимается до самой ранней запрашиваемой даты.
+		// Требование: долгий перерыв между запусками не отправляет запросы в запретную
+		// зону — нижняя граница догрузки зажимается к границе хранения.
+		// Traceability: openspec:sync/bybit-history#scenario-incremental-boundary-clamped
+		await _stateStore.SaveAsync(new SyncState { Category = "linear", ExecWatermarkMs = NowMs - 800 * DayMs });
+		var options = new ExecutionCategorySyncOptions { IncrementalOverlapMs = 0 };
+		var allowedEarliestMs = NowMs - 723 * DayMs;
+
+		// Act
+		var result = await _engine.RunAsync("linear", options);
+
+		// Assert: режим — инкремент, все запросы не раньше границы, последнее окно — от неё.
+		Assert.That(result.Mode, Is.EqualTo(SyncRunMode.Incremental));
+		Assert.That(_gateway.Queries, Is.Not.Empty);
+		Assert.That(_gateway.Queries.All(query => query.StartTimeMs >= allowedEarliestMs), Is.True);
+		Assert.That(_gateway.Queries.Last().StartTimeMs, Is.EqualTo(allowedEarliestMs));
+		Assert.That(result.HistoryExhausted, Is.False);
+
+		// Assert: водяной знак продвинут к моменту запуска.
+		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
+	}
+
+	[TestMethod]
+	[Description("Пограничное окно у пола повторяется с началом на границе хранения — записи зажатого окна сохраняются")]
+	public async Task TryIfBoundaryWindowRetriedWithClampedStartAndRecordsSaved()
+	{
+		// Arrange: глубина 730 дней, пол зажат границей хранения; последнее окно перебора
+		// [граница, предыдущее окно] биржа отвергает как выходящий за глубину, повторный
+		// запрос с зажатым началом приносит запись у границы.
+		// Требование: окно, отклонённое за глубину хранения, повторяется один раз
+		// с временем начала на границе, записи зажатого диапазона загружаются и сохраняются.
+		// Traceability: openspec:sync/bybit-history#scenario-boundary-window-retried-clamped
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 730 * DayMs };
+		var allowedEarliestMs = NowMs - 723 * DayMs;
+		var lastWindowStartMs = NowMs - 721 * DayMs;
+
+		// Первые 103 окна перебора пусты, последнее окно у границы отклоняется,
+		// ретрай того же окна с зажатым началом отдаёт запись у границы.
+		for (var index = 0; index < 103; index++)
+		{
+			_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		}
+
+		_gateway.EnqueueError(new BybitApiException(
+			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("exec-at-boundary", NowMs - 722 * DayMs)],
+		});
+
+		// Act
+		var result = await _engine.RunAsync("linear", options);
+
+		// Assert: отказавшее окно и его ретрай запрошены с началом ровно на границе хранения.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(105));
+		Assert.That(_gateway.Queries[103].StartTimeMs, Is.EqualTo(allowedEarliestMs));
+		Assert.That(_gateway.Queries[104].StartTimeMs, Is.EqualTo(allowedEarliestMs));
+		Assert.That(_gateway.Queries[104].EndTimeMs, Is.EqualTo(lastWindowStartMs));
+
+		// Assert: запись зажатого окна загружена и сохранена, запуск успешен.
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId),
+			Is.EqualTo(new[] { "exec-at-boundary" }));
+		Assert.That(result.HistoryExhausted, Is.True);
+		Assert.That(_stateStore.Find("linear")!.BackfillBoundaryMs, Is.EqualTo(NowMs - 722 * DayMs));
+	}
+
+	[TestMethod]
+	[Description("Повторный пограничный отказ завершает перебор исчерпанием — остальные области не запрашиваются, запуск успешен")]
+	public async Task TryIfRepeatedBoundaryRefusalEndsWalkWithoutOtherScopes()
+	{
+		// Arrange: доска из двух активов; первое же окно области BTC биржа отвергает
+		// за глубину хранения, повтор с зажатым началом тоже отклонён.
+		// Требование: повторный пограничный отказ исчерпывает историю категории —
+		// оставшиеся окна и области не запрашиваются, запуск успешен с водяным знаком.
+		// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.EnqueueError(new BybitApiException(
+			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
+		_gateway.EnqueueError(new BybitApiException(
+			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
+
+		// Act: исключение не выходит наружу — запуск завершается штатно.
+		var result = await engine.RunAsync("option", options);
+
+		// Assert: обе области ETH и оставшиеся окна BTC не запрашивались.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
+		Assert.That(_gateway.Queries.All(query => query.BaseCoin == "BTC"), Is.True);
+
+		// Assert: перебор исчерпан, водяной знак зафиксирован, запуск успешен.
+		Assert.That(result.HistoryExhausted, Is.True);
+		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
+		var saved = _stateStore.Find("option");
+		Assert.That(saved, Is.Not.Null);
+		Assert.That(saved!.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(saved.LastSuccessAt, Is.Not.Null);
 	}
 
 	#region Помощники
@@ -576,6 +732,7 @@ public class ExecutionCategorySyncTests
 	/// <summary>
 	/// Фиктивный шлюз биржи: раздаёт заготовленные страницы и ошибки по порядку и помнит
 	/// все запросы движка. При исчерпании сценария отвечает пустой страницей без курсора.
+	/// Серверное время по умолчанию совпадает с виртуальными часами движка.
 	/// </summary>
 	private sealed class ScriptedGateway : IBybitHistoryGateway
 	{
@@ -583,6 +740,15 @@ public class ExecutionCategorySyncTests
 
 		/// <summary>Все запросы движка в порядке отправления.</summary>
 		public List<BybitExecutionListQuery> Queries { get; } = [];
+
+		/// <summary>Серверное время биржи, отдаваемое шлюзом; по умолчанию — момент запуска.</summary>
+		public long ServerTimeMs { get; set; } = NowMs;
+
+		/// <summary>Отказ эндпоинта серверного времени; null — эндпоинт отвечает успешно.</summary>
+		public BybitApiException? ServerTimeError { get; set; }
+
+		/// <summary>Сколько раз движок запрашивал серверное время.</summary>
+		public int ServerTimeCalls { get; private set; }
 
 		public void Enqueue(BybitPagedResponse<BybitExecution> page)
 		{
@@ -619,7 +785,10 @@ public class ExecutionCategorySyncTests
 
 		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
 		{
-			throw new NotSupportedException("Движок синхронизации исполнения не запрашивает серверное время в этом сценарии.");
+			ServerTimeCalls++;
+			return ServerTimeError is not null
+				? Task.FromException<long>(ServerTimeError)
+				: Task.FromResult(ServerTimeMs);
 		}
 	}
 

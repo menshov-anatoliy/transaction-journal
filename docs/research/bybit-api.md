@@ -151,7 +151,7 @@ Market-эндпоинты **отсутствуют в таблице per-UID API
 
 ## 7. Глубина истории
 
-- `/v5/execution/list`: окно одного запроса ≤ 7 дней; **общая глубина хранения в документации не указана** (см. Открытые вопросы). Явного лимита «N дней назад» docs не декларируют.
+- `/v5/execution/list`: окно одного запроса ≤ 7 дней; глубина хранения ~2 года. Явного лимита «N дней назад» docs не декларируют, но биржа отвечает на запросы старше двух лет ошибкой `retCode 10001` с текстом «Can't query order earlier than 2 years, please check your params: startTime or endTime!» (см. Открытые вопросы, №1).
 - `/v5/position/closed-pnl`: те же правила 7-дневного окна; общая глубина не задокументирована. Источник: [close-pnl](https://bybit-exchange.github.io/docs/v5/position/close-pnl).
 - `/v5/account/transaction-log`: **2 года** (задокументировано). Источник: [transaction-log](https://bybit-exchange.github.io/docs/v5/account/transaction-log).
 - `/v5/asset/delivery-record`: в навигации docs помечен как «Get Delivery Record (2 years)». Источник: [навигация раздела Asset](https://bybit-exchange.github.io/docs/v5/asset/fund-history).
@@ -177,7 +177,7 @@ Market-эндпоинты **отсутствуют в таблице per-UID API
 
 ## Открытые вопросы/риски
 
-1. **Глубина execution list**: документация не фиксирует, сколько лет назад отдаются данные (только «7 дней на запрос»). Практику покажет первый бэкфилл; при необходимости — сверка с transaction-log (2 года) и закрытием в поддержку Bybit.
+1. **Глубина execution list** — **закрыто**: граница подтверждена практикой, глубина хранения ~2 года. На запрос окна старше двух лет биржа отвечает `retCode 10001` с текстом «Can't query order earlier than 2 years, please check your params: startTime or endTime!». Код учитывает границу: пол backfill и нижняя граница инкремента зажимаются до `serverTime - 730 дней + 7 дней` (хелпер `BybitHistoryBoundary` в `src/TransactionJournal/Sync`), а пограничный отказ обрабатывается грациозно — окно ретраится один раз с началом на границе, повторный отказ завершает перебор окон с `historyExhausted = true` без падения запуска (guard в `ExecutionCategorySync` / `DeliveryCategorySync`). Спека: `sync/bybit-history`, требование `history-boundary-guard`.
 2. **`closedPnl` в execution list отсутствует** — в тикете он ожидался в составе полей. Реализованный PnL придётся собирать из `/v5/position/closed-pnl` (linear) и `/v5/asset/delivery-record` (delivery), либо считать самостоятельно из сделок (в журнале и так требуется свой «Реализованный результат», см. CONTEXT.md).
 3. **Опции в closed-pnl не поддерживаются** (`category=linear|inverse` only) — PnL экспираций опционов только через delivery-record (`deliveryRpl`).
 4. **Дробные/нестандартные страйки и базовые активы**: формат даты `dMMMyy` допускает однозначный день; при появлении новых базовых активов полагаться на instruments-info, а не на парсинг строки.

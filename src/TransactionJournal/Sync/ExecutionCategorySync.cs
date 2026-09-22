@@ -10,10 +10,13 @@ namespace TransactionJournal.Sync;
 /// знака с перекрытием назад. Категория option проходится областью на каждый базовый
 /// актив опционной доски, остальные категории — одной областью без фильтра. Успешный
 /// проход всех областей фиксирует в состоянии категории водяной знак, а backfill —
-/// ещё и достигнутую границу доступной истории.
+/// ещё и достигнутую границу доступной истории. Пол перебора зажимается границей
+/// хранения истории биржи по серверному времени, а пограничный отказ биржи завершает
+/// перебор исчерпанием, не срывая запуск.
 /// Traceability: openspec:sync/bybit-history#requirement-manual-sync-modes
 /// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
 /// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+/// Traceability: openspec:sync/bybit-history#requirement-history-boundary-guard
 /// Traceability: change:add-bybit-sync/design#d4
 /// </summary>
 public sealed class ExecutionCategorySync
@@ -22,26 +25,30 @@ public sealed class ExecutionCategorySync
 	private const string OptionCategory = "option";
 
 	private readonly ExecutionWindowPass _windowPass;
+	private readonly IBybitHistoryGateway _gateway;
 	private readonly IExecutionSyncStateStore _stateStore;
 	private readonly IOptionBaseCoinSource _optionBaseCoins;
 	private readonly TimeProvider _timeProvider;
 		private readonly IRawExecutionBatchWriter? _rawWriter;
 
-		/// <summary>Создаёт движок над проходом окна, хранилищем состояния и источником активов доски.</summary>
+		/// <summary>Создаёт движок над проходом окна, шлюзом биржи, хранилищем состояния и источником активов доски.</summary>
 		/// <param name="windowPass">Проход одного 7-дневного окна с курсорной пагинацией.</param>
+		/// <param name="gateway">Шлюз истории биржи: источник серверного времени для расчёта границы хранения.</param>
 		/// <param name="stateStore">Хранилище состояния синхронизации категории.</param>
 		/// <param name="optionBaseCoins">Источник базовых активов опционной доски для областей прохода.</param>
 		/// <param name="timeProvider">Поставщик времени; по умолчанию системные часы.</param>
 		/// <param name="rawWriter">Писатель сырых записей пачками по окнам; null — записи не сохраняются, движок только собирает их в памяти.</param>
-		/// <exception cref="ArgumentNullException">Проход, хранилище или источник активов не заданы.</exception>
+		/// <exception cref="ArgumentNullException">Проход, шлюз, хранилище или источник активов не заданы.</exception>
 		public ExecutionCategorySync(
 			ExecutionWindowPass windowPass,
+			IBybitHistoryGateway gateway,
 			IExecutionSyncStateStore stateStore,
 			IOptionBaseCoinSource optionBaseCoins,
 			TimeProvider? timeProvider = null,
 			IRawExecutionBatchWriter? rawWriter = null)
 		{
 			_windowPass = windowPass ?? throw new ArgumentNullException(nameof(windowPass));
+			_gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
 			_stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
 			_optionBaseCoins = optionBaseCoins ?? throw new ArgumentNullException(nameof(optionBaseCoins));
 			_timeProvider = timeProvider ?? TimeProvider.System;
@@ -91,6 +98,26 @@ public sealed class ExecutionCategorySync
 		var startedAt = _timeProvider.GetUtcNow();
 		var startedAtMs = startedAt.ToUnixTimeMilliseconds();
 
+		// Серверное время биржи запрашивается один на запуск: по нему считается граница
+		// хранения истории, чтобы рассинхрон локальных часов не сдвигал пол перебора за
+		// разрешённую зону. Отказ эндпоинта времени не роняет запуск — fallback на
+		// локальное время, а запас границы в одно execution-окно покрывает остаточный дрейф.
+		// Traceability: openspec:sync/bybit-history#scenario-floor-clamped-to-exchange-boundary
+		long serverNowMs;
+		try
+		{
+			serverNowMs = await _gateway.GetServerTimeMsAsync(cancellationToken).ConfigureAwait(false);
+		}
+		catch (BybitApiException)
+		{
+			serverNowMs = startedAtMs;
+		}
+
+		// Самая ранняя запрашиваемая дата этого запуска: опорная точка clamp-а пола
+		// и зажатия начала ретрая пограничного окна.
+		// Traceability: openspec:sync/bybit-history#scenario-floor-clamped-to-exchange-boundary
+		var allowedEarliestMs = BybitHistoryBoundary.GetAllowedEarliestMs(serverNowMs);
+
 		// Режим определяется по водяному знаку: отсутствие отметки об успешном синке
 		// означает первый запуск категории — выполняется первичный backfill всей доступной истории.
 		// Traceability: openspec:sync/bybit-history#scenario-first-run-backfill
@@ -107,6 +134,7 @@ public sealed class ExecutionCategorySync
 		var windowsProcessed = 0;
 		var historyExhausted = false;
 		var earlyStopped = false;
+		var boundaryExhausted = false;
 
 		if (mode == SyncRunMode.Backfill)
 		{
@@ -115,18 +143,30 @@ public sealed class ExecutionCategorySync
 			// перерыв в торговле не означает отсутствие более старой истории, а
 			// зафиксированная ранее граница глубину перебора больше не ограничивает:
 			// вычисленная по неполному набору активов, она не должна резать историю других.
+			// Пол зажимается clamp-ом к границе хранения биржи: конфигурация глубже неё
+			// и смещённые локальные часы не отправляют запросы в запретную зону.
 			// Traceability: openspec:sync/bybit-history#scenario-trading-gap-does-not-truncate-history
 			// Traceability: openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion
-			var floorMs = startedAtMs - options.MaxBackfillDepthMs;
+			// Traceability: openspec:sync/bybit-history#scenario-floor-clamped-to-exchange-boundary
+			var floorMs = BybitHistoryBoundary.ClampFloorMs(startedAtMs - options.MaxBackfillDepthMs, serverNowMs);
 			foreach (var scopeBaseCoin in scopes)
 			{
 				var windowEndMs = startedAtMs;
-				while (windowEndMs > floorMs)
+				while (windowEndMs > floorMs && boundaryExhausted == false)
 				{
 					cancellationToken.ThrowIfCancellationRequested();
 
 					var windowStartMs = Math.Max(windowEndMs - ExecutionWindowPass.MaxWindowMs, floorMs);
-					var passResult = await RunWindowAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, options, earlyStopOnKnownPage: false, cancellationToken).ConfigureAwait(false);
+					var passResult = await RunWindowWithBoundaryGuardAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage: false, cancellationToken).ConfigureAwait(false);
+					if (passResult is null)
+					{
+						// Повторный пограничный отказ: доступная история исчерпана — оставшиеся
+						// окна области и остальные области категории не запрашиваются.
+						// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+						boundaryExhausted = true;
+						break;
+					}
+
 					windowsProcessed++;
 					newExecutions.AddRange(passResult.NewExecutions);
 					allSeenExecutions.AddRange(passResult.AllExecutions);
@@ -134,10 +174,15 @@ public sealed class ExecutionCategorySync
 
 					windowEndMs = windowStartMs;
 				}
+
+				if (boundaryExhausted)
+				{
+					break;
+				}
 			}
 
-			// Каждая область листана до пола глубины: перебор истории категории исчерпан,
-			// можно переходить к следующей категории.
+			// Каждая область листана до пола глубины либо до границы хранения биржи:
+			// перебор истории категории исчерпан, можно переходить к следующей категории.
 			// Traceability: openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion
 			historyExhausted = true;
 		}
@@ -146,18 +191,30 @@ public sealed class ExecutionCategorySync
 			// Инкрементальная догрузка идёт окнами назад от момента запуска до водяного знака
 			// минус перекрытие: перечитывается только хвост истории, а не вся она. Ранняя
 			// остановка на целиком известной странице завершает проход области — старше лежат
-			// только уже сохранённые записи, остальные области продолжают обход.
+			// только уже сохранённые записи, остальные области продолжают обход. Нижняя
+			// граница зажимается к границе хранения биржи: долгий перерыв между запусками
+			// не отправляет запросы в запретную зону.
 			// Traceability: openspec:sync/bybit-history#scenario-subsequent-run-incremental
-			var targetStartMs = watermarkMs.GetValueOrDefault() - options.IncrementalOverlapMs;
+			// Traceability: openspec:sync/bybit-history#scenario-incremental-boundary-clamped
+			var targetStartMs = BybitHistoryBoundary.ClampFloorMs(watermarkMs.GetValueOrDefault() - options.IncrementalOverlapMs, serverNowMs);
 			foreach (var scopeBaseCoin in scopes)
 			{
 				var windowEndMs = startedAtMs;
-				while (windowEndMs > targetStartMs)
+				while (windowEndMs > targetStartMs && boundaryExhausted == false)
 				{
 					cancellationToken.ThrowIfCancellationRequested();
 
 					var windowStartMs = Math.Max(windowEndMs - ExecutionWindowPass.MaxWindowMs, targetStartMs);
-					var passResult = await RunWindowAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, options, earlyStopOnKnownPage: true, cancellationToken).ConfigureAwait(false);
+					var passResult = await RunWindowWithBoundaryGuardAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage: true, cancellationToken).ConfigureAwait(false);
+					if (passResult is null)
+					{
+						// Повторный пограничный отказ: хвост истории за границей недоступен —
+						// оставшиеся окна и области категории не запрашиваются.
+						// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+						boundaryExhausted = true;
+						break;
+					}
+
 					windowsProcessed++;
 					newExecutions.AddRange(passResult.NewExecutions);
 					allSeenExecutions.AddRange(passResult.AllExecutions);
@@ -171,7 +228,17 @@ public sealed class ExecutionCategorySync
 
 					windowEndMs = windowStartMs;
 				}
+
+				if (boundaryExhausted)
+				{
+					break;
+				}
 			}
+
+			// Пограничный отказ завершает инкрементальную догрузку исчерпанием истории:
+			// хвост за границей хранения биржа не отдаёт.
+			// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+			historyExhausted = boundaryExhausted;
 		}
 
 		// Фиксация фактов успешного прохода всех областей. Водяной знак монотонен: покрывает
@@ -275,6 +342,100 @@ public sealed class ExecutionCategorySync
 			EarlyStopOnKnownPage = earlyStopOnKnownPage,
 		};
 		return await _windowPass.RunAsync(window, passOptions, cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Проходит одно окно с защитным контуром границы хранения истории: пограничный
+	/// отказ биржи повторяет перебор диапазона один раз с началом, зажатым до границы,
+	/// а повторный отказ означает исчерпание доступной истории. Возвращает null, когда
+	/// перебор исчерпан и оставшиеся окна и области категории не запрашиваются; прочие
+	/// ошибки биржи пробрасываются как раньше.
+	/// Traceability: openspec:sync/bybit-history#requirement-history-boundary-guard
+	/// </summary>
+	private async Task<ExecutionWindowPassResult?> RunWindowWithBoundaryGuardAsync(
+		string category,
+		string? baseCoin,
+		long windowStartMs,
+		long windowEndMs,
+		long allowedEarliestMs,
+		ExecutionCategorySyncOptions options,
+		bool earlyStopOnKnownPage,
+		CancellationToken cancellationToken)
+	{
+		try
+		{
+			return await RunWindowAsync(category, baseCoin, windowStartMs, windowEndMs, options, earlyStopOnKnownPage, cancellationToken).ConfigureAwait(false);
+		}
+		catch (BybitApiException error) when (BybitApiException.IsHistoryBoundaryError(error))
+		{
+			// Окно отклонено за глубину хранения: записи в разрешённой зоне ещё можно
+			// прочитать — диапазон повторяется один раз с началом на границе. Диапазон
+			// идёт под-окнами ширины прохода: зажатый диапазон бывает шире семи дней.
+			// Traceability: openspec:sync/bybit-history#scenario-boundary-window-retried-clamped
+			return await RunClampedRangeAsync(category, baseCoin, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage, cancellationToken).ConfigureAwait(false);
+		}
+	}
+
+	/// <summary>
+	/// Повторяет перебор зажатого диапазона от границы хранения до конца отказавшего
+	/// окна под-окнами ширины прохода. Любой пограничный отказ внутри повтора означает,
+	/// что запаса не хватило: возвращается null — доступная история исчерпана.
+	/// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+	/// </summary>
+	private async Task<ExecutionWindowPassResult?> RunClampedRangeAsync(
+		string category,
+		string? baseCoin,
+		long rangeEndMs,
+		long allowedEarliestMs,
+		ExecutionCategorySyncOptions options,
+		bool earlyStopOnKnownPage,
+		CancellationToken cancellationToken)
+	{
+		var allExecutions = new List<BybitExecution>();
+		var newExecutions = new List<BybitExecution>();
+		var pagesFetched = 0;
+		var earlyStopped = false;
+		var rangeEnd = rangeEndMs;
+		while (rangeEnd > allowedEarliestMs)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+
+			var rangeStart = Math.Max(rangeEnd - ExecutionWindowPass.MaxWindowMs, allowedEarliestMs);
+			ExecutionWindowPassResult subResult;
+			try
+			{
+				subResult = await RunWindowAsync(category, baseCoin, rangeStart, rangeEnd, options, earlyStopOnKnownPage, cancellationToken).ConfigureAwait(false);
+			}
+			catch (BybitApiException error) when (BybitApiException.IsHistoryBoundaryError(error))
+			{
+				// Повторный пограничный отказ: граница ближе, чем рассчитано, —
+				// доступная история исчерпана.
+				// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+				return null;
+			}
+
+			allExecutions.AddRange(subResult.AllExecutions);
+			newExecutions.AddRange(subResult.NewExecutions);
+			pagesFetched += subResult.PagesFetched;
+
+			// Целиком известное под-окно останавливает повтор: глубже лежат только
+			// уже сохранённые записи, как и в обычном инкрементальном проходе.
+			if (subResult.EarlyStopped)
+			{
+				earlyStopped = true;
+				break;
+			}
+
+			rangeEnd = rangeStart;
+		}
+
+		return new ExecutionWindowPassResult
+		{
+			AllExecutions = allExecutions,
+			NewExecutions = newExecutions,
+			PagesFetched = pagesFetched,
+			EarlyStopped = earlyStopped,
+		};
 	}
 
 	#endregion

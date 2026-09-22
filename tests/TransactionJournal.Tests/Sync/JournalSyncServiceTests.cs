@@ -57,12 +57,13 @@ public class JournalSyncServiceTests
 		// опционной доски отдаёт заглушка: один базовый актив, без обращения к справочнику.
 		var executionEngine = new ExecutionCategorySync(
 			new ExecutionWindowPass(_gateway, _store),
+			_gateway,
 			_store,
 			new FakeOptionBaseCoinSource("BTC"),
 			new ManualTimeProvider(),
 			_store);
 		var deliveryEngine = new DeliveryCategorySync(
-			new DeliveryWindowPass(_gateway, _store), _store, new ManualTimeProvider(), _store);
+			new DeliveryWindowPass(_gateway, _store), _gateway, _store, new ManualTimeProvider(), _store);
 		_service = new JournalSyncService(
 			executionEngine,
 			deliveryEngine,
@@ -529,7 +530,8 @@ public class JournalSyncServiceTests
 
 		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
 		{
-			throw new NotSupportedException("Оркестратор синхронизации не запрашивает серверное время в этом сценарии.");
+			// Серверное время биржи совпадает с виртуальными часами оркестратора.
+			return Task.FromResult(NowMs);
 		}
 
 		private static BybitPagedResponse<TItem> DequeuePage<TItem>(Queue<object> responses)
