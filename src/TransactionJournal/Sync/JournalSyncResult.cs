@@ -40,4 +40,13 @@ public sealed record JournalSyncResult
 	/// Traceability: openspec:sync/bybit-history#scenario-unavailable-instrument-spec-skipped
 	/// </summary>
 	public IReadOnlyList<string> UnresolvedInstruments { get; init; } = [];
+
+	/// <summary>
+	/// Непокрытые базовые активы опционной доски: активы option-записей полного снимка
+	/// сырья, чьи области не пройдены этим запуском. Средства лечения — конфигурация
+	/// дополнительных активов доски и сброс состояния категории option; расчёт advisory,
+	/// запуск не помечается ошибкой.
+	/// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
+	/// </summary>
+	public IReadOnlyList<string> UncoveredBaseCoins { get; init; } = [];
 }

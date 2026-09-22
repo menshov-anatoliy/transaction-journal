@@ -136,6 +136,7 @@ public sealed class ExecutionCategorySync
 		var earlyStopped = false;
 		var boundaryExhausted = false;
 		var skippedAreas = new List<string>();
+		var passedBaseCoins = new List<string>();
 
 		if (mode == SyncRunMode.Backfill)
 		{
@@ -152,6 +153,16 @@ public sealed class ExecutionCategorySync
 			var floorMs = BybitHistoryBoundary.ClampFloorMs(startedAtMs - options.MaxBackfillDepthMs, serverNowMs);
 			foreach (var scopeBaseCoin in scopes)
 			{
+				// Область доски, до которой дошёл ход перебора, фиксируется пройденной:
+				// в том числе область, пропущенная биржей как недоступная. Безфильтровая
+				// область linear базового актива не имеет и в перечень не попадает;
+				// области после пограничного исчерпания не запрашивались и не входят.
+				// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
+				if (scopeBaseCoin is not null)
+				{
+					passedBaseCoins.Add(scopeBaseCoin);
+				}
+
 				var windowEndMs = startedAtMs;
 				while (windowEndMs > floorMs && boundaryExhausted == false)
 				{
@@ -213,6 +224,16 @@ public sealed class ExecutionCategorySync
 			var targetStartMs = BybitHistoryBoundary.ClampFloorMs(watermarkMs.GetValueOrDefault() - options.IncrementalOverlapMs, serverNowMs);
 			foreach (var scopeBaseCoin in scopes)
 			{
+				// Область доски, до которой дошёл ход перебора, фиксируется пройденной:
+				// в том числе область, пропущенная биржей как недоступная. Безфильтровая
+				// область linear базового актива не имеет и в перечень не попадает;
+				// области после пограничного исчерпания не запрашивались и не входят.
+				// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
+				if (scopeBaseCoin is not null)
+				{
+					passedBaseCoins.Add(scopeBaseCoin);
+				}
+
 				var windowEndMs = startedAtMs;
 				while (windowEndMs > targetStartMs && boundaryExhausted == false)
 				{
@@ -300,6 +321,7 @@ public sealed class ExecutionCategorySync
 			ExecWatermarkMs = fixedWatermarkMs,
 			NewExecutionsPersisted = newExecutionsPersisted,
 			SkippedAreas = skippedAreas,
+			PassedBaseCoins = passedBaseCoins,
 		};
 	}
 

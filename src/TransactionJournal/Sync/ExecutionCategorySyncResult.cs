@@ -45,4 +45,13 @@ public sealed class ExecutionCategorySyncResult
 	/// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
 	/// </summary>
 	public IReadOnlyList<string> SkippedAreas { get; init; } = [];
+
+	/// <summary>
+	/// Базовые активы опционной доски, области которых запрашивались этим запуском:
+	/// включая области, пропущенные биржей как недоступные, — их записи не загружены,
+	/// но сама область пройдена ходом перебора. Для категорий без деления доски перечень
+	/// пуст. Служит входом расчёта непокрытых активов оркестратором.
+	/// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
+	/// </summary>
+	public IReadOnlyList<string> PassedBaseCoins { get; init; } = [];
 }

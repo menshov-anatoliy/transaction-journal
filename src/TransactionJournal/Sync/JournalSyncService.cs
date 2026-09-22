@@ -127,6 +127,7 @@ public sealed class JournalSyncService : IJournalSyncService
 		// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
 		JournalMaterializationResult? projection = null;
 		string? projectionError = null;
+		IReadOnlyList<string> uncoveredBaseCoins = [];
 		try
 		{
 			var snapshot = await _rawSnapshotStore.LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -136,6 +137,12 @@ public sealed class JournalSyncService : IJournalSyncService
 				snapshot.Deliveries,
 				tradeAssignments: null,
 				asOf: _timeProvider.GetUtcNow());
+
+			// Непокрытые активы доски сравниваются по полному снимку, а не только по новым
+			// записям запуска: дыра покрытия существует и когда записи пришли прежними
+			// запусками, а область актива не обходилась ни разу.
+			// Traceability: openspec:sync/bybit-history#scenario-uncovered-base-coin-reported
+			uncoveredBaseCoins = ComputeUncoveredBaseCoins(snapshot, executionResults);
 		}
 		catch (Exception ex)
 		{
@@ -154,10 +161,62 @@ public sealed class JournalSyncService : IJournalSyncService
 			// неполученных спецификаций проходит в итог запуска для показа пользователю.
 			// Traceability: openspec:sync/bybit-history#scenario-unavailable-instrument-spec-skipped
 			UnresolvedInstruments = instrumentSync?.UnresolvedSymbols ?? [],
+			UncoveredBaseCoins = uncoveredBaseCoins,
 		};
 	}
 
 	#region Вспомогательные методы
+
+	/// <summary>Категория опционной доски: её записи делятся на базовые активы по префиксу символа.</summary>
+	private const string OptionCategory = "option";
+
+	/// <summary>
+	/// Вычисляет непокрытые базовые активы опционной доски: собирает активы символов
+	/// option-записей полного снимка сырья (исполнений и delivery-записей) и вычитает
+	/// области, фактически пройденные запуском. Актив извлекается из префикса символа
+	/// до первого дефиса и нормализуется как в <see cref="OptionBaseCoinSource"/> —
+	/// trim и верхний регистр. Расчёт advisory: перечень отсортирован, повторы сняты.
+	/// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
+	/// </summary>
+	private static IReadOnlyList<string> ComputeUncoveredBaseCoins(
+		JournalRawSnapshot snapshot,
+		IReadOnlyDictionary<string, ExecutionCategorySyncResult> executionResults)
+	{
+		// Пройденные области берутся из итога option-движка исполнения: только он
+		// делит обход доски на области по базовым активам.
+		var passedBaseCoins = new HashSet<string>(
+			executionResults.GetValueOrDefault(OptionCategory)?.PassedBaseCoins ?? [],
+			StringComparer.Ordinal);
+
+		// Сортированное множество дедуплицирует повторяющиеся активы и даёт
+		// стабильный порядок перечня между запусками.
+		var recordedBaseCoins = new SortedSet<string>(StringComparer.Ordinal);
+		foreach (var execution in snapshot.Executions)
+		{
+			if (string.Equals(execution.Category, OptionCategory, StringComparison.Ordinal))
+			{
+				recordedBaseCoins.Add(ExtractBaseCoin(execution.Symbol));
+			}
+		}
+
+		foreach (var delivery in snapshot.Deliveries)
+		{
+			if (string.Equals(delivery.Category, OptionCategory, StringComparison.Ordinal))
+			{
+				recordedBaseCoins.Add(ExtractBaseCoin(delivery.Symbol));
+			}
+		}
+
+		return recordedBaseCoins.Where(coin => passedBaseCoins.Contains(coin) == false).ToList();
+	}
+
+	/// <summary>Извлекает базовый актив из символа: префикс до первого дефиса, trim и верхний регистр.</summary>
+	private static string ExtractBaseCoin(string symbol)
+	{
+		var separatorIndex = symbol.IndexOf('-');
+		var prefix = separatorIndex < 0 ? symbol : symbol[..separatorIndex];
+		return prefix.Trim().ToUpperInvariant();
+	}
 
 	/// <summary>
 	/// Собирает пары категория-символ из новых записей запуска: исполнения и delivery-записи

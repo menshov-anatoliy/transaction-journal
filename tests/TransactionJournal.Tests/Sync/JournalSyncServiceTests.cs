@@ -55,26 +55,7 @@ public class JournalSyncServiceTests
 		// Полный стек оркестратора: движки категорий с писателями сырых записей,
 		// пополнитель справочника и материализатор над одним хранилищем. Список активов
 		// опционной доски отдаёт заглушка: один базовый актив, без обращения к справочнику.
-		var executionEngine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _store),
-			_gateway,
-			_store,
-			new FakeOptionBaseCoinSource("BTC"),
-			new ManualTimeProvider(),
-			_store);
-		var deliveryEngine = new DeliveryCategorySync(
-			new DeliveryWindowPass(_gateway, _store), _gateway, _store, new ManualTimeProvider(), _store);
-		_service = new JournalSyncService(
-			executionEngine,
-			deliveryEngine,
-			new InstrumentReferenceSync(_gateway, _store),
-			_store,
-			_store,
-			_store,
-			new JournalMaterializer(),
-			new ExecutionCategorySyncOptions(),
-			new DeliveryCategorySyncOptions(),
-			new ManualTimeProvider());
+		_service = CreateService("BTC");
 	}
 
 	[TestCleanup]
@@ -354,7 +335,95 @@ public class JournalSyncServiceTests
 		Assert.That(db.RawExecutions.Count(), Is.EqualTo(2));
 	}
 
+	[TestMethod]
+	[Description("Delivery-записи ETH при пройденной только области BTC дают непокрытый актив ETH")]
+	public async Task TryIfEthDeliveriesWithOnlyBtcAreaWalkedReportUncoveredEth()
+	{
+		// Arrange: доска заглушки состоит из одного актива BTC; delivery-эндпоинт при этом
+		// отдаёт запись делистнутого ETH-опциона — её символ уже в снимке сырья, хотя
+		// область ETH не входила в пройденные области запуска.
+		// Требование: базовый актив, чьи записи есть в журнале, но чья область не
+		// проходилась запуском, попадает в перечень непокрытых результата; запуск
+		// при этом успешен.
+		// Traceability: openspec:sync/bybit-history#scenario-uncovered-base-coin-reported
+		_gateway.EnqueueExecution(ExecutionPage(LinearExecution()));
+		_gateway.EnqueueExecution(ExecutionPage(OptionExecution()));
+		_gateway.EnqueueDelivery(DeliveryPage());
+		_gateway.EnqueueDelivery(DeliveryPage(OptionDelivery("ETH-15DEC25-45000-P")));
+		_gateway.EnqueueDelivery(DeliveryPage());
+		_gateway.AddInstrument(LinearInstrument());
+		_gateway.AddInstrument(OptionInstrument());
+		_gateway.AddInstrument(OptionInstrument("ETH-15DEC25-45000-P", "ETH", "Put"));
+
+		// Act
+		var result = await _service.SyncAsync();
+
+		// Assert: запуск успешен, а ETH — единственный непокрытый актив: его записи
+		// в сырье есть, пройденная область доски — только BTC.
+		// Traceability: openspec:sync/bybit-history#scenario-uncovered-base-coin-reported
+		Assert.That(result.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(result.ProjectionError, Is.Null);
+		Assert.That(result.UncoveredBaseCoins, Is.EqualTo(new[] { "ETH" }));
+	}
+
+	[TestMethod]
+	[Description("Полностью покрытая доска не даёт непокрытых активов в результате запуска")]
+	public async Task TryIfFullyCoveredBoardReportsNoUncoveredBaseCoins()
+	{
+		// Arrange: доска из двух активов BTC и ETH, обе области пройдены запуском;
+		// delivery-эндпоинт отдаёт ту же запись ETH-опциона.
+		// Требование: когда все базовые активы записей option покрыты пройденными
+		// областями доски, перечень непокрытых пуст.
+		// Traceability: openspec:sync/bybit-history#scenario-covered-board-no-warning
+		var service = CreateService("BTC", "ETH");
+		_gateway.EnqueueExecution(ExecutionPage(LinearExecution()));
+		_gateway.EnqueueExecution(ExecutionPage(OptionExecution()));
+		_gateway.EnqueueExecution(ExecutionPage());
+		_gateway.EnqueueDelivery(DeliveryPage());
+		_gateway.EnqueueDelivery(DeliveryPage(OptionDelivery("ETH-15DEC25-45000-P")));
+		_gateway.EnqueueDelivery(DeliveryPage());
+		_gateway.AddInstrument(LinearInstrument());
+		_gateway.AddInstrument(OptionInstrument());
+		_gateway.AddInstrument(OptionInstrument("ETH-15DEC25-45000-P", "ETH", "Put"));
+
+		// Act
+		var result = await service.SyncAsync();
+
+		// Assert: обе области запрошены и пройдены — записи ETH покрыты, перечень пуст.
+		Assert.That(result.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(result.Executions["option"].PassedBaseCoins, Is.EqualTo(new[] { "BTC", "ETH" }));
+		Assert.That(result.UncoveredBaseCoins, Is.Empty);
+	}
+
 	#region Помощники
+
+	/// <summary>
+	/// Собирает оркестратор над общими хранилищами и фиктивной биржей с заданным
+	/// списком базовых активов опционной доски.
+	/// </summary>
+	private JournalSyncService CreateService(params string[] optionBaseCoins)
+	{
+		var executionEngine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _store),
+			_gateway,
+			_store,
+			new FakeOptionBaseCoinSource(optionBaseCoins),
+			new ManualTimeProvider(),
+			_store);
+		var deliveryEngine = new DeliveryCategorySync(
+			new DeliveryWindowPass(_gateway, _store), _gateway, _store, new ManualTimeProvider(), _store);
+		return new JournalSyncService(
+			executionEngine,
+			deliveryEngine,
+			new InstrumentReferenceSync(_gateway, _store),
+			_store,
+			_store,
+			_store,
+			new JournalMaterializer(),
+			new ExecutionCategorySyncOptions(),
+			new DeliveryCategorySyncOptions(),
+			new ManualTimeProvider());
+	}
 
 	/// <summary>Прогон первичного backfill тех же данных, что в первом сценарии.</summary>
 	private async Task RunFirstBackfillAsync()
@@ -401,9 +470,9 @@ public class JournalSyncServiceTests
 	};
 
 	/// <summary>ITM delivery-запись купленного колла: расчётная цена 46000 при страйке 45000.</summary>
-	private static BybitDeliveryRecord OptionDelivery() => new()
+	private static BybitDeliveryRecord OptionDelivery(string symbol = OptionSymbol) => new()
 	{
-		Symbol = OptionSymbol,
+		Symbol = symbol,
 		DeliveryTimeMs = OptionDeliveryMs,
 		Side = "Buy",
 		Position = 0.0003m,
@@ -425,14 +494,17 @@ public class JournalSyncServiceTests
 		DeliveryTimeMs = 0L,
 	};
 
-	private static BybitInstrumentInfo OptionInstrument() => new()
+	private static BybitInstrumentInfo OptionInstrument(
+		string symbol = OptionSymbol,
+		string baseCoin = "BTC",
+		string optionsType = "Call") => new()
 	{
-		Symbol = OptionSymbol,
+		Symbol = symbol,
 		Status = "Trading",
-		BaseCoin = "BTC",
+		BaseCoin = baseCoin,
 		QuoteCoin = "USD",
 		SettleCoin = "USDC",
-		OptionsType = "Call",
+		OptionsType = optionsType,
 		DeliveryTimeMs = OptionDeliveryMs,
 	};
 

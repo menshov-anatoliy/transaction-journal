@@ -273,6 +273,64 @@ public class SyncPageTests
 	}
 
 	[TestMethod]
+	[Description("Завершённый запуск с непокрытыми активами доски показывает заметку с подсказкой лечения")]
+	public void TryIfUncoveredBaseCoinsNoteShownWithTreatmentHintWhenListIsNotEmpty()
+	{
+		// Arrange: запуск завершён успешно, но записи ETH-опционов есть в журнале,
+		// а область ETH не пройдена — актив непокрыт.
+		// Требование: перечень непокрытых активов виден рядом с результатом запуска
+		// с подсказкой о конфигурации дополнительных активов доски и сбросе состояния
+		// категории.
+		// Traceability: openspec:sync/bybit-history#scenario-uncovered-base-coin-reported
+		var service = new Mock<IJournalSyncService>();
+		service
+			.Setup(svc => svc.SyncAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateCompletedResult() with { UncoveredBaseCoins = ["ETH"] });
+		_context.Services.AddSingleton(service.Object);
+
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Act: нажатие «Синхронизировать» запускает синк.
+		cut.Find("button").Click();
+
+		// Assert: заметка с перечнем и подсказкой лечения видна, статус запуска
+		// остаётся успешным — без блока прерывания.
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("Синхронизация завершена"));
+			Assert.That(cut.Markup, Does.Not.Contain("Синхронизация прервана"));
+			var uncoveredNote = cut.Find("p[role='note']");
+			Assert.That(uncoveredNote.TextContent, Does.Contain("Непокрытые базовые активы"));
+			Assert.That(uncoveredNote.TextContent, Does.Contain("ETH"));
+			Assert.That(uncoveredNote.TextContent, Does.Contain("Sync:ExtraOptionBaseCoins"));
+			Assert.That(uncoveredNote.TextContent, Does.Contain("сбросьте состояние категории"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Завершённый запуск без непокрытых активов не показывает заметку о покрытии доски")]
+	public void TryIfNoUncoveredBaseCoinsNoteWhenListIsEmpty()
+	{
+		// Arrange: обычный успешный запуск — все активы записей option покрыты
+		// пройденными областями доски.
+		var service = new Mock<IJournalSyncService>();
+		service
+			.Setup(svc => svc.SyncAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateCompletedResult());
+		_context.Services.AddSingleton(service.Object);
+
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Act: нажатие «Синхронизировать» запускает синк.
+		cut.Find("button").Click();
+
+		// Assert: результат показан, заметки о непокрытых активах нет.
+		// Traceability: openspec:sync/bybit-history#scenario-covered-board-no-warning
+		cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("Синхронизация завершена")));
+		Assert.That(cut.Markup, Does.Not.Contain("Непокрытые базовые активы"));
+	}
+
+	[TestMethod]
 	[Description("Ошибка синка показывается на странице, кнопка остаётся доступной для повторного запуска")]
 	public void TryIfFailedSyncShowsErrorAndKeepsButtonForRetry()
 	{

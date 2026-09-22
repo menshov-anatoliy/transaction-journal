@@ -803,6 +803,50 @@ public class ExecutionCategorySyncTests
 		Assert.That(saved.LastSuccessAt, Is.Not.Null);
 	}
 
+	[TestMethod]
+	[Description("Перечень пройденных активов доски собирает и пропущенные по 110023, и догруженные области")]
+	public async Task TryIfPassedBaseCoinsIncludeSkippedAndWalkedBoardAreas()
+	{
+		// Arrange: доска из двух активов; область BTC биржа отвечает отказом «контракт
+		// недоступен для торговли», область ETH приносит запись.
+		// Требование: перечень пройденных областей доски — вход расчёта непокрытых
+		// активов — отражает все запрошенные области запуска, включая пропущенные
+		// как недоступные.
+		// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
+		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.EnqueueError(new BybitApiException(110023, "The contract is not available for trades"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - DayMs)] });
+
+		// Act
+		var result = await engine.RunAsync("option", options);
+
+		// Assert: обе области запрошены и перечислены пройденными — пропуск BTC
+		// не выбрасывает актив из перечня.
+		// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
+		Assert.That(result.PassedBaseCoins, Is.EqualTo(new[] { "BTC", "ETH" }));
+	}
+
+	[TestMethod]
+	[Description("Категория без деления доски не даёт пройденных базовых активов")]
+	public async Task TryIfLinearRunPassesNoBaseCoins()
+	{
+		// Arrange: linear читается одной областью без фильтра по активу — пройденных
+		// базовых активов доски у категории нет.
+		// Требование: перечень пройденных активов доски наполняют только option-области.
+		// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-lin", NowMs - DayMs)] });
+
+		// Act
+		var result = await _engine.RunAsync("linear", options);
+
+		// Assert
+		Assert.That(result.PassedBaseCoins, Is.Empty);
+	}
+
 	#region Помощники
 
 	private static BybitExecution Execution(string execId, long execTimeMs) => new()

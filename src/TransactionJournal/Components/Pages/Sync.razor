@@ -63,6 +63,19 @@ else
 				сделки по ним отложены): @string.Join(", ", unresolvedInstruments)
 			</p>
 		}
+
+		@if (_result.UncoveredBaseCoins is { Count: > 0 } uncoveredBaseCoins)
+		{
+			@* Дыра покрытия доски не помечает запуск ошибкой, но история актива не
+				обходилась: заметка называет оба средства лечения — конфигурацию
+				дополнительных активов доски и сброс состояния категории. *@
+			<p role="note">
+				Непокрытые базовые активы опционной доски (история не обходилась запуском:
+				добавьте активы в конфигурацию дополнительных активов доски Sync:ExtraOptionBaseCoins
+				и сбросьте состояние категории option для повторного полного перебора):
+				@string.Join(", ", uncoveredBaseCoins)
+			</p>
+		}
 	</section>
 
 	@if (_result.ProjectionError is not null)
