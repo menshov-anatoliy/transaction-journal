@@ -422,6 +422,21 @@ public sealed class JournalSyncStore :
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 	}
 
+	/// <inheritdoc cref="IExecutionSyncStateStore.ResetAsync" />
+	public async Task ResetAsync(string category, CancellationToken cancellationToken = default)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(category);
+		using var db = CreateContext();
+		// Удаляется только строка состояния своей категории: сырые записи, доменные
+		// сущности и журнал запусков остаются — следующий запуск категории выполнит
+		// первичный backfill без дублей уже известной истории.
+		// Traceability: openspec:sync/bybit-history#scenario-reset-keeps-journal-data
+		await db.SyncStates
+			.Where(state => state.Category == category)
+			.ExecuteDeleteAsync(cancellationToken)
+			.ConfigureAwait(false);
+	}
+
 	#endregion
 
 	#region ISyncRunJournal

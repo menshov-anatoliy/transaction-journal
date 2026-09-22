@@ -18,14 +18,14 @@
 
 ## 4. Delivery-движок
 
-- [ ] 4.1 Добавить `MaxBackfillDepthMs` в `DeliveryCategorySyncOptions` (дефолт 730 дней) с той же семантикой пола глубины: без остановки по пустому окну; проверить тестами `DeliveryCategorySyncTests`/`DeliveryWindowPassTests`: перерыв в delivery-истории не обрезает проход, остановка на полу
-- [ ] 4.2 Снабдить смысловые блоки traceability-метками `openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion`; проверить разрешение ссылок rg-поиском
+- [x] 4.1 Добавить `MaxBackfillDepthMs` в `DeliveryCategorySyncOptions` (дефолт 730 дней) с той же семантикой пола глубины: без остановки по пустому окну; проверить тестами `DeliveryCategorySyncTests`/`DeliveryWindowPassTests`: перерыв в delivery-истории не обрезает проход, остановка на полу
+- [x] 4.2 Снабдить смысловые блоки traceability-метками `openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion`; проверить разрешение ссылок rg-поиском
 
 ## 5. Сброс состояния категории
 
-- [ ] 5.1 Расширить `IExecutionSyncStateStore` методом `ResetAsync(category)` и реализовать в `JournalSyncStore` удалением строки `SyncStates` категории; проверить тестом `JournalSyncStoreTests`: сброс удаляет состояние только своей категории, сырые записи и запуски остаются
-- [ ] 5.2 Добавить на страницу `Sync.razor` блок обслуживания с командой сброса состояния категории (linear/option), подтверждением и блокировкой на время синка; проверить UI-тестом `SyncPageTests`: команда требует подтверждения, вызывает сброс выбранной категории, скрыта/заблокирована при выполнении синка
-- [ ] 5.3 Проверить интеграцией через `JournalSyncServiceTests`: после сброса состояния option очередной `SyncAsync` выполняет backfill категории и не создаёт дублей известных записей (scenario-reset-forces-backfill)
+- [x] 5.1 Расширить `IExecutionSyncStateStore` методом `ResetAsync(category)` и реализовать в `JournalSyncStore` удалением строки `SyncStates` категории; проверить тестом `JournalSyncStoreTests`: сброс удаляет состояние только своей категории, сырые записи и запуски остаются
+- [x] 5.2 Добавить на страницу `Sync.razor` блок обслуживания с командой сброса состояния категории (linear/option), подтверждением и блокировкой на время синка; проверить UI-тестом `SyncPageTests`: команда требует подтверждения, вызывает сброс выбранной категории, скрыта/заблокирована при выполнении синка
+- [x] 5.3 Проверить интеграцией через `JournalSyncServiceTests`: после сброса состояния option очередной `SyncAsync` выполняет backfill категории и не создаёт дублей известных записей (scenario-reset-forces-backfill)
 
 ## 6. Конфигурация и проводка
 

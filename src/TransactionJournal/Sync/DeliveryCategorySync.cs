@@ -6,7 +6,7 @@ namespace TransactionJournal.Sync;
 /// <summary>
 /// Синхронизация delivery-истории одной торговой категории: по водяному знаку состояния
 /// выбирает режим — без отметки об успешном delivery-синке выполняется первичный backfill
-/// 30-дневными окнами назад до исчерпания данных биржи, иначе инкрементальная догрузка
+/// 30-дневными окнами назад до пола глубины, иначе инкрементальная догрузка
 /// от водяного знака с перекрытием назад. Дедуп по ключу symbol + deliveryTime отсекает
 /// записи пересекающихся окон, поэтому повторные прогоны не создают дублей. Успешный
 /// проход фиксирует водяной знак delivery-категории, не трогая поля прохода исполнений.
@@ -46,11 +46,11 @@ public sealed class DeliveryCategorySync
 	/// успешного прохода.
 	/// </summary>
 	/// <param name="category">Торговая категория: option или linear.</param>
-	/// <param name="options">Параметры синхронизации: размер страницы и перекрытие инкремента.</param>
+	/// <param name="options">Параметры синхронизации: размер страницы, перекрытие инкремента и глубина backfill.</param>
 	/// <param name="progressRun">Запуск, чей счётчик новых delivery-записей продвигается пачками по окнам; null — прогресс запуска не ведётся.</param>
 	/// <param name="cancellationToken">Токен отмены синхронизации.</param>
 	/// <exception cref="ArgumentException">Категория не задана либо запуск прогресса передан без писателя сырых записей.</exception>
-	/// <exception cref="ArgumentOutOfRangeException">Перекрытие инкрементального окна отрицательно.</exception>
+	/// <exception cref="ArgumentOutOfRangeException">Перекрытие инкрементального окна отрицательно или глубина backfill неположительна.</exception>
 	/// <exception cref="BybitApiException">Биржа ответила ошибкой после всех повторов; состояние категории не меняется.</exception>
 	public async Task<DeliveryCategorySyncResult> RunAsync(
 		string category,
@@ -64,6 +64,12 @@ public sealed class DeliveryCategorySync
 		{
 			throw new ArgumentOutOfRangeException(
 				nameof(options), options.IncrementalOverlapMs, "Перекрытие инкрементального окна не может быть отрицательным.");
+		}
+
+		if (options.MaxBackfillDepthMs <= 0)
+		{
+			throw new ArgumentOutOfRangeException(
+				nameof(options), options.MaxBackfillDepthMs, "Глубина backfill должна быть положительной.");
 		}
 
 		if (progressRun is not null && _rawWriter is null)
@@ -92,29 +98,29 @@ public sealed class DeliveryCategorySync
 
 		if (mode == SyncRunMode.Backfill)
 		{
-			// Backfill идёт окнами назад от момента запуска до первого пустого окна:
-			// пустое окно при пролистывании назад означает, что глубже delivery-данных
-			// биржа не отдаёт.
+			// Пол глубины: окна листаются назад от момента запуска до этой границы,
+			// последнее окно усекается до пола. Пустое окно проход не завершает —
+			// перерыв в delivery-торговле не означает отсутствие более старых экспираций.
+			// Traceability: openspec:sync/bybit-history#scenario-trading-gap-does-not-truncate-history
 			// Traceability: openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion
+			var floorMs = startedAtMs - options.MaxBackfillDepthMs;
 			var windowEndMs = startedAtMs;
-			while (true)
+			while (windowEndMs > floorMs)
 			{
 				cancellationToken.ThrowIfCancellationRequested();
 
-				var windowStartMs = windowEndMs - DeliveryWindowPass.MaxWindowMs;
+				var windowStartMs = Math.Max(windowEndMs - DeliveryWindowPass.MaxWindowMs, floorMs);
 				var passResult = await RunWindowAsync(category, windowStartMs, windowEndMs, options, cancellationToken).ConfigureAwait(false);
 				windowsProcessed++;
 				newDeliveries.AddRange(passResult.NewDeliveries);
 				newDeliveriesPersisted += await PersistWindowBatchAsync(category, passResult, progressRun, cancellationToken).ConfigureAwait(false);
 
-				if (passResult.AllDeliveries.Count == 0)
-				{
-					historyExhausted = true;
-					break;
-				}
-
 				windowEndMs = windowStartMs;
 			}
+
+			// Пол глубины достигнут: перебор delivery-истории категории исчерпан.
+			// Traceability: openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion
+			historyExhausted = true;
 		}
 		else
 		{

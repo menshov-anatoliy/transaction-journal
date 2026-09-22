@@ -1,3 +1,4 @@
+using AngleSharp.Dom;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -24,17 +25,92 @@ namespace TransactionJournal.Tests.Ui;
 public class SyncPageTests
 {
 	private Bunit.TestContext _context = null!;
+	private Mock<IExecutionSyncStateStore> _stateStore = null!;
 
 	[TestInitialize]
 	public void Initialize()
 	{
 		_context = new Bunit.TestContext();
+		_stateStore = new Mock<IExecutionSyncStateStore>();
+		_context.Services.AddSingleton(_stateStore.Object);
+		// Страница требует и сервис синка: тестам сброса достаточно свободной заглушки.
+		_context.Services.AddSingleton(new Mock<IJournalSyncService>().Object);
 	}
 
 	[TestCleanup]
 	public void Cleanup()
 	{
 		_context.Dispose();
+	}
+
+	[TestMethod]
+	[Description("Команда сброса состояния требует подтверждения и вызывает сброс выбранной категории")]
+	public void TryIfResetCommandRequiresConfirmationAndResetsSelectedCategory()
+	{
+		// Arrange: блок обслуживания предлагает сброс по каждой категории.
+		// Требование: сброс состояния — отдельная обслуживающая команда с подтверждением
+		// пользователя; без подтверждения хранилище не вызывается.
+		// Traceability: openspec:sync/bybit-history#requirement-manual-category-state-reset
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Act: выбор категории option — только показ запроса подтверждения.
+		FindButton(cut, "Сбросить состояние option").Click();
+
+		// Assert: хранилище ещё не вызывалось, на экране запрос подтверждения.
+		Assert.That(_stateStore.Invocations, Is.Empty);
+		Assert.That(cut.Markup, Does.Contain("Сбросить состояние синхронизации категории option?"));
+
+		// Act: отмена возвращает блок к выбору категории без сброса.
+		FindButton(cut, "Отмена").Click();
+
+		// Assert: подтверждение скрыто, хранилище по-прежнему не вызывалось.
+		Assert.That(cut.Markup, Does.Not.Contain("Подтвердить сброс"));
+		Assert.That(_stateStore.Invocations, Is.Empty);
+
+		// Act: повторный выбор option и явное подтверждение выполняют сброс.
+		FindButton(cut, "Сбросить состояние option").Click();
+		FindButton(cut, "Подтвердить сброс").Click();
+		cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("категории option сброшено")));
+
+		// Assert: сброс вызван ровно один раз и только для выбранной категории.
+		_stateStore.Verify(store => store.ResetAsync("option", It.IsAny<CancellationToken>()), Times.Once);
+		_stateStore.Verify(store => store.ResetAsync("linear", It.IsAny<CancellationToken>()), Times.Never);
+	}
+
+	[TestMethod]
+	[Description("Команды сброса состояния заблокированы, пока выполняется синхронизация")]
+	public void TryIfResetCommandsAreLockedWhileSyncIsRunning()
+	{
+		// Arrange: сервис синхронизации держит задачу незавершённой — синк «выполняется».
+		// Требование: сброс состояния категории на время синка блокируется — сброс
+		// в момент прохода исключён на уровне экрана.
+		// Traceability: openspec:sync/bybit-history#requirement-manual-category-state-reset
+		var service = new Mock<IJournalSyncService>();
+		var syncGate = new TaskCompletionSource<JournalSyncResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+		service
+			.Setup(svc => svc.SyncAsync(It.IsAny<CancellationToken>()))
+			.Returns(syncGate.Task);
+		_context.Services.AddSingleton(service.Object);
+
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Act: запуск синка.
+		FindButton(cut, "Синхронизировать").Click();
+
+		// Assert: кнопки сброса получили атрибут disabled на время синка.
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(FindButton(cut, "Сбросить состояние option").HasAttribute("disabled"), Is.True);
+			Assert.That(FindButton(cut, "Сбросить состояние linear").HasAttribute("disabled"), Is.True);
+		});
+
+		// Act: синк завершается — блок обслуживания разблокируется.
+		syncGate.SetResult(CreateCompletedResult());
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(FindButton(cut, "Сбросить состояние option").HasAttribute("disabled"), Is.False);
+			Assert.That(FindButton(cut, "Сбросить состояние linear").HasAttribute("disabled"), Is.False);
+		});
 	}
 
 	[TestMethod]
@@ -103,6 +179,10 @@ public class SyncPageTests
 	}
 
 	#region Помощники
+
+	/// <summary>Кнопка по подстроке текста: на странице несколько команд с кнопками.</summary>
+	private static IElement FindButton(IRenderedComponent<SyncPage> cut, string text) =>
+		cut.FindAll("button").Single(button => button.TextContent.Contains(text));
 
 	/// <summary>Завершённый успешный запуск: счётчики новых записей и одно предупреждение сверки.</summary>
 	private static JournalSyncResult CreateCompletedResult() => new()

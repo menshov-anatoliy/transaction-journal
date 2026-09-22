@@ -28,6 +28,7 @@ public class JournalSyncServiceTests
 	private static readonly long NowMs = Now.ToUnixTimeMilliseconds();
 	private static readonly long DayMs = 86_400_000L;
 	private static readonly long WeekMs = ExecutionWindowPass.MaxWindowMs;
+	private static readonly long MonthMs = DeliveryWindowPass.MaxWindowMs;
 
 	/// <summary>Каноническое время delivery опциона: 15DEC25 08:00 UTC.</summary>
 	private static readonly long OptionDeliveryMs =
@@ -188,6 +189,73 @@ public class JournalSyncServiceTests
 		// Проекция прежняя: сделки «Входящих» и предупреждение сверки на месте.
 		Assert.That(result.Projection!.InboxTrades.Count, Is.EqualTo(2));
 		Assert.That(result.Projection.ReconciliationWarnings.Count, Is.EqualTo(1));
+	}
+
+	[TestMethod]
+	[Description("Сброс состояния option возвращает категорию к первичному backfill без дублей известных записей")]
+	public async Task TryIfOptionStateResetForcesBackfillWithoutDuplicates()
+	{
+		// Arrange (прогон 1): первичный backfill обеих категорий.
+		// Требование: сброс состояния категории удаляет водяные знаки — следующий запуск
+		// выполняет первичный backfill категории; сырые записи и домен не затронуты,
+		// идемпотентность по execId исключает дубликаты уже известной истории.
+		// Traceability: openspec:sync/bybit-history#requirement-manual-category-state-reset
+		// Traceability: openspec:sync/bybit-history#scenario-reset-forces-backfill
+		// Traceability: openspec:sync/bybit-history#scenario-reset-keeps-journal-data
+		await RunFirstBackfillAsync();
+
+		// Act: сброс состояния option удаляет только его строку, данные журнала целы.
+		await _store.ResetAsync("option");
+		Assert.That(LoadState("option"), Is.Null);
+		Assert.That(LoadState("linear"), Is.Not.Null);
+
+		// Arrange (прогон 2): биржа снова отдаёт известную опционную сделку и одну новую
+		// по активу ETH; инкремент linear получает пустую страницу. Список активов доски
+		// от заглушки по-прежнему один — BTC, ETH-сделка приходит первым же окном.
+		_gateway.EnqueueExecution(ExecutionPage());
+		_gateway.EnqueueExecution(ExecutionPage(OptionExecution(), OptionExecution("ETH-15DEC25-45000-P")));
+		_gateway.AddInstrument(new BybitInstrumentInfo
+		{
+			Symbol = "ETH-15DEC25-45000-P",
+			Status = "Trading",
+			BaseCoin = "ETH",
+			QuoteCoin = "USD",
+			SettleCoin = "USDC",
+			OptionsType = "Put",
+			DeliveryTimeMs = OptionDeliveryMs,
+		});
+
+		// Act (прогон 2)
+		var result = await _service.SyncAsync();
+
+		// Assert: запуск вернулся к backfill: у option нет водяного знака исполнения
+		// и доставки, linear продолжил инкрементом.
+		Assert.That(result.Mode, Is.EqualTo(SyncRunMode.Backfill));
+		Assert.That(result.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(result.Executions["option"].Mode, Is.EqualTo(SyncRunMode.Backfill));
+		Assert.That(result.Deliveries["option"].Mode, Is.EqualTo(SyncRunMode.Backfill));
+		Assert.That(result.Executions["linear"].Mode, Is.EqualTo(SyncRunMode.Incremental));
+
+		// Assert: из повторно отданной страницы вставлена только новая сделка — известный
+		// exec-opt пропущен, дублей нет; объём журнала вырос ровно на одну запись.
+		Assert.That(result.Run.NewExecutions, Is.EqualTo(1));
+		Assert.That(result.Run.NewDeliveries, Is.Zero);
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var execIds = db.RawExecutions.Select(execution => execution.ExecId).ToList();
+			Assert.That(execIds, Has.Count.EqualTo(3));
+			Assert.That(execIds.Count(execId => execId == "exec-opt"), Is.EqualTo(1));
+			Assert.That(db.RawDeliveries.Count(), Is.EqualTo(1));
+		}
+
+		// Assert: проекция перестроена с новой сделкой во «Входящих», состояние option
+		// восстановлено успешным backfill-проходом.
+		Assert.That(result.ProjectionError, Is.Null);
+		Assert.That(result.Projection!.InboxTrades.Count, Is.EqualTo(3));
+		var optionState = LoadState("option");
+		Assert.That(optionState, Is.Not.Null);
+		Assert.That(optionState!.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(optionState.DeliveryWatermarkMs, Is.EqualTo(NowMs));
 	}
 
 	[TestMethod]
@@ -435,6 +503,14 @@ public class JournalSyncServiceTests
 			CancellationToken cancellationToken = default)
 		{
 			DeliveryQueries.Add(query);
+			// Окно старее первого отвечает пустой страницей без расходования сценария:
+			// backfill листает окна до пола глубины, и заготовленных страниц на каждое
+			// окно перебора не существует — содержательны только самые свежие окна.
+			if (query.StartTimeMs < NowMs - MonthMs)
+			{
+				return Task.FromResult(new BybitPagedResponse<BybitDeliveryRecord>());
+			}
+
 			return Task.FromResult(DequeuePage<BybitDeliveryRecord>(_deliveryResponses));
 		}
 

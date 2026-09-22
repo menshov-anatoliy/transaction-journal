@@ -4,6 +4,7 @@
 @using TransactionJournal.Sync
 @rendermode InteractiveServer
 @inject IJournalSyncService SyncService
+@inject IExecutionSyncStateStore StateStore
 
 <PageTitle>Синхронизация Bybit</PageTitle>
 
@@ -71,10 +72,49 @@ else
 	}
 }
 
+@* Обслуживание состояния синхронизации: сброс возвращает категории первичный backfill,
+	требует подтверждения и заблокирован, пока выполняется синк — гонка сброса с проходом
+	исключена на уровне экрана. *@
+<section>
+	<h2>Обслуживание</h2>
+	<p>Сброс состояния категории удаляет её водяные знаки: следующий запуск синхронизации выполнит первичный backfill этой категории. Сырые записи журнала при этом не удаляются.</p>
+
+	@if (_resetCandidateCategory is null)
+	{
+		<p>
+			<button type="button" disabled="@_running" @onclick='() => RequestReset("linear")'>Сбросить состояние linear</button>
+			<button type="button" disabled="@_running" @onclick='() => RequestReset("option")'>Сбросить состояние option</button>
+		</p>
+	}
+	else
+	{
+		<div role="alertdialog" aria-label="Подтверждение сброса состояния">
+			<p>Сбросить состояние синхронизации категории @_resetCandidateCategory? Следующий запуск выполнит первичный backfill этой категории.</p>
+			<button type="button" @onclick="ConfirmResetAsync">Подтвердить сброс</button>
+			<button type="button" @onclick="CancelReset">Отмена</button>
+		</div>
+	}
+
+	@if (_resetMessage is not null)
+	{
+		<p role="status">@_resetMessage</p>
+	}
+
+	@if (_resetError is not null)
+	{
+		<div role="alert">
+			<strong>Сброс состояния не выполнен:</strong> @_resetError
+		</div>
+	}
+</section>
+
 @code {
 	private bool _running;
 	private JournalSyncResult? _result;
 	private string? _error;
+	private string? _resetCandidateCategory;
+	private string? _resetMessage;
+	private string? _resetError;
 
 	// Единственная ручная команда синхронизации: запуск выполняется до конца, кнопка
 	// блокируется на время работы, результат и ошибка показываются на этой же странице.
@@ -101,4 +141,43 @@ else
 	private static string ModeLabel(SyncRunMode mode) => mode == SyncRunMode.Backfill
 		? "первичная загрузка (backfill)"
 		: "инкрементальная догрузка";
+
+	// Команда сброса требует подтверждения: выбор категории лишь показывает запрос
+	// подтверждения, фактический сброс состояния выполняет только явное подтверждение.
+	// Traceability: openspec:sync/bybit-history#requirement-manual-category-state-reset
+	private void RequestReset(string category)
+	{
+		_resetCandidateCategory = category;
+		_resetMessage = null;
+		_resetError = null;
+	}
+
+	// Отмена возвращает блок обслуживания к выбору категории без вызова хранилища.
+	private void CancelReset()
+	{
+		_resetCandidateCategory = null;
+	}
+
+	private async Task ConfirmResetAsync()
+	{
+		if (_resetCandidateCategory is null)
+		{
+			return;
+		}
+
+		var category = _resetCandidateCategory;
+		_resetCandidateCategory = null;
+		try
+		{
+			// Сброс удаляет только водяные знаки категории: сырые записи и доменные
+			// сущности журнала остаются, следующий запуск выполнит первичный backfill.
+			// Traceability: openspec:sync/bybit-history#scenario-reset-keeps-journal-data
+			await StateStore.ResetAsync(category);
+			_resetMessage = $"Состояние категории {category} сброшено: следующий запуск синхронизации выполнит первичный backfill этой категории.";
+		}
+		catch (Exception ex)
+		{
+			_resetError = ex.Message;
+		}
+	}
 }

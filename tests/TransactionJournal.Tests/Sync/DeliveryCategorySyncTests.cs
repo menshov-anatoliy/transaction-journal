@@ -44,12 +44,14 @@ public class DeliveryCategorySyncTests
 	{
 		// Arrange: исполнение категории уже синхронизировалось (есть ExecWatermarkMs и
 		// граница backfill), а delivery-водяного знака нет — экспирации синхронизируются
-		// впервые. Биржа отдаёт записи в двух окнах, третье окно пустое: глубже данных нет.
+		// впервые. Глубина backfill ограничена тремя месяцами: биржа отдаёт записи в двух
+		// окнах, третье окно пустое, но проход завершается только на полу глубины.
 		// Требование: при отсутствии отметки о завершённой синхронизации выполняется
 		// первичный backfill, по завершении фиксируется водяной знак.
 		// Traceability: openspec:sync/bybit-history#requirement-manual-sync-modes
 		// Traceability: openspec:sync/bybit-history#scenario-first-run-backfill
 		// Traceability: openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion
+		var options = new DeliveryCategorySyncOptions { MaxBackfillDepthMs = 3 * MonthMs };
 		await _stateStore.SaveAsync(new SyncState
 		{
 			Category = "option",
@@ -67,7 +69,7 @@ public class DeliveryCategorySyncTests
 		_gateway.Enqueue(new BybitPagedResponse<BybitDeliveryRecord>());
 
 		// Act
-		var result = await _engine.RunAsync("option");
+		var result = await _engine.RunAsync("option", options);
 
 		// Assert: режим — первичный backfill, окна идут назад от момента запуска тридцатидневным шагом.
 		Assert.That(result.Mode, Is.EqualTo(SyncRunMode.Backfill));
@@ -81,7 +83,8 @@ public class DeliveryCategorySyncTests
 		Assert.That(_gateway.Queries[2].StartTimeMs, Is.EqualTo(NowMs - 3 * MonthMs));
 		Assert.That(_gateway.Queries[2].EndTimeMs, Is.EqualTo(NowMs - 2 * MonthMs));
 
-		// Assert: все записи новые, пустое окно означило исчерпания delivery-истории.
+		// Assert: все записи новые, перебор дошёл до пола глубины — пустое окно
+		// проход не завершило.
 		Assert.That(result.NewDeliveries.Select(delivery => delivery.Symbol),
 			Is.EqualTo(new[] { "BTC-2JAN26-100000-C", "ETH-2JAN26-4000-P", "BTC-2DEC25-90000-P" }));
 		Assert.That(result.WindowsProcessed, Is.EqualTo(3));
@@ -96,6 +99,57 @@ public class DeliveryCategorySyncTests
 		Assert.That(saved.BackfillBoundaryMs, Is.EqualTo(NowMs - 180 * DayMs));
 		Assert.That(saved.LastSuccessAt, Is.EqualTo(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)));
 		Assert.That(result.DeliveryWatermarkMs, Is.EqualTo(NowMs));
+	}
+
+	[TestMethod]
+	[Description("Пустое окно не завершает delivery-backfill: экспирации за перерывом торговли загружаются")]
+	public async Task TryIfDeliveryGapDoesNotTruncateBackfillPass()
+	{
+		// Arrange: глубина три месяца; второе окно пустое — перерыв в delivery-торговле,
+		// третье окно за перерывом снова приносит экспирацию.
+		// Требование: пустое окно не завершает проход — окна листаются назад до пола
+		// глубины, delivery-записи старее перерыва загружаются.
+		// Traceability: openspec:sync/bybit-history#scenario-trading-gap-does-not-truncate-history
+		var options = new DeliveryCategorySyncOptions { MaxBackfillDepthMs = 3 * MonthMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitDeliveryRecord> { List = [Delivery("BTC-2JAN26-100000-C", NowMs - DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitDeliveryRecord>());
+		_gateway.Enqueue(new BybitPagedResponse<BybitDeliveryRecord> { List = [Delivery("BTC-2NOV25-90000-P", NowMs - 65 * DayMs)] });
+
+		// Act
+		var result = await _engine.RunAsync("option", options);
+
+		// Assert: все три окна запрошены — пустое окно не остановило перебор.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		Assert.That(result.NewDeliveries.Select(delivery => delivery.Symbol),
+			Is.EqualTo(new[] { "BTC-2JAN26-100000-C", "BTC-2NOV25-90000-P" }));
+		Assert.That(result.WindowsProcessed, Is.EqualTo(3));
+		Assert.That(result.HistoryExhausted, Is.True);
+	}
+
+	[TestMethod]
+	[Description("Delivery-backfill останавливается на полу глубины, последнее окно усекается до пола")]
+	public async Task TryIfDeliveryBackfillStopsAtDepthFloor()
+	{
+		// Arrange: глубина сорок пять дней — пол между границами окон. Второе окно
+		// усекается до пола, третьего запроса быть не должно.
+		// Требование: backfill листает окна назад до границы максимальной глубины
+		// delivery-истории, после неё перебор исчерпан.
+		// Traceability: openspec:sync/bybit-history#scenario-backfill-pages-until-exhaustion
+		var options = new DeliveryCategorySyncOptions { MaxBackfillDepthMs = 45 * DayMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitDeliveryRecord> { List = [Delivery("BTC-2JAN26-100000-C", NowMs - DayMs)] });
+
+		// Act
+		var result = await _engine.RunAsync("option", options);
+
+		// Assert: ровно два окна, начало второго срезано полом глубины.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
+		Assert.That(_gateway.Queries[1].StartTimeMs, Is.EqualTo(NowMs - 45 * DayMs));
+		Assert.That(_gateway.Queries[1].EndTimeMs, Is.EqualTo(NowMs - MonthMs));
+		Assert.That(result.WindowsProcessed, Is.EqualTo(2));
+		Assert.That(result.HistoryExhausted, Is.True);
+
+		// Assert: состояние зафиксировано — delivery-водяной знак на момент запуска.
+		Assert.That(_stateStore.Find("option")!.DeliveryWatermarkMs, Is.EqualTo(NowMs));
 	}
 
 	[TestMethod]
@@ -210,12 +264,13 @@ public class DeliveryCategorySyncTests
 			Mode = SyncRunMode.Backfill,
 			Status = SyncRunStatus.Running,
 		};
+		var options = new DeliveryCategorySyncOptions { MaxBackfillDepthMs = 3 * MonthMs };
 		_gateway.Enqueue(new BybitPagedResponse<BybitDeliveryRecord> { List = [Delivery("BTC-2JAN26-100000-C", NowMs - DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitDeliveryRecord> { List = [Delivery("ETH-2JAN26-4000-P", NowMs - 31 * DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitDeliveryRecord>());
 
 		// Act
-		var result = await engine.RunAsync("option", progressRun: progressRun);
+		var result = await engine.RunAsync("option", options, progressRun);
 
 		// Assert: писателю ушли ровно две пачки — по свежим записям непустых окон.
 		Assert.That(writer.Batches, Has.Count.EqualTo(2));
@@ -346,6 +401,28 @@ public class DeliveryCategorySyncTests
 	}
 
 	[TestMethod]
+	[Description("Неположительная глубина backfill отклоняется до обращения к шлюзу и хранилищу")]
+	[ExpectedException(typeof(ArgumentOutOfRangeException))]
+	public async Task ThrowOnNonPositiveMaxBackfillDepth()
+	{
+		// Arrange: глубина backfill задаёт нижнюю границу перебора, ноль или минус лишили бы её смысла.
+		var options = new DeliveryCategorySyncOptions { MaxBackfillDepthMs = 0 };
+
+		// Act — некорректная глубина прерывается до чтения состояния и запросов.
+		try
+		{
+			await _engine.RunAsync("option", options);
+		}
+		catch (ArgumentOutOfRangeException)
+		{
+			// Assert: шлюз и хранилище не запрашивались.
+			Assert.That(_gateway.Queries, Is.Empty);
+			Assert.That(_stateStore.FindCalls, Is.Zero);
+			throw;
+		}
+	}
+
+	[TestMethod]
 	[DataRow(true)]
 	[DataRow(false)]
 	[Description("Нулевая зависимость конструктора отклоняется")]
@@ -452,7 +529,7 @@ public class DeliveryCategorySyncTests
 
 	/// <summary>
 	/// Фиктивное хранилище состояния: держит по одной строке на категорию
-	/// и помнит все сохранённые состояния и обращения за ними.
+	/// и помнит все сохранённые состояния, обращения за ними и сбросы.
 	/// </summary>
 	private sealed class FakeStateStore : IExecutionSyncStateStore
 	{
@@ -463,6 +540,9 @@ public class DeliveryCategorySyncTests
 
 		/// <summary>Сколько раз движок читал состояние категории.</summary>
 		public int FindCalls { get; private set; }
+
+		/// <summary>Категории, чьё состояние сбрасывали, в порядке вызовов.</summary>
+		public List<string> ResetCategories { get; } = [];
 
 		public SyncState? Find(string category)
 		{
@@ -479,6 +559,13 @@ public class DeliveryCategorySyncTests
 		{
 			_states[state.Category] = state;
 			Saved.Add(state);
+			return Task.CompletedTask;
+		}
+
+		public Task ResetAsync(string category, CancellationToken cancellationToken = default)
+		{
+			ResetCategories.Add(category);
+			_states.Remove(category);
 			return Task.CompletedTask;
 		}
 	}

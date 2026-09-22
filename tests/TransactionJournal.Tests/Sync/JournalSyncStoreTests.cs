@@ -210,6 +210,46 @@ public class JournalSyncStoreTests
 	}
 
 	[TestMethod]
+	[Description("Сброс состояния удаляет строку только своей категории: сырые записи и запуски остаются")]
+	public async Task TryIfResetRemovesOnlyOwnCategoryState()
+	{
+		// Arrange: обе категории зафиксировали успешный синк, в хранилище лежат сырые
+		// записи обеих категорий и строка запуска синхронизации.
+		// Требование: сброс состояния категории удаляет водяные знаки только этой
+		// категории; сырые записи, доменные сущности и журнал запусков не затрагиваются.
+		// Traceability: openspec:sync/bybit-history#requirement-manual-category-state-reset
+		// Traceability: openspec:sync/bybit-history#scenario-reset-keeps-journal-data
+		await _store.SaveAsync(new SyncState
+		{
+			Category = "option",
+			ExecWatermarkMs = 2000,
+			DeliveryWatermarkMs = 1500,
+			BackfillBoundaryMs = 500,
+			LastSuccessAt = Now,
+		});
+		await _store.SaveAsync(new SyncState { Category = "linear", ExecWatermarkMs = 3000, DeliveryWatermarkMs = 2500 });
+		await _store.WriteAsync("option", [Execution("exec-opt")]);
+		await _store.WriteAsync("linear", [Execution("exec-lin")]);
+		var run = await _store.StartAsync(SyncRunMode.Incremental);
+
+		// Act
+		await _store.ResetAsync("option");
+
+		// Assert: состояние option удалено — следующий запуск категории выполнит backfill;
+		// состояние linear цело.
+		Assert.That(await _store.FindAsync("option"), Is.Null);
+		var linearState = await _store.FindAsync("linear");
+		Assert.That(linearState, Is.Not.Null);
+		Assert.That(linearState!.ExecWatermarkMs, Is.EqualTo(3000));
+		Assert.That(linearState.DeliveryWatermarkMs, Is.EqualTo(2500));
+
+		// Assert: сырые записи обеих категорий и строка запуска остались в журнале.
+		var storedIds = LoadRawExecutions().Select(execution => execution.ExecId).ToList();
+		Assert.That(storedIds, Is.EqualTo(new[] { "exec-lin", "exec-opt" }));
+		Assert.That(LoadRun(run.Id), Is.Not.Null);
+	}
+
+	[TestMethod]
 	[Description("Журнал запусков открывает запуск бегущим и закрывает успехом или ошибкой")]
 	public async Task TryIfRunJournalClosesRunWithSuccessOrFailure()
 	{

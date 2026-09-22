@@ -646,7 +646,7 @@ public class ExecutionCategorySyncTests
 
 	/// <summary>
 	/// Фиктивное хранилище состояния: держит по одной строке на категорию
-	/// и помнит все сохранённые состояния и обращения за ними.
+	/// и помнит все сохранённые состояния, обращения за ними и сбросы.
 	/// </summary>
 	private sealed class FakeStateStore : IExecutionSyncStateStore
 	{
@@ -657,6 +657,9 @@ public class ExecutionCategorySyncTests
 
 		/// <summary>Сколько раз движок читал состояние категории.</summary>
 		public int FindCalls { get; private set; }
+
+		/// <summary>Категории, чьё состояние сбрасывали, в порядке вызовов.</summary>
+		public List<string> ResetCategories { get; } = [];
 
 		public SyncState? Find(string category)
 		{
@@ -673,6 +676,13 @@ public class ExecutionCategorySyncTests
 		{
 			_states[state.Category] = state;
 			Saved.Add(state);
+			return Task.CompletedTask;
+		}
+
+		public Task ResetAsync(string category, CancellationToken cancellationToken = default)
+		{
+			ResetCategories.Add(category);
+			_states.Remove(category);
 			return Task.CompletedTask;
 		}
 	}
