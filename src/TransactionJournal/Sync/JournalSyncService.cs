@@ -24,6 +24,8 @@ public sealed class JournalSyncService : IJournalSyncService
 	private readonly ISyncRunJournal _runJournal;
 	private readonly IJournalRawSnapshotStore _rawSnapshotStore;
 	private readonly JournalMaterializer _materializer;
+	private readonly ExecutionCategorySyncOptions _executionOptions;
+	private readonly DeliveryCategorySyncOptions _deliveryOptions;
 	private readonly TimeProvider _timeProvider;
 
 	/// <summary>Создаёт оркестратор над движками категорий, хранилищами и материализатором.</summary>
@@ -34,6 +36,8 @@ public sealed class JournalSyncService : IJournalSyncService
 	/// <param name="runJournal">Журнал запусков синхронизации.</param>
 	/// <param name="rawSnapshotStore">Источник полного снимка сырых записей для проекции.</param>
 	/// <param name="materializer">Переразборщик доменных представлений из сырых записей.</param>
+	/// <param name="executionOptions">Опции движка исполнения с глубиной backfill из конфигурации приложения.</param>
+	/// <param name="deliveryOptions">Опции delivery-движка с глубиной backfill из конфигурации приложения.</param>
 	/// <param name="timeProvider">Поставщик времени; по умолчанию системные часы.</param>
 	/// <exception cref="ArgumentNullException">Какая-либо зависимость не задана.</exception>
 	public JournalSyncService(
@@ -44,6 +48,8 @@ public sealed class JournalSyncService : IJournalSyncService
 		ISyncRunJournal runJournal,
 		IJournalRawSnapshotStore rawSnapshotStore,
 		JournalMaterializer materializer,
+		ExecutionCategorySyncOptions executionOptions,
+		DeliveryCategorySyncOptions deliveryOptions,
 		TimeProvider? timeProvider = null)
 	{
 		_executionSync = executionSync ?? throw new ArgumentNullException(nameof(executionSync));
@@ -53,6 +59,8 @@ public sealed class JournalSyncService : IJournalSyncService
 		_runJournal = runJournal ?? throw new ArgumentNullException(nameof(runJournal));
 		_rawSnapshotStore = rawSnapshotStore ?? throw new ArgumentNullException(nameof(rawSnapshotStore));
 		_materializer = materializer ?? throw new ArgumentNullException(nameof(materializer));
+		_executionOptions = executionOptions ?? throw new ArgumentNullException(nameof(executionOptions));
+		_deliveryOptions = deliveryOptions ?? throw new ArgumentNullException(nameof(deliveryOptions));
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
@@ -85,13 +93,14 @@ public sealed class JournalSyncService : IJournalSyncService
 			foreach (var category in ExecutionHistorySync.DefaultCategories)
 			{
 				// Категория проходится целиком: сначала история исполнения, затем delivery-записи —
-				// оба прохода делят общую строку запуска и её счётчики.
-				executionResults[category] = await _executionSync
-					.RunAsync(category, progressRun: run, cancellationToken: cancellationToken)
-					.ConfigureAwait(false);
-				deliveryResults[category] = await _deliverySync
-					.RunAsync(category, progressRun: run, cancellationToken: cancellationToken)
-					.ConfigureAwait(false);
+					// оба прохода делят общую строку запуска и её счётчики. Опции движков задают
+					// глубину backfill, прочитанную из конфигурации при старте приложения.
+					executionResults[category] = await _executionSync
+						.RunAsync(category, _executionOptions, progressRun: run, cancellationToken: cancellationToken)
+						.ConfigureAwait(false);
+					deliveryResults[category] = await _deliverySync
+						.RunAsync(category, _deliveryOptions, progressRun: run, cancellationToken: cancellationToken)
+						.ConfigureAwait(false);
 			}
 
 			// Справочник пополняется символами новых записей запуска до закрытия запуска:

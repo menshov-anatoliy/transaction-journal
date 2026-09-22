@@ -64,12 +64,21 @@ builder.Services.AddHttpClient<BybitTickersClient>();
 builder.Services.AddTransient<BybitHistoryGateway>();
 builder.Services.AddTransient<IBybitHistoryGateway>(sp => sp.GetRequiredService<BybitHistoryGateway>());
 builder.Services.AddTransient<IBybitInstrumentSource>(sp => sp.GetRequiredService<BybitHistoryGateway>());
+// Опции движков синхронизации собираются из конфигурации при старте: глубина backfill
+// Sync:MaxBackfillDepthDays (дефолт 730 дней) и дополнительные базовые активы опционной
+// доски Sync:ExtraOptionBaseCoins (делистнутые доски с торговой историей); без секции
+// Sync в конфигурации приложение работает на дефолтах кода.
+// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
+// Traceability: openspec:sync/bybit-history#scenario-delisted-base-coin-from-config
+var syncEngineOptions = SyncOptionsReader.Read(builder.Configuration);
+builder.Services.AddSingleton(syncEngineOptions.Execution);
+builder.Services.AddSingleton(syncEngineOptions.Delivery);
 // Список базовых активов опционной доски строится над тем же шлюзом спецификаций;
-// конфигурируемые дополнения (делистнутые доски) подключит задача 6.1 при чтении
-// Sync:ExtraOptionBaseCoins из конфигурации.
+// конфигурационные дополнения покрывают делистнутые доски.
 // Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
 builder.Services.AddTransient<IOptionBaseCoinSource>(sp => new OptionBaseCoinSource(
-	sp.GetRequiredService<IBybitInstrumentSource>()));
+	sp.GetRequiredService<IBybitInstrumentSource>(),
+	syncEngineOptions.ExtraOptionBaseCoins));
 builder.Services.AddTransient<ExecutionWindowPass>();
 builder.Services.AddTransient<DeliveryWindowPass>();
 builder.Services.AddTransient<ExecutionCategorySync>();

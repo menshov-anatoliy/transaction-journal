@@ -71,6 +71,8 @@ public class JournalSyncServiceTests
 			_store,
 			_store,
 			new JournalMaterializer(),
+			new ExecutionCategorySyncOptions(),
+			new DeliveryCategorySyncOptions(),
 			new ManualTimeProvider());
 	}
 

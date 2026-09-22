@@ -121,6 +121,8 @@ public class ReadOnlyAccessAcceptanceTests
 			store,
 			store,
 			new JournalMaterializer(),
+			new ExecutionCategorySyncOptions(),
+			new DeliveryCategorySyncOptions(),
 			new ManualTimeProvider());
 
 		// Act: единственная ручная команда — полный первичный backfill обеих категорий.
