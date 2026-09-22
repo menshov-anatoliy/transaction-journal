@@ -24,7 +24,7 @@ _Нет._
 ## Impact
 
 - `src/TransactionJournal/Sync`: `ExecutionCategorySync` и `DeliveryCategorySync` — вычисление пола через границу биржи, перехват пограничной ошибки в backfill-цикле, ретрай с зажатым окном, семантика исчерпания; `IBybitHistoryGateway` — новый метод серверного времени; фиктивные шлюзы в тестах.
-- `src/TransactionJournal/Bybit`: `BybitApiClient` — проброс серверного времени (уже есть `SyncTimeAsync`/`ServerTimeOffsetMs`); `BybitApiException` — хранение `retMsg` и хелпер распознавания пограничной ошибки (прецедент: `FromAccessBlocked`); `BybitResilience` пограничную ошибку не ретраит — изменений конвейера не требуется.
+- `src/TransactionJournal/Bybit`: `BybitApiClient` — проброс серверного времени (уже есть `GetServerTimeAsync`/`ServerTimeOffsetMs`); `BybitApiException` — хранение `retMsg` и хелпер распознавания пограничной ошибки (прецедент: `FromAccessBlocked`); `BybitResilience` пограничную ошибку не ретраит — изменений конвейера не требуется.
 - Конфигурация: без новых ключей; запас до границы — константа в коде.
 - Тесты: `tests/TransactionJournal.Tests/Sync` (clamp пола, ретрай, исчерпание), `tests/TransactionJournal.Tests/Bybit` (детект ошибки, серверное время шлюза).
 - Документация: `docs/research/bybit-api.md` — закрыть открытый вопрос №1 фактом границы и поведения API.

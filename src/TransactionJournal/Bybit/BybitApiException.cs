@@ -6,8 +6,24 @@ namespace TransactionJournal.Bybit;
 /// </summary>
 public sealed class BybitApiException : Exception
 {
+	/// <summary>Код ошибки биржи retCode 10001 «params error» — общий код отказа в параметрах запроса.</summary>
+	private const int ParamsErrorRetCode = 10001;
+
+	/// <summary>
+	/// Подстрока сообщения биржи об отказе за глубину хранения истории: единственный
+	/// различающий сигнал среди прочих отказов параметров с тем же retCode 10001.
+	/// </summary>
+	private const string HistoryBoundaryMarker = "earlier than 2 years";
+
 	/// <summary>Код ошибки биржи retCode; null, если ответ не удалось разобрать.</summary>
 	public int? RetCode { get; }
+
+	/// <summary>
+	/// Сообщение ошибки биржи retMsg: носитель сигнала пограничного отказа за глубину
+	/// хранения истории, который защитный контур перебора распознаёт по подстроке.
+	/// Traceability: openspec:sync/bybit-history#requirement-history-boundary-guard
+	/// </summary>
+	public string? RetMsg { get; }
 
 	/// <summary>HTTP-статус неудачного ответа; null, если ошибка пришла в теле успешного ответа.</summary>
 	public int? HttpStatusCode { get; }
@@ -20,7 +36,23 @@ public sealed class BybitApiException : Exception
 		: base($"Bybit API ответил ошибкой: retCode={retCode}, retMsg=\"{retMsg}\".")
 	{
 		RetCode = retCode;
+		RetMsg = retMsg;
 		ResponseBody = responseBody;
+	}
+
+	/// <summary>
+	/// Распознаёт пограничный отказ биржи при выходе запроса за глубину хранения истории:
+	/// это сигнал защитного контура перебора истории — окно у границы повторяется один раз
+	/// с зажатым временем начала, а запуск не помечается неуспешным. Биржа не выделяет
+	/// такому отказу собственный retCode, поэтому распознавание требует совпадения и кода
+	/// 10001, и подстроки сообщения без учёта регистра.
+	/// Traceability: openspec:sync/bybit-history#requirement-history-boundary-guard
+	/// </summary>
+	public static bool IsHistoryBoundaryError(BybitApiException exception)
+	{
+		ArgumentNullException.ThrowIfNull(exception);
+		return exception.RetCode == ParamsErrorRetCode
+			&& exception.RetMsg?.Contains(HistoryBoundaryMarker, StringComparison.OrdinalIgnoreCase) == true;
 	}
 
 	/// <summary>Создаёт ошибку по HTTP-статусу, когда конверт retCode недоступен.</summary>

@@ -70,6 +70,57 @@ public class BybitHistoryGatewayTests
 	}
 
 	[TestMethod]
+	[Description("Шлюз возвращает серверное время биржи из публичного эндпоинта /v5/market/time")]
+	public async Task TryIfGatewayReturnsServerTimeMsFromClient()
+	{
+		// Arrange: публичный эндпоинт времени на фиктивном транспорте без подписи запроса.
+		var handler = new ScriptedHttpMessageHandler();
+		handler.EnqueueJson(
+			"""{"retCode":0,"retMsg":"OK","result":{"timeSecond":"1767225600","timeNano":"1767225600123456789"}}""");
+		var credentials = new BybitCredentials("test-api-key", "test-api-secret");
+		var credentialsProvider = Mock.Of<IBybitCredentialsProvider>(
+			provider => provider.GetCredentials() == credentials);
+		var gateway = new BybitHistoryGateway(new BybitApiClient(
+			new HttpClient(handler), credentialsProvider, new BybitClientOptions { BaseUrl = TestBaseUrl }));
+
+		// Act
+		var serverTimeMs = await gateway.GetServerTimeMsAsync();
+
+		// Assert: запрос ушёл на /v5/market/time, время взято из первых 13 разрядов timeNano.
+		Assert.That(handler.Requests.Single().RequestUri!.ToString(),
+			Is.EqualTo($"{TestBaseUrl}/v5/market/time"));
+		Assert.That(serverTimeMs, Is.EqualTo(1767225600123L));
+	}
+
+	[TestMethod]
+	[Description("Отказ биржи при запросе серверного времени пробрасывается шлюзом как BybitApiException")]
+	public void ThrowOnExchangeFailureForServerTime()
+	{
+		// Arrange: конверт с ненулевым retCode от эндпоинта времени.
+		var handler = new ScriptedHttpMessageHandler();
+		handler.EnqueueJson("""{"retCode":10001,"retMsg":"params error"}""");
+		var credentials = new BybitCredentials("test-api-key", "test-api-secret");
+		var credentialsProvider = Mock.Of<IBybitCredentialsProvider>(
+			provider => provider.GetCredentials() == credentials);
+		var gateway = new BybitHistoryGateway(new BybitApiClient(
+			new HttpClient(handler), credentialsProvider, new BybitClientOptions { BaseUrl = TestBaseUrl }));
+
+		// Act
+		try
+		{
+			gateway.GetServerTimeMsAsync().GetAwaiter().GetResult();
+		}
+		catch (BybitApiException exception)
+		{
+			// Assert: ошибка биржи дошла до вызывающей стороны с исходным кодом.
+			Assert.That(exception.RetCode, Is.EqualTo(10001));
+			return;
+		}
+
+		Assert.Fail("Ожидался BybitApiException от эндпоинта серверного времени.");
+	}
+
+	[TestMethod]
 	[Description("Delivery-запрос без параметров отклоняется шлюзом до сетевого вызова")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnNullDeliveryQuery()

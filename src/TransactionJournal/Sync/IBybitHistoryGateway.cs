@@ -29,4 +29,13 @@ public interface IBybitHistoryGateway
 	Task<BybitPagedResponse<BybitDeliveryRecord>> GetDeliveryRecordAsync(
 		BybitDeliveryRecordQuery query,
 		CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// GET /v5/market/time — серверное время биржи в миллисекундах: опорная точка расчёта
+	/// границы хранения истории. Сравнение с границей ведётся по часам биржи, чтобы
+	/// рассинхрон локальных часов не сдвигал пол перебора за разрешённую зону.
+	/// Traceability: openspec:sync/bybit-history#scenario-floor-clamped-to-exchange-boundary
+	/// </summary>
+	/// <exception cref="BybitApiException">Эндпоинт времени недоступен или вернул некорректный ответ.</exception>
+	Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default);
 }

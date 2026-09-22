@@ -46,6 +46,17 @@ public sealed class BybitHistoryGateway : IBybitHistoryGateway, IBybitInstrument
 		return _client.GetDeliveryRecordAsync(query, cancellationToken);
 	}
 
+	/// <summary>
+	/// GET /v5/market/time — серверное время биржи в миллисекундах: публичный эндпоинт
+	/// клиента без подписи; смещение часов для подписей клиент поддерживает сам.
+	/// </summary>
+	/// <exception cref="BybitApiException">Эндпоинт времени недоступен или вернул некорректный ответ.</exception>
+	public async Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
+	{
+		var serverTime = await _client.GetServerTimeAsync(cancellationToken).ConfigureAwait(false);
+		return serverTime.Milliseconds;
+	}
+
 	#endregion
 
 	#region IBybitInstrumentSource

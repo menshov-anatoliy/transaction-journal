@@ -327,6 +327,11 @@ public class ExecutionWindowPassTests
 		{
 			throw new NotSupportedException("Проход истории исполнения не запрашивает delivery-записи.");
 		}
+
+		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
+		{
+			throw new NotSupportedException("Проход истории исполнения не запрашивает серверное время.");
+		}
 	}
 
 	/// <summary>

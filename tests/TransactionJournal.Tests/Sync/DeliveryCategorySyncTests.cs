@@ -499,6 +499,11 @@ public class DeliveryCategorySyncTests
 				? Task.FromException<BybitPagedResponse<BybitDeliveryRecord>>(error)
 				: Task.FromResult((BybitPagedResponse<BybitDeliveryRecord>)response);
 		}
+
+		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
+		{
+			throw new NotSupportedException("Движок delivery-синхронизации не запрашивает серверное время в этом сценарии.");
+		}
 	}
 
 	/// <summary>

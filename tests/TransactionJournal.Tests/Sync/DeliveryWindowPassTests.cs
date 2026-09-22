@@ -274,6 +274,11 @@ public class DeliveryWindowPassTests
 			var page = _pages.Count > 0 ? _pages.Dequeue() : new BybitPagedResponse<BybitDeliveryRecord>();
 			return Task.FromResult(page);
 		}
+
+		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
+		{
+			throw new NotSupportedException("Проход delivery-истории не запрашивает серверное время.");
+		}
 	}
 
 	/// <summary>

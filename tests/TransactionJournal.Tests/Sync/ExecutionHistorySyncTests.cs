@@ -375,6 +375,11 @@ public class ExecutionHistorySyncTests
 		{
 			throw new NotSupportedException("Оркестратор истории исполнения не запрашивает delivery-записи.");
 		}
+
+		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
+		{
+			throw new NotSupportedException("Оркестратор истории исполнения не запрашивает серверное время.");
+		}
 	}
 
 	#endregion

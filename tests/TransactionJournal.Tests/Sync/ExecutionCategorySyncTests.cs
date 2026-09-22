@@ -616,6 +616,11 @@ public class ExecutionCategorySyncTests
 		{
 			throw new NotSupportedException("Движок синхронизации исполнения не запрашивает delivery-записи.");
 		}
+
+		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
+		{
+			throw new NotSupportedException("Движок синхронизации исполнения не запрашивает серверное время в этом сценарии.");
+		}
 	}
 
 	/// <summary>

@@ -2,13 +2,13 @@
 
 ## 1. Детект пограничной ошибки
 
-- [ ] 1.1 В `BybitApiException` добавить свойство `RetMsg`, прокинуть его из основного конструктора, и добавить статический хелпер `IsHistoryBoundaryError`: `RetCode == 10001` и подстрока `earlier than 2 years` в `RetMsg` без учёта регистра; проверить тестами в `tests/TransactionJournal.Tests/Bybit`: хелпер распознаёт реальный текст ошибки биржи, не срабатывает на другом сообщении с кодом 10001 и на retCode 10006
-- [ ] 1.2 Снабдить хелпер и свойство traceability-меткой `openspec:sync/bybit-history#requirement-history-boundary-guard` с человекочитаемым комментарием о защитном контуре границы хранения; проверить rg-поиском, что ссылка разрешается в `Traceability ID` delta-spec этого change
+- [x] 1.1 В `BybitApiException` добавить свойство `RetMsg`, прокинуть его из основного конструктора, и добавить статический хелпер `IsHistoryBoundaryError`: `RetCode == 10001` и подстрока `earlier than 2 years` в `RetMsg` без учёта регистра; проверить тестами в `tests/TransactionJournal.Tests/Bybit`: хелпер распознаёт реальный текст ошибки биржи, не срабатывает на другом сообщении с кодом 10001 и на retCode 10006
+- [x] 1.2 Снабдить хелпер и свойство traceability-меткой `openspec:sync/bybit-history#requirement-history-boundary-guard` с человекочитаемым комментарием о защитном контуре границы хранения; проверить rg-поиском, что ссылка разрешается в `Traceability ID` delta-spec этого change
 
 ## 2. Серверное время в шлюзе истории
 
-- [ ] 2.1 Расширить `IBybitHistoryGateway` методом `GetServerTimeMsAsync(CancellationToken)` и реализовать в `BybitHistoryGateway` поверх `BybitApiClient` (`SyncTimeAsync`); обновить фиктивные шлюзы в тестах `tests/TransactionJournal.Tests/Sync`; проверить сборкой `dotnet build` и зелёным прогоном затронутых тестов
-- [ ] 2.2 Проверить тестом реального шлюза (по образцу существующих тестов `BybitHistoryGateway`): метод возвращает серверное время клиента и пробрасывает `BybitApiException` при отказе биржи
+- [x] 2.1 Расширить `IBybitHistoryGateway` методом `GetServerTimeMsAsync(CancellationToken)` и реализовать в `BybitHistoryGateway` поверх `BybitApiClient` (`GetServerTimeAsync`); обновить фиктивные шлюзы в тестах `tests/TransactionJournal.Tests/Sync`; проверить сборкой `dotnet build` и зелёным прогоном затронутых тестов
+- [x] 2.2 Проверить тестом реального шлюза (по образцу существующих тестов `BybitHistoryGateway`): метод возвращает серверное время клиента и пробрасывает `BybitApiException` при отказе биржи
 
 ## 3. Хелпер границы хранения
 

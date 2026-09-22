@@ -527,6 +527,11 @@ public class JournalSyncServiceTests
 			return Task.FromResult(new BybitPagedResponse<BybitInstrumentInfo> { List = list });
 		}
 
+		public Task<long> GetServerTimeMsAsync(CancellationToken cancellationToken = default)
+		{
+			throw new NotSupportedException("Оркестратор синхронизации не запрашивает серверное время в этом сценарии.");
+		}
+
 		private static BybitPagedResponse<TItem> DequeuePage<TItem>(Queue<object> responses)
 		{
 			if (responses.Count == 0)
