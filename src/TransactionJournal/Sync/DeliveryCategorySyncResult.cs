@@ -28,4 +28,12 @@ public sealed class DeliveryCategorySyncResult
 	/// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
 	/// </summary>
 	public required int NewDeliveriesPersisted { get; init; }
+
+	/// <summary>
+	/// Метки областей, пропущенных из-за отказа биржи «контракт недоступен для торговли»:
+	/// для безфильтровой области delivery-прохода — только категория. Пуст, когда
+	/// пропусков не было; исчерпание истории и пограничное зажатие пропуск не отмечают.
+	/// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+	/// </summary>
+	public IReadOnlyList<string> SkippedAreas { get; init; } = [];
 }

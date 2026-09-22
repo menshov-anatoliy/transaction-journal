@@ -2,19 +2,19 @@
 
 ## 1. Детект отказа «контракт недоступен»
 
-- [ ] 1.1 В `BybitApiException` добавить статический хелпер `IsContractUnavailableError`: `RetCode == 110023` без анализа `RetMsg`; проверить тестами в `tests/TransactionJournal.Tests/Bybit/BybitApiExceptionTests`: хелпер распознаёт отказ с реальным текстом биржи «The contract is not available for trades», не срабатывает на другом коде и не зависит от формулировки retMsg
-- [ ] 1.2 Снабдить хелпер traceability-меткой `openspec:sync/bybit-history#requirement-contract-unavailable-area-skip` с человекочитаемым комментарием о защитном контуре недоступных контрактов; проверить rg-поиском, что ссылка разрешается в `Traceability ID` delta-spec этого change
+- [x] 1.1 В `BybitApiException` добавить статический хелпер `IsContractUnavailableError`: `RetCode == 110023` без анализа `RetMsg`; проверить тестами в `tests/TransactionJournal.Tests/Bybit/BybitApiExceptionTests`: хелпер распознаёт отказ с реальным текстом биржи «The contract is not available for trades», не срабатывает на другом коде и не зависит от формулировки retMsg
+- [x] 1.2 Снабдить хелпер traceability-меткой `openspec:sync/bybit-history#requirement-contract-unavailable-area-skip` с человекочитаемым комментарием о защитном контуре недоступных контрактов; проверить rg-поиском, что ссылка разрешается в `Traceability ID` delta-spec этого change
 
 ## 2. Исход «область недоступна» в защищённом проходе окна
 
-- [ ] 2.1 В `ExecutionCategorySync` и `DeliveryCategorySync` перевести `RunWindowWithBoundaryGuardAsync` с пары «результат/null» на исход прохода: успешный результат, пограничное исчерпание перебора, область недоступна; перехват `IsContractUnavailableError` без ретрая и без зажатия; поведение пограничного контура не меняется; проверить сборкой и зелёным прогоном существующих тестов границы (`ExecutionCategorySyncTests`, `DeliveryCategorySyncTests`)
-- [ ] 2.2 Снабдить изменённые guard-методы traceability-меткой `openspec:sync/bybit-history#requirement-contract-unavailable-area-skip` с комментарием о третьем исходе; проверить разрешение ссылки rg-поиском
+- [x] 2.1 В `ExecutionCategorySync` и `DeliveryCategorySync` перевести `RunWindowWithBoundaryGuardAsync` с пары «результат/null» на исход прохода: успешный результат, пограничное исчерпание перебора, область недоступна; перехват `IsContractUnavailableError` без ретрая и без зажатия; поведение пограничного контура не меняется; проверить сборкой и зелёным прогоном существующих тестов границы (`ExecutionCategorySyncTests`, `DeliveryCategorySyncTests`)
+- [x] 2.2 Снабдить изменённые guard-методы traceability-меткой `openspec:sync/bybit-history#requirement-contract-unavailable-area-skip` с комментарием о третьем исходе; проверить разрешение ссылки rg-поиском
 
 ## 3. Пропуск области в циклах движков
 
-- [ ] 3.1 В `ExecutionCategorySync` в backfill- и инкрементальном циклах областей на исходе «область недоступна» фиксировать метку пропущенной области (категория плюс базовый актив; для безфильтровой области — только категория), останавливать обход окон области и продолжать следующие области; проверить тестами `ExecutionCategorySyncTests` на фиктивном шлюзе с retCode 110023: option-область пропускается, остальные области догружаются, запуск успешен с водяным знаком в обоих режимах (scenario-unavailable-option-area-skipped); единственная безфильтровая область linear завершает проход категории без сбоя (scenario-unavailable-single-area-ends-walk)
-- [ ] 3.2 Провести то же в `DeliveryCategorySync` для единственной области delivery-прохода; проверить тестами `DeliveryCategorySyncTests` по scenario-unavailable-single-area-ends-walk: проход завершён, водяной знак delivery зафиксирован, статус запуска успешный
-- [ ] 3.3 Добавить в `ExecutionCategorySyncResult` и `DeliveryCategorySyncResult` перечень меток пропущенных областей (пуст при отсутствии пропусков); проверить тестами: перечень пуст без отказов, метки корректны после пропуска, `HistoryExhausted` не отмечает пропуск
+- [x] 3.1 В `ExecutionCategorySync` в backfill- и инкрементальном циклах областей на исходе «область недоступна» фиксировать метку пропущенной области (категория плюс базовый актив; для безфильтровой области — только категория), останавливать обход окон области и продолжать следующие области; проверить тестами `ExecutionCategorySyncTests` на фиктивном шлюзе с retCode 110023: option-область пропускается, остальные области догружаются, запуск успешен с водяным знаком в обоих режимах (scenario-unavailable-option-area-skipped); единственная безфильтровая область linear завершает проход категории без сбоя (scenario-unavailable-single-area-ends-walk)
+- [x] 3.2 Провести то же в `DeliveryCategorySync` для единственной области delivery-прохода; проверить тестами `DeliveryCategorySyncTests` по scenario-unavailable-single-area-ends-walk: проход завершён, водяной знак delivery зафиксирован, статус запуска успешный
+- [x] 3.3 Добавить в `ExecutionCategorySyncResult` и `DeliveryCategorySyncResult` перечень меток пропущенных областей (пуст при отсутствии пропусков); проверить тестами: перечень пуст без отказов, метки корректны после пропуска, `HistoryExhausted` не отмечает пропуск
 
 ## 4. Видимость пропуска пользователю
 

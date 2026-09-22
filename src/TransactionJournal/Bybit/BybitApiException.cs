@@ -10,6 +10,12 @@ public sealed class BybitApiException : Exception
 	private const int ParamsErrorRetCode = 10001;
 
 	/// <summary>
+	/// Код ошибки биржи retCode 110023 — отказ «контракт недоступен для торговли»:
+	/// биржа не отдаёт историю контракта, ограниченного в торговле.
+	/// </summary>
+	private const int ContractUnavailableRetCode = 110023;
+
+	/// <summary>
 	/// Подстрока сообщения биржи об отказе за глубину хранения истории: единственный
 	/// различающий сигнал среди прочих отказов параметров с тем же retCode 10001.
 	/// </summary>
@@ -53,6 +59,21 @@ public sealed class BybitApiException : Exception
 		ArgumentNullException.ThrowIfNull(exception);
 		return exception.RetCode == ParamsErrorRetCode
 			&& exception.RetMsg?.Contains(HistoryBoundaryMarker, StringComparison.OrdinalIgnoreCase) == true;
+	}
+
+	/// <summary>
+	/// Распознаёт отказ биржи «контракт недоступен для торговли»: это сигнал защитного
+	/// контура недоступных контрактов — область перебора, чьё окно биржа отвергла этим
+	/// отказом, считается недоступной, обход её окон прекращается без ретрая, а запуск
+	/// продолжается со следующими областями. Распознавание идёт только по коду: биржа
+	/// переиспользует retCode 110023 с разными формулировками retMsg, поэтому текст
+	/// в матч включать нельзя.
+	/// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+	/// </summary>
+	public static bool IsContractUnavailableError(BybitApiException exception)
+	{
+		ArgumentNullException.ThrowIfNull(exception);
+		return exception.RetCode == ContractUnavailableRetCode;
 	}
 
 	/// <summary>Создаёт ошибку по HTTP-статусу, когда конверт retCode недоступен.</summary>

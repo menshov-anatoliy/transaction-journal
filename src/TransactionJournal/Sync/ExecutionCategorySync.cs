@@ -135,6 +135,7 @@ public sealed class ExecutionCategorySync
 		var historyExhausted = false;
 		var earlyStopped = false;
 		var boundaryExhausted = false;
+		var skippedAreas = new List<string>();
 
 		if (mode == SyncRunMode.Backfill)
 		{
@@ -157,8 +158,8 @@ public sealed class ExecutionCategorySync
 					cancellationToken.ThrowIfCancellationRequested();
 
 					var windowStartMs = Math.Max(windowEndMs - ExecutionWindowPass.MaxWindowMs, floorMs);
-					var passResult = await RunWindowWithBoundaryGuardAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage: false, cancellationToken).ConfigureAwait(false);
-					if (passResult is null)
+						var guardResult = await RunWindowWithBoundaryGuardAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage: false, cancellationToken).ConfigureAwait(false);
+						if (guardResult.Outcome == WindowGuardOutcome.BoundaryExhausted)
 					{
 						// Повторный пограничный отказ: доступная история исчерпана — оставшиеся
 						// окна области и остальные области категории не запрашиваются.
@@ -167,7 +168,20 @@ public sealed class ExecutionCategorySync
 						break;
 					}
 
-					windowsProcessed++;
+						if (guardResult.Outcome == WindowGuardOutcome.AreaUnavailable)
+						{
+							// Область недоступна бирже: факт пропуска фиксируется меткой, обход
+							// её окон прекращается, перебор продолжается со следующими областями;
+							// водяной знак фиксируется штатно в конце запуска.
+							// Traceability: openspec:sync/bybit-history#scenario-unavailable-option-area-skipped
+							// Traceability: openspec:sync/bybit-history#scenario-unavailable-single-area-ends-walk
+							skippedAreas.Add(BuildSkippedAreaLabel(category, scopeBaseCoin));
+							break;
+						}
+
+						var passResult = guardResult.PassResult!;
+
+						windowsProcessed++;
 					newExecutions.AddRange(passResult.NewExecutions);
 					allSeenExecutions.AddRange(passResult.AllExecutions);
 					newExecutionsPersisted += await PersistWindowBatchAsync(category, passResult, progressRun, cancellationToken).ConfigureAwait(false);
@@ -205,8 +219,8 @@ public sealed class ExecutionCategorySync
 					cancellationToken.ThrowIfCancellationRequested();
 
 					var windowStartMs = Math.Max(windowEndMs - ExecutionWindowPass.MaxWindowMs, targetStartMs);
-					var passResult = await RunWindowWithBoundaryGuardAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage: true, cancellationToken).ConfigureAwait(false);
-					if (passResult is null)
+						var guardResult = await RunWindowWithBoundaryGuardAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage: true, cancellationToken).ConfigureAwait(false);
+						if (guardResult.Outcome == WindowGuardOutcome.BoundaryExhausted)
 					{
 						// Повторный пограничный отказ: хвост истории за границей недоступен —
 						// оставшиеся окна и области категории не запрашиваются.
@@ -215,7 +229,20 @@ public sealed class ExecutionCategorySync
 						break;
 					}
 
-					windowsProcessed++;
+						if (guardResult.Outcome == WindowGuardOutcome.AreaUnavailable)
+						{
+							// Область недоступна бирже: факт пропуска фиксируется меткой, обход
+							// её окон прекращается, перебор продолжается со следующими областями;
+							// водяной знак фиксируется штатно в конце запуска.
+							// Traceability: openspec:sync/bybit-history#scenario-unavailable-option-area-skipped
+							// Traceability: openspec:sync/bybit-history#scenario-unavailable-single-area-ends-walk
+							skippedAreas.Add(BuildSkippedAreaLabel(category, scopeBaseCoin));
+							break;
+						}
+
+						var passResult = guardResult.PassResult!;
+
+						windowsProcessed++;
 					newExecutions.AddRange(passResult.NewExecutions);
 					allSeenExecutions.AddRange(passResult.AllExecutions);
 					newExecutionsPersisted += await PersistWindowBatchAsync(category, passResult, progressRun, cancellationToken).ConfigureAwait(false);
@@ -272,6 +299,7 @@ public sealed class ExecutionCategorySync
 			BackfillBoundaryMs = state.BackfillBoundaryMs,
 			ExecWatermarkMs = fixedWatermarkMs,
 			NewExecutionsPersisted = newExecutionsPersisted,
+			SkippedAreas = skippedAreas,
 		};
 	}
 
@@ -292,6 +320,17 @@ public sealed class ExecutionCategorySync
 
 		var baseCoins = await _optionBaseCoins.GetBaseCoinsAsync(cancellationToken).ConfigureAwait(false);
 		return baseCoins.Cast<string?>().ToList();
+	}
+
+	/// <summary>
+	/// Строит метку пропущенной области: для области опционной доски — категория плюс
+	/// базовый актив, для безфильтровой области — только категория. Метка возвращается
+	/// в результате запуска и показывается пользователю на странице синхронизации.
+	/// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+	/// </summary>
+	private static string BuildSkippedAreaLabel(string category, string? baseCoin)
+	{
+		return baseCoin is null ? category : $"{category}:{baseCoin}";
 	}
 
 	/// <summary>
@@ -345,14 +384,17 @@ public sealed class ExecutionCategorySync
 	}
 
 	/// <summary>
-	/// Проходит одно окно с защитным контуром границы хранения истории: пограничный
-	/// отказ биржи повторяет перебор диапазона один раз с началом, зажатым до границы,
-	/// а повторный отказ означает исчерпание доступной истории. Возвращает null, когда
-	/// перебор исчерпан и оставшиеся окна и области категории не запрашиваются; прочие
-	/// ошибки биржи пробрасываются как раньше.
+	/// Проходит одно окно с защитным контуром перебора истории и возвращает исход прохода:
+	/// успешный результат, пограничное исчерпание перебора либо недоступность области.
+	/// Пограничный отказ биржи повторяет перебор диапазона один раз с началом, зажатым до
+	/// границы, а повторный отказ означает исчерпание доступной истории. Отказ биржи
+	/// «контракт недоступен для торговли» не ретраится и не зажимается — область считается
+	/// недоступной, её окна больше не запрашиваются; прочие ошибки биржи пробрасываются
+	/// как раньше.
 	/// Traceability: openspec:sync/bybit-history#requirement-history-boundary-guard
+	/// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
 	/// </summary>
-	private async Task<ExecutionWindowPassResult?> RunWindowWithBoundaryGuardAsync(
+	private async Task<WindowGuardResult<ExecutionWindowPassResult>> RunWindowWithBoundaryGuardAsync(
 		string category,
 		string? baseCoin,
 		long windowStartMs,
@@ -364,15 +406,36 @@ public sealed class ExecutionCategorySync
 	{
 		try
 		{
-			return await RunWindowAsync(category, baseCoin, windowStartMs, windowEndMs, options, earlyStopOnKnownPage, cancellationToken).ConfigureAwait(false);
+			ExecutionWindowPassResult? passResult;
+			try
+			{
+				passResult = await RunWindowAsync(category, baseCoin, windowStartMs, windowEndMs, options, earlyStopOnKnownPage, cancellationToken).ConfigureAwait(false);
+			}
+			catch (BybitApiException error) when (BybitApiException.IsHistoryBoundaryError(error))
+			{
+				// Окно отклонено за глубину хранения: записи в разрешённой зоне ещё можно
+				// прочитать — диапазон повторяется один раз с началом на границе. Диапазон
+				// идёт под-окнами ширины прохода: зажатый диапазон бывает шире семи дней.
+				// Повторный пограничный отказ внутри повтора означает, что запаса не
+				// хватило — доступная история исчерпана.
+				// Traceability: openspec:sync/bybit-history#scenario-boundary-window-retried-clamped
+				// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+				var clampedResult = await RunClampedRangeAsync(category, baseCoin, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage, cancellationToken).ConfigureAwait(false);
+				return clampedResult is null
+					? WindowGuardResult<ExecutionWindowPassResult>.BoundaryExhausted()
+					: WindowGuardResult<ExecutionWindowPassResult>.Passed(clampedResult);
+			}
+
+			return WindowGuardResult<ExecutionWindowPassResult>.Passed(passResult);
 		}
-		catch (BybitApiException error) when (BybitApiException.IsHistoryBoundaryError(error))
+		catch (BybitApiException error) when (BybitApiException.IsContractUnavailableError(error))
 		{
-			// Окно отклонено за глубину хранения: записи в разрешённой зоне ещё можно
-			// прочитать — диапазон повторяется один раз с началом на границе. Диапазон
-			// идёт под-окнами ширины прохода: зажатый диапазон бывает шире семи дней.
-			// Traceability: openspec:sync/bybit-history#scenario-boundary-window-retried-clamped
-			return await RunClampedRangeAsync(category, baseCoin, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage, cancellationToken).ConfigureAwait(false);
+			// Отказ «контракт недоступен для торговли» детерминированный: повтор запроса
+			// и зажатие начала окно ответа не меняют. Третий исход защитного контура —
+			// область недоступна: её окна больше не запрашиваются, ранее прочитанные
+			// страницы области остаются сохранёнными.
+			// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+			return WindowGuardResult<ExecutionWindowPassResult>.AreaUnavailable();
 		}
 	}
 

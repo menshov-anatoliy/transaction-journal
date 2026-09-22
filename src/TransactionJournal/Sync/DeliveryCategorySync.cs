@@ -123,6 +123,7 @@ public sealed class DeliveryCategorySync
 		var windowsProcessed = 0;
 		var historyExhausted = false;
 		var boundaryExhausted = false;
+		var skippedAreas = new List<string>();
 
 		if (mode == SyncRunMode.Backfill)
 		{
@@ -141,8 +142,8 @@ public sealed class DeliveryCategorySync
 				cancellationToken.ThrowIfCancellationRequested();
 
 				var windowStartMs = Math.Max(windowEndMs - DeliveryWindowPass.MaxWindowMs, floorMs);
-				var passResult = await RunWindowWithBoundaryGuardAsync(category, windowStartMs, windowEndMs, allowedEarliestMs, options, cancellationToken).ConfigureAwait(false);
-				if (passResult is null)
+					var guardResult = await RunWindowWithBoundaryGuardAsync(category, windowStartMs, windowEndMs, allowedEarliestMs, options, cancellationToken).ConfigureAwait(false);
+					if (guardResult.Outcome == WindowGuardOutcome.BoundaryExhausted)
 				{
 					// Повторный пограничный отказ: доступная delivery-история исчерпана —
 					// оставшиеся окна не запрашиваются.
@@ -151,7 +152,19 @@ public sealed class DeliveryCategorySync
 					break;
 				}
 
-				windowsProcessed++;
+					if (guardResult.Outcome == WindowGuardOutcome.AreaUnavailable)
+					{
+						// Единственная область delivery-прохода недоступна бирже: факт пропуска
+						// фиксируется меткой, обход её окон прекращается — проход категории
+						// завершён; водяной знак фиксируется штатно в конце запуска.
+						// Traceability: openspec:sync/bybit-history#scenario-unavailable-single-area-ends-walk
+						skippedAreas.Add(category);
+						break;
+					}
+
+					var passResult = guardResult.PassResult!;
+
+					windowsProcessed++;
 				newDeliveries.AddRange(passResult.NewDeliveries);
 				newDeliveriesPersisted += await PersistWindowBatchAsync(category, passResult, progressRun, cancellationToken).ConfigureAwait(false);
 
@@ -180,8 +193,8 @@ public sealed class DeliveryCategorySync
 				cancellationToken.ThrowIfCancellationRequested();
 
 				var windowStartMs = Math.Max(windowEndMs - DeliveryWindowPass.MaxWindowMs, targetStartMs);
-				var passResult = await RunWindowWithBoundaryGuardAsync(category, windowStartMs, windowEndMs, allowedEarliestMs, options, cancellationToken).ConfigureAwait(false);
-				if (passResult is null)
+					var guardResult = await RunWindowWithBoundaryGuardAsync(category, windowStartMs, windowEndMs, allowedEarliestMs, options, cancellationToken).ConfigureAwait(false);
+					if (guardResult.Outcome == WindowGuardOutcome.BoundaryExhausted)
 				{
 					// Повторный пограничный отказ: хвост delivery-истории за границей
 					// недоступен — оставшиеся окна не запрашиваются.
@@ -190,7 +203,19 @@ public sealed class DeliveryCategorySync
 					break;
 				}
 
-				windowsProcessed++;
+					if (guardResult.Outcome == WindowGuardOutcome.AreaUnavailable)
+					{
+						// Единственная область delivery-прохода недоступна бирже: факт пропуска
+						// фиксируется меткой, обход её окон прекращается — проход категории
+						// завершён; водяной знак фиксируется штатно в конце запуска.
+						// Traceability: openspec:sync/bybit-history#scenario-unavailable-single-area-ends-walk
+						skippedAreas.Add(category);
+						break;
+					}
+
+					var passResult = guardResult.PassResult!;
+
+					windowsProcessed++;
 				newDeliveries.AddRange(passResult.NewDeliveries);
 				newDeliveriesPersisted += await PersistWindowBatchAsync(category, passResult, progressRun, cancellationToken).ConfigureAwait(false);
 
@@ -221,6 +246,7 @@ public sealed class DeliveryCategorySync
 			HistoryExhausted = historyExhausted,
 			DeliveryWatermarkMs = fixedWatermarkMs,
 			NewDeliveriesPersisted = newDeliveriesPersisted,
+			SkippedAreas = skippedAreas,
 		};
 	}
 
@@ -273,14 +299,17 @@ public sealed class DeliveryCategorySync
 	}
 
 	/// <summary>
-	/// Проходит одно окно с защитным контуром границы хранения истории: пограничный
-	/// отказ биржи повторяет перебор диапазона один раз с началом, зажатым до границы,
-	/// а повторный отказ означает исчерпание доступной delivery-истории. Возвращает null,
-	/// когда перебор исчерпан и оставшиеся окна не запрашиваются; прочие ошибки биржи
+	/// Проходит одно окно с защитным контуром перебора delivery-истории и возвращает исход
+	/// прохода: успешный результат, пограничное исчерпание перебора либо недоступность
+	/// области. Пограничный отказ биржи повторяет перебор диапазона один раз с началом,
+	/// зажатым до границы, а повторный отказ означает исчерпание доступной истории. Отказ
+	/// биржи «контракт недоступен для торговли» не ретраится и не зажимается — область
+	/// считается недоступной, её окна больше не запрашиваются; прочие ошибки биржи
 	/// пробрасываются как раньше.
 	/// Traceability: openspec:sync/bybit-history#requirement-history-boundary-guard
+	/// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
 	/// </summary>
-	private async Task<DeliveryWindowPassResult?> RunWindowWithBoundaryGuardAsync(
+	private async Task<WindowGuardResult<DeliveryWindowPassResult>> RunWindowWithBoundaryGuardAsync(
 		string category,
 		long windowStartMs,
 		long windowEndMs,
@@ -290,15 +319,36 @@ public sealed class DeliveryCategorySync
 	{
 		try
 		{
-			return await RunWindowAsync(category, windowStartMs, windowEndMs, options, cancellationToken).ConfigureAwait(false);
+			DeliveryWindowPassResult? passResult;
+			try
+			{
+				passResult = await RunWindowAsync(category, windowStartMs, windowEndMs, options, cancellationToken).ConfigureAwait(false);
+			}
+			catch (BybitApiException error) when (BybitApiException.IsHistoryBoundaryError(error))
+			{
+				// Окно отклонено за глубину хранения: записи в разрешённой зоне ещё можно
+				// прочитать — диапазон повторяется один раз с началом на границе. Диапазон
+				// идёт под-окнами ширины прохода: зажатый диапазон бывает шире тридцати дней.
+				// Повторный пограничный отказ внутри повтора означает, что запаса не
+				// хватило — доступная история исчерпана.
+				// Traceability: openspec:sync/bybit-history#scenario-boundary-window-retried-clamped
+				// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+				var clampedResult = await RunClampedRangeAsync(category, windowEndMs, allowedEarliestMs, options, cancellationToken).ConfigureAwait(false);
+				return clampedResult is null
+					? WindowGuardResult<DeliveryWindowPassResult>.BoundaryExhausted()
+					: WindowGuardResult<DeliveryWindowPassResult>.Passed(clampedResult);
+			}
+
+			return WindowGuardResult<DeliveryWindowPassResult>.Passed(passResult);
 		}
-		catch (BybitApiException error) when (BybitApiException.IsHistoryBoundaryError(error))
+		catch (BybitApiException error) when (BybitApiException.IsContractUnavailableError(error))
 		{
-			// Окно отклонено за глубину хранения: записи в разрешённой зоне ещё можно
-			// прочитать — диапазон повторяется один раз с началом на границе. Диапазон
-			// идёт под-окнами ширины прохода: зажатый диапазон бывает шире тридцати дней.
-			// Traceability: openspec:sync/bybit-history#scenario-boundary-window-retried-clamped
-			return await RunClampedRangeAsync(category, windowEndMs, allowedEarliestMs, options, cancellationToken).ConfigureAwait(false);
+			// Отказ «контракт недоступен для торговли» детерминированный: повтор запроса
+			// и зажатие начала окно ответа не меняют. Третий исход защитного контура —
+			// область недоступна: её окна больше не запрашиваются, ранее прочитанные
+			// страницы области остаются сохранёнными.
+			// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+			return WindowGuardResult<DeliveryWindowPassResult>.AreaUnavailable();
 		}
 	}
 

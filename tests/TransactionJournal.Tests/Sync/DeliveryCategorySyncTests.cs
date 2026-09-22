@@ -99,6 +99,10 @@ public class DeliveryCategorySyncTests
 		Assert.That(saved.BackfillBoundaryMs, Is.EqualTo(NowMs - 180 * DayMs));
 		Assert.That(saved.LastSuccessAt, Is.EqualTo(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)));
 		Assert.That(result.DeliveryWatermarkMs, Is.EqualTo(NowMs));
+
+		// Assert: без отказов биржи перечень пропущенных областей пуст.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.Empty);
 	}
 
 	[TestMethod]
@@ -532,6 +536,40 @@ public class DeliveryCategorySyncTests
 		Assert.That(result.HistoryExhausted, Is.True);
 
 		// Assert: водяной знак зафиксирован, запуск помечен успешным.
+		var saved = _stateStore.Find("option");
+		Assert.That(saved, Is.Not.Null);
+		Assert.That(saved!.DeliveryWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(saved.LastSuccessAt, Is.Not.Null);
+
+		// Assert: пограничное исчерпание — не пропуск области: перечень пропущенных пуст.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Отказ 110023 на единственной области delivery-прохода завершает проход без сбоя — водяной знак зафиксирован")]
+	public async Task TryIfUnavailableSingleDeliveryAreaEndsWalkWithWatermarkFixed()
+	{
+		// Arrange: первое же 30-дневное окно backfill биржа отвечает отказом
+		// «контракт недоступен для торговли».
+		// Требование: отказ 110023 не роняет запуск — проход delivery-категории
+		// завершается, водяной знак фиксируется штатно, метка пропуска — категория.
+		// Traceability: openspec:sync/bybit-history#scenario-unavailable-single-area-ends-walk
+		var options = new DeliveryCategorySyncOptions { MaxBackfillDepthMs = 3 * MonthMs };
+		_gateway.EnqueueError(new BybitApiException(110023, "The contract is not available for trades"));
+
+		// Act: исключение не выходит наружу — запуск завершается штатно.
+		var result = await _engine.RunAsync("option", options);
+
+		// Assert: область запрошена один раз — отказ не ретраился, окна не листались.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(1));
+		Assert.That(result.NewDeliveries, Is.Empty);
+		Assert.That(result.WindowsProcessed, Is.EqualTo(0));
+
+		// Assert: метка пропуска — категория, водяной знак зафиксирован, запуск успешен.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.EqualTo(new[] { "option" }));
+		Assert.That(result.DeliveryWatermarkMs, Is.EqualTo(NowMs));
 		var saved = _stateStore.Find("option");
 		Assert.That(saved, Is.Not.Null);
 		Assert.That(saved!.DeliveryWatermarkMs, Is.EqualTo(NowMs));

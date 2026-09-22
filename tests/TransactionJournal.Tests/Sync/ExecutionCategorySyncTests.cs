@@ -97,6 +97,10 @@ public class ExecutionCategorySyncTests
 		Assert.That(saved.LastSuccessAt, Is.EqualTo(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)));
 		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
 		Assert.That(result.BackfillBoundaryMs, Is.EqualTo(NowMs - 8 * DayMs));
+
+		// Assert: без отказов биржи перечень пропущенных областей пуст.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.Empty);
 	}
 
 	[TestMethod]
@@ -687,6 +691,113 @@ public class ExecutionCategorySyncTests
 		Assert.That(result.HistoryExhausted, Is.True);
 		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
 		var saved = _stateStore.Find("option");
+		Assert.That(saved, Is.Not.Null);
+		Assert.That(saved!.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(saved.LastSuccessAt, Is.Not.Null);
+
+		// Assert: пограничное исчерпание — не пропуск области: перечень пропущенных пуст.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Отказ 110023 на окне option-области пропускает область в backfill — остальные догружаются, запуск успешен")]
+	public async Task TryIfUnavailableOptionAreaSkippedInBackfillAndOtherScopesLoaded()
+	{
+		// Arrange: доска из двух активов; окно области BTC биржа отвечает отказом
+		// «контракт недоступен для торговли», окно области ETH приносит запись.
+		// Требование: отказ 110023 не прерывает запуск — область пропускается без ретрая,
+		// остальные области догружаются, водяной знак фиксируется штатно.
+		// Traceability: openspec:sync/bybit-history#scenario-unavailable-option-area-skipped
+		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.EnqueueError(new BybitApiException(110023, "The contract is not available for trades"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - DayMs)] });
+
+		// Act
+		var result = await engine.RunAsync("option", options);
+
+		// Assert: область BTC запрошена один раз — отказ не ретраится, оставшиеся окна
+		// области не запрашиваются, область ETH догружена.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
+		Assert.That(_gateway.Queries[0].BaseCoin, Is.EqualTo("BTC"));
+		Assert.That(_gateway.Queries[1].BaseCoin, Is.EqualTo("ETH"));
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth" }));
+		Assert.That(result.WindowsProcessed, Is.EqualTo(1));
+
+		// Assert: пропуск зафиксирован меткой «категория:актив», запуск успешен
+		// с водяным знаком.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.EqualTo(new[] { "option:BTC" }));
+		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
+		var saved = _stateStore.Find("option");
+		Assert.That(saved, Is.Not.Null);
+		Assert.That(saved!.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(saved.LastSuccessAt, Is.Not.Null);
+	}
+
+	[TestMethod]
+	[Description("Отказ 110023 на окне option-области пропускает область в инкременте — остальные догружаются, запуск успешен")]
+	public async Task TryIfUnavailableOptionAreaSkippedInIncrementalAndOtherScopesLoaded()
+	{
+		// Arrange: водяной знак суток, доска из двух активов; окно области BTC биржа
+		// отвечает отказом «контракт недоступен», окно области ETH приносит новую запись.
+		// Требование: отказ 110023 не прерывает инкрементальную догрузку — область
+		// пропускается, остальные догружаются, водяной знак фиксируется штатно.
+		// Traceability: openspec:sync/bybit-history#scenario-unavailable-option-area-skipped
+		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
+		await _stateStore.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = NowMs - DayMs });
+		_gateway.EnqueueError(new BybitApiException(110023, "The contract is not available for trades"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - 2 * 3600_000L)] });
+
+		// Act
+		var result = await engine.RunAsync("option");
+
+		// Assert: каждая область получила по одному окну, отказ BTC не ретраился.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
+		Assert.That(_gateway.Queries[0].BaseCoin, Is.EqualTo("BTC"));
+		Assert.That(_gateway.Queries[1].BaseCoin, Is.EqualTo("ETH"));
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth" }));
+
+		// Assert: пропуск зафиксирован меткой, история не объявлена исчерпанной —
+		// пропуск и исчерпание перебора разные факты, водяной знак зафиксирован штатно.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.EqualTo(new[] { "option:BTC" }));
+		Assert.That(result.HistoryExhausted, Is.False);
+		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(_stateStore.Find("option")!.LastSuccessAt, Is.Not.Null);
+	}
+
+	[TestMethod]
+	[Description("Отказ 110023 на единственной безфильтровой области linear завершает проход категории без сбоя")]
+	public async Task TryIfUnavailableSingleLinearAreaEndsCategoryWalk()
+	{
+		// Arrange: linear читается одной областью без фильтра; первое же окно биржа
+		// отвечает отказом «контракт недоступен для торговли».
+		// Требование: пропуск единственной области завершает проход категории — запуск
+		// успешен со штатно зафиксированным водяным знаком, метка пропуска — категория.
+		// Traceability: openspec:sync/bybit-history#scenario-unavailable-single-area-ends-walk
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.EnqueueError(new BybitApiException(110023, "The contract is not available for trades"));
+
+		// Act: исключение не выходит наружу — запуск завершается штатно.
+		var result = await _engine.RunAsync("linear", options);
+
+		// Assert: область запрошена один раз — отказ не ретраился, окна не листались.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(1));
+		Assert.That(_gateway.Queries[0].BaseCoin, Is.Null);
+		Assert.That(result.NewExecutions, Is.Empty);
+		Assert.That(result.WindowsProcessed, Is.EqualTo(0));
+
+		// Assert: метка пропуска — только категория, водяной знак зафиксирован штатно.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.EqualTo(new[] { "linear" }));
+		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
+		var saved = _stateStore.Find("linear");
 		Assert.That(saved, Is.Not.Null);
 		Assert.That(saved!.ExecWatermarkMs, Is.EqualTo(NowMs));
 		Assert.That(saved.LastSuccessAt, Is.Not.Null);

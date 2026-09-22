@@ -55,4 +55,45 @@ public class BybitApiExceptionTests
 		// Act — Assert
 		Assert.That(BybitApiException.IsHistoryBoundaryError(rateLimit), Is.False);
 	}
+
+	[TestMethod]
+	[Description("Хелпер распознаёт отказ «контракт недоступен» по реальному тексту биржи")]
+	public void TryIfHelperRecognizesRealContractUnavailableText()
+	{
+		// Arrange: точный текст отказа биржи из практики синхронизации делистнутой доски.
+		// Требование: отказ 110023 «The contract is not available for trades» при запросе
+		// окна области распознаётся как недоступность контракта.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		var real = new BybitApiException(110023, "The contract is not available for trades");
+
+		// Act — Assert
+		Assert.That(BybitApiException.IsContractUnavailableError(real), Is.True);
+	}
+
+	[TestMethod]
+	[Description("Хелпер не срабатывает на другом коде с тем же текстом отказа")]
+	public void TryIfHelperIgnoresOtherRetCodeWithSameText()
+	{
+		// Arrange: тот же текст отказа, но другой код — распознавание ведётся только
+		// по retCode 110023, текст сообщения биржи не участвует.
+		var otherCode = new BybitApiException(10001, "The contract is not available for trades");
+
+		// Act — Assert
+		Assert.That(BybitApiException.IsContractUnavailableError(otherCode), Is.False);
+	}
+
+	[TestMethod]
+	[Description("Хелпер не зависит от формулировки retMsg: другой текст с кодом 110023 распознаётся")]
+	public void TryIfHelperMatchesOtherWordingWithContractUnavailableRetCode()
+	{
+		// Arrange: биржа переиспользует код 110023 с другим текстом — формулировка
+		// из официальной таблицы кодов о позиции «только закрытие».
+		// Требование: распознавание не зависит от формулировки retMsg.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		var officialWording = new BybitApiException(
+			110023, "Currently you can only reduce your position on this contract");
+
+		// Act — Assert
+		Assert.That(BybitApiException.IsContractUnavailableError(officialWording), Is.True);
+	}
 }
