@@ -24,9 +24,11 @@
   - только `endTime` → `[endTime-7d, endTime]`;
   - оба → `endTime - startTime <= 7 дней`.
   То есть бэкфилл делается «пролистыванием» 7-дневными окнами от текущего момента назад.
-- Фильтры: `category` (обязателен: `linear`, `inverse`, `spot`, `option`), `symbol`, `orderId`, `orderLinkId`, `baseCoin` (для option по умолчанию `BTC`), `settleCoin`, `execType`.
+- Фильтры: `category` (обязателен: `linear`, `inverse`, `spot`, `option`), `symbol`, `orderId`, `orderLinkId`, `baseCoin` (только option; явный фильтр по доске базового актива), `settleCoin`, `execType`.
 - Приоритет фильтров: `orderId > orderLinkId > symbol > baseCoin`; если передан `orderId`/`orderLinkId`, остальные игнорируются.
 - Для realtime docs рекомендует websocket-стрим `execution`, а не поллинг этого эндпоинта.
+
+Живой факт (2026-09-23): `execution/list?category=option` **без фильтра `baseCoin`** возвращает записи всех базовых активов аккаунта, а не только доски по умолчанию — окно 2026-09-14…21 отдало исполнения ETH и XAUT разом. Поэтому безфильтровый проход категории одновременно загружает историю и обнаруживает активы, которых нет в перечислении справочника; полнота истории конкретного актива при этом гарантируется только отдельным проходом с явным `baseCoin` (см. `sync/bybit-history`, требование `option-base-coin-coverage`).
 
 Состав полей ответа (каждая запись `list[]`): `symbol`, `orderId`, `orderLinkId`, `side` (`Buy`/`Sell`), `orderPrice`, `orderQty`, `leavesQty`, `createType`, `orderType` (`Market`/`Limit`), `stopOrderType`, `execFee`, `execFeeV2` (только `FutureSpread`), `execId`, `execPrice`, `execQty`, `execType`, `execValue`, `execTime` (ms), `feeCurrency`, `isMaker` (bool), `feeRate`, `markPrice` (марка на момент исполнения), `blockTradeId`, `closedSize` (закрытая часть позиции этим исполнением), `seq` (cross sequence; уникальность — `seq + symbol`), `extraFees`; опционные поля: `tradeIv`, `markIv`, `indexPrice`, `underlyingPrice`.
 Источник: [docs/v5/order/execution — Response Parameters](https://bybit-exchange.github.io/docs/v5/order/execution).
@@ -34,7 +36,7 @@
 Различия linear/option:
 
 - У опционов есть `tradeIv`/`markIv`/`indexPrice`/`underlyingPrice`; у linear их нет (у linear `indexPrice` не возвращается).
-- `category=option` без `symbol` запрашивается по `baseCoin` (дефолт `BTC`).
+- `category=option` без `symbol` запрашивается по `baseCoin` (дефолт `BTC`); запрос вовсе без `baseCoin` биржа принимает и отвечает записями всех активов аккаунта — см. живой факт выше.
 - Валюта комиссии — из `feeCurrency` (см. §5).
 
 Rate limit: `/v5/execution/list` — **50 req/s**.
@@ -88,15 +90,18 @@ Enum `execType` эндпоинта execution list содержит `Delivery` (�
 `GET /v5/market/delivery-price` (без аутентификации): по опционам возвращает символы в статусе `DELIVERING` (окно UTC 08:00–12:00), если не указан `symbol`; `settleCoin` по умолчанию `USDC`; поля `symbol`, `deliveryPrice`, `deliveryTime`; `limit [1..200]`, дефолт 50.
 Источник: [docs/v5/market/delivery-price](https://bybit-exchange.github.io/docs/v5/market/delivery-price).
 
+`delivery-price` **непригоден как источник перечня досок**: без `symbol` эндпоинт перечисляет только инструменты в момент экспирации (статус `DELIVERING`, окно 08:00–12:00 UTC) и начинает перечисление с доски по умолчанию — полный перечень активов доски им не получить, а делистнутые доски не возвращаются вовсе. Перечень областей option строится из других источников (см. §3 и требование `option-base-coin-coverage`).
+
 ## 3. Публичные марки (tickers) без аутентификации
 
 Эндпоинт: **`GET /v5/market/tickers`**.
 Источник: [docs/v5/market/tickers](https://bybit-exchange.github.io/docs/v5/market/tickers).
 
-- Параметры: `category` (обязателен), `symbol`, `baseCoin` (только option), `expDate` (только option, формат `25DEC22`). Для `category=option` обязательно передать `symbol` или `baseCoin`.
+- Параметры: `category` (обязателен), `symbol`, `baseCoin` (только option), `expDate` (только option, формат `25DEC22`). Для `category=option` обязательно передать `symbol` или `baseCoin`: запрос `tickers?category=option` без обоих параметров биржа отвергает `retCode 10001` (живой факт 2026-09-23), поэтому марки опционов запрашиваются только по активу или символу.
 - Для linear/inverse (фьючерсы/перпы) поля включают: `lastPrice`, `markPrice`, `indexPrice`, `prevPrice24h`, `price24hPcnt`, `bid1Price`/`bid1Size`, `ask1Price`/`ask1Size`, `turnover24h`, `volume24h`, `openInterest`, `fundingRate`, `nextFundingTime`, `basisRate`, `basis`, `predictedDeliveryPrice` (за 30 минут до delivery), `deliveryFeeRate`, `deliveryTime` (только expiry-фьючерсы), `preOpenPrice` и др.
 - Для option поля включают: `bid1Price`/`bid1Size`/`bid1Iv`, `ask1Price`/`ask1Size`/`ask1Iv`, `lastPrice`, `markPrice`, `indexPrice`, `markIv`, `underlyingPrice`, греки `delta`, `gamma`, `vega`, `theta`, `openInterest`, `turnover24h`, `volume24h`, `predictedDeliveryPrice`, `change24h`.
 - `GET /v5/market/instruments-info` (публичный) — спецификация инструментов, `limit [1..1000]`, дефолт 500, cursor; для option: `optionsType` (`Call`/`Put`), `baseCoin`, `quoteCoin`, `settleCoin`, `launchTime`, `deliveryTime`, `deliveryFeeRate`, фильтры цены/лота, `displayName`; для linear: `contractType`, `status`, `baseCoin`, `quoteCoin`, `settleCoin`, `launchTime`, `deliveryTime` (время delivery expiry-фьючерса/делистинга перпа), `deliveryFeeRate`, `fundingInterval`, фильтры. Источник: [docs/v5/market/instrument](https://bybit-exchange.github.io/docs/v5/market/instrument).
+- Безфильтровое перечисление `instruments-info?category=option` покрывает **только доску по умолчанию (BTC)**: живой факт 2026-09-23 — 854 инструмента, курсор исчерпан; доски ETH (714 инструментов) и XAUT (408) видны только с явным `baseCoin`. Ответ безфильтрового запроса — не полный перечень доски: перечень областей option нельзя строить одним перечислением справочника, он собирается объединением источников (безфильтровый проход истории, активы сырьевого хранилища, это перечисление и конфигурация) — см. требование `option-base-coin-coverage`.
 - Отказ «контракт недоступен» на эндпоинте спецификаций: запрос `GET /v5/market/instruments-info?category=option&symbol=...` по символу делистнутого инструмента получает `retCode 110023` с текстом «The contract is not available for trades» — публичный market-эндпоинт отказывает по контрактам, закрытым для торговли, вместо пустой страницы (факт подтверждён живым прогоном синхронизации, 2026-09: спецификация опциона делистнутой доски ETH не отдаётся даже при явном `symbol`; тот же код переиспользуется и на приватных окнах истории, см. §7). Детект тот же — только по retCode (`BybitApiException.IsContractUnavailableError`), без анализа retMsg. Пополнение справочника (`InstrumentReferenceSync`) обрабатывает отказ грациозно: спецификация символа пропускается без ретрая, символ фиксируется в перечне неразрешённых инструментов результата запуска, пополнение остальных инструментов продолжается, запуск завершается успешно; повторный запуск заново пробует запросить спецификацию — недоступность может быть снята биржей. Спека: `sync/bybit-history`, требование `instrument-reference`, сценарий `unavailable-instrument-spec-skipped`.
 - Server time (для синхронизации часов при подписи): `GET /v5/market/time`. Источник: [docs/v5/market/time](https://bybit-exchange.github.io/docs/v5/market/time).
 
@@ -105,7 +110,7 @@ Market-эндпоинты **отсутствуют в таблице per-UID API
 ## 4. Форматы символов
 
 Опционы: `{BASE}-{DDMMMYY}-{STRIKE}-{C|P}[-{QUOTE}]`, например `BTC-27DEC24-2800-C`, `BTC-30DEC22-18000-C`, `ETH-3JAN23-1250-P`, `ETH-26DEC22-1400-C`; живая доска опционов пишет хвостовым сегментом котируемую валюту: `BTC-25JUN27-106000-P-USDT`, `XAUT-30OCT26-4400-C-USDT`.
-Источники: примеры в [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers), [instrument](https://bybit-exchange.github.io/docs/v5/market/instrument), [delivery-price](https://bybit-exchange.github.io/docs/v5/market/delivery-price); формат даты `25DEC22`/`25MAR22` подтверждён параметрами `expDate` в [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers) и [delivery-record](https://bybit-exchange.github.io/docs/v5/asset/delivery); суффикс котируемой валюты подтверждён живым ответом `GET /v5/market/instruments-info?category=option` (2026-09: 846 инструментов, `quoteCoin` USDT; исторические USDC-доски — суффикс `-USDC`).
+Источники: примеры в [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers), [instrument](https://bybit-exchange.github.io/docs/v5/market/instrument), [delivery-price](https://bybit-exchange.github.io/docs/v5/market/delivery-price); формат даты `25DEC22`/`25MAR22` подтверждён параметрами `expDate` в [tickers](https://bybit-exchange.github.io/docs/v5/market/tickers) и [delivery-record](https://bybit-exchange.github.io/docs/v5/asset/delivery); суффикс котируемой валюты подтверждён живым ответом `GET /v5/market/instruments-info?category=option` (2026-09: живой доской по умолчанию — BTC — отвечает 854 инструмента с `quoteCoin` USDT; это ответ одной доски, а не полной перечня досок — см. §3; исторические USDC-доски — суффикс `-USDC`).
 
 - Дата: день 1–2 цифры (без ведущего нуля: `3JAN23`), месяц — 3 заглавные английские буквы, год — 2 цифры. Дата экспирации в UTC; delivery-окно опционов 08:00–12:00 UTC (см. `DELIVERING` в [delivery-price](https://bybit-exchange.github.io/docs/v5/market/delivery-price)).
 - Парсинг: `symbol.Split('-')` → 4 или 5 частей: базовый актив, дата (`DateTime.TryParseExact(ddMMMYY, "dMMMyy", InvariantCulture)`), страйк (`decimal`), тип (`C`/`P`), опционально валюта котировки (`USDT`/`USDC`) — примеры из старой документации без суффикса тоже валидны. Надёжнее не верить строке на слово, а сверяться с `/v5/market/instruments-info?category=option` (`optionsType`, `baseCoin`, `deliveryTime`) — там же фильтры тика/лота.
@@ -190,7 +195,7 @@ Market-эндпоинты **отсутствуют в таблице per-UID API
 
 ## Выводы для спеки синхронизации
 
-1. **Источник сделок**: `GET /v5/execution/list` с `category=linear` и `category=option` (два прохода). Идемпотентный ключ записи — `execId` (+ `orderId`, `seq` для отладки). Окно запроса ≤ 7 дней, пагинация `nextPageCursor`, `limit=100`. Инкрементальный sync — от последнего `execTime` минус перекрытие (сортировка desc — листать до уже известных `execId`).
+1. **Источник сделок**: `GET /v5/execution/list` с `category=linear` и `category=option`. Линейная история читается одной безфильтровой областью; option проходится безфильтровой областью (загружает записи всех активов и обнаруживает новые доски) плюс отдельной областью на каждый базовый актив из перечня источников — перечисление `instruments-info?category=option` безфильтровым ответом даёт только доску по умолчанию и полным перечнем досок не является. Идемпотентный ключ записи — `execId` (+ `orderId`, `seq` для отладки). Окно запроса ≤ 7 дней, пагинация `nextPageCursor`, `limit=100`. Инкрементальный sync — от последнего `execTime` минус перекрытие (сортировка desc — листать до уже известных `execId`).
 2. **Delivery-закрытия**: отдельно тянуть `GET /v5/asset/delivery-record?category=option` (окно 30 дней, limit 50) для экспираций опционов и `category=linear` для датированных фьючерсов; дедуп по `symbol + deliveryTime`. Transaction log (`type=DELIVERY`) — контроль полноты и валютные движения, не основной источник.
 3. **Реализованный PnL**: не брать closedPnl Bybit как единственную истину — журнал считает свой «Реализованный результат» из сделок и комиссий (глоссарий CONTEXT.md); closed-pnl/deliveryRpl использовать для сверки.
 4. **Марки для нереализованного результата**: публичный `GET /v5/market/tickers` (option: `markPrice` + `underlyingPrice`; linear: `markPrice`) без API-ключа; кэшировать на стороне журнала.

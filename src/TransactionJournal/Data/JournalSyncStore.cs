@@ -492,6 +492,33 @@ public sealed class JournalSyncStore :
 		SyncHandle(run, runRow);
 	}
 
+	/// <inheritdoc cref="ISyncRunJournal.SaveWarningsAsync" />
+	public async Task SaveWarningsAsync(SyncRun run, SyncRunWarnings warnings, CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(run);
+		ArgumentNullException.ThrowIfNull(warnings);
+
+		// Предупреждения пишутся отдельным обновлением закрытой строки запуска:
+		// сбой сохранения не меняет статус и счётчики уже закрытого запуска.
+		// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+		using var db = CreateContext();
+		var runRow = await FindRunRowAsync(db, run.Id, cancellationToken).ConfigureAwait(false);
+		runRow.WarningsJson = warnings.ToJson();
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+		run.WarningsJson = runRow.WarningsJson;
+	}
+
+	/// <inheritdoc cref="ISyncRunJournal.ReadWarningsAsync" />
+	public async Task<SyncRunWarnings> ReadWarningsAsync(long runId, CancellationToken cancellationToken = default)
+	{
+		using var db = CreateContext();
+		var runRow = await FindRunRowAsync(db, runId, cancellationToken).ConfigureAwait(false);
+
+		// Строки без сохранённого значения — запуски до появления колонки — читаются
+		// пустым перечнем: заметки на странице для них не показываются.
+		return SyncRunWarnings.Parse(runRow.WarningsJson);
+	}
+
 	#endregion
 
 	#region IOptionRawBaseCoinReader

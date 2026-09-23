@@ -31,4 +31,25 @@ public interface ISyncRunJournal
 	/// <exception cref="ArgumentException">Текст ошибки пуст или не задан.</exception>
 	/// <exception cref="InvalidOperationException">Строка запуска не найдена в журнале.</exception>
 	Task MarkFailedAsync(SyncRun run, string error, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Сохраняет предупреждения завершённого запуска в его строке: перечень пропущенных
+	/// областей, неразрешённых инструментов и непокрытых активов доски. Отдельное
+	/// обновление после закрытия запуска — предупреждения переживают перезагрузку страницы.
+	/// </summary>
+	/// <param name="run">Дескриптор закрытого запуска, полученный из <see cref="StartAsync"/>.</param>
+	/// <param name="warnings">Предупреждения запуска; пустые перечни сохраняются как пустой перечень.</param>
+	/// <param name="cancellationToken">Токен отмены синхронизации.</param>
+	/// <exception cref="ArgumentNullException">Запуск или предупреждения не заданы.</exception>
+	/// <exception cref="InvalidOperationException">Строка запуска не найдена в журнале.</exception>
+	Task SaveWarningsAsync(SyncRun run, SyncRunWarnings warnings, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Читает предупреждения строки запуска. Запуски без сохранённого значения —
+	/// в том числе строки до появления колонки — читаются пустым перечнем.
+	/// </summary>
+	/// <param name="runId">Ключ строки запуска в журнале.</param>
+	/// <param name="cancellationToken">Токен отмены синхронизации.</param>
+	/// <exception cref="InvalidOperationException">Строка запуска не найдена в журнале.</exception>
+	Task<SyncRunWarnings> ReadWarningsAsync(long runId, CancellationToken cancellationToken = default);
 }

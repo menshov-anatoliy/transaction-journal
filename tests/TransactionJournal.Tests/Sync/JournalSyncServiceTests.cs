@@ -395,6 +395,70 @@ public class JournalSyncServiceTests
 		Assert.That(result.UncoveredBaseCoins, Is.Empty);
 	}
 
+	[TestMethod]
+	[Description("Успешный запуск с неразрешённым символом и непокрытым активом сохраняет оба перечня в записи запуска")]
+	public async Task TryIfRunWithUnresolvedSymbolAndUncoveredCoinPersistsBothWarnings()
+	{
+		// Arrange: линейная сделка нормальна, опционный пут делистнут — биржа отвергает
+		// спецификацию отказом 110023, символ остаётся неразрешённым; delivery-запись
+		// ETH с известной спецификацией даёт непокрытый актив — область ETH не входит
+		// в перечень доски заглушки.
+		// Требование: предупреждения завершённого запуска сохраняются с записью запуска:
+		// перечень неразрешённых инструментов и непокрытых активов читается из базы
+		// при следующем открытии страницы без повторного запуска.
+		// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+		_gateway.EnqueueExecution(ExecutionPage(LinearExecution()));
+		_gateway.EnqueueExecution(ExecutionPage(OptionExecution("BTC-15DEC25-45000-P")));
+		_gateway.EnqueueDelivery(DeliveryPage());
+		_gateway.EnqueueDelivery(DeliveryPage(OptionDelivery("ETH-15DEC25-45000-P")));
+		_gateway.EnqueueDelivery(DeliveryPage());
+		_gateway.AddInstrument(LinearInstrument());
+		_gateway.AddInstrument(OptionInstrument());
+		_gateway.AddInstrument(OptionInstrument("ETH-15DEC25-45000-P", "ETH", "Put"));
+		_gateway.AddUnavailableInstrument("BTC-15DEC25-45000-P");
+
+		// Act
+		var result = await _service.SyncAsync();
+
+		// Assert: итог запуска содержит оба перечня, запись запуска — сериализованный payload.
+		Assert.That(result.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(result.UnresolvedInstruments, Is.EqualTo(new[] { "BTC-15DEC25-45000-P" }));
+		Assert.That(result.UncoveredBaseCoins, Is.EqualTo(new[] { "ETH" }));
+
+		var runRow = LoadRuns().Single();
+		Assert.That(runRow.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(runRow.WarningsJson, Is.Not.Null);
+
+		var persisted = SyncRunWarnings.Parse(runRow.WarningsJson);
+		Assert.That(persisted.UnresolvedInstruments, Is.EqualTo(new[] { "BTC-15DEC25-45000-P" }));
+		Assert.That(persisted.UncoveredBaseCoins, Is.EqualTo(new[] { "ETH" }));
+		Assert.That(persisted.SkippedAreas, Is.Empty);
+		Assert.That(persisted.IsEmpty, Is.False);
+	}
+
+	[TestMethod]
+	[Description("Чистый запуск сохраняет в записи запуска пустые перечни предупреждений")]
+	public async Task TryIfCleanRunPersistsEmptyWarnings()
+	{
+		// Arrange: штатный первичный backfill без пропусков областей, неразрешённых
+		// символов и непокрытых активов.
+		// Требование: предупреждения сохраняются и у чистого запуска — пустой payload
+		// явно фиксирует «заметок нет», а не отсутствие сведений о запуске.
+		// Traceability: openspec:sync/bybit-history#scenario-clean-run-no-persisted-warnings
+		await RunFirstBackfillAsync();
+
+		// Act — Assert: запись запуска закрыта успехом и несёт пустые перечни.
+		var runRow = LoadRuns().Single();
+		Assert.That(runRow.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(runRow.WarningsJson, Is.Not.Null);
+
+		var persisted = SyncRunWarnings.Parse(runRow.WarningsJson);
+		Assert.That(persisted.IsEmpty, Is.True);
+		Assert.That(persisted.SkippedAreas, Is.Empty);
+		Assert.That(persisted.UnresolvedInstruments, Is.Empty);
+		Assert.That(persisted.UncoveredBaseCoins, Is.Empty);
+	}
+
 	#region Помощники
 
 	/// <summary>

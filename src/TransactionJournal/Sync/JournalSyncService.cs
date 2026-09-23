@@ -10,9 +10,12 @@ namespace TransactionJournal.Sync;
 /// и после закрытия запуска перестраивает доменные проекции из сырых записей. Прерванный
 /// запуск оставляет журнал согласованным: сохранённые пачки остаются в хранилище,
 /// состояние категорий не фиксируется, повторное нажатие кнопки продолжает с места
-/// остановки без дублей.
+/// остановки без дублей. Предупреждения успешного запуска — пропущенные области,
+/// неразрешённые инструменты, непокрытые активы доски — сводятся из итогов проходов
+/// и сохраняются с записью запуска.
 /// Traceability: openspec:sync/bybit-history#requirement-manual-sync-modes
 /// Traceability: openspec:sync/bybit-history#scenario-interrupted-sync-resumable
+/// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
 /// Traceability: change:add-bybit-sync/design#d2
 /// </summary>
 public sealed class JournalSyncService : IJournalSyncService
@@ -149,6 +152,31 @@ public sealed class JournalSyncService : IJournalSyncService
 			projectionError = ex.Message;
 		}
 
+		// Предупреждения запуска сводятся из тех же итогов, что показывает страница,
+		// и сохраняются с записью запуска: перечень виден при следующем открытии
+		// страницы без повторного запуска синхронизации.
+		// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+		// Traceability: openspec:sync/bybit-history#scenario-run-warnings-shown-on-page-load
+		var warnings = new SyncRunWarnings
+		{
+			SkippedAreas = CollectSkippedAreas(executionResults, deliveryResults),
+			UnresolvedInstruments = CollectUnresolvedInstruments(
+				instrumentSync?.UnresolvedSymbols ?? [], projection),
+			UncoveredBaseCoins = uncoveredBaseCoins,
+		};
+
+		// Сохранение предупреждений не роняет итог запуска: статус, счётчики и свежий
+		// результат уже зафиксированы, отсутствующее сохранённое значение страница
+		// читает как «заметок нет».
+		try
+		{
+			await _runJournal.SaveWarningsAsync(run, warnings, CancellationToken.None).ConfigureAwait(false);
+		}
+		catch (Exception)
+		{
+			// Тихая деградация: предупреждения advisory, их потеря не влияет на данные.
+		}
+
 		return new JournalSyncResult
 		{
 			Mode = mode,
@@ -217,6 +245,38 @@ public sealed class JournalSyncService : IJournalSyncService
 		var prefix = separatorIndex < 0 ? symbol : symbol[..separatorIndex];
 		return prefix.Trim().ToUpperInvariant();
 	}
+
+	/// <summary>
+	/// Сводит перечень пропущенных областей запуска: сначала области исполнения по
+	/// категориям, затем delivery — в том же порядке, что и заметка страницы.
+	/// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+	/// </summary>
+	private static IReadOnlyList<string> CollectSkippedAreas(
+		IReadOnlyDictionary<string, ExecutionCategorySyncResult> executionResults,
+		IReadOnlyDictionary<string, DeliveryCategorySyncResult> deliveryResults)
+	{
+		var executionAreas = executionResults
+			.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+			.SelectMany(pair => pair.Value.SkippedAreas);
+		var deliveryAreas = deliveryResults
+			.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+			.SelectMany(pair => pair.Value.SkippedAreas);
+		return executionAreas.Concat(deliveryAreas).ToList();
+	}
+
+	/// <summary>
+	/// Сводит перечень неразрешённых инструментов запуска: спецификации, не полученные
+	/// пополнением справочника этого запуска, и символы, оставшиеся неразрешёнными
+	/// в перестроенной проекции, — единым списком без повторов.
+	/// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbols-reported-to-user
+	/// </summary>
+	private static IReadOnlyList<string> CollectUnresolvedInstruments(
+		IReadOnlyList<string> syncUnresolved,
+		JournalMaterializationResult? projection) => syncUnresolved
+		.Concat(projection?.UnresolvedInstruments ?? [])
+		.Distinct(StringComparer.Ordinal)
+		.OrderBy(symbol => symbol, StringComparer.Ordinal)
+		.ToList();
 
 	/// <summary>
 	/// Собирает пары категория-символ из новых записей запуска: исполнения и delivery-записи

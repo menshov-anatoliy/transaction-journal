@@ -5,6 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
 using TransactionJournal.Bybit;
+using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
@@ -26,6 +27,7 @@ public class SyncPageTests
 {
 	private Bunit.TestContext _context = null!;
 	private Mock<IExecutionSyncStateStore> _stateStore = null!;
+	private Mock<ISyncJournalReadModel> _syncJournal = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -35,6 +37,13 @@ public class SyncPageTests
 		_context.Services.AddSingleton(_stateStore.Object);
 		// Страница требует и сервис синка: тестам сброса достаточно свободной заглушки.
 		_context.Services.AddSingleton(new Mock<IJournalSyncService>().Object);
+		// Журнал запусков читается при загрузке страницы: по умолчанию заглушка
+		// отвечает отсутствием завершённых запусков — блок результата не показывается.
+		_syncJournal = new Mock<ISyncJournalReadModel>();
+		_syncJournal
+			.Setup(journal => journal.ReadLastCompletedAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync((SyncRunRow?)null);
+		_context.Services.AddSingleton(_syncJournal.Object);
 	}
 
 	[TestCleanup]
@@ -357,11 +366,104 @@ public class SyncPageTests
 		});
 	}
 
+	[TestMethod]
+	[Description("Предупреждения последнего завершённого запуска видны при загрузке страницы без нажатия кнопки")]
+	public void TryIfLastRunWarningsShownOnPageLoad()
+	{
+		// Arrange: последний завершённый запуск успешен и несёт три перечня предупреждений.
+		// Требование: предупреждения сохраняются с записью запуска и показываются
+		// при открытии страницы в том же виде, что сразу после завершения запуска.
+		// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+		// Traceability: openspec:sync/bybit-history#scenario-run-warnings-shown-on-page-load
+		_syncJournal
+			.Setup(journal => journal.ReadLastCompletedAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(PersistedRunWithWarnings());
+
+		// Act: страница открывается без запуска синхронизации.
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Assert: блок последнего запуска со статусом, режимом, счётчиками и всеми
+		// тремя заметками виден без нажатия кнопки «Синхронизировать».
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("Синхронизация завершена"));
+			Assert.That(cut.Markup, Does.Contain("инкрементальная догрузка"));
+			Assert.That(cut.Markup, Does.Contain("Новых записей исполнения: 3"));
+			Assert.That(cut.FindAll("p[role='note']"), Has.Count.EqualTo(3));
+			Assert.That(cut.Markup, Does.Contain("option:BTC"));
+			Assert.That(cut.Markup, Does.Contain("XAUT-30OCT26-4400-C"));
+			Assert.That(cut.Markup, Does.Contain("ETH"));
+		});
+
+		// Сервис синхронизации кнопкой не запускался.
+		Assert.That(cut.FindAll("button").Single(button => button.TextContent.Contains("Синхронизировать")), Is.Not.Null);
+	}
+
+	[TestMethod]
+	[Description("Чистый последний запуск не показывает предупреждающих заметок при загрузке страницы")]
+	public void TryIfCleanRunShowsNoPersistedWarnings()
+	{
+		// Arrange: последний завершённый запуск успешен, его перечни предупреждений пусты.
+		// Требование: предупреждения показываются только для запусков, у которых они
+		// есть; чистый запуск заметок не отображает.
+		// Traceability: openspec:sync/bybit-history#scenario-clean-run-no-persisted-warnings
+		_syncJournal
+			.Setup(journal => journal.ReadLastCompletedAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(PersistedCleanRun());
+
+		// Act: страница открывается без запуска синхронизации.
+		var cut = _context.RenderComponent<SyncPage>();
+
+		// Assert: блок результата виден, предупреждающих заметок нет.
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("Синхронизация завершена"));
+			Assert.That(cut.FindAll("p[role='note']"), Is.Empty);
+		});
+		Assert.That(cut.Markup, Does.Not.Contain("Пропущенные области"));
+		Assert.That(cut.Markup, Does.Not.Contain("Неразрешённые инструменты"));
+		Assert.That(cut.Markup, Does.Not.Contain("Непокрытые базовые активы"));
+	}
+
 	#region Помощники
 
 	/// <summary>Кнопка по подстроке текста: на странице несколько команд с кнопками.</summary>
 	private static IElement FindButton(IRenderedComponent<SyncPage> cut, string text) =>
 		cut.FindAll("button").Single(button => button.TextContent.Contains(text));
+
+	/// <summary>
+	/// Последний завершённый успешный запуск с тремя непустыми перечнями предупреждений,
+	/// сериализованными в колонку записи запуска.
+	/// </summary>
+	private static SyncRunRow PersistedRunWithWarnings() => new(
+		7,
+		new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero),
+		new DateTimeOffset(2026, 1, 2, 0, 3, 0, TimeSpan.Zero),
+		SyncRunMode.Incremental,
+		SyncRunStatus.Succeeded,
+		Error: null,
+		NewExecutions: 3,
+		NewDeliveries: 1,
+		NewInstruments: 0,
+		WarningsJson: new SyncRunWarnings
+		{
+			SkippedAreas = ["option:BTC"],
+			UnresolvedInstruments = ["XAUT-30OCT26-4400-C"],
+			UncoveredBaseCoins = ["ETH"],
+		}.ToJson());
+
+	/// <summary>Последний завершённый успешный запуск без предупреждений.</summary>
+	private static SyncRunRow PersistedCleanRun() => new(
+		8,
+		new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero),
+		new DateTimeOffset(2026, 1, 3, 0, 1, 0, TimeSpan.Zero),
+		SyncRunMode.Incremental,
+		SyncRunStatus.Succeeded,
+		Error: null,
+		NewExecutions: 0,
+		NewDeliveries: 0,
+		NewInstruments: 0,
+		WarningsJson: new SyncRunWarnings().ToJson());
 
 	/// <summary>Завершённый успешный запуск: счётчики новых записей и одно предупреждение сверки.</summary>
 	private static JournalSyncResult CreateCompletedResult() => new()

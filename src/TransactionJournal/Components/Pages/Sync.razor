@@ -5,6 +5,7 @@
 @rendermode InteractiveServer
 @inject IJournalSyncService SyncService
 @inject IExecutionSyncStateStore StateStore
+@inject ISyncJournalReadModel SyncJournal
 
 <PageTitle>Синхронизация Bybit</PageTitle>
 
@@ -28,20 +29,29 @@ else
 	</div>
 }
 
-@if (_result is not null)
+@if (ResultView is { } view)
 {
 	<section>
 		<h2>Результат</h2>
 
-		@* Статус и режим одного запуска: счётчики новых записей приходят из строки SyncRun. *@
-		<p>Синхронизация завершена. Режим: @ModeLabel(_result.Mode).</p>
-		<ul>
-			<li>Новых записей исполнения: @_result.Run.NewExecutions</li>
-			<li>Новых delivery-записей: @_result.Run.NewDeliveries</li>
-			<li>Новых инструментов в справочнике: @_result.Run.NewInstruments</li>
-		</ul>
+		@if (view.Status == SyncRunStatus.Succeeded)
+		{
+			@* Статус и режим одного запуска: счётчики новых записей приходят из строки SyncRun. *@
+			<p>Синхронизация завершена. Режим: @ModeLabel(view.Mode).</p>
+			<ul>
+				<li>Новых записей исполнения: @view.NewExecutions</li>
+				<li>Новых delivery-записей: @view.NewDeliveries</li>
+				<li>Новых инструментов в справочнике: @view.NewInstruments</li>
+			</ul>
+		}
+		else
+		{
+			@* Прерванный запуск из журнала: предупреждения у него не сохраняются,
+				но причина прерывания остаётся видна при загрузке страницы. *@
+			<p>Последний запуск синхронизации прерван: @view.Error</p>
+		}
 
-		@if (SkippedAreasOf(_result) is { Count: > 0 } skippedAreas)
+		@if (view.SkippedAreas is { Count: > 0 } skippedAreas)
 		{
 			@* Заметка стоит рядом с результатом запуска: пропуск области не помечает
 				запуск ошибкой, но данные области не загружены — перечень не должен
@@ -52,7 +62,7 @@ else
 			</p>
 		}
 
-		@if (UnresolvedInstrumentsOf(_result) is { Count: > 0 } unresolvedInstruments)
+		@if (view.UnresolvedInstruments is { Count: > 0 } unresolvedInstruments)
 		{
 			@* Инструменты без спецификации не роняют запуск и проекцию: их записи
 				отложены до появления спецификации, поэтому перечень отложенных символов
@@ -64,7 +74,7 @@ else
 			</p>
 		}
 
-		@if (_result.UncoveredBaseCoins is { Count: > 0 } uncoveredBaseCoins)
+		@if (view.UncoveredBaseCoins is { Count: > 0 } uncoveredBaseCoins)
 		{
 			@* Дыра покрытия доски не помечает запуск ошибкой, но история актива не
 				обходилась: заметка называет оба средства лечения — конфигурацию
@@ -78,32 +88,35 @@ else
 		}
 	</section>
 
-	@if (_result.ProjectionError is not null)
+	@if (_result is not null)
 	{
-		<div role="alert">
-			<strong>Проекция журнала не построена:</strong> @_result.ProjectionError
-		</div>
-	}
-	else if (_result.Projection is { } projection)
-	{
-		@if (projection.ReconciliationWarnings.Count == 0)
+		@if (_result.ProjectionError is not null)
 		{
-			<p>Расхождений сверки экспираций с биржей нет.</p>
+			<div role="alert">
+				<strong>Проекция журнала не построена:</strong> @_result.ProjectionError
+			</div>
 		}
-		else
+		else if (_result.Projection is { } projection)
 		{
-			@* Предупреждение сверки не блокирует синк: собственный расчёт остаётся источником результата. *@
-			<h2>Предупреждения сверки с биржей</h2>
-			<ul>
-				@foreach (var warning in projection.ReconciliationWarnings)
-				{
-					<li>
-						@warning.Symbol
-						(@warning.DeliveryTime.ToString("u", CultureInfo.InvariantCulture)):
-						расхождение @warning.Difference.ToString("0.0###", CultureInfo.InvariantCulture)
-					</li>
-				}
-			</ul>
+			@if (projection.ReconciliationWarnings.Count == 0)
+			{
+				<p>Расхождений сверки экспираций с биржей нет.</p>
+			}
+			else
+			{
+				@* Предупреждение сверки не блокирует синк: собственный расчёт остаётся источником результата. *@
+				<h2>Предупреждения сверки с биржей</h2>
+				<ul>
+					@foreach (var warning in projection.ReconciliationWarnings)
+					{
+						<li>
+							@warning.Symbol
+							(@warning.DeliveryTime.ToString("u", CultureInfo.InvariantCulture)):
+							расхождение @warning.Difference.ToString("0.0###", CultureInfo.InvariantCulture)
+						</li>
+					}
+				</ul>
+			}
 		}
 	}
 }
@@ -147,10 +160,93 @@ else
 @code {
 	private bool _running;
 	private JournalSyncResult? _result;
+	private SyncRunRow? _lastRun;
 	private string? _error;
 	private string? _resetCandidateCategory;
 	private string? _resetMessage;
 	private string? _resetError;
+
+	// Блок результата: сразу после нажатия кнопки строится из свежего итога, при
+	// загрузке страницы — из последней завершённой строки журнала запусков с её
+	// предупреждениями; свежий итог имеет приоритет.
+	// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+	private RunResultView? ResultView => _result is not null
+		? RunResultView.FromFresh(_result)
+		: _lastRun is not null
+			? RunResultView.FromPersisted(_lastRun)
+			: null;
+
+	// Предупреждения последнего завершённого запуска читаются при загрузке страницы:
+	// блок результата виден без повторного запуска синхронизации. Сбой чтения журнала
+	// не блокирует страницу — блок появится после первого запуска синхронизации.
+	// Traceability: openspec:sync/bybit-history#scenario-run-warnings-shown-on-page-load
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			_lastRun = await SyncJournal.ReadLastCompletedAsync();
+		}
+		catch (Exception)
+		{
+			_lastRun = null;
+		}
+	}
+
+	// Единый вид блока результата для свежего итога и строки журнала запусков:
+	// статус, режим, счётчики новых записей и три перечня предупреждений запуска.
+	private sealed record RunResultView
+	{
+		public required SyncRunMode Mode { get; init; }
+
+		public required SyncRunStatus Status { get; init; }
+
+		public string? Error { get; init; }
+
+		public required int NewExecutions { get; init; }
+
+		public required int NewDeliveries { get; init; }
+
+		public required int NewInstruments { get; init; }
+
+		public required IReadOnlyList<string> SkippedAreas { get; init; }
+
+		public required IReadOnlyList<string> UnresolvedInstruments { get; init; }
+
+		public required IReadOnlyList<string> UncoveredBaseCoins { get; init; }
+
+		public static RunResultView FromFresh(JournalSyncResult result) => new()
+		{
+			Mode = result.Mode,
+			Status = result.Run.Status,
+			Error = result.Run.Error,
+			NewExecutions = result.Run.NewExecutions,
+			NewDeliveries = result.Run.NewDeliveries,
+			NewInstruments = result.Run.NewInstruments,
+			SkippedAreas = SkippedAreasOf(result),
+			UnresolvedInstruments = UnresolvedInstrumentsOf(result),
+			UncoveredBaseCoins = result.UncoveredBaseCoins,
+		};
+
+		// Предупреждения последнего запуска разбираются из сохранённого JSON строки:
+		// запуски без сохранённого значения читаются пустыми перечнями — заметок нет.
+		// Traceability: openspec:sync/bybit-history#scenario-run-warnings-shown-on-page-load
+		public static RunResultView FromPersisted(SyncRunRow row)
+		{
+			var warnings = row.Warnings;
+			return new RunResultView
+			{
+				Mode = row.Mode,
+				Status = row.Status,
+				Error = row.Error,
+				NewExecutions = row.NewExecutions,
+				NewDeliveries = row.NewDeliveries,
+				NewInstruments = row.NewInstruments,
+				SkippedAreas = warnings.SkippedAreas,
+				UnresolvedInstruments = warnings.UnresolvedInstruments,
+				UncoveredBaseCoins = warnings.UncoveredBaseCoins,
+			};
+		}
+	}
 
 	// Единственная ручная команда синхронизации: запуск выполняется до конца, кнопка
 	// блокируется на время работы, результат и ошибка показываются на этой же странице.

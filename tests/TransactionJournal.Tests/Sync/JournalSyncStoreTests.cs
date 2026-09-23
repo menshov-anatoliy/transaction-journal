@@ -557,6 +557,63 @@ public class JournalSyncStoreTests
 		Assert.That(baseCoins, Is.EqualTo(new[] { "BTC", "ETH", "XAUT" }));
 	}
 
+	[TestMethod]
+	[Description("Предупреждения запуска сохраняются в строке запуска и читаются обратно")]
+	public async Task TryIfRunWarningsRoundTripThroughRunJournal()
+	{
+		// Arrange: закрытый успешный запуск и три перечня предупреждений — пропущенная
+		// область, неразрешённый инструмент, непокрытый актив доски.
+		// Требование: предупреждения завершённого запуска сохраняются с записью запуска
+		// и читаются при открытии страницы — переживают перезагрузку.
+		// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+		var run = await _store.StartAsync(SyncRunMode.Incremental);
+		await _store.MarkSucceededAsync(run);
+		var warnings = new SyncRunWarnings
+		{
+			SkippedAreas = ["option:BTC"],
+			UnresolvedInstruments = ["XAUT-30OCT26-4400-C"],
+			UncoveredBaseCoins = ["ETH"],
+		};
+
+		// Act
+		await _store.SaveWarningsAsync(run, warnings);
+		var restored = await _store.ReadWarningsAsync(run.Id);
+
+		// Assert: все три перечня читаются обратно без потерь и в том же порядке.
+		Assert.That(restored.SkippedAreas, Is.EqualTo(new[] { "option:BTC" }));
+		Assert.That(restored.UnresolvedInstruments, Is.EqualTo(new[] { "XAUT-30OCT26-4400-C" }));
+		Assert.That(restored.UncoveredBaseCoins, Is.EqualTo(new[] { "ETH" }));
+		Assert.That(restored.IsEmpty, Is.False);
+
+		// Assert: дескриптор запуска синхронизирован со строкой хранилища.
+		Assert.That(run.WarningsJson, Is.Not.Null);
+	}
+
+	[TestMethod]
+	[Description("Запуск без сохранённых предупреждений читается пустым перечнем")]
+	public async Task TryIfRunWithoutPersistedWarningsReadsAsEmpty()
+	{
+		// Arrange: два запуска — свежий, чьи предупреждения не сохранялись, и закрытый
+		// ошибкой; колонка у обеих строк пуста, как у записей до миграции.
+		// Требование: строки без колоночного значения читаются пустым перечнем —
+		// заметки на странице для таких запусков не показываются.
+		// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+		var freshRun = await _store.StartAsync(SyncRunMode.Backfill);
+		var failedRun = await _store.StartAsync(SyncRunMode.Incremental);
+		await _store.MarkFailedAsync(failedRun, "обрыв связи");
+
+		// Act
+		var freshWarnings = await _store.ReadWarningsAsync(freshRun.Id);
+		var failedWarnings = await _store.ReadWarningsAsync(failedRun.Id);
+
+		// Assert: чтение пустого значения даёт пустые перечни, а не ошибку.
+		Assert.That(freshWarnings.IsEmpty, Is.True);
+		Assert.That(freshWarnings.SkippedAreas, Is.Empty);
+		Assert.That(freshWarnings.UnresolvedInstruments, Is.Empty);
+		Assert.That(freshWarnings.UncoveredBaseCoins, Is.Empty);
+		Assert.That(failedWarnings.IsEmpty, Is.True);
+	}
+
 	#region Помощники
 
 	private DbContextOptions<JournalDbContext> CreateOptions() =>

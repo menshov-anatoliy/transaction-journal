@@ -57,4 +57,12 @@ public sealed class SyncRun
 
 	/// <summary>Количество новых инструментов, попавших в справочник этим запуском.</summary>
 	public int NewInstruments { get; set; }
+
+	/// <summary>
+	/// Сериализованные предупреждения завершённого запуска: перечень пропущенных областей,
+	/// неразрешённых инструментов и непокрытых активов доски. Null у запусков, чьи
+	/// предупреждения не сохранялись — чтение трактует отсутствие значения как пустой перечень.
+	/// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
+	/// </summary>
+	public string? WarningsJson { get; set; }
 }
