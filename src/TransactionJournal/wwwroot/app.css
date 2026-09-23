@@ -151,10 +151,90 @@ body {
 
 .action-form .action-warning { color: #d29922; }
 
-/* Фильтры «Входящих»: компактные поля дат в ряду с чекбоксами инструментов
-   и направлений — блок не должен растягиваться широкими полями ввода. */
+/* ===== Фильтры «Входящих»: обособленная рамкой область с заголовком ===== */
 .action-form .action-input.date-input { width: 130px; }
-.filter-symbols { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* Рамка области фильтров: fieldset с заголовком «Фильтры» — flex-раскладка
+   action-form сохраняется, добавляются рамка и внутренние отступы. */
+fieldset.inbox-filters {
+	margin: 0 0 12px;
+	padding: 4px 12px 10px;
+	border: 1px solid #30363d;
+	border-radius: 6px;
+	min-inline-size: 0;
+}
+
+	fieldset.inbox-filters legend {
+		padding: 0 6px;
+		font-size: 12px;
+		color: #8b949e;
+		float: none;
+		width: auto;
+	}
+
+/* Контрол инструментов: кнопка со счётчиком выбранного и раскрывающаяся
+   панель с чекбоксами — панель не толкает таблицу, а ложится поверх. */
+.symbols-dropdown { position: relative; }
+
+.symbols-toggle {
+	background: #0d1117;
+	color: #c9d1d9;
+	border: 1px solid #30363d;
+	border-radius: 4px;
+	padding: 4px 10px;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.symbols-toggle:hover { background: #30363d; }
+
+.symbols-panel {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 220px;
+	max-height: 260px;
+	overflow-y: auto;
+	background: #0d1117;
+	border: 1px solid #30363d;
+	border-radius: 4px;
+	padding: 8px 10px;
+	color: #c9d1d9;
+}
+
+.symbols-panel .symbols-select-all {
+	padding-bottom: 4px;
+	border-bottom: 1px solid #21262d;
+	color: #8b949e;
+}
+
+/* Список символов внутри панели — вертикальный, чтобы длинный набор
+   инструментов не растягивал панель в ширину. */
+.symbols-panel .filter-symbols { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+/* Группа направления: вложенная рамка с заголовком, чекбоксы в ряд. */
+fieldset.filter-direction-group {
+	display: inline-flex;
+	gap: 8px;
+	align-items: center;
+	margin: 0;
+	padding: 0 10px 4px;
+	border: 1px solid #30363d;
+	border-radius: 4px;
+	min-inline-size: 0;
+}
+
+	fieldset.filter-direction-group legend {
+		padding: 0 4px;
+		font-size: 11px;
+		color: #8b949e;
+		float: none;
+		width: auto;
+	}
 
 /* Признак сбоя марок: нереализованные величины и отметка времени марок
    показываются видимым состоянием деградации, а не пустым прочерком. */

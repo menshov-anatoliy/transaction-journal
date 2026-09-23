@@ -443,16 +443,24 @@ public class InboxScreenTests
 		SeedExecution("exec-fresh", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
 		SeedExecution("exec-old", "ETHUSDT", "Sell", "2400", "0.5", "0.1", "USDT", MonthsAgoMs(2, 10, 0));
 
-		// Act: пользователь открывает экран «Входящие».
+		// Act: пользователь открывает экран «Входящие» и раскрывает контрол
+		// инструментов, чтобы увидеть список символов.
 		var cut = _context.RenderComponent<Inbox>();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(1)));
+		cut.Find(".symbols-toggle").Click();
 
 		// Assert: поля дат предзаполнены «сегодня − 1 месяц … сегодня», все
 		// инструменты и оба направления отмечены; таблица показывает только
-		// свежую сделку — сделка старше окна по умолчанию скрыта.
+		// свежую сделку — сделка старше окна по умолчанию скрыта. Область
+		// фильтров обнесена рамкой с заголовком «Фильтры», направление —
+		// группа в рамке с заголовком «Направление».
 		// Сценарий: фильтры по умолчанию показывают последний месяц.
 		// Traceability: openspec:ui/screens#scenario-inbox-filters-default-last-month
 		cut.WaitForAssertion(() =>
 		{
+			var legends = cut.FindAll("legend");
+			Assert.That(legends.Select(legend => legend.TextContent.Trim()), Is.EquivalentTo(new[] { "Фильтры", "Направление" }));
+
 			var dateInputs = cut.FindAll(".inbox-filters input[type=date]");
 			Assert.That(dateInputs, Has.Count.EqualTo(2));
 			Assert.That(dateInputs[0].GetAttribute("value"), Is.EqualTo(DateText(DateOnly.FromDateTime(DateTime.Now).AddMonths(-1))));
@@ -461,6 +469,7 @@ public class InboxScreenTests
 			var symbolLabels = cut.FindAll(".filter-symbols label");
 			Assert.That(symbolLabels.Select(label => label.TextContent.Trim()), Is.EquivalentTo(new[] { "BTCUSDT", "ETHUSDT" }));
 			Assert.That(CheckedCount(cut, ".filter-symbols input[type=checkbox]"), Is.EqualTo(2));
+			Assert.That(cut.Find(".symbols-toggle").TextContent, Does.Contain("Инструменты: 2 из 2"));
 			Assert.That(CheckedCount(cut, ".filter-direction input[type=checkbox]"), Is.EqualTo(2));
 
 			var rows = cut.FindAll("tbody tr");
@@ -483,9 +492,10 @@ public class InboxScreenTests
 		var cut = _context.RenderComponent<Inbox>();
 		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(4)));
 
-		// Act: пользователь задаёт «с» = сегодня, снимает инструмент ETHUSDT
-		// и направление «продажа».
+		// Act: пользователь задаёт «с» = сегодня, раскрывает контрол
+		// инструментов, снимает ETHUSDT и направление «продажа».
 		cut.FindAll(".inbox-filters input[type=date]")[0].Change(DateText(DateOnly.FromDateTime(DateTime.Now)));
+		cut.Find(".symbols-toggle").Click();
 		cut.FindAll(".filter-symbols input[type=checkbox]")[1].Change(false);
 		cut.FindAll(".filter-direction input[type=checkbox]")[1].Change(false);
 
@@ -510,6 +520,49 @@ public class InboxScreenTests
 		{
 			Assert.That(SelectedRowCount(cut), Is.EqualTo(1));
 			Assert.That(FindToolbarButtons(cut).All(button => button.HasAttribute("disabled")), Is.False);
+		});
+	}
+
+	[TestMethod]
+	[Description("«Выбрать все» в контроле инструментов переключает все инструменты или ничего")]
+	public void TryIfSymbolsSelectAllTogglesAllOrNone()
+	{
+		// Arrange: две сделки разных инструментов внутри окна фильтров —
+		// набор инструментов фильтра состоит из BTCUSDT и ETHUSDT.
+		SeedExecution("exec-btc", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-eth", "ETHUSDT", "Buy", "2400", "0.5", "0.1", "USDT", TodayMs(10, 5));
+		var cut = _context.RenderComponent<Inbox>();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(2)));
+
+		// Act: пользователь раскрывает контрол инструментов и снимает
+		// «Выбрать все» — полностью выбранный набор снимается целиком.
+		cut.Find(".symbols-toggle").Click();
+		cut.Find(".symbols-select-all input[type=checkbox]").Change(false);
+
+		// Assert: инструментов не выбрано — все строки скрыты, показано
+		// сообщение о пустом результате фильтров, счётчик кнопки — «0 из 2».
+		// Сценарий: «Выбрать все» в контроле инструментов переключает все или ничего.
+		// Traceability: openspec:ui/screens#scenario-inbox-filters-symbols-select-all
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll("tbody tr"), Is.Empty);
+			Assert.That(cut.Markup, Does.Contain("По заданным фильтрам ничего не найдено"));
+			Assert.That(cut.Find(".symbols-toggle").TextContent, Does.Contain("Инструменты: 0 из 2"));
+		});
+
+		// Act: пользователь возвращает один символ (частичный выбор) и
+		// снова нажимает «Выбрать все».
+		cut.FindAll(".filter-symbols input[type=checkbox]")[0].Change(true);
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(1)));
+		cut.Find(".symbols-select-all input[type=checkbox]").Change(true);
+
+		// Assert: неполный набор дополнен до всех — снова видны обе сделки.
+		// Сценарий: «Выбрать все» в контроле инструментов переключает все или ничего.
+		// Traceability: openspec:ui/screens#scenario-inbox-filters-symbols-select-all
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(2));
+			Assert.That(cut.Find(".symbols-toggle").TextContent, Does.Contain("Инструменты: 2 из 2"));
 		});
 	}
 

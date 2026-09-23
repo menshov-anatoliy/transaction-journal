@@ -107,9 +107,11 @@ else
 	@* Блок фильтров над таблицей: диапазон дат, инструменты и направление
 	   действуют одновременно и меняют только представление списка — разбор
 	   выбранных работает как раньше. Пустое поле даты снимает ограничение
-	   с соответствующей стороны диапазона. *@
+	   с соответствующей стороны диапазона. Область обособлена рамкой fieldset
+	   с заголовком «Фильтры», чтобы не смешиваться с формами разбора выбранных. *@
 	@* Traceability: openspec:ui/screens#requirement-inbox-screen *@
-	<div class="action-form inbox-filters">
+	<fieldset class="action-form inbox-filters">
+		<legend>Фильтры</legend>
 		<label class="action-label">
 			с
 			<input type="date" class="action-input date-input" value="@DateFromInput" @onchange="OnDateFromChanged" />
@@ -118,24 +120,51 @@ else
 			по
 			<input type="date" class="action-input date-input" value="@DateToInput" @onchange="OnDateToChanged" />
 		</label>
-		<span class="filter-symbols">
-			@foreach (var symbol in AvailableSymbols)
+		@* Контрол инструментов: кнопка показывает счётчик выбранного, панель
+		   раскрывается кликом — длинный список символов не растягивает строку
+		   фильтров и живёт в своей рамке над таблицей. *@
+		<div class="symbols-dropdown">
+			<button type="button" class="symbols-toggle" @onclick="ToggleSymbolsDropdown">
+				Инструменты: @SelectedSymbolsCount из @AvailableSymbolsCount@(_symbolsDropdownOpen ? " ▴" : " ▾")
+			</button>
+			@if (_symbolsDropdownOpen)
 			{
-				<label class="action-label">
-					<input type="checkbox" checked="@_selectedSymbols.Contains(symbol)" @onchange="args => OnSymbolFilterChanged(symbol, args.Value is true)" />
-					@symbol
-				</label>
+				<div class="symbols-panel">
+					@* «Выбрать все» переключает набор инструментов как «все или ничего»:
+					   полный набор снимается целиком, неполный — дополняется до всех.
+					   Пустой набор скрывает все строки с сообщением о пустом результате. *@
+					@* Traceability: openspec:ui/screens#scenario-inbox-filters-symbols-select-all *@
+					<label class="action-label symbols-select-all">
+						<input type="checkbox" checked="@AllSymbolsSelected" @onchange="ToggleAllSymbols" />
+						Выбрать все
+					</label>
+					<span class="filter-symbols">
+						@foreach (var symbol in AvailableSymbols)
+						{
+							<label class="action-label">
+								<input type="checkbox" checked="@_selectedSymbols.Contains(symbol)" @onchange="args => OnSymbolFilterChanged(symbol, args.Value is true)" />
+								@symbol
+							</label>
+						}
+					</span>
+				</div>
 			}
-		</span>
-		<label class="action-label filter-direction">
-			<input type="checkbox" checked="@_filterBuy" @onchange="args => OnDirectionFilterChanged(false, args.Value is true)" />
-			покупка
-		</label>
-		<label class="action-label filter-direction">
-			<input type="checkbox" checked="@_filterSell" @onchange="args => OnDirectionFilterChanged(true, args.Value is true)" />
-			продажа
-		</label>
-	</div>
+		</div>
+		@* Направление — два независимых чекбокса в общей рамке с заголовком:
+		   логика не меняется, состояние «оба сняты» остаётся допустимым и даёт
+		   пустой список с явным сообщением. *@
+		<fieldset class="filter-direction-group">
+			<legend>Направление</legend>
+			<label class="action-label filter-direction">
+				<input type="checkbox" checked="@_filterBuy" @onchange="args => OnDirectionFilterChanged(false, args.Value is true)" />
+				покупка
+			</label>
+			<label class="action-label filter-direction">
+				<input type="checkbox" checked="@_filterSell" @onchange="args => OnDirectionFilterChanged(true, args.Value is true)" />
+				продажа
+			</label>
+		</fieldset>
+	</fieldset>
 
 	@if (VisibleTrades.Any() == false)
 	{
@@ -206,6 +235,12 @@ else
 	private readonly HashSet<string> _selectedSymbols = new(StringComparer.Ordinal);
 	private bool _filterBuy = true;
 	private bool _filterSell = true;
+
+	// Раскрытость панели контрола инструментов — тоже circuit-состояние:
+	// панель закрывается повторным кликом по кнопке, JS-интероп для закрытия
+	// по клику вне панели не вводится.
+	// Traceability: change:add-inbox-filters/design#d8
+	private bool _symbolsDropdownOpen;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -396,6 +431,39 @@ else
 		else
 		{
 			_selectedSymbols.Remove(symbol);
+		}
+
+		OnFiltersChanged();
+	}
+
+	/// <summary>Число выбранных инструментов — счётчик на кнопке контрола.</summary>
+	private int SelectedSymbolsCount => _selectedSymbols.Count;
+
+	/// <summary>Число всех доступных инструментов — счётчик на кнопке контрола.</summary>
+	private int AvailableSymbolsCount => AvailableSymbols.Count();
+
+	/// <summary>Отмечены ли все доступные инструменты — состояние чекбокса «Выбрать все».</summary>
+	private bool AllSymbolsSelected =>
+		AvailableSymbols.Any() && AvailableSymbols.All(symbol => _selectedSymbols.Contains(symbol));
+
+	/// <summary>Кнопка контрола инструментов раскрывает панель и закрывает повторным кликом.</summary>
+	// Traceability: change:add-inbox-filters/design#d8
+	private void ToggleSymbolsDropdown() => _symbolsDropdownOpen = _symbolsDropdownOpen == false;
+
+	/// <summary>
+	/// «Выбрать все» в контроле инструментов работает как «все или ничего»:
+	/// полностью выбранный набор снимается целиком, неполный — дополняется
+	/// до всех; пустой набор скрывает все строки с сообщением о пустом
+	/// результате фильтров.
+	/// </summary>
+	// Traceability: openspec:ui/screens#scenario-inbox-filters-symbols-select-all
+	private void ToggleAllSymbols(ChangeEventArgs args)
+	{
+		var wasAllSelected = AllSymbolsSelected;
+		_selectedSymbols.Clear();
+		if (wasAllSelected == false)
+		{
+			_selectedSymbols.UnionWith(AvailableSymbols);
 		}
 
 		OnFiltersChanged();
