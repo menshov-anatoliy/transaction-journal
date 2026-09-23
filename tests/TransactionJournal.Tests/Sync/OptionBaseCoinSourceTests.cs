@@ -97,10 +97,66 @@ public class OptionBaseCoinSourceTests
 		_source.Enqueue(Page(null, ("BTC-24JUN23-56000-C", "BTC")));
 
 		// Act
-		var baseCoins = await new OptionBaseCoinSource(_source, ["LUNA", "btc"]).GetBaseCoinsAsync();
+		var baseCoins = await new OptionBaseCoinSource(_source, extraBaseCoins: ["LUNA", "btc"]).GetBaseCoinsAsync();
 
 		// Assert: конфигурационные активы дополнены к доске в общем отсортированном порядке.
 		Assert.That(baseCoins, Is.EqualTo(new[] { "BTC", "LUNA" }));
+	}
+
+	[TestMethod]
+	[Description("Актив, встречающийся только в сырьевом хранилище, попадает в перечень")]
+	public async Task TryIfRawStorageOnlyBaseCoinIsIncluded()
+	{
+		// Arrange: безфильтровое перечисление справочника отдало доску по умолчанию (BTC),
+		// а в сырьё уже загружены записи XAUT, невидимые этому перечислению.
+		// Требование: перечень областей строится объединением источников — активы сырья
+		// попадают в перечень, даже если справочник их не называет.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		_source.Enqueue(Page(null, ("BTC-24JUN23-56000-C", "BTC")));
+
+		// Act
+		var baseCoins = await new OptionBaseCoinSource(_source, RawReader("XAUT")).GetBaseCoinsAsync();
+
+		// Assert: сырьевой актив дополнен к доске в общем отсортированном порядке.
+		Assert.That(baseCoins, Is.EqualTo(new[] { "BTC", "XAUT" }));
+	}
+
+	[TestMethod]
+	[Description("Актив, встречающийся только в справочнике, попадает в перечень")]
+	public async Task TryIfReferenceOnlyBaseCoinIsIncluded()
+	{
+		// Arrange: сырьё пустое, справочник листинговал два актива.
+		// Требование: живое перечисление справочника остаётся источником перечня
+		// и при пустом сырье.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		_source.Enqueue(Page(null, ("BTC-24JUN23-56000-C", "BTC"), ("SOL-24JUN23-100-P", "SOL")));
+
+		// Act
+		var baseCoins = await new OptionBaseCoinSource(_source, RawReader()).GetBaseCoinsAsync();
+
+		// Assert
+		Assert.That(baseCoins, Is.EqualTo(new[] { "BTC", "SOL" }));
+	}
+
+	[TestMethod]
+	[Description("Пересечения справочника, сырья и конфигурации дедуплицируются")]
+	public async Task TryIfSourceIntersectionsAreDeduplicated()
+	{
+		// Arrange: BTC назван всеми тремя источниками, ETH — справочником и сырьём
+		// с разным регистром; LUNA есть только в конфигурации.
+		// Требование: объединение источников без дублей, нормализация и стабильный
+		// порядок сохраняются.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		_source.Enqueue(Page(null, ("BTC-24JUN23-56000-C", "BTC"), ("ETH-24JUN23-3000-C", "ETH")));
+
+		// Act
+		var baseCoins = await new OptionBaseCoinSource(
+			_source,
+			RawReader("btc", "eth"),
+			extraBaseCoins: ["LUNA", "BTC"]).GetBaseCoinsAsync();
+
+		// Assert: каждый актив встречается в списке один раз.
+		Assert.That(baseCoins, Is.EqualTo(new[] { "BTC", "ETH", "LUNA" }));
 	}
 
 	[TestMethod]
@@ -109,7 +165,7 @@ public class OptionBaseCoinSourceTests
 	public void ThrowOnNullInstrumentSource()
 	{
 		// Arrange — Act — Assert: источник спецификаций обязателен источнику активов;
-		// null-список дополнений легален и означает «дополнений нет».
+		// null-читатель сырья и null-список дополнений легальны.
 		new OptionBaseCoinSource(null!);
 	}
 
@@ -136,6 +192,28 @@ public class OptionBaseCoinSourceTests
 	#endregion
 
 	#region Фиктивные зависимости
+
+	/// <summary>Создаёт фиктивного читателя активов сырья с заготовленным перечнем.</summary>
+	private static FakeRawBaseCoinReader RawReader(params string[] baseCoins) => new(baseCoins);
+
+	/// <summary>
+	/// Фиктивный читатель активов сырьевого хранилища: возвращает заготовленный
+	/// перечень префиксов опционных символов.
+	/// </summary>
+	private sealed class FakeRawBaseCoinReader : IOptionRawBaseCoinReader
+	{
+		private readonly IReadOnlyList<string> _baseCoins;
+
+		public FakeRawBaseCoinReader(params string[] baseCoins)
+		{
+			_baseCoins = baseCoins;
+		}
+
+		public Task<IReadOnlyList<string>> GetRawBaseCoinsAsync(CancellationToken cancellationToken = default)
+		{
+			return Task.FromResult(_baseCoins);
+		}
+	}
 
 	/// <summary>
 	/// Фиктивный источник спецификаций: раздаёт заготовленные страницы по порядку

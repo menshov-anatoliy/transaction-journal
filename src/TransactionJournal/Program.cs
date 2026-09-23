@@ -73,11 +73,14 @@ builder.Services.AddTransient<IBybitInstrumentSource>(sp => sp.GetRequiredServic
 var syncEngineOptions = SyncOptionsReader.Read(builder.Configuration);
 builder.Services.AddSingleton(syncEngineOptions.Execution);
 builder.Services.AddSingleton(syncEngineOptions.Delivery);
-// Список базовых активов опционной доски строится над тем же шлюзом спецификаций;
-// конфигурационные дополнения покрывают делистнутые доски.
+// Список базовых активов опционной доски строится над тем же шлюзом спецификаций,
+// сырьевым хранилищем и конфигурационными дополнениями: безфильтровое перечисление
+// справочника покрывает только доску по умолчанию, сырьё называет остальные доски.
 // Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+builder.Services.AddSingleton<IOptionRawBaseCoinReader>(sp => sp.GetRequiredService<JournalSyncStore>());
 builder.Services.AddTransient<IOptionBaseCoinSource>(sp => new OptionBaseCoinSource(
 	sp.GetRequiredService<IBybitInstrumentSource>(),
+	sp.GetRequiredService<IOptionRawBaseCoinReader>(),
 	syncEngineOptions.ExtraOptionBaseCoins));
 builder.Services.AddTransient<ExecutionWindowPass>();
 builder.Services.AddTransient<DeliveryWindowPass>();

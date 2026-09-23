@@ -7,12 +7,13 @@ namespace TransactionJournal.Sync;
 /// Синхронизация истории исполнения одной торговой категории: по водяному знаку
 /// состояния выбирает режим — без отметки об успешном синке выполняется первичный
 /// backfill окнами назад до пола глубины, иначе инкрементальная догрузка от водяного
-/// знака с перекрытием назад. Категория option проходится областью на каждый базовый
-/// актив опционной доски, остальные категории — одной областью без фильтра. Успешный
-/// проход всех областей фиксирует в состоянии категории водяной знак, а backfill —
-/// ещё и достигнутую границу доступной истории. Пол перебора зажимается границей
-/// хранения истории биржи по серверному времени, а пограничный отказ биржи завершает
-/// перебор исчерпанием, не срывая запуск.
+/// знака с перекрытием назад. Категория option проходится безфильтровой областью
+/// (биржа отдаёт записи всех активов аккаунта) плюс областью на каждый базовый актив
+/// доски, остальные категории — одной областью без фильтра. Успешный проход всех
+/// областей фиксирует в состоянии категории водяной знак, а backfill — ещё и достигнутую
+/// границу доступной истории. Пол перебора зажимается границей хранения истории биржи
+/// по серверному времени, а пограничный отказ биржи завершает перебор области
+/// исчерпанием, не срывая запуск.
 /// Traceability: openspec:sync/bybit-history#requirement-manual-sync-modes
 /// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
 /// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
@@ -134,7 +135,7 @@ public sealed class ExecutionCategorySync
 		var windowsProcessed = 0;
 		var historyExhausted = false;
 		var earlyStopped = false;
-		var boundaryExhausted = false;
+		var anyBoundaryExhausted = false;
 		var skippedAreas = new List<string>();
 		var passedBaseCoins = new List<string>();
 
@@ -155,16 +156,20 @@ public sealed class ExecutionCategorySync
 			{
 				// Область доски, до которой дошёл ход перебора, фиксируется пройденной:
 				// в том числе область, пропущенная биржей как недоступная. Безфильтровая
-				// область linear базового актива не имеет и в перечень не попадает;
-				// области после пограничного исчерпания не запрашивались и не входят.
+				// область не является покрытием актива и в перечень не попадает.
 				// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
 				if (scopeBaseCoin is not null)
 				{
 					passedBaseCoins.Add(scopeBaseCoin);
 				}
 
+				// Пограничное исчерпание действует в границах одной области: флаг
+				// заводится на область и завершает только её обход, перебор продолжается
+				// со следующей областью.
+				// Traceability: openspec:sync/bybit-history#scenario-boundary-exhaustion-scoped-to-area
+				var areaBoundaryExhausted = false;
 				var windowEndMs = startedAtMs;
-				while (windowEndMs > floorMs && boundaryExhausted == false)
+				while (windowEndMs > floorMs && areaBoundaryExhausted == false)
 				{
 					cancellationToken.ThrowIfCancellationRequested();
 
@@ -172,10 +177,13 @@ public sealed class ExecutionCategorySync
 						var guardResult = await RunWindowWithBoundaryGuardAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage: false, cancellationToken).ConfigureAwait(false);
 						if (guardResult.Outcome == WindowGuardOutcome.BoundaryExhausted)
 					{
-						// Повторный пограничный отказ: доступная история исчерпана — оставшиеся
-						// окна области и остальные области категории не запрашиваются.
+						// Повторный пограничный отказ: доступная история этой области
+						// исчерпана — оставшиеся окна области не запрашиваются, остальные
+						// области категории обходятся штатно.
 						// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
-						boundaryExhausted = true;
+						// Traceability: openspec:sync/bybit-history#scenario-boundary-exhaustion-scoped-to-area
+						areaBoundaryExhausted = true;
+						anyBoundaryExhausted = true;
 						break;
 					}
 
@@ -199,11 +207,6 @@ public sealed class ExecutionCategorySync
 
 					windowEndMs = windowStartMs;
 				}
-
-				if (boundaryExhausted)
-				{
-					break;
-				}
 			}
 
 			// Каждая область листана до пола глубины либо до границы хранения биржи:
@@ -226,16 +229,20 @@ public sealed class ExecutionCategorySync
 			{
 				// Область доски, до которой дошёл ход перебора, фиксируется пройденной:
 				// в том числе область, пропущенная биржей как недоступная. Безфильтровая
-				// область linear базового актива не имеет и в перечень не попадает;
-				// области после пограничного исчерпания не запрашивались и не входят.
+				// область не является покрытием актива и в перечень не попадает.
 				// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
 				if (scopeBaseCoin is not null)
 				{
 					passedBaseCoins.Add(scopeBaseCoin);
 				}
 
+				// Пограничное исчерпание действует в границах одной области: флаг
+				// заводится на область и завершает только её обход, перебор продолжается
+				// со следующей областью.
+				// Traceability: openspec:sync/bybit-history#scenario-boundary-exhaustion-scoped-to-area
+				var areaBoundaryExhausted = false;
 				var windowEndMs = startedAtMs;
-				while (windowEndMs > targetStartMs && boundaryExhausted == false)
+				while (windowEndMs > targetStartMs && areaBoundaryExhausted == false)
 				{
 					cancellationToken.ThrowIfCancellationRequested();
 
@@ -243,10 +250,13 @@ public sealed class ExecutionCategorySync
 						var guardResult = await RunWindowWithBoundaryGuardAsync(category, scopeBaseCoin, windowStartMs, windowEndMs, allowedEarliestMs, options, earlyStopOnKnownPage: true, cancellationToken).ConfigureAwait(false);
 						if (guardResult.Outcome == WindowGuardOutcome.BoundaryExhausted)
 					{
-						// Повторный пограничный отказ: хвост истории за границей недоступен —
-						// оставшиеся окна и области категории не запрашиваются.
+						// Повторный пограничный отказ: хвост истории этой области за границей
+						// недоступен — оставшиеся окна области не запрашиваются, остальные
+						// области категории обходятся штатно.
 						// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
-						boundaryExhausted = true;
+						// Traceability: openspec:sync/bybit-history#scenario-boundary-exhaustion-scoped-to-area
+						areaBoundaryExhausted = true;
+						anyBoundaryExhausted = true;
 						break;
 					}
 
@@ -276,17 +286,13 @@ public sealed class ExecutionCategorySync
 
 					windowEndMs = windowStartMs;
 				}
-
-				if (boundaryExhausted)
-				{
-					break;
-				}
 			}
 
 			// Пограничный отказ завершает инкрементальную догрузку исчерпанием истории:
-			// хвост за границей хранения биржа не отдаёт.
+			// хвост за границей хранения биржа не отдаёт. Исчерпание хотя бы одной области
+			// отражается отчётным флагом, состояние категории от него не зависит.
 			// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
-			historyExhausted = boundaryExhausted;
+			historyExhausted = anyBoundaryExhausted;
 		}
 
 		// Фиксация фактов успешного прохода всех областей. Водяной знак монотонен: покрывает
@@ -328,10 +334,14 @@ public sealed class ExecutionCategorySync
 	#region Вспомогательные методы
 
 	/// <summary>
-	/// Строит области прохода категории. Для option каждая область — один базовый актив
-	/// доски: без явного фильтра биржа отдаёт записи только одного актива по умолчанию.
-	/// Остальные категории отдают все символы разом и читаются одной областью без фильтра.
+	/// Строит области прохода категории. Для option первая область — безфильтровая:
+	/// биржа без фильтра отдаёт записи всех активов аккаунта, поэтому проход загружает
+	/// и те записи, чьи доски не попали в перечень источников. Далее — область на каждый
+	/// базовый актив доски: явный фильтр гарантирует полноту истории актива независимо
+	/// от поведения безфильтрового ответа. Остальные категории отдают все символы разом
+	/// и читаются одной областью без фильтра.
 	/// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+	/// Traceability: openspec:sync/bybit-history#scenario-non-btc-option-trades-loaded
 	/// </summary>
 	private async Task<IReadOnlyList<string?>> ResolvePassScopesAsync(string category, CancellationToken cancellationToken)
 	{
@@ -341,7 +351,13 @@ public sealed class ExecutionCategorySync
 		}
 
 		var baseCoins = await _optionBaseCoins.GetBaseCoinsAsync(cancellationToken).ConfigureAwait(false);
-		return baseCoins.Cast<string?>().ToList();
+
+		// Безфильтровая область идёт первой в перечне: её записи пополняют сырьевое
+		// хранилище — источник перечня областей следующего запуска.
+		// Traceability: openspec:sync/bybit-history#scenario-new-base-coin-picked-up
+		var scopes = new List<string?>(baseCoins.Count + 1) { null };
+		scopes.AddRange(baseCoins.Cast<string?>());
+		return scopes;
 	}
 
 	/// <summary>

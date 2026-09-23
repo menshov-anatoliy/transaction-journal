@@ -26,10 +26,14 @@ public sealed class JournalSyncStore :
 	IRawDeliveryBatchWriter,
 	IInstrumentReferenceStore,
 	IJournalRawSnapshotStore,
-	ISyncRunJournal
+	ISyncRunJournal,
+	IOptionRawBaseCoinReader
 {
 	private readonly DbContextOptions<JournalDbContext> _options;
 	private readonly TimeProvider _timeProvider;
+
+	/// <summary>Категория опционной доски: её записи питают перечень активов сырья.</summary>
+	private const string OptionCategory = "option";
 
 	/// <summary>Создаёт адаптер над опциями контекста журнала.</summary>
 	/// <param name="options">Опции EF-контекста; база уже развёрнута миграциями.</param>
@@ -486,6 +490,43 @@ public sealed class JournalSyncStore :
 		runRow.Error = error;
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 		SyncHandle(run, runRow);
+	}
+
+	#endregion
+
+	#region IOptionRawBaseCoinReader
+
+	/// <inheritdoc cref="IOptionRawBaseCoinReader.GetRawBaseCoinsAsync" />
+	public async Task<IReadOnlyList<string>> GetRawBaseCoinsAsync(CancellationToken cancellationToken = default)
+	{
+		using var db = CreateContext();
+
+		// Символы обеих опционных таблиц выбираются distinct-запросом: объём сырья
+		// (сотни символов) не требует разбора префикса средствами SQL.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		var optionSymbols = await db.RawExecutions
+			.Where(execution => execution.Category == OptionCategory)
+			.Select(execution => execution.Symbol)
+			.Union(db.RawDeliveries
+				.Where(delivery => delivery.Category == OptionCategory)
+				.Select(delivery => delivery.Symbol))
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+
+		// Актив — префикс символа до первого дефиса, нормализация как в OptionBaseCoinSource:
+		// trim и верхний регистр; отсортированное множество дедуплицирует префиксы и
+		// стабилизирует порядок перечня между запусками.
+		var baseCoins = new SortedSet<string>(StringComparer.Ordinal);
+		foreach (var symbol in optionSymbols)
+		{
+			var prefix = symbol.Split('-')[0];
+			if (string.IsNullOrWhiteSpace(prefix) == false)
+			{
+				baseCoins.Add(prefix.Trim().ToUpperInvariant());
+			}
+		}
+
+		return baseCoins.ToList();
 	}
 
 	#endregion

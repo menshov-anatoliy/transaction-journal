@@ -179,7 +179,7 @@ public class ExecutionHistorySyncTests
 	{
 		// Arrange: обе категории синхронизируются впервые, по одной записи и пустому окну
 		// каждая; глубина backfill ограничена двумя окнами. Опционная категория проходится
-		// областью единственного актива заглушки источника.
+		// безфильтровой областью и областью единственного актива заглушки источника.
 		// Требование: backfill выполняется по каждой торговой категории отдельным проходом,
 		// а запуск синхронизации у общей кнопки один.
 		// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
@@ -189,13 +189,16 @@ public class ExecutionHistorySyncTests
 		_gateway.Enqueue(Page());
 		_gateway.Enqueue(Page(Execution("exec-option", NowMs - 3 * DayMs)));
 		_gateway.Enqueue(Page());
+		_gateway.Enqueue(Page());
+		_gateway.Enqueue(Page());
 
 		// Act: запуск по категориям по умолчанию — linear и option.
 		var result = await _orchestrator.RunAsync(options: options);
 
-		// Assert: каждая категория запрашивалась своим проходом.
+		// Assert: каждая категория запрашивалась своим проходом; option — безфильтровой
+		// областью и областью актива доски.
 		Assert.That(_gateway.Queries.Select(query => query.Category),
-			Is.EqualTo(new[] { "linear", "linear", "option", "option" }));
+			Is.EqualTo(new[] { "linear", "linear", "option", "option", "option", "option" }));
 
 		// Assert: строка запуска одна на обе категории, счётчик суммирует новые записи.
 		Assert.That(LoadRuns(), Has.Count.EqualTo(1));

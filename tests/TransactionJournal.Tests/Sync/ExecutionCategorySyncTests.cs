@@ -154,44 +154,53 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
-	[Description("Backfill option отправляет запросы с каждым базовым активом из источника")]
+	[Description("Backfill option отправляет безфильтровое окно и по окну на каждый актив из источника")]
 	public async Task TryIfOptionBackfillQueriesEveryBaseCoinFromSource()
 	{
-		// Arrange: источник доски отдаёт три актива, глубина одного окна — по области на актив.
-		// Требование: опционная доска проходится по каждому базовому активу отдельно, потому
-		// что без явного фильтра биржа отдаёт записи только одного актива.
+		// Arrange: источник доски отдаёт три актива, глубина одного окна — безфильтровая
+		// область плюс по области на актив.
+		// Требование: опционная категория проходится безфильтровой областью — биржа без
+		// фильтра отдаёт записи всех активов аккаунта — и по каждому базовому активу
+		// отдельно для гарантированной полноты истории актива.
 		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
 		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH", "SOL");
 		var engine = new ExecutionCategorySync(
 			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
 		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-unfiltered", NowMs - DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-btc", NowMs - DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 
 		// Act
 		var result = await engine.RunAsync("option", options);
 
-		// Assert: по одному окну на каждый актив в порядке источника, фильтр проставлен во всех запросах.
-		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		// Assert: безфильтровое окно запрошено первым без фильтра по активу, затем
+		// по окну на каждый актив в порядке источника.
+		// Traceability: openspec:sync/bybit-history#scenario-non-btc-option-trades-loaded
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(4));
 		Assert.That(_gateway.Queries.Select(query => query.Category),
-			Is.EqualTo(new[] { "option", "option", "option" }));
+			Is.EqualTo(new[] { "option", "option", "option", "option" }));
 		Assert.That(_gateway.Queries.Select(query => query.BaseCoin),
-			Is.EqualTo(new[] { "BTC", "ETH", "SOL" }));
+			Is.EqualTo(new string?[] { null, "BTC", "ETH", "SOL" }));
 		Assert.That(optionBaseCoins.Calls, Is.EqualTo(1));
 
-		// Assert: записи разных активов собираются в один проход, перебор исчерпан на полу.
-		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-btc" }));
-		Assert.That(result.WindowsProcessed, Is.EqualTo(3));
+		// Assert: записи безфильтрового и по-активных проходов собираются в один результат,
+		// перебор исчерпан на полу.
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId),
+			Is.EqualTo(new[] { "exec-unfiltered", "exec-btc" }));
+		Assert.That(result.WindowsProcessed, Is.EqualTo(4));
 		Assert.That(result.HistoryExhausted, Is.True);
 		Assert.That(_stateStore.Find("option")!.ExecWatermarkMs, Is.EqualTo(NowMs));
 	}
 
 	[TestMethod]
-	[Description("Инкремент option обходит область каждого актива, ранняя остановка не отменяет остальные")]
+	[Description("Инкремент option обходит безфильтровую область и область каждого актива, остановка одной не отменяет остальные")]
 	public async Task TryIfOptionIncrementalWalksEveryBaseCoinScope()
 	{
-		// Arrange: водяной знак трёхдневной давности, доска из двух активов. Страница BTC
-		// целиком известна — ранняя остановка, страница ETH приносит новую запись.
+		// Arrange: водяной знак трёхдневной давности, доска из двух активов. Страницы
+		// безфильтровой области и BTC целиком известны — ранняя остановка, страница ETH
+		// приносит новую запись.
 		// Требование: области прохода обходятся и в инкрементальном режиме; остановка одной
 		// области не отменяет обход остальных.
 		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
@@ -200,22 +209,137 @@ public class ExecutionCategorySyncTests
 		var engine = new ExecutionCategorySync(
 			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
 		await _stateStore.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = NowMs - 3 * DayMs });
-		_knownIdProbe.Know("exec-known");
+		_knownIdProbe.Know("exec-known", "exec-known-2");
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-known", NowMs - 2 * DayMs)] });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-known-2", NowMs - 2 * DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - 2 * DayMs)] });
 
 		// Act
 		var result = await engine.RunAsync("option");
 
-		// Assert: каждая область получила своё окно от знака минус перекрытие до момента запуска.
-		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
-		Assert.That(_gateway.Queries.Select(query => query.BaseCoin), Is.EqualTo(new[] { "BTC", "ETH" }));
+		// Assert: безфильтровая область и каждая по-активная получили своё окно от знака
+		// минус перекрытие до момента запуска.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin), Is.EqualTo(new string?[] { null, "BTC", "ETH" }));
 		Assert.That(_gateway.Queries.All(query => query.StartTimeMs == NowMs - 3 * DayMs - DayMs), Is.True);
 		Assert.That(_gateway.Queries.All(query => query.EndTimeMs == NowMs), Is.True);
 
-		// Assert: BTC остановился рано на известной странице, ETH принёс новую запись.
+		// Assert: первые две области остановились рано на известных страницах, ETH принёс новую запись.
 		Assert.That(result.EarlyStopped, Is.True);
 		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth" }));
+	}
+
+	[TestMethod]
+	[Description("Безфильтровая область option загружает записи активов, отсутствующих в перечне областей")]
+	public async Task TryIfUnfilteredOptionScopeLoadsRecordsOfUnlistedBaseCoins()
+	{
+		// Arrange: перечень областей знает только BTC, но аккаунт торговал опционами ETH —
+		// биржа без фильтра отдаёт записи всех активов аккаунта.
+		// Требование: безфильтровая область запрашивает окна без baseCoin, её записи
+		// загружаются и сохраняются — сделки не-BTC активов не теряются.
+		// Traceability: openspec:sync/bybit-history#scenario-non-btc-option-trades-loaded
+		var writer = new IdempotentRawWriter(_knownIdProbe);
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, _optionBaseCoins, new ManualTimeProvider(), writer);
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("exec-eth-1", NowMs - DayMs, "ETH-25DEC23-3000-C")],
+		});
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+
+		// Act
+		var result = await engine.RunAsync("option", options);
+
+		// Assert: безфильтровое окно ушло без фильтра по активу, запись ETH загружена
+		// и сохранена пачкой сырых записей.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		Assert.That(_gateway.Queries[0].BaseCoin, Is.Null);
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth-1" }));
+		Assert.That(writer.InsertedExecIds, Is.EqualTo(new[] { "exec-eth-1" }));
+	}
+
+	[TestMethod]
+	[Description("Повторная выгрузка безфильтровых записей по-активной областью не создаёт дублей")]
+	public async Task TryIfPerBaseCoinScopeDoesNotDuplicateUnfilteredRecords()
+	{
+		// Arrange: водяной знак суток, доска из ETH; безфильтровая и по-активная области
+		// возвращают одну и ту же запись; вставленная запись сразу видна проверке
+		// известных execId, как в сырьевом хранилище.
+		// Требование: известные записи пропускаются по биржевому идентификатору исполнения —
+		// дубли между безфильтровым и по-активным проходами не создаются.
+		// Traceability: openspec:sync/bybit-history#scenario-base-coin-passes-no-duplicates
+		var writer = new IdempotentRawWriter(_knownIdProbe);
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, new FakeOptionBaseCoinSource("ETH"), new ManualTimeProvider(), writer);
+		await _stateStore.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = NowMs - DayMs });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("exec-eth-1", NowMs - 2 * 3600_000L, "ETH-25DEC23-3000-C")],
+		});
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("exec-eth-1", NowMs - 2 * 3600_000L, "ETH-25DEC23-3000-C")],
+		});
+
+		// Act
+		var result = await engine.RunAsync("option");
+
+		// Assert: запись вставлена один раз — безфильтровой областью; по-активная область
+		// узнала её и остановилась рано, новых вставок нет.
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin), Is.EqualTo(new string?[] { null, "ETH" }));
+		Assert.That(writer.InsertedExecIds, Is.EqualTo(new[] { "exec-eth-1" }));
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth-1" }));
+		Assert.That(result.WindowsProcessed, Is.EqualTo(2));
+		Assert.That(result.EarlyStopped, Is.True);
+	}
+
+	[TestMethod]
+	[Description("Актив, обнаруженный безфильтровым проходом, получает собственную область на следующем запуске")]
+	public async Task TryIfBaseCoinDiscoveredByUnfilteredPassGetsOwnScopeNextRun()
+	{
+		// Arrange: первый запуск знает только BTC; безфильтровая область приносит запись
+		// XAUT, которая сохраняется в сырьё. Второй запуск читает перечень с XAUT —
+		// сырьевое хранилище уже называет этот актив.
+		// Требование: актив, впервые встреченный безфильтровым проходом, определяется
+		// в перечне источников и проходится отдельной областью очередным запуском.
+		// Traceability: openspec:sync/bybit-history#scenario-new-base-coin-picked-up
+		var writer = new IdempotentRawWriter(_knownIdProbe);
+		var optionBaseCoins = new FakeOptionBaseCoinSource(
+			new IReadOnlyList<string>[] { ["BTC"], ["BTC", "XAUT"] });
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider(), writer);
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+
+		// Первый запуск: безфильтровая область загружает XAUT, область BTC пуста.
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("exec-xaut-1", NowMs - DayMs, "XAUT-25DEC23-5000-P")],
+		});
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		await engine.RunAsync("option", options);
+
+		// Второй запуск: водяной знак первого запуска переводит категорию в инкремент;
+		// страницы пустые, кроме области XAUT, которая возвращает уже известную запись.
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("exec-xaut-1", NowMs - DayMs, "XAUT-25DEC23-5000-P")],
+		});
+
+		// Act
+		var result = await engine.RunAsync("option");
+
+		// Assert: второй запуск запросил безфильтровую область и области обоих активов —
+		// XAUT получил собственную область; повторная страница XAUT распознана как
+		// известная, дублей нет.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(5));
+		Assert.That(_gateway.Queries.Skip(2).Select(query => query.BaseCoin),
+			Is.EqualTo(new string?[] { null, "BTC", "XAUT" }));
+		Assert.That(writer.InsertedExecIds, Is.EqualTo(new[] { "exec-xaut-1" }));
+		Assert.That(result.NewExecutions, Is.Empty);
+		Assert.That(result.PassedBaseCoins, Is.EqualTo(new[] { "BTC", "XAUT" }));
 	}
 
 	[TestMethod]
@@ -267,13 +391,13 @@ public class ExecutionCategorySyncTests
 		// новой записи, ранней остановки не происходит.
 		// Требование: догрузка перечитывает только хвост истории и не уходит глубже знака.
 		// Traceability: openspec:sync/bybit-history#requirement-manual-sync-modes
-		await _stateStore.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = NowMs - 16 * DayMs });
+		await _stateStore.SaveAsync(new SyncState { Category = "linear", ExecWatermarkMs = NowMs - 16 * DayMs });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-1", NowMs - DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-2", NowMs - 8 * DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-3", NowMs - 15 * DayMs)] });
 
 		// Act
-		var result = await _engine.RunAsync("option");
+		var result = await _engine.RunAsync("linear");
 
 		// Assert: три окна назад, самое старое начинается ровно на знаке минус перекрытие.
 		Assert.That(result.Mode, Is.EqualTo(SyncRunMode.Incremental));
@@ -285,7 +409,7 @@ public class ExecutionCategorySyncTests
 			Is.EqualTo(new[] { "exec-1", "exec-2", "exec-3" }));
 
 		// Assert: водяной знак продвинулся на момент запуска.
-		Assert.That(_stateStore.Find("option")!.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(_stateStore.Find("linear")!.ExecWatermarkMs, Is.EqualTo(NowMs));
 	}
 
 	[TestMethod]
@@ -324,28 +448,33 @@ public class ExecutionCategorySyncTests
 	public async Task TryIfBackfillBoundaryTrackedPerCategoryIndependently()
 	{
 		// Arrange: обе категории синхронизируются впервые, история разной глубины —
-		// linear заканчивается двумя днями назад, option пятью. Глубина двух окон.
+		// linear заканчивается двумя днями назад, option пятью. Глубина двух окон:
+		// option проходится безфильтровой областью и областью актива доски.
 		// Требование: backfill выполняется по каждой торговой категории отдельным проходом,
-		// опционная категория — с фильтром по базовому активу области.
+		// опционная категория — безфильтровой областью и с фильтром по базовому активу
+		// по-активной области.
 		// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
 		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = 2 * WeekMs };
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-linear", NowMs - 2 * DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-option", NowMs - 5 * DayMs)] });
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 
 		// Act
 		var linearResult = await _engine.RunAsync("linear", options);
 		var optionResult = await _engine.RunAsync("option", options);
 
-		// Assert: каждый проход запрашивал только свою категорию; опционные окна несут
-		// фильтр актива из источника доски, линейные — без фильтра.
+		// Assert: каждый проход запрашивал только свою категорию; опционная безфильтровая
+		// область несёт окна без фильтра, по-активная — фильтр актива из источника доски,
+		// линейные — без фильтра.
 		Assert.That(linearResult.Mode, Is.EqualTo(SyncRunMode.Backfill));
 		Assert.That(optionResult.Mode, Is.EqualTo(SyncRunMode.Backfill));
 		Assert.That(_gateway.Queries.Select(query => query.Category),
-			Is.EqualTo(new[] { "linear", "linear", "option", "option" }));
+			Is.EqualTo(new[] { "linear", "linear", "option", "option", "option", "option" }));
 		Assert.That(_gateway.Queries.Select(query => query.BaseCoin),
-			Is.EqualTo(new[] { null, null, "BTC", "BTC" }));
+			Is.EqualTo(new string?[] { null, null, null, null, "BTC", "BTC" }));
 
 		// Assert: состояния категорий независимы — своя граница и свой водяной знак.
 		var linearState = _stateStore.Find("linear");
@@ -663,17 +792,14 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
-	[Description("Повторный пограничный отказ завершает перебор исчерпанием — остальные области не запрашиваются, запуск успешен")]
+	[Description("Повторный пограничный отказ исчерпывает единственную область linear — проход категории завершается без сбоя")]
 	public async Task TryIfRepeatedBoundaryRefusalEndsWalkWithoutOtherScopes()
 	{
-		// Arrange: доска из двух активов; первое же окно области BTC биржа отвергает
-		// за глубину хранения, повтор с зажатым началом тоже отклонён.
-		// Требование: повторный пограничный отказ исчерпывает историю категории —
-		// оставшиеся окна и области не запрашиваются, запуск успешен с водяным знаком.
+		// Arrange: linear читается единственной областью без фильтра; первое же окно
+		// биржа отвергает за глубину хранения, повтор с зажатым началом тоже отклонён.
+		// Требование: повторный пограничный отказ исчерпывает историю области — оставшиеся
+		// окна не запрашиваются, запуск успешен с водяным знаком.
 		// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
-		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
-		var engine = new ExecutionCategorySync(
-			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
 		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
 		_gateway.EnqueueError(new BybitApiException(
 			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
@@ -681,13 +807,60 @@ public class ExecutionCategorySyncTests
 			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
 
 		// Act: исключение не выходит наружу — запуск завершается штатно.
-		var result = await engine.RunAsync("option", options);
+		var result = await _engine.RunAsync("linear", options);
 
-		// Assert: обе области ETH и оставшиеся окна BTC не запрашивались.
+		// Assert: область запрошена дважды — отказ и его ретрай с зажатым началом;
+		// оставшиеся окна не запрашивались.
 		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
-		Assert.That(_gateway.Queries.All(query => query.BaseCoin == "BTC"), Is.True);
+		Assert.That(_gateway.Queries.All(query => query.BaseCoin == null), Is.True);
 
 		// Assert: перебор исчерпан, водяной знак зафиксирован, запуск успешен.
+		Assert.That(result.HistoryExhausted, Is.True);
+		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
+		var saved = _stateStore.Find("linear");
+		Assert.That(saved, Is.Not.Null);
+		Assert.That(saved!.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(saved.LastSuccessAt, Is.Not.Null);
+
+		// Assert: пограничное исчерпание — не пропуск области: перечень пропущенных пуст.
+		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
+		Assert.That(result.SkippedAreas, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Пограничное исчерпание области BTC не отменяет обход безфильтровой области и области ETH")]
+	public async Task TryIfBoundaryExhaustionInOptionAreaDoesNotStopOtherAreas()
+	{
+		// Arrange: доска из одного актива; первое же окно по-активной области BTC биржа
+		// отвергает за глубину хранения, повтор с зажатым началом тоже отклонён.
+		// Требование: пограничное исчерпание действует в границах одной области — обход
+		// её окон прекращается, безфильтровая и по-активная области других активов
+		// запрашиваются штатно.
+		// Traceability: openspec:sync/bybit-history#scenario-boundary-exhaustion-scoped-to-area
+		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		_gateway.EnqueueError(new BybitApiException(
+			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
+		_gateway.EnqueueError(new BybitApiException(
+			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - DayMs)] });
+
+		// Act: исключение не выходит наружу — запуск завершается штатно.
+		var result = await engine.RunAsync("option", options);
+
+		// Assert: безфильтровая область пройдена до исчерпания BTC, область ETH запрошена
+		// и догружена; оставшиеся окна BTC не запрашивались.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(4));
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin),
+			Is.EqualTo(new string?[] { null, "BTC", "BTC", "ETH" }));
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth" }));
+
+		// Assert: запуск успешен с водяным знаком; исчерпание одной области в backfill
+		// не отменяет факт исчерпания перебора категории.
+		// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
 		Assert.That(result.HistoryExhausted, Is.True);
 		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
 		var saved = _stateStore.Find("option");
@@ -701,10 +874,46 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
-	[Description("Отказ 110023 на окне option-области пропускает область в backfill — остальные догружаются, запуск успешен")]
+	[Description("Пограничное исчерпание в инкременте отражается отчётным флагом, не отменяя обход остальных областей")]
+	public async Task TryIfIncrementalBoundaryExhaustionIsReportedWhileOtherAreasWalked()
+	{
+		// Arrange: водяной знак суток, доска из двух активов; окно области BTC биржа
+		// отвергает за глубину хранения дважды.
+		// Требование: в инкрементальном режиме HistoryExhausted отражает исчерпание хотя бы
+		// одной области, при этом области остальных активов обходятся штатно.
+		// Traceability: openspec:sync/bybit-history#scenario-boundary-exhaustion-scoped-to-area
+		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
+		await _stateStore.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = NowMs - DayMs });
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
+		_gateway.EnqueueError(new BybitApiException(
+			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
+		_gateway.EnqueueError(new BybitApiException(
+			10001, "Can't query order earlier than 2 years, please check your params: startTime or endTime!"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - 2 * 3600_000L)] });
+
+		// Act
+		var result = await engine.RunAsync("option");
+
+		// Assert: область ETH пройдена после исчерпания BTC.
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin),
+			Is.EqualTo(new string?[] { null, "BTC", "BTC", "ETH" }));
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth" }));
+
+		// Assert: исчерпание хотя бы одной области отражено флагом, водяной знак штатно
+		// зафиксирован, запуск успешен.
+		// Traceability: openspec:sync/bybit-history#scenario-boundary-refusal-ends-walk
+		Assert.That(result.HistoryExhausted, Is.True);
+		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
+		Assert.That(_stateStore.Find("option")!.LastSuccessAt, Is.Not.Null);
+	}
+
+	[TestMethod]
+	[Description("Отказ 110023 на безфильтровой области option пропускает её в backfill — по-активные области догружаются, запуск успешен")]
 	public async Task TryIfUnavailableOptionAreaSkippedInBackfillAndOtherScopesLoaded()
 	{
-		// Arrange: доска из двух активов; окно области BTC биржа отвечает отказом
+		// Arrange: первое же окно безфильтровой области биржа отвечает отказом
 		// «контракт недоступен для торговли», окно области ETH приносит запись.
 		// Требование: отказ 110023 не прерывает запуск — область пропускается без ретрая,
 		// остальные области догружаются, водяной знак фиксируется штатно.
@@ -714,23 +923,24 @@ public class ExecutionCategorySyncTests
 			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
 		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
 		_gateway.EnqueueError(new BybitApiException(110023, "The contract is not available for trades"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - DayMs)] });
 
 		// Act
 		var result = await engine.RunAsync("option", options);
 
-		// Assert: область BTC запрошена один раз — отказ не ретраится, оставшиеся окна
-		// области не запрашиваются, область ETH догружена.
-		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
-		Assert.That(_gateway.Queries[0].BaseCoin, Is.EqualTo("BTC"));
-		Assert.That(_gateway.Queries[1].BaseCoin, Is.EqualTo("ETH"));
+		// Assert: безфильтровая область запрошена один раз — отказ не ретраится, оставшиеся
+		// окна области не запрашиваются, по-активные области догружены.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin),
+			Is.EqualTo(new string?[] { null, "BTC", "ETH" }));
 		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth" }));
-		Assert.That(result.WindowsProcessed, Is.EqualTo(1));
+		Assert.That(result.WindowsProcessed, Is.EqualTo(2));
 
-		// Assert: пропуск зафиксирован меткой «категория:актив», запуск успешен
-		// с водяным знаком.
+		// Assert: пропуск безфильтровой области зафиксирован меткой категории, запуск
+		// успешен с водяным знаком.
 		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
-		Assert.That(result.SkippedAreas, Is.EqualTo(new[] { "option:BTC" }));
+		Assert.That(result.SkippedAreas, Is.EqualTo(new[] { "option" }));
 		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
 		var saved = _stateStore.Find("option");
 		Assert.That(saved, Is.Not.Null);
@@ -739,11 +949,11 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
-	[Description("Отказ 110023 на окне option-области пропускает область в инкременте — остальные догружаются, запуск успешен")]
+	[Description("Отказ 110023 на безфильтровой области option пропускает её в инкременте — по-активные области догружаются, запуск успешен")]
 	public async Task TryIfUnavailableOptionAreaSkippedInIncrementalAndOtherScopesLoaded()
 	{
-		// Arrange: водяной знак суток, доска из двух активов; окно области BTC биржа
-		// отвечает отказом «контракт недоступен», окно области ETH приносит новую запись.
+		// Arrange: водяной знак суток; окно безфильтровой области биржа отвечает отказом
+		// «контракт недоступен», окно области ETH приносит новую запись.
 		// Требование: отказ 110023 не прерывает инкрементальную догрузку — область
 		// пропускается, остальные догружаются, водяной знак фиксируется штатно.
 		// Traceability: openspec:sync/bybit-history#scenario-unavailable-option-area-skipped
@@ -752,21 +962,22 @@ public class ExecutionCategorySyncTests
 			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
 		await _stateStore.SaveAsync(new SyncState { Category = "option", ExecWatermarkMs = NowMs - DayMs });
 		_gateway.EnqueueError(new BybitApiException(110023, "The contract is not available for trades"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - 2 * 3600_000L)] });
 
 		// Act
 		var result = await engine.RunAsync("option");
 
-		// Assert: каждая область получила по одному окну, отказ BTC не ретраился.
-		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
-		Assert.That(_gateway.Queries[0].BaseCoin, Is.EqualTo("BTC"));
-		Assert.That(_gateway.Queries[1].BaseCoin, Is.EqualTo("ETH"));
+		// Assert: безфильтровая и по-активные области получили по окну, отказ не ретраился.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(3));
+		Assert.That(_gateway.Queries.Select(query => query.BaseCoin),
+			Is.EqualTo(new string?[] { null, "BTC", "ETH" }));
 		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "exec-eth" }));
 
 		// Assert: пропуск зафиксирован меткой, история не объявлена исчерпанной —
 		// пропуск и исчерпание перебора разные факты, водяной знак зафиксирован штатно.
 		// Traceability: openspec:sync/bybit-history#requirement-contract-unavailable-area-skip
-		Assert.That(result.SkippedAreas, Is.EqualTo(new[] { "option:BTC" }));
+		Assert.That(result.SkippedAreas, Is.EqualTo(new[] { "option" }));
 		Assert.That(result.HistoryExhausted, Is.False);
 		Assert.That(result.ExecWatermarkMs, Is.EqualTo(NowMs));
 		Assert.That(_stateStore.Find("option")!.LastSuccessAt, Is.Not.Null);
@@ -807,24 +1018,26 @@ public class ExecutionCategorySyncTests
 	[Description("Перечень пройденных активов доски собирает и пропущенные по 110023, и догруженные области")]
 	public async Task TryIfPassedBaseCoinsIncludeSkippedAndWalkedBoardAreas()
 	{
-		// Arrange: доска из двух активов; область BTC биржа отвечает отказом «контракт
-		// недоступен для торговли», область ETH приносит запись.
+		// Arrange: безфильтровая область биржа отвечает отказом «контракт недоступен
+		// для торговли», области BTC и ETH запрашиваются штатно.
 		// Требование: перечень пройденных областей доски — вход расчёта непокрытых
-		// активов — отражает все запрошенные области запуска, включая пропущенные
-		// как недоступные.
+		// активов — отражает все запрошенные по-активные области запуска, включая
+		// пропущенные как недоступные; безфильтровая область покрытием актива не считается.
 		// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
 		var optionBaseCoins = new FakeOptionBaseCoinSource("BTC", "ETH");
 		var engine = new ExecutionCategorySync(
 			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, optionBaseCoins, new ManualTimeProvider());
 		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
 		_gateway.EnqueueError(new BybitApiException(110023, "The contract is not available for trades"));
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>());
 		_gateway.Enqueue(new BybitPagedResponse<BybitExecution> { List = [Execution("exec-eth", NowMs - DayMs)] });
 
 		// Act
 		var result = await engine.RunAsync("option", options);
 
-		// Assert: обе области запрошены и перечислены пройденными — пропуск BTC
-		// не выбрасывает актив из перечня.
+		// Assert: обе по-активные области запрошены и перечислены пройденными — пропуск
+		// безфильтровой области не выбрасывает активы из перечня, а сама она покрытия
+		// актива не даёт.
 		// Traceability: openspec:sync/bybit-history#requirement-uncovered-base-coin-visibility
 		Assert.That(result.PassedBaseCoins, Is.EqualTo(new[] { "BTC", "ETH" }));
 	}
@@ -849,9 +1062,11 @@ public class ExecutionCategorySyncTests
 
 	#region Помощники
 
-	private static BybitExecution Execution(string execId, long execTimeMs) => new()
+	private static BybitExecution Execution(string execId, long execTimeMs) => Execution(execId, execTimeMs, "BTCUSDT");
+
+	private static BybitExecution Execution(string execId, long execTimeMs, string symbol) => new()
 	{
-		Symbol = "BTCUSDT",
+		Symbol = symbol,
 		ExecId = execId,
 		Side = "Buy",
 		ExecTimeMs = execTimeMs,
@@ -863,15 +1078,21 @@ public class ExecutionCategorySyncTests
 
 	/// <summary>
 	/// Фиктивный источник базовых активов опционной доски: возвращает заготовленный
-	/// список активов и помнит число обращений за списком.
+	/// список активов каждого обращения и помнит число обращений за списком.
 	/// </summary>
 	private sealed class FakeOptionBaseCoinSource : IOptionBaseCoinSource
 	{
-		private readonly IReadOnlyList<string> _baseCoins;
+		private readonly IReadOnlyList<IReadOnlyList<string>> _listsByCall;
 
 		public FakeOptionBaseCoinSource(params string[] baseCoins)
+			: this(new IReadOnlyList<string>[] { baseCoins })
 		{
-			_baseCoins = baseCoins;
+		}
+
+		/// <summary>Создаёт источник с перечнем активов, меняющимся между обращениями.</summary>
+		public FakeOptionBaseCoinSource(IReadOnlyList<IReadOnlyList<string>> baseCoinsByCall)
+		{
+			_listsByCall = baseCoinsByCall;
 		}
 
 		/// <summary>Сколько раз движок запрашивал список активов.</summary>
@@ -879,8 +1100,46 @@ public class ExecutionCategorySyncTests
 
 		public Task<IReadOnlyList<string>> GetBaseCoinsAsync(CancellationToken cancellationToken = default)
 		{
+			var list = _listsByCall[Math.Min(Calls, _listsByCall.Count - 1)];
 			Calls++;
-			return Task.FromResult(_baseCoins);
+			return Task.FromResult(list);
+		}
+	}
+
+	/// <summary>
+	/// Писатель сырых записей, связанный с проверкой известных execId: вставленная пачка
+	/// сразу становится известной — так же записи сырьевого хранилища видны повторным
+	/// проходам того же запуска и проходам следующих запусков.
+	/// </summary>
+	private sealed class IdempotentRawWriter : IRawExecutionBatchWriter
+	{
+		private readonly FakeKnownIdProbe _probe;
+
+		public IdempotentRawWriter(FakeKnownIdProbe probe)
+		{
+			_probe = probe;
+		}
+
+		/// <summary>Все вставленные execId в порядке вызовов.</summary>
+		public List<string> InsertedExecIds { get; } = [];
+
+		public Task<RawExecutionBatchResult> WriteAsync(
+			string category,
+			IReadOnlyCollection<BybitExecution> executions,
+			SyncRun? progressRun = null,
+			CancellationToken cancellationToken = default)
+		{
+			foreach (var execution in executions)
+			{
+				_probe.Know(execution.ExecId);
+				InsertedExecIds.Add(execution.ExecId);
+			}
+
+			return Task.FromResult(new RawExecutionBatchResult
+			{
+				InsertedExecIds = executions.Select(execution => execution.ExecId).ToList(),
+				SkippedKnownCount = 0,
+			});
 		}
 	}
 

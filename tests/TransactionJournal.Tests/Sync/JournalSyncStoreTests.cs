@@ -529,6 +529,34 @@ public class JournalSyncStoreTests
 		new JournalSyncStore(null!);
 	}
 
+	[TestMethod]
+	[Description("Читатель активов сырья собирает distinct-префиксы опционных символов обеих таблиц, другие категории игнорирует")]
+	public async Task TryIfRawBaseCoinsCollectDistinctPrefixesFromBothOptionTables()
+	{
+		// Arrange: сырьё содержит исполнения двух опционных активов с повторяющимся
+		// префиксом в разном регистре, delivery-запись третьего актива и линейную запись
+		// с символом без дефиса.
+		// Требование: перечень областей option пополняется базовыми активами сырья —
+		// префиксами символов опционных исполнений и delivery-записей; записи других
+		// категорий в перечень не попадают.
+		// Traceability: openspec:sync/bybit-history#requirement-option-base-coin-coverage
+		await _store.WriteAsync("option", new[]
+		{
+			Execution("exec-btc-1", "BTC-27DEC24-28000-C"),
+			Execution("exec-btc-2", "btc-27dec24-29000-p"),
+			Execution("exec-eth-1", "ETH-27DEC24-3000-C"),
+		});
+		await _store.WriteAsync("linear", [Execution("exec-lin", "BTCUSDT")]);
+		await _store.WriteAsync("option", [Delivery("XAUT-27DEC24-5000-P", 1735296000000)]);
+
+		// Act
+		var baseCoins = await _store.GetRawBaseCoinsAsync();
+
+		// Assert: префиксы обеих опционных таблиц дедуплицированы и нормализованы,
+		// линейная запись в перечень не попала.
+		Assert.That(baseCoins, Is.EqualTo(new[] { "BTC", "ETH", "XAUT" }));
+	}
+
 	#region Помощники
 
 	private DbContextOptions<JournalDbContext> CreateOptions() =>
@@ -557,9 +585,11 @@ public class JournalSyncStoreTests
 		return db.SyncRuns.Find(runId);
 	}
 
-	private static BybitExecution Execution(string execId) => new()
+	private static BybitExecution Execution(string execId) => Execution(execId, "BTCUSDT");
+
+	private static BybitExecution Execution(string execId, string symbol) => new()
 	{
-		Symbol = "BTCUSDT",
+		Symbol = symbol,
 		ExecId = execId,
 		Side = "Buy",
 		ExecTimeMs = 1735296000000,
