@@ -104,47 +104,90 @@ else if (_trades.Count == 0)
 }
 else
 {
-	@* Таблица непривязанных сделок с атрибутами биржевой записи и чекбоксами
-	   выбора строк; переключатель в шапке выполняет «Выбрать всё» как «все или
-	   ничего». Разбор выбранных — массовая привязка и создание конструкции —
-	   выполняется use-case сервисами домена, UI собственных правил не вводит. *@
+	@* Блок фильтров над таблицей: диапазон дат, инструменты и направление
+	   действуют одновременно и меняют только представление списка — разбор
+	   выбранных работает как раньше. Пустое поле даты снимает ограничение
+	   с соответствующей стороны диапазона. *@
 	@* Traceability: openspec:ui/screens#requirement-inbox-screen *@
-	<table>
-		<thead>
-			<tr>
-				<th class="col-check">
-					<label class="select-all" title="Выбрать все сделки или снять выбор">
-						<input type="checkbox" class="select-all" checked="@AllSelected" @onchange="ToggleSelectAll" />
-						Выбрать всё
-					</label>
-				</th>
-				<th>Время</th>
-				<th>execId</th>
-				<th>Инструмент</th>
-				<th>Направление</th>
-				<th>Количество</th>
-				<th>Цена</th>
-				<th>Сумма</th>
-				<th>Комиссия</th>
-			</tr>
-		</thead>
-		<tbody>
-			@foreach (var trade in _trades)
+	<div class="action-form inbox-filters">
+		<label class="action-label">
+			с
+			<input type="date" class="action-input date-input" value="@DateFromInput" @onchange="OnDateFromChanged" />
+		</label>
+		<label class="action-label">
+			по
+			<input type="date" class="action-input date-input" value="@DateToInput" @onchange="OnDateToChanged" />
+		</label>
+		<span class="filter-symbols">
+			@foreach (var symbol in AvailableSymbols)
 			{
-				<tr>
-					<td><input type="checkbox" checked="@IsSelected(trade.ExecId)" @onchange="args => ToggleRow(trade.ExecId, args.Value is true)" /></td>
-					<td>@FormatTime(trade.ExecutedAt)</td>
-					<td>@trade.ExecId</td>
-					<td>@trade.Symbol</td>
-					<td class="@DirectionClass(trade.Quantity)">@DirectionText(trade.Quantity)</td>
-					<td>@FormatSigned(trade.Quantity)</td>
-					<td>@FormatAmount(trade.Price)</td>
-					<td>@FormatAmount(AmountOf(trade))</td>
-					<td>@FormatFee(trade.Fee, trade.FeeCurrency)</td>
-				</tr>
+				<label class="action-label">
+					<input type="checkbox" checked="@_selectedSymbols.Contains(symbol)" @onchange="args => OnSymbolFilterChanged(symbol, args.Value is true)" />
+					@symbol
+				</label>
 			}
-		</tbody>
-	</table>
+		</span>
+		<label class="action-label filter-direction">
+			<input type="checkbox" checked="@_filterBuy" @onchange="args => OnDirectionFilterChanged(false, args.Value is true)" />
+			покупка
+		</label>
+		<label class="action-label filter-direction">
+			<input type="checkbox" checked="@_filterSell" @onchange="args => OnDirectionFilterChanged(true, args.Value is true)" />
+			продажа
+		</label>
+	</div>
+
+	@if (VisibleTrades.Any() == false)
+	{
+		@* Список непуст, но фильтры скрыли все строки: причина пустого экрана
+		   должна отличаться от отсутствия непривязанных сделок. *@
+		@* Traceability: change:add-inbox-filters/design#d6 *@
+		<p class="note">По заданным фильтрам ничего не найдено: измените диапазон дат, инструменты или направление.</p>
+	}
+	else
+	{
+		@* Таблица непривязанных сделок с атрибутами биржевой записи и чекбоксами
+		   выбора строк; переключатель в шапке выполняет «Выбрать всё» как «все или
+		   ничего». Разбор выбранных — массовая привязка и создание конструкции —
+		   выполняется use-case сервисами домена, UI собственных правил не вводит. *@
+		@* Traceability: openspec:ui/screens#requirement-inbox-screen *@
+		<table>
+			<thead>
+				<tr>
+					<th class="col-check">
+						<label class="select-all" title="Выбрать все сделки или снять выбор">
+							<input type="checkbox" class="select-all" checked="@AllSelected" @onchange="ToggleSelectAll" />
+							Выбрать всё
+						</label>
+					</th>
+					<th>Время</th>
+					<th>execId</th>
+					<th>Инструмент</th>
+					<th>Направление</th>
+					<th>Количество</th>
+					<th>Цена</th>
+					<th>Сумма</th>
+					<th>Комиссия</th>
+				</tr>
+			</thead>
+			<tbody>
+				@foreach (var trade in VisibleTrades)
+				{
+					<tr>
+						<td><input type="checkbox" checked="@IsSelected(trade.ExecId)" @onchange="args => ToggleRow(trade.ExecId, args.Value is true)" /></td>
+						<td>@FormatTime(trade.ExecutedAt)</td>
+						<td>@trade.ExecId</td>
+						<td>@trade.Symbol</td>
+						<td class="@DirectionClass(trade.Quantity)">@DirectionText(trade.Quantity)</td>
+						<td>@FormatSigned(trade.Quantity)</td>
+						<td>@FormatAmount(trade.Price)</td>
+						<td>@FormatAmount(AmountOf(trade))</td>
+						<td>@FormatFee(trade.Fee, trade.FeeCurrency)</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
 }
 
 @code {
@@ -155,12 +198,32 @@ else
 	// требуется, потерянный при обрыве circuit выбор данных не теряет.
 	private readonly HashSet<string> _selectedExecIds = new(StringComparer.Ordinal);
 
-	protected override async Task OnInitializedAsync() => await RefreshAsync();
+	// Фильтры списка — тоже circuit-состояние представления: контракт
+	// read-модели не расширяется, фильтрация выполняется при отрисовке.
+	// Traceability: change:add-inbox-filters/design#d1
+	private DateOnly? _filterDateFrom;
+	private DateOnly? _filterDateTo;
+	private readonly HashSet<string> _selectedSymbols = new(StringComparer.Ordinal);
+	private bool _filterBuy = true;
+	private bool _filterSell = true;
+
+	protected override async Task OnInitializedAsync()
+	{
+		// По умолчанию выбраны: скользящий последний месяц — «с» = сегодня − 1
+		// месяц, «по» = сегодня по текущим суткам сервера, — все инструменты
+		// (пополняются в RefreshAsync) и оба направления.
+		// Traceability: openspec:ui/screens#scenario-inbox-filters-default-last-month
+		var today = DateOnly.FromDateTime(DateTime.Now);
+		_filterDateFrom = today.AddMonths(-1);
+		_filterDateTo = today;
+		await RefreshAsync();
+	}
 
 	/// <summary>
 	/// Перечитывает непривязанные сделки из read-модели «Входящих» при открытии
 	/// экрана: устаревших значений UI не показывает, а выбор чистит от сделок,
-	/// покинувших список.
+	/// покинувших список; множество инструментов фильтра пересобирается из
+	/// текущего списка.
 	/// </summary>
 	// Экран перечитывает read-модель при каждом открытии; выбор — circuit-состояние.
 	// Traceability: change:add-ui-screens/design#d7
@@ -179,18 +242,42 @@ else
 
 		// Выбор сделок, которых больше нет во «Входящих», теряет смысл.
 		_selectedExecIds.RemoveWhere(execId => _trades?.Any(trade => trade.ExecId == execId) == false);
+
+		// Инструменты фильтра пересобираются из текущего списка: новые символы
+		// попадают в выбор (по умолчанию выбраны все), исчезнувшие из списка
+		// уходят — инвариант «выбраны все» держится и после синхронизации.
+		// Traceability: change:add-inbox-filters/design#d4
+		_selectedSymbols.Clear();
+		if (_trades is not null)
+		{
+			foreach (var symbol in _trades.Select(trade => trade.Symbol).Distinct(StringComparer.Ordinal))
+			{
+				_selectedSymbols.Add(symbol);
+			}
+		}
 	}
 
-	/// <summary>Отмечены ли все сделки таблицы — состояние переключателя «Выбрать всё».</summary>
-	private bool AllSelected => _trades is { Count: > 0 } trades && _selectedExecIds.Count == trades.Count;
+	/// <summary>Отмечены ли все видимые (отфильтрованные) сделки — состояние переключателя «Выбрать всё».</summary>
+	// Выбор никогда не шире видимых строк: скрытая фильтром сделка исключается
+	// из выбора, поэтому достаточно сравнить количества.
+	// Traceability: openspec:ui/screens#scenario-inbox-select-all-or-none
+	private bool AllSelected
+	{
+		get
+		{
+			var visibleCount = VisibleTrades.Count();
+			return visibleCount > 0 && _selectedExecIds.Count == visibleCount;
+		}
+	}
 
 	/// <summary>Выбрана ли сделка строки по её execId.</summary>
 	private bool IsSelected(string execId) => _selectedExecIds.Contains(execId);
 
 	/// <summary>
-	/// Переключатель «Выбрать всё» работает как «все или ничего»: когда выбраны
-	/// все сделки, нажатие снимает выбор полностью, иначе выбираются все
-	/// непривязанные сделки.
+	/// Переключатель «Выбрать всё» работает как «все или ничего» по видимым
+	/// (отфильтрованным) сделкам: когда выбраны все видимые, нажатие снимает
+	/// выбор полностью, иначе выбираются все видимые сделки — скрытые
+	/// фильтрами сделки в выбор не попадают.
 	/// </summary>
 	// Traceability: openspec:ui/screens#scenario-inbox-select-all-or-none
 	private void ToggleSelectAll(ChangeEventArgs args)
@@ -201,12 +288,9 @@ else
 			return;
 		}
 
-		if (_trades is not null)
+		foreach (var trade in VisibleTrades)
 		{
-			foreach (var trade in _trades)
-			{
-				_selectedExecIds.Add(trade.ExecId);
-			}
+			_selectedExecIds.Add(trade.ExecId);
 		}
 	}
 
@@ -223,6 +307,127 @@ else
 			_selectedExecIds.Remove(execId);
 		}
 	}
+
+	#region Фильтры списка
+
+	/// <summary>Видимые (отфильтрованные) сделки — то, что показывает таблица и что выбирает «Выбрать всё».</summary>
+	// Traceability: openspec:ui/screens#requirement-inbox-screen
+	private IEnumerable<MaterializedTrade> VisibleTrades =>
+		_trades?.Where(IsVisible) ?? Enumerable.Empty<MaterializedTrade>();
+
+	/// <summary>Проходит ли сделка через все фильтры одновременно: диапазон дат, инструмент и направление.</summary>
+	// Сравнение дат включительное, очищенная граница снимает ограничение с
+	// соответствующей стороны; направление определяется знаком количества.
+	// Traceability: openspec:ui/screens#scenario-inbox-filters-combine
+	private bool IsVisible(MaterializedTrade trade)
+	{
+		if (_filterDateFrom is { } from && ExecutionDateOf(trade) < from)
+		{
+			return false;
+		}
+
+		if (_filterDateTo is { } to && ExecutionDateOf(trade) > to)
+		{
+			return false;
+		}
+
+		if (_filterBuy == false && trade.Quantity > 0)
+		{
+			return false;
+		}
+
+		if (_filterSell == false && trade.Quantity < 0)
+		{
+			return false;
+		}
+
+		return _selectedSymbols.Contains(trade.Symbol);
+	}
+
+	/// <summary>Календарные сутки исполнения по часам сервера — гранулярность фильтра дат.</summary>
+	private static DateOnly ExecutionDateOf(MaterializedTrade trade) =>
+		DateOnly.FromDateTime(trade.ExecutedAt.LocalDateTime);
+
+	/// <summary>Упорядоченный уникальный список инструментов текущих «Входящих» — пункты фильтра инструментов.</summary>
+	private IEnumerable<string> AvailableSymbols =>
+		(_trades ?? Enumerable.Empty<MaterializedTrade>())
+			.Select(trade => trade.Symbol)
+			.Distinct(StringComparer.Ordinal)
+			.OrderBy(symbol => symbol, StringComparer.Ordinal);
+
+	/// <summary>Поле «с»: пустое значение снимает ограничение с начала диапазона.</summary>
+	private string DateFromInput => DateFilterText(_filterDateFrom);
+
+	/// <summary>Поле «по»: пустое значение снимает ограничение с конца диапазона.</summary>
+	private string DateToInput => DateFilterText(_filterDateTo);
+
+	/// <summary>Смена границы «с»: пустое поле открывает диапазон слева.</summary>
+	// Traceability: openspec:ui/screens#requirement-inbox-screen
+	private void OnDateFromChanged(ChangeEventArgs args)
+	{
+		_filterDateFrom = ParseDateFilter(args.Value as string);
+		OnFiltersChanged();
+	}
+
+	/// <summary>Смена границы «по»: пустое поле открывает диапазон справа.</summary>
+	// Traceability: openspec:ui/screens#requirement-inbox-screen
+	private void OnDateToChanged(ChangeEventArgs args)
+	{
+		_filterDateTo = ParseDateFilter(args.Value as string);
+		OnFiltersChanged();
+	}
+
+	/// <summary>Текст поля даты для ввода: формат input type="date" либо пустая строка.</summary>
+	private static string DateFilterText(DateOnly? date) =>
+		date?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
+
+	/// <summary>Разбор поля даты: пустое или неразбираемое значение снимает границу диапазона.</summary>
+	private static DateOnly? ParseDateFilter(string? text) =>
+		DateOnly.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
+
+	/// <summary>Чекбокс инструмента включает или исключает символ из видимых сделок.</summary>
+	// Traceability: openspec:ui/screens#requirement-inbox-screen
+	private void OnSymbolFilterChanged(string symbol, bool selected)
+	{
+		if (selected)
+		{
+			_selectedSymbols.Add(symbol);
+		}
+		else
+		{
+			_selectedSymbols.Remove(symbol);
+		}
+
+		OnFiltersChanged();
+	}
+
+	/// <summary>Флажок направления: «покупка» — положительное количество, «продажа» — отрицательное.</summary>
+	// Снятие обоих флажков даёт пустой видимый список с явным сообщением,
+	// без скрытой логики «пусто значит все».
+	// Traceability: openspec:ui/screens#scenario-inbox-filters-combine
+	private void OnDirectionFilterChanged(bool isSell, bool selected)
+	{
+		if (isSell)
+		{
+			_filterSell = selected;
+		}
+		else
+		{
+			_filterBuy = selected;
+		}
+
+		OnFiltersChanged();
+	}
+
+	/// <summary>
+	/// Исключает скрытые фильтрами сделки из выбора: массовая привязка не
+	/// должна забирать строки, которых пользователь на экране не видит.
+	/// </summary>
+	// Traceability: openspec:ui/screens#requirement-inbox-screen
+	private void OnFiltersChanged() =>
+		_selectedExecIds.RemoveWhere(execId => VisibleTrades.Any(trade => trade.ExecId == execId) == false);
+
+	#endregion
 
 	#region Разбор выбранных
 

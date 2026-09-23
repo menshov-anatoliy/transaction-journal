@@ -1,9 +1,13 @@
+using System.Globalization;
 using AngleSharp.Dom;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using NUnit.Framework;
+using TransactionJournal.Analytics;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
@@ -19,7 +23,9 @@ namespace TransactionJournal.Tests.Ui;
 /// работает как «все или ничего»; массовая привязка к существующей конструкции
 /// и создание конструкции из выбранных очищают выбор и список, оповещают
 /// каркас о смене числа непривязанных; команды недоступны при пустом выборе;
-/// пустые и недоступные «Входящие» показываются явно.
+/// пустые и недоступные «Входящие» показываются явно. Фильтры списка —
+/// диапазон дат, инструменты и направление — действуют одновременно,
+/// ограничивают «Выбрать всё» видимыми строками и не влияют на бейдж вкладки.
 /// Traceability: openspec:ui/screens#requirement-inbox-screen
 /// </summary>
 [TestClass]
@@ -93,9 +99,12 @@ public class InboxScreenTests
 	[Description("Таблица показывает непривязанные сделки с атрибутами биржевой записи")]
 	public void TryIfTableShowsUnboundTradesWithExchangeAttributes()
 	{
-		// Arrange: две сделки — покупка BTCUSDT и продажа ETHUSDT с rebate-комиссией.
-		SeedExecution("exec-buy", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 0));
-		SeedExecution("exec-sell", "ETHUSDT", "Sell", "2400.5", "0.5", "-0.01", "USDT", ExecMs(2026, 6, 20, 11, 30));
+		// Arrange: две сделки сегодняшнего дня — покупка BTCUSDT и продажа
+		// ETHUSDT с rebate-комиссией; обе внутри окна фильтров по умолчанию.
+		var buyAt = TodayMs(10, 0);
+		var sellAt = TodayMs(11, 30);
+		SeedExecution("exec-buy", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", buyAt);
+		SeedExecution("exec-sell", "ETHUSDT", "Sell", "2400.5", "0.5", "-0.01", "USDT", sellAt);
 
 		// Act: пользователь открывает экран «Входящие».
 		var cut = _context.RenderComponent<Inbox>();
@@ -118,7 +127,7 @@ public class InboxScreenTests
 
 			var rows = cut.FindAll("tbody tr");
 			Assert.That(rows, Has.Count.EqualTo(2));
-			Assert.That(rows[0].TextContent, Does.Contain("2026-06-20 10:00")
+			Assert.That(rows[0].TextContent, Does.Contain(ExecText(buyAt))
 				.And.Contain("exec-buy")
 				.And.Contain("BTCUSDT")
 				.And.Contain("покупка")
@@ -126,7 +135,7 @@ public class InboxScreenTests
 				.And.Contain("45000")
 				.And.Contain("450")
 				.And.Contain("+0.5 USDT"));
-			Assert.That(rows[1].TextContent, Does.Contain("2026-06-20 11:30")
+			Assert.That(rows[1].TextContent, Does.Contain(ExecText(sellAt))
 				.And.Contain("exec-sell")
 				.And.Contain("ETHUSDT")
 				.And.Contain("продажа")
@@ -142,9 +151,9 @@ public class InboxScreenTests
 	public void TryIfSelectAllTogglesAllOrNothing()
 	{
 		// Arrange: во «Входящих» три непривязанные сделки, ничего не выбрано.
-		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 0));
-		SeedExecution("exec-2", "BTCUSDT", "Sell", "44000", "0.02", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 5));
-		SeedExecution("exec-3", "ETHUSDT", "Buy", "2400", "0.5", "0.1", "USDT", ExecMs(2026, 6, 20, 10, 10));
+		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-2", "BTCUSDT", "Sell", "44000", "0.02", "0.5", "USDT", TodayMs(10, 5));
+		SeedExecution("exec-3", "ETHUSDT", "Buy", "2400", "0.5", "0.1", "USDT", TodayMs(10, 10));
 		var cut = _context.RenderComponent<Inbox>();
 		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(3)));
 
@@ -176,9 +185,9 @@ public class InboxScreenTests
 	public void TryIfSelectAllAfterPartialSelectionSelectsEverything()
 	{
 		// Arrange: во «Входящих» три сделки; пользователь выбрал одну чекбоксом строки.
-		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 0));
-		SeedExecution("exec-2", "BTCUSDT", "Sell", "44000", "0.02", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 5));
-		SeedExecution("exec-3", "ETHUSDT", "Buy", "2400", "0.5", "0.1", "USDT", ExecMs(2026, 6, 20, 10, 10));
+		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-2", "BTCUSDT", "Sell", "44000", "0.02", "0.5", "USDT", TodayMs(10, 5));
+		SeedExecution("exec-3", "ETHUSDT", "Buy", "2400", "0.5", "0.1", "USDT", TodayMs(10, 10));
 		var cut = _context.RenderComponent<Inbox>();
 		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(3)));
 		cut.FindAll("tbody input[type=checkbox]")[0].Change(true);
@@ -238,7 +247,7 @@ public class InboxScreenTests
 	public void TryIfBindingActionsDisabledWithoutSelection()
 	{
 		// Arrange: одна непривязанная сделка, выбор пуст.
-		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 0));
+		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
 		var cut = _context.RenderComponent<Inbox>();
 		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(1)));
 
@@ -261,8 +270,8 @@ public class InboxScreenTests
 	public async Task TryIfBatchBindClearsListSelectionAndRaisesSignal()
 	{
 		// Arrange: две непривязанные сделки и активная целевая конструкция.
-		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 0));
-		SeedExecution("exec-2", "ETHUSDT", "Sell", "2400", "0.5", "0.1", "USDT", ExecMs(2026, 6, 20, 10, 5));
+		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-2", "ETHUSDT", "Sell", "2400", "0.5", "0.1", "USDT", TodayMs(10, 5));
 		var target = await _constructions.CreateAsync("Целевая", 1000m);
 		var cut = _context.RenderComponent<Inbox>();
 		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(2)));
@@ -272,7 +281,7 @@ public class InboxScreenTests
 		FindToolbarButton(cut, "Привязать к конструкции…").Click();
 		cut.WaitForAssertion(() =>
 		{
-			var options = cut.FindAll(".action-form select option");
+			var options = cut.FindAll(ActionFormSelector + " select option");
 			Assert.That(options, Has.Count.EqualTo(1));
 			Assert.That(options[0].TextContent, Is.EqualTo("Целевая"));
 		});
@@ -289,7 +298,7 @@ public class InboxScreenTests
 		{
 			Assert.That(cut.Markup, Does.Contain("Входящие пусты"));
 			Assert.That(cut.FindAll("tbody input[type=checkbox]"), Has.Count.EqualTo(0));
-			Assert.That(cut.FindAll(".action-form"), Has.Count.EqualTo(0));
+			Assert.That(cut.FindAll(ActionFormSelector), Has.Count.EqualTo(0));
 			Assert.That(_changesRaised, Is.GreaterThanOrEqualTo(1));
 		});
 		await using (var db = new JournalDbContext(CreateOptions()))
@@ -310,17 +319,17 @@ public class InboxScreenTests
 	public async Task TryIfCreateFromSelectedOpensConstructionAndBindsAllSelected()
 	{
 		// Arrange: две непривязанные сделки; конструкций в журнале нет.
-		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 0));
-		SeedExecution("exec-2", "ETHUSDT", "Sell", "2400", "0.5", "0.1", "USDT", ExecMs(2026, 6, 20, 10, 5));
+		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-2", "ETHUSDT", "Sell", "2400", "0.5", "0.1", "USDT", TodayMs(10, 5));
 		var cut = _context.RenderComponent<Inbox>();
 		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(2)));
 
 		// Act: пользователь выбирает все сделки и заполняет форму создания.
 		cut.Find("input.select-all").Change(true);
 		FindToolbarButton(cut, "Создать конструкцию из выбранных…").Click();
-		cut.WaitForAssertion(() => Assert.That(cut.FindAll(".action-form .action-input"), Has.Count.EqualTo(2)));
-		cut.FindAll(".action-form .action-input")[0].Change("Спринт октябрь");
-		cut.FindAll(".action-form .action-input")[1].Change("3000");
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll(ActionFormSelector + " .action-input"), Has.Count.EqualTo(2)));
+		cut.FindAll(ActionFormSelector + " .action-input")[0].Change("Спринт октябрь");
+		cut.FindAll(ActionFormSelector + " .action-input")[1].Change("3000");
 
 		// Act: подтверждает создание и привязку.
 		FindButton(cut, "Создать и привязать").Click();
@@ -348,7 +357,7 @@ public class InboxScreenTests
 		{
 			Assert.That(cut.Markup, Does.Contain("Входящие пусты"));
 			Assert.That(cut.FindAll("tbody input[type=checkbox]"), Has.Count.EqualTo(0));
-			Assert.That(cut.FindAll(".action-form"), Has.Count.EqualTo(0));
+			Assert.That(cut.FindAll(ActionFormSelector), Has.Count.EqualTo(0));
 			Assert.That(_changesRaised, Is.GreaterThanOrEqualTo(1));
 		});
 		Assert.That(await ReadInboxCountAsync(), Is.EqualTo(0));
@@ -359,7 +368,7 @@ public class InboxScreenTests
 	public void TryIfCancelClosesFormsWithoutBindingOrCreating()
 	{
 		// Arrange: одна сделка и целевая конструкция; обе формы открываются по очереди.
-		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 0));
+		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
 		_constructions.CreateAsync("Целевая", 1000m).GetAwaiter().GetResult();
 		var cut = _context.RenderComponent<Inbox>();
 		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(1)));
@@ -372,7 +381,7 @@ public class InboxScreenTests
 		// Assert: форма закрыта, привязка не запускалась.
 		// Требование: без подтверждения разбор не выполняется.
 		// Traceability: openspec:ui/screens#requirement-inbox-screen
-		cut.WaitForAssertion(() => Assert.That(cut.FindAll(".action-form"), Has.Count.EqualTo(0)));
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll(ActionFormSelector), Has.Count.EqualTo(0)));
 		Assert.That(_changesRaised, Is.EqualTo(0));
 
 		// Act: отмена формы создания.
@@ -382,7 +391,7 @@ public class InboxScreenTests
 		// Assert: форма закрыта, конструкция не создана, сделка осталась во «Входящих».
 		// Требование: без подтверждения разбор не выполняется.
 		// Traceability: openspec:ui/screens#requirement-inbox-screen
-		cut.WaitForAssertion(() => Assert.That(cut.FindAll(".action-form"), Has.Count.EqualTo(0)));
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll(ActionFormSelector), Has.Count.EqualTo(0)));
 		Assert.That(_constructions.ListActiveAsync().GetAwaiter().GetResult(), Has.Count.EqualTo(1));
 		Assert.That(_changesRaised, Is.EqualTo(0));
 	}
@@ -392,7 +401,7 @@ public class InboxScreenTests
 	public async Task TryIfCreateFormValidatesNameAndCapital()
 	{
 		// Arrange: одна выбранная сделка и открытая форма создания.
-		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", ExecMs(2026, 6, 20, 10, 0));
+		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
 		var cut = _context.RenderComponent<Inbox>();
 		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(1)));
 		cut.FindAll("tbody input[type=checkbox]")[0].Change(true);
@@ -406,13 +415,13 @@ public class InboxScreenTests
 		// Traceability: openspec:ui/screens#requirement-inbox-screen
 		cut.WaitForAssertion(() =>
 		{
-			Assert.That(cut.Find(".action-form").TextContent, Does.Contain("Введите имя конструкции"));
+			Assert.That(cut.Find(ActionFormSelector).TextContent, Does.Contain("Введите имя конструкции"));
 			Assert.That(_changesRaised, Is.EqualTo(0));
 		});
 
 		// Act: имя задано, капитал не число.
-		cut.FindAll(".action-form .action-input")[0].Change("Спринт октябрь");
-		cut.FindAll(".action-form .action-input")[1].Change("ноль");
+		cut.FindAll(ActionFormSelector + " .action-input")[0].Change("Спринт октябрь");
+		cut.FindAll(ActionFormSelector + " .action-input")[1].Change("ноль");
 		FindButton(cut, "Создать и привязать").Click();
 
 		// Assert: показана причина про капитал, конструкция не создана.
@@ -420,10 +429,186 @@ public class InboxScreenTests
 		// Traceability: openspec:ui/screens#requirement-inbox-screen
 		cut.WaitForAssertion(() =>
 		{
-			Assert.That(cut.Find(".action-form").TextContent, Does.Contain("Введите число в USDT"));
+			Assert.That(cut.Find(ActionFormSelector).TextContent, Does.Contain("Введите число в USDT"));
 			Assert.That(_changesRaised, Is.EqualTo(0));
 		});
 		Assert.That((await _inbox.ListAsync()).Count, Is.EqualTo(1));
+	}
+
+	[TestMethod]
+	[Description("Фильтры по умолчанию предзаполнены последним месяцем, всеми инструментами и обоими направлениями")]
+	public void TryIfFiltersDefaultToLastMonthWithAllSymbolsAndDirections()
+	{
+		// Arrange: одна сделка внутри последнего месяца и одна старше окна.
+		SeedExecution("exec-fresh", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-old", "ETHUSDT", "Sell", "2400", "0.5", "0.1", "USDT", MonthsAgoMs(2, 10, 0));
+
+		// Act: пользователь открывает экран «Входящие».
+		var cut = _context.RenderComponent<Inbox>();
+
+		// Assert: поля дат предзаполнены «сегодня − 1 месяц … сегодня», все
+		// инструменты и оба направления отмечены; таблица показывает только
+		// свежую сделку — сделка старше окна по умолчанию скрыта.
+		// Сценарий: фильтры по умолчанию показывают последний месяц.
+		// Traceability: openspec:ui/screens#scenario-inbox-filters-default-last-month
+		cut.WaitForAssertion(() =>
+		{
+			var dateInputs = cut.FindAll(".inbox-filters input[type=date]");
+			Assert.That(dateInputs, Has.Count.EqualTo(2));
+			Assert.That(dateInputs[0].GetAttribute("value"), Is.EqualTo(DateText(DateOnly.FromDateTime(DateTime.Now).AddMonths(-1))));
+			Assert.That(dateInputs[1].GetAttribute("value"), Is.EqualTo(DateText(DateOnly.FromDateTime(DateTime.Now))));
+
+			var symbolLabels = cut.FindAll(".filter-symbols label");
+			Assert.That(symbolLabels.Select(label => label.TextContent.Trim()), Is.EquivalentTo(new[] { "BTCUSDT", "ETHUSDT" }));
+			Assert.That(CheckedCount(cut, ".filter-symbols input[type=checkbox]"), Is.EqualTo(2));
+			Assert.That(CheckedCount(cut, ".filter-direction input[type=checkbox]"), Is.EqualTo(2));
+
+			var rows = cut.FindAll("tbody tr");
+			Assert.That(rows, Has.Count.EqualTo(1));
+			Assert.That(rows[0].TextContent, Does.Contain("exec-fresh"));
+			Assert.That(rows[0].TextContent, Does.Not.Contain("exec-old"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Диапазон дат, инструмент и направление скрывают строки одновременно")]
+	public void TryIfDateSymbolAndDirectionFiltersCombine()
+	{
+		// Arrange: четыре сделки — подходящая под все фильтры и по одному
+		// «нарушителю» на каждый фильтр: ранняя, чужой инструмент, продажа.
+		SeedExecution("exec-ok", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-early", "BTCUSDT", "Buy", "44000", "0.02", "0.5", "USDT", DaysAgoMs(3, 10, 0));
+		SeedExecution("exec-other-symbol", "ETHUSDT", "Buy", "2400", "0.5", "0.1", "USDT", TodayMs(10, 5));
+		SeedExecution("exec-sell", "BTCUSDT", "Sell", "44500", "0.01", "0.1", "USDT", TodayMs(10, 10));
+		var cut = _context.RenderComponent<Inbox>();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(4)));
+
+		// Act: пользователь задаёт «с» = сегодня, снимает инструмент ETHUSDT
+		// и направление «продажа».
+		cut.FindAll(".inbox-filters input[type=date]")[0].Change(DateText(DateOnly.FromDateTime(DateTime.Now)));
+		cut.FindAll(".filter-symbols input[type=checkbox]")[1].Change(false);
+		cut.FindAll(".filter-direction input[type=checkbox]")[1].Change(false);
+
+		// Assert: видимой осталась только сделка, подходящая под все три
+		// условия сразу; сделка вне диапазона, снятого инструмента и снятого
+		// направления скрыты.
+		// Сценарий: фильтры действуют одновременно.
+		// Traceability: openspec:ui/screens#scenario-inbox-filters-combine
+		cut.WaitForAssertion(() =>
+		{
+			var rows = cut.FindAll("tbody tr");
+			Assert.That(rows, Has.Count.EqualTo(1));
+			Assert.That(rows[0].TextContent, Does.Contain("exec-ok"));
+		});
+
+		// «Выбрать всё» при активных фильтрах выбирает только видимую строку:
+		// скрытые сделки в выбор не попадают — выбор ограничен видимым.
+		// Требование: разбор выбранных работает с видимыми строками.
+		// Traceability: openspec:ui/screens#requirement-inbox-screen
+		cut.Find("input.select-all").Change(true);
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(SelectedRowCount(cut), Is.EqualTo(1));
+			Assert.That(FindToolbarButtons(cut).All(button => button.HasAttribute("disabled")), Is.False);
+		});
+	}
+
+	[TestMethod]
+	[Description("«Выбрать всё» при активных фильтрах выбирает все видимые строки или снимает выбор полностью")]
+	public void TryIfSelectAllWithActiveFiltersSelectsVisibleOnlyOrNothing()
+	{
+		// Arrange: три сделки — две видимые в окне по умолчанию, одна старше окна.
+		SeedExecution("exec-visible-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-visible-2", "ETHUSDT", "Buy", "2400", "0.5", "0.1", "USDT", TodayMs(10, 5));
+		SeedExecution("exec-hidden", "BTCUSDT", "Buy", "44000", "0.02", "0.5", "USDT", MonthsAgoMs(2, 10, 0));
+		var cut = _context.RenderComponent<Inbox>();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(2)));
+
+		// Act: «Выбрать всё» при активных фильтрах.
+		cut.Find("input.select-all").Change(true);
+
+		// Assert: выбраны обе видимые строки, скрытая в выбор не попала.
+		// Сценарий: переключатель выбирает все видимые (отфильтрованные) сделки.
+		// Traceability: openspec:ui/screens#scenario-inbox-select-all-or-none
+		cut.WaitForAssertion(() => Assert.That(SelectedRowCount(cut), Is.EqualTo(2)));
+
+		// Act: снятие ограничения «с» возвращает скрытую сделку в таблицу.
+		cut.FindAll(".inbox-filters input[type=date]")[0].Change(string.Empty);
+
+		// Assert: скрытая сделка появилась с неотмеченным чекбоксом —
+		// «Выбрать всё» скрытые фильтрами сделки не выбирал.
+		// Traceability: openspec:ui/screens#scenario-inbox-select-all-or-none
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(3));
+			Assert.That(SelectedRowCount(cut), Is.EqualTo(2));
+			Assert.That(cut.Find("input.select-all").HasAttribute("checked"), Is.False);
+		});
+
+		// Act: при частичном выборе переключатель выбирает все видимые строки.
+		cut.Find("input.select-all").Change(true);
+
+		// Assert: выбраны все три видимые сделки.
+		cut.WaitForAssertion(() => Assert.That(SelectedRowCount(cut), Is.EqualTo(3)));
+
+		// Act: повторное нажатие при полном выборе видимых строк.
+		cut.Find("input.select-all").Change(false);
+
+		// Assert: выбор снят полностью — «все или ничего».
+		// Сценарий: переключатель полностью снимает выбор.
+		// Traceability: openspec:ui/screens#scenario-inbox-select-all-or-none
+		cut.WaitForAssertion(() => Assert.That(SelectedRowCount(cut), Is.EqualTo(0)));
+	}
+
+	[TestMethod]
+	[Description("Бейдж вкладки показывает все непривязанные сделки при скрытых фильтрами строках")]
+	public void TryIfInboxBadgeIgnoresFilters()
+	{
+		// Arrange: одна сделка в окне фильтров по умолчанию и одна старше окна;
+		// каркас читает счётчик непривязанных сделок собственной read-моделью.
+		SeedExecution("exec-fresh", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-hidden", "ETHUSDT", "Sell", "2400", "0.5", "0.1", "USDT", MonthsAgoMs(2, 10, 0));
+		var frame = new Mock<IFrameReadModel>();
+		frame.Setup(model => model.CountInboxAsync(It.IsAny<CancellationToken>())).ReturnsAsync(2);
+		_context.Services.AddSingleton(frame.Object);
+		_context.Services.AddSingleton(new Mock<IJournalMetricsReadModel>().Object);
+
+		// Act: пользователь открывает «Входящие» внутри каркаса.
+		var cut = _context.RenderComponent<MainLayout>(parameters => parameters.Add(layout => layout.Body, Screen<Inbox>()));
+
+		// Assert: фильтры скрыли старую сделку — в таблице одна строка, а бейдж
+		// вкладки по-прежнему показывает обе непривязанные сделки.
+		// Сценарий: бейдж вкладки не зависит от фильтров.
+		// Traceability: openspec:ui/screens#scenario-inbox-filters-badge-unaffected
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Find(".tab-badge").TextContent, Is.EqualTo("2"));
+			Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(1));
+			Assert.That(cut.FindAll("tbody tr")[0].TextContent, Does.Contain("exec-fresh"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Фильтры, скрывшие все строки, дают отдельное сообщение вместо «Входящие пусты»")]
+	public void TryIfAllRowsHiddenByFiltersShowsFilteredOutMessage()
+	{
+		// Arrange: единственная сделка старше последнего месяца — вне окна по умолчанию.
+		SeedExecution("exec-old", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", MonthsAgoMs(2, 10, 0));
+
+		// Act: пользователь открывает экран «Входящие».
+		var cut = _context.RenderComponent<Inbox>();
+
+		// Assert: список непуст, но фильтры скрыли все строки — показано
+		// сообщение о пустом результате фильтров; сообщение об отсутствии
+		// непривязанных сделок не показывается, таблицы нет.
+		// Требование: пустые состояния списка и фильтров различимы.
+		// Traceability: openspec:ui/screens#requirement-inbox-screen
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("По заданным фильтрам ничего не найдено"));
+			Assert.That(cut.Markup, Does.Not.Contain("Входящие пусты"));
+			Assert.That(cut.FindAll("table"), Has.Count.EqualTo(0));
+		});
 	}
 
 	#region Помощники
@@ -449,8 +634,18 @@ public class InboxScreenTests
 	private static IElement FindButton(IRenderedComponent<Inbox> cut, string text) =>
 		cut.FindAll("button").Single(button => button.TextContent.Trim() == text);
 
+	/// <summary>Селектор форм разбора (привязка, создание): блок фильтров класса inbox-filters в него не входит.</summary>
+	private const string ActionFormSelector = ".action-form:not(.inbox-filters)";
+
 	/// <summary>Число непривязанных сделок в read-модели «Входящих».</summary>
 	private async Task<int> ReadInboxCountAsync() => (await _inbox.ListAsync()).Count;
+
+	/// <summary>Фрагмент рендера экрана как тела каркаса.</summary>
+	private static RenderFragment Screen<TScreen>() where TScreen : IComponent => builder =>
+	{
+		builder.OpenComponent<TScreen>(0);
+		builder.CloseComponent();
+	};
 
 	/// <summary>Кладёт сырую запись исполнения линейного инструмента в хранилище:
 	/// линейные сделки не требуют справочника инструментов для материализации.</summary>
@@ -479,8 +674,39 @@ public class InboxScreenTests
 		db.SaveChanges();
 	}
 
-	private static long ExecMs(int year, int month, int day, int hour, int minute) =>
-		new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+	/// <summary>Число отмеченных чекбоксов по селектору.</summary>
+	private static int CheckedCount(IRenderedComponent<Inbox> cut, string selector) =>
+		cut.FindAll(selector).Count(input => input.HasAttribute("checked"));
+
+	/// <summary>
+	/// Момент исполнения по календарной дате и часам сервера: фильтр дат
+	/// сравнивает сутки исполнения по текущим суткам сервера, поэтому и сиды
+	/// задаются относительно локального «сегодня».
+	/// </summary>
+	private static long AtMs(DateOnly date, int hour, int minute)
+	{
+		var offset = TimeZoneInfo.Local.GetUtcOffset(DateTime.Now);
+		return new DateTimeOffset(date, new TimeOnly(hour, minute), offset).ToUnixTimeMilliseconds();
+	}
+
+	/// <summary>Момент исполнения «сегодня» — сделка внутри окна фильтров по умолчанию.</summary>
+	private static long TodayMs(int hour, int minute) =>
+		AtMs(DateOnly.FromDateTime(DateTime.Now), hour, minute);
+
+	/// <summary>Момент исполнения N суток назад — внутри месяца, но до границы «с» при её сужении.</summary>
+	private static long DaysAgoMs(int daysAgo, int hour, int minute) =>
+		AtMs(DateOnly.FromDateTime(DateTime.Now).AddDays(-daysAgo), hour, minute);
+
+	/// <summary>Момент исполнения N месяцев назад — вне окна фильтров по умолчанию.</summary>
+	private static long MonthsAgoMs(int monthsAgo, int hour, int minute) =>
+		AtMs(DateOnly.FromDateTime(DateTime.Now).AddMonths(-monthsAgo), hour, minute);
+
+	/// <summary>Ожидаемый текст времени сделки: экран форматирует UTC-представление биржевого штампа.</summary>
+	private static string ExecText(long execTimeMs) =>
+		DateTimeOffset.FromUnixTimeMilliseconds(execTimeMs).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+
+	/// <summary>Дата в формате input type="date" — для подстановки в поле фильтра и проверки значения.</summary>
+	private static string DateText(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
 	#endregion
 }

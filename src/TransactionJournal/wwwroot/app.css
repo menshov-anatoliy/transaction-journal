@@ -151,6 +151,11 @@ body {
 
 .action-form .action-warning { color: #d29922; }
 
+/* Фильтры «Входящих»: компактные поля дат в ряду с чекбоксами инструментов
+   и направлений — блок не должен растягиваться широкими полями ввода. */
+.action-form .action-input.date-input { width: 130px; }
+.filter-symbols { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
 /* Признак сбоя марок: нереализованные величины и отметка времени марок
    показываются видимым состоянием деградации, а не пустым прочерком. */
 .markfail { color: #d29922; font-style: italic; }
