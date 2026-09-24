@@ -117,6 +117,45 @@ public class InboxReadModelTests
 	}
 
 	[TestMethod]
+	[Description("«Входящие» на наборе Trade- и Funding-сырых записей возвращают только Trade-сделку")]
+	public async Task TryIfInboxOnTradeAndFundingRawSetReturnsOnlyTradeTrade()
+	{
+		// Сырьё linear-инструмента содержит и Trade-, и Funding-записи: read-модель
+		// «Входящих» показывает только сделку из Trade-записи — фандинг с заполненными
+		// количеством и ценой по марк-цене хранится в сырье, но сделкой не становится,
+		// и чтение не завершается ошибкой.
+		// Traceability: openspec:sync/bybit-history#scenario-funding-record-is-not-a-trade
+		// Arrange: Trade-запись линейной покупки и фандинг того же инструмента легли
+		// в хранилище синхронизацией.
+		var tradeMs = ExecMs(2023, 12, 28, 10, 0);
+		var fundingMs = ExecMs(2023, 12, 28, 10, 30);
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawExecutions.Add(Raw("exec-lin-trade", "linear", "BTCUSDT", tradeMs,
+				ExecutionPayload("exec-lin-trade", "BTCUSDT", "Buy", "42000", "0.01", "0.0042", "USDT", tradeMs)));
+			db.RawExecutions.Add(Raw("exec-lin-funding", "linear", "BTCUSDT", fundingMs,
+				ExecutionPayload("exec-lin-funding", "BTCUSDT", "Buy", "42050", "0.01", "0", "USDT", fundingMs,
+					execType: "Funding")));
+			await db.SaveChangesAsync();
+		}
+
+		// Act: читаем «Входящие».
+		var inbox = await _readModel.ListAsync();
+
+		// Assert: единственная сделка — от Trade-записи, с атрибутами биржевой записи;
+		// фандинг-запись сделки не дала.
+		Assert.That(inbox.Select(trade => trade.ExecId).ToList(),
+			Is.EqualTo(new[] { "exec-lin-trade" }));
+		var trade = inbox.Single();
+		Assert.That(trade.Category, Is.EqualTo("linear"));
+		Assert.That(trade.Symbol, Is.EqualTo("BTCUSDT"));
+		Assert.That(trade.Quantity, Is.EqualTo(0.01m));
+		Assert.That(trade.Price, Is.EqualTo(42000m));
+		Assert.That(trade.Fee, Is.EqualTo(0.0042m));
+		Assert.That(trade.FeeCurrency, Is.EqualTo("USDT"));
+	}
+
+	[TestMethod]
 	[Description("Привязанная сделка исчезает из «Входящих», возврат возвращает её обратно")]
 	public async Task TryIfBoundTradeLeavesInboxAndReturnsAfterUnbind()
 	{
@@ -248,7 +287,9 @@ public class InboxReadModelTests
 		FetchedAt = FetchedAt,
 	};
 
-	/// <summary>Запись исполнения в форме ответа execution-list: числа биржа шлёт строками.</summary>
+	/// <summary>Запись исполнения в форме ответа execution-list: числа биржа шлёт строками.
+	/// Тип исполнения по умолчанию Trade — торговые записи составляют большинство синка;
+	/// не-Trade типы тесты фильтра задают явно.</summary>
 	private static string ExecutionPayload(
 		string execId,
 		string symbol,
@@ -258,11 +299,12 @@ public class InboxReadModelTests
 		string execFee,
 		string? feeCurrency,
 		long execTimeMs,
-		bool isMaker = false)
+		bool isMaker = false,
+		string execType = "Trade")
 	{
 		var feeCurrencyJson = feeCurrency is null ? "null" : $"\"{feeCurrency}\"";
 		var isMakerJson = isMaker ? "true" : "false";
-		return $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"Trade","execTime":"{{execTimeMs}}","feeCurrency":{{feeCurrencyJson}},"isMaker":{{isMakerJson}}}""";
+		return $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"{{execType}}","execTime":"{{execTimeMs}}","feeCurrency":{{feeCurrencyJson}},"isMaker":{{isMakerJson}}}""";
 	}
 
 	private static long ExecMs(int year, int month, int day, int hour, int minute) =>

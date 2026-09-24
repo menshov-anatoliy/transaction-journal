@@ -135,6 +135,74 @@ public class JournalMaterializerTests
 	}
 
 	[TestMethod]
+	[Description("Набор Trade- и Funding-записей linear-инструмента даёт проекции только из вклада Trade-записей")]
+	public void TryIfLinearTradeAndFundingSetGivesTradeOnlyProjections()
+	{
+		// Переразбор набора linear-инструмента из Trade- и Funding-записей: фандинг
+		// с заполненными количеством и ценой по марк-цене остаётся сырьём — во
+		// «Входящих» только Trade-сделки, в остатках экспираций только вклад
+		// Trade-записей. Конструкция держит опционную и линейную ноги: закрывающая
+		// запись ITM-доставки обнуляет ровно опционный остаток Trade-сделки, по
+		// linear-инструменту закрывающих записей нет, а сверка deliveryRpl сходится
+		// без фандинга — количество инструмента не искажено не-Trade записями.
+		// Traceability: openspec:sync/bybit-history#scenario-non-trade-records-keep-projections-clean
+		// Arrange: обе ноги конструкции материализуются из Trade-записей; остатки
+		// строятся только по сделкам, фандинг-записи линейной ноги в них не участвуют.
+		var materializer = new JournalMaterializer();
+		var assignments = new Dictionary<string, string?> { ["exec-opt-1"] = "con-a", ["exec-lin-1"] = "con-a" };
+		var optionExecMs = ExecMs(2023, 12, 28, 10, 0);
+		var linearExecMs = ExecMs(2023, 12, 28, 10, 30);
+		var rawExecutions = new[]
+		{
+			Raw("exec-opt-1", "option", CallSymbol, optionExecMs,
+				ExecutionPayload("exec-opt-1", CallSymbol, "Buy", "0.0002", "0.0002", "0.0002", "USDC", optionExecMs)),
+			Raw("exec-lin-1", "linear", "BTCUSDT", linearExecMs,
+				ExecutionPayload("exec-lin-1", "BTCUSDT", "Buy", "42000", "0.01", "0.0042", "USDT", linearExecMs)),
+			Raw("exec-funding-1", "linear", "BTCUSDT", ExecMs(2023, 12, 28, 11, 0),
+				ExecutionPayload("exec-funding-1", "BTCUSDT", "Buy", "42050", "0.01", "0", "USDT", ExecMs(2023, 12, 28, 11, 0),
+					execType: "Funding")),
+			Raw("exec-funding-2", "linear", "BTCUSDT", ExecMs(2023, 12, 28, 11, 30),
+				ExecutionPayload("exec-funding-2", "BTCUSDT", "Sell", "42100", "0.01", "0", "USDT", ExecMs(2023, 12, 28, 11, 30),
+					execType: "Funding")),
+		};
+		// deliveryRpl совпадает с собственным расчётом по одним лишь Trade-записям:
+		// поток сделок опциона 0.0002 * 0.0002 = 0.00000004 и закрывающий поток
+		// −0.0002 * 1000 = −0.2 дают собственный результат 0.19999996.
+		var rawDeliveries = new[]
+		{
+			new RawDelivery
+			{
+				Symbol = CallSymbol,
+				DeliveryTimeMs = OptionDeliveryMs,
+				Category = "option",
+				PayloadJson = DeliveryPayload(CallSymbol, OptionDeliveryMs, "46000", "45000", "0", "0.19999996"),
+				FetchedAt = FetchedAt,
+			},
+		};
+
+		// Act
+		var result = materializer.Materialize(CreateRawInstruments(), rawExecutions, rawDeliveries, assignments, AfterDelivery());
+
+		// Assert: во «Входящих» только Trade-сделки — фандинг сделки не дал.
+		Assert.That(result.InboxTrades.Select(trade => trade.ExecId).ToList(),
+			Is.EqualTo(new[] { "exec-opt-1", "exec-lin-1" }));
+
+		// Assert: остатки экспираций закрыты только вкладом Trade-записей —
+		// закрывающая запись ровно обнуляет опционный остаток конструкции,
+		// по linear-инструменту закрывающих записей нет; сверка с deliveryRpl
+		// сходится без предупреждений, неразрешённых символов нет.
+		Assert.That(result.ExpiryClosingEntries.Count, Is.EqualTo(1));
+		var closing = result.ExpiryClosingEntries.Single();
+		Assert.That(closing.Symbol, Is.EqualTo(CallSymbol));
+		Assert.That(closing.ConstructionId, Is.EqualTo("con-a"));
+		Assert.That(closing.Quantity, Is.EqualTo(-0.0002m));
+		Assert.That(closing.EffectivePrice, Is.EqualTo(1000m));
+		Assert.That(result.ExpiryClosingEntries.Any(entry => entry.Symbol == "BTCUSDT"), Is.False);
+		Assert.That(result.ReconciliationWarnings, Is.Empty);
+		Assert.That(result.UnresolvedInstruments, Is.Empty);
+	}
+
+	[TestMethod]
 	[Description("Полный переразбор пустого хранилища даёт пустую проекцию")]
 	public void TryIfEmptyRawStoreGivesEmptyProjection()
 	{
@@ -268,7 +336,9 @@ public class JournalMaterializerTests
 		FetchedAt = FetchedAt,
 	};
 
-	/// <summary>Запись исполнения в форме ответа execution-list: числа биржа шлёт строками.</summary>
+	/// <summary>Запись исполнения в форме ответа execution-list: числа биржа шлёт строками.
+	/// Тип исполнения по умолчанию Trade — торговые записи составляют большинство синка;
+	/// не-Trade типы тесты фильтра задают явно.</summary>
 	private static string ExecutionPayload(
 		string execId,
 		string symbol,
@@ -278,11 +348,12 @@ public class JournalMaterializerTests
 		string execFee,
 		string? feeCurrency,
 		long execTimeMs,
-		bool isMaker = false)
+		bool isMaker = false,
+		string execType = "Trade")
 	{
 		var feeCurrencyJson = feeCurrency is null ? "null" : $"\"{feeCurrency}\"";
 		var isMakerJson = isMaker ? "true" : "false";
-		return $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"Trade","execTime":"{{execTimeMs}}","feeCurrency":{{feeCurrencyJson}},"isMaker":{{isMakerJson}}}""";
+		return $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"{{execType}}","execTime":"{{execTimeMs}}","feeCurrency":{{feeCurrencyJson}},"isMaker":{{isMakerJson}}}""";
 	}
 
 	/// <summary>Delivery-запись в форме ответа delivery-record: числа биржа шлёт строками.</summary>

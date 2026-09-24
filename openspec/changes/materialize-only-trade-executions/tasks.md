@@ -14,9 +14,9 @@
 
 ## 3. Проекции поверх фильтра
 
-- [ ] 3.1 В `tests\TransactionJournal.Tests\Materialization\JournalMaterializerTests` добавить тест: набор из Trade- и Funding-записей linear-инструмента даёт во «Входящих» и в остатках экспираций только вклад Trade-записей — количество инструмента сходится без фандинга. Метки `Traceability: openspec:sync/bybit-history#scenario-non-trade-records-keep-projections-clean` с человекочитаемым комментарием
-- [ ] 3.2 В `tests\TransactionJournal.Tests\Domain\InboxReadModelTests` добавить тест: read-модель «Входящих» на наборе Trade- и Funding-сырых записей возвращает только Trade-сделку. Метки `Traceability: openspec:sync/bybit-history#scenario-funding-record-is-not-a-trade` с человекочитаемым комментарием
+- [x] 3.1 В `tests\TransactionJournal.Tests\Materialization\JournalMaterializerTests` добавить тест: набор из Trade- и Funding-записей linear-инструмента даёт во «Входящих» и в остатках экспираций только вклад Trade-записей — количество инструмента сходится без фандинга. Метки `Traceability: openspec:sync/bybit-history#scenario-non-trade-records-keep-projections-clean` с человекочитаемым комментарием
+- [x] 3.2 В `tests\TransactionJournal.Tests\Domain\InboxReadModelTests` добавить тест: read-модель «Входящих» на наборе Trade- и Funding-сырых записей возвращает только Trade-сделку. Метки `Traceability: openspec:sync/bybit-history#scenario-funding-record-is-not-a-trade` с человекочитаемым комментарием
 
 ## 4. Финальная верификация
 
-- [ ] 4.1 Собрать решение (`dotnet build`) и прогнать весь тестовый проект (`dotnet test`): зелёный прогон без пропущенных падений; проверить rg-рецептом, что каждая новая метка `Traceability: openspec:sync/bybit-history#...` разрешается в `Traceability ID:` дельты `openspec\changes\materialize-only-trade-executions\specs\sync\bybit-history\spec.md`, и что полезные существующие комментарии рядом с изменёнными блоками не удалены
+- [x] 4.1 Собрать решение (`dotnet build`) и прогнать весь тестовый проект (`dotnet test`): зелёный прогон без пропущенных падений; проверить rg-рецептом, что каждая новая метка `Traceability: openspec:sync/bybit-history#...` разрешается в `Traceability ID:` дельты `openspec\changes\materialize-only-trade-executions\specs\sync\bybit-history\spec.md`, и что полезные существующие комментарии рядом с изменёнными блоками не удалены
