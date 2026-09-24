@@ -9,9 +9,11 @@ namespace TransactionJournal.Tests.Analytics;
 /// <summary>
 /// Проверки калькулятора метрик позиции: агрегаты выводятся из сделок и
 /// закрывающих записей самой позиции, закрытая позиция не имеет нереализованной
-/// части, средней цены и марки, а переоткрытие позиции сдвигает её даты под
-/// текущий состав записей без следов прежнего расчёта. Негативные проверки
-/// отклоняют пустой и незаданный поток записей.
+/// части, средней цены остатка и марки, но имеет средние цены входа и закрытия,
+/// направление по первой записи и общий PnL, равный реализованному, а
+/// переоткрытие позиции сдвигает её даты под текущий состав записей без следов
+/// прежнего расчёта. Негативные проверки отклоняют пустой и незаданный поток
+/// записей.
 /// </summary>
 [TestClass]
 public class PositionMetricsCalculatorTests
@@ -183,6 +185,91 @@ public class PositionMetricsCalculatorTests
 		Assert.That(moved.OpenedAt, Is.EqualTo(At(20)));
 		Assert.That(moved.ClosedAt, Is.EqualTo(At(30)));
 		Assert.That(moved.Duration, Is.EqualTo(TimeSpan.FromMinutes(10)));
+	}
+
+	[TestMethod]
+	[Description("Направление позиции задаётся стороной первой записи потока")]
+	public void TryIfDirectionFollowsFirstEntrySide()
+	{
+		// Arrange: покупка первой записью против продажи первой записью; состав
+		// потоков зеркальный, различается только сторона открывающей записи.
+		// Требование: направление позиции определяется знаком первой записи
+		// потока — покупка делает позицию длинной, продажа короткой; правило
+		// едино для открытых и закрытых позиций.
+		// Traceability: openspec:analytics/performance#scenario-position-direction-from-opening-entry
+		var longEntries = new[]
+		{
+			Trade(0, "exec-buy-1", 1m, 100m),
+			Trade(10, "exec-sell-1", -0.4m, 110m),
+		};
+		var shortEntries = new[]
+		{
+			Trade(0, "exec-sell-1", -1m, 100m),
+			Trade(10, "exec-buy-1", 0.4m, 90m),
+		};
+
+		// Act
+		var longMetrics = _calculator.Calculate(ConstructionId, Symbol, longEntries);
+		var shortMetrics = _calculator.Calculate(ConstructionId, Symbol, shortEntries);
+
+		// Assert: обе позиции открыты, сторона каждой задана её первой записью.
+		Assert.That(longMetrics.IsLong, Is.True);
+		Assert.That(shortMetrics.IsLong, Is.False);
+	}
+
+	[TestMethod]
+	[Description("Закрытая позиция имеет средние цены входа и закрытия и общий PnL, равный реализованному")]
+	public void TryIfClosedPositionHasEntryCloseAveragesAndTotalPnL()
+	{
+		// Arrange: покупка 1@100 и продажа 1@110 с комиссиями — позиция закрыта
+		// встречной сделкой.
+		// Требование: закрытая позиция имеет среднюю цену входа и, при наличии
+		// закрывающих частей, среднюю цену закрытия; общий PnL равен реализованному
+		// и марок не требует.
+		// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
+		// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
+		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
+		var entries = new[]
+		{
+			Trade(0, "exec-buy-1", 1m, 100m, 0.02m),
+			Trade(10, "exec-sell-1", -1m, 110m, 0.01m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, Symbol, entries);
+
+		// Assert: вход по 100, закрытие по 110; реализованный PnL 10 − 0.03,
+		// общий PnL совпадает с ним — нереализованной части у закрытой нет.
+		Assert.That(metrics.AverageEntryPrice, Is.EqualTo(100m));
+		Assert.That(metrics.AverageClosePrice, Is.EqualTo(110m));
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(9.97m));
+		Assert.That(metrics.TotalPnL, Is.EqualTo(9.97m));
+	}
+
+	[TestMethod]
+	[Description("Общий PnL открытой позиции остаётся null до слоя марок")]
+	public void TryIfOpenPositionTotalPnLStaysNullBeforeMarks()
+	{
+		// Arrange: открытый остаток 0.5@120 после частичной продажи — позиция
+		// ждёт нереализованную оценку слоем марок.
+		// Требование: у открытой позиции общий PnL собирается слоем марок и до
+		// него остаётся null; средние цены входа и закрытия при этом заполнены.
+		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
+		var entries = new[]
+		{
+			Trade(0, "exec-buy-1", 1m, 100m),
+			Trade(10, "exec-sell-1", -0.5m, 110m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, Symbol, entries);
+
+		// Assert: общий PnL — null, вход по 100 и закрытие открывшейся части
+		// по 110 на месте; нереализованная часть тоже ждёт слой марок.
+		Assert.That(metrics.TotalPnL, Is.Null);
+		Assert.That(metrics.UnrealizedPnL, Is.Null);
+		Assert.That(metrics.AverageEntryPrice, Is.EqualTo(100m));
+		Assert.That(metrics.AverageClosePrice, Is.EqualTo(110m));
 	}
 
 	[TestMethod]

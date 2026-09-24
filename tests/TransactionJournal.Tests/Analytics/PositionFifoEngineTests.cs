@@ -66,6 +66,114 @@ public class PositionFifoEngineTests
 	}
 
 	[TestMethod]
+	[Description("Средняя цена входа взвешена по всем открывающим частям, включая впоследствии закрытые")]
+	public void TryIfAverageEntryPriceWeightsAllOpeningPartsIncludingClosed()
+	{
+		// Arrange: две покупки и частичная продажа; обе покупки ушли в слои — обе
+		// являются открывающими частями потока, даже когда их часть затем закрылась.
+		// Требование: средняя цена входа — количество-взвешенная цена всех
+		// открывающих частей, включая закрытые: это цена, по которой входили,
+		// а не цена текущего остатка.
+		// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
+		var entries = new[]
+		{
+			Trade(30, "exec-sell-1", -1.5m, 115m),
+			Trade(0, "exec-buy-1", 1m, 100m),
+			Trade(10, "exec-buy-2", 1m, 120m),
+		};
+
+		// Act
+		var result = _engine.Match(entries);
+
+		// Assert: открывающие части 1@100 и 1@120 дали среднюю входа (100 + 120) / 2 = 110;
+		// средняя остатка — 120 по непокрытому слою, средняя закрытия — 115.
+		Assert.That(result.AverageEntryPrice, Is.EqualTo(110m));
+		Assert.That(result.AverageOpenPrice, Is.EqualTo(120m));
+		Assert.That(result.AverageClosePrice, Is.EqualTo(115m));
+	}
+
+	[TestMethod]
+	[Description("Средняя цена закрытия взвешена по встречным сделкам и закрывающим записям")]
+	public void TryIfAverageClosePriceWeightsTradesAndClosingEntries()
+	{
+		// Arrange: покупка 1@100, частичная продажа 0.5@110 и ручная пометка
+		// остатка 0.5@90 — закрывающие части приходят и встречной сделкой,
+		// и закрывающей записью с эффективной ценой.
+		// Требование: средняя цена закрытия — количество-взвешенная эффективная
+		// цена всех закрывающих частей потока.
+		// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
+		var entries = new[]
+		{
+			Trade(0, "exec-buy-1", 1m, 100m),
+			Trade(10, "exec-sell-1", -0.5m, 110m),
+			Closing(20, "manual:1", PositionFifoEntryKind.ManualMark, -0.5m, 90m),
+		};
+
+		// Act
+		var result = _engine.Match(entries);
+
+		// Assert: закрывающие части 0.5@110 и 0.5@90 дали среднюю закрытия
+		// (0.5·110 + 0.5·90) / 1 = 100; средняя входа — цена единственной покупки.
+		Assert.That(result.AverageClosePrice, Is.EqualTo(100m));
+		Assert.That(result.AverageEntryPrice, Is.EqualTo(100m));
+		Assert.That(result.Residual, Is.EqualTo(0m));
+		Assert.That(result.AverageOpenPrice, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Переброс направления взвешивает части обоих видов по абсолютной величине")]
+	public void TryIfDirectionFlipWeightsPartsByAbsoluteQuantity()
+	{
+		// Arrange: переброс стороны посреди потока — продажа 2@110 закрывает слой
+		// 1@100 и открывает короткий слой 1@110, выкуп 1@105 закрывает короткий слой.
+		// Требование: у частей одного вида знак может различаться, поэтому количества
+		// взвешиваются по абсолютной величине — знаковая сумма обнулила бы вес
+		// и разрушила среднюю.
+		// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
+		// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
+		var entries = new[]
+		{
+			Trade(0, "exec-buy-1", 1m, 100m),
+			Trade(10, "exec-sell-1", -2m, 110m),
+			Trade(20, "exec-buy-2", 1m, 105m),
+		};
+
+		// Act
+		var result = _engine.Match(entries);
+
+		// Assert: открывающие части 1@100 и 1@110 дали среднюю входа 105,
+		// закрывающие части 1@110 и 1@105 — среднюю закрытия 107.5; остаток нулевой.
+		Assert.That(result.Residual, Is.EqualTo(0m));
+		Assert.That(result.AverageEntryPrice, Is.EqualTo(105m));
+		Assert.That(result.AverageClosePrice, Is.EqualTo(107.5m));
+	}
+
+	[TestMethod]
+	[Description("Средние цены — null при отсутствии частей соответствующего вида")]
+	public void TryIfNullAveragesWithoutPartsOfTheKind()
+	{
+		// Arrange: единственная покупка — поток без закрывающих частей; нулевые
+		// количества не дают ни открывающих, ни закрывающих частей вовсе.
+		// Требование: средняя цена не вычисляется, если частей соответствующего
+		// вида в потоке нет.
+		// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
+		// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
+		var openEntries = new[] { Trade(0, "exec-buy-1", 1m, 100m) };
+
+		// Act
+		var openResult = _engine.Match(openEntries);
+		var emptyResult = _engine.Match(new[] { Trade(0, "exec-zero-1", 0m, 100m) });
+
+		// Assert: у открытой позиции закрывающих частей нет — средней закрытия нет,
+		// а единственная открывающая часть даёт среднюю входа; поток без частей
+		// обоих видов деградирует в null обеих средних.
+		Assert.That(openResult.AverageClosePrice, Is.Null);
+		Assert.That(openResult.AverageEntryPrice, Is.EqualTo(100m));
+		Assert.That(emptyResult.AverageEntryPrice, Is.Null);
+		Assert.That(emptyResult.AverageClosePrice, Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Короткие слои закрываются выкупом в том же FIFO-порядке")]
 	public void TryIfShortLayersCloseByBuyBackChronologically()
 	{

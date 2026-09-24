@@ -10,11 +10,12 @@ namespace TransactionJournal.Tests.Analytics;
 
 /// <summary>
 /// Проверки оценщика нереализованного PnL: открытые остатки оцениваются свежей
-/// маркой инструмента на момент запроса и несут отметку времени марок, закрытые
+/// маркой инструмента на момент запроса и несут отметку времени марок, общая
+/// оценка позиции собирается из реализованной и нереализованной частей, закрытые
 /// позиции марок не требуют вовсе, а сбой тикеров деградирует только в null
-/// нереализованной части и отметки времени — реализованные метрики, комиссии,
-/// даты и проценты возвращаются без изменений. Негативные проверки отклоняют
-/// незаданные метрики и отсутствующий источник марок.
+/// нереализованной части, общего PnL и отметки времени — реализованные метрики,
+/// комиссии, даты и проценты возвращаются без изменений. Негативные проверки
+/// отклоняют незаданные метрики и отсутствующий источник марок.
 /// </summary>
 [TestClass]
 public class UnrealizedPnlMarkEvaluatorTests
@@ -87,11 +88,16 @@ public class UnrealizedPnlMarkEvaluatorTests
 		Assert.That(shortPosition.MarkPrice, Is.EqualTo(90m));
 		Assert.That(shortPosition.UnrealizedPnL, Is.EqualTo(10m));
 
-		// Assert: закрытая позиция осталась без марки и нереализованной части,
-		// её инструмент у тикеров не запрашивался.
+		// Assert: общий PnL открытых позиций собран из реализованной и
+		// нереализованной частей; закрытая позиция осталась без марки и
+		// нереализованной части, её инструмент у тикеров не запрашивался.
+		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
+		Assert.That(longPosition.TotalPnL, Is.EqualTo(17.5m));
+		Assert.That(shortPosition.TotalPnL, Is.EqualTo(7.5m));
 		var closedPosition = evaluation.Positions.Single(position => position.Symbol == ClosedSymbol);
 		Assert.That(closedPosition.MarkPrice, Is.Null);
 		Assert.That(closedPosition.UnrealizedPnL, Is.EqualTo(0m));
+		Assert.That(closedPosition.TotalPnL, Is.EqualTo(9.97m));
 		_markSource.Verify(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()), Times.Once);
 		_markSource.Verify(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()), Times.Once);
 		_markSource.VerifyNoOtherCalls();
@@ -139,11 +145,13 @@ public class UnrealizedPnlMarkEvaluatorTests
 		// Assert: открытый остаток остался без марки и оценки, отметка времени
 		// марок — null с признаком сбоя. Марка позиции деградировала в null
 		// вместе с нереализованным PnL — часть сценария средней и марки
-		// открытой позиции.
+		// открытой позиции; общий PnL остался null вместе с ними.
 		// Traceability: openspec:analytics/performance#scenario-open-position-average-and-mark
+		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-mark-failure
 		var openPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
 		Assert.That(openPosition.MarkPrice, Is.Null);
 		Assert.That(openPosition.UnrealizedPnL, Is.Null);
+		Assert.That(openPosition.TotalPnL, Is.Null);
 		Assert.That(evaluation.MarksAsOf, Is.Null);
 		Assert.That(evaluation.HasMarkFailure, Is.True);
 
@@ -228,14 +236,49 @@ public class UnrealizedPnlMarkEvaluatorTests
 		// Act
 		var evaluation = await _evaluator.EvaluateAsync(positions);
 
-		// Assert: остаток не оценён, реализованные метрики позиции на месте.
+		// Assert: остаток не оценён, реализованные метрики позиции на месте,
+		// общий PnL остался null вместе с нереализованной частью.
 		var openPosition = evaluation.Positions.Single();
 		Assert.That(openPosition.RealizedPnL, Is.EqualTo(12.5m));
 		Assert.That(openPosition.AverageOpenPrice, Is.EqualTo(120m));
 		Assert.That(openPosition.MarkPrice, Is.Null);
 		Assert.That(openPosition.UnrealizedPnL, Is.Null);
+		Assert.That(openPosition.TotalPnL, Is.Null);
 		Assert.That(evaluation.MarksAsOf, Is.Null);
 		Assert.That(evaluation.HasMarkFailure, Is.True);
+	}
+
+	[TestMethod]
+	[Description("Общий PnL позиции собирается из реализованной и нереализованной частей")]
+	public async Task TryIfTotalPnLCombinesRealizedAndUnrealizedParts()
+	{
+		// Arrange: длинный открытый остаток 0.5 со средней 120 и реализованным 12.5;
+		// марка 130 даёт нереализованную оценку (130 − 120) × 0.5 = 5.
+		// Требование: общий PnL открытой позиции равен сумме реализованного PnL
+		// и нереализованной оценки; у закрытой позиции общий PnL равен
+		// реализованному и марок не требует вовсе.
+		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 130m, At(120)));
+		var positions = new[]
+		{
+			OpenPosition(LongSymbol, FirstConstructionId, 0.5m, 120m, 12.5m),
+			ClosedPosition(ClosedSymbol, FirstConstructionId, 9.97m),
+		};
+
+		// Act
+		var evaluation = await _evaluator.EvaluateAsync(positions);
+
+		// Assert: общий PnL открытой позиции — 12.5 + 5 = 17.5; закрытая позиция
+		// сохранила свои реализованные 9.97, её инструмент не запрашивался.
+		var openPosition = evaluation.Positions.Single(position => position.Symbol == LongSymbol);
+		Assert.That(openPosition.UnrealizedPnL, Is.EqualTo(5m));
+		Assert.That(openPosition.TotalPnL, Is.EqualTo(17.5m));
+		var closedPosition = evaluation.Positions.Single(position => position.Symbol == ClosedSymbol);
+		Assert.That(closedPosition.TotalPnL, Is.EqualTo(9.97m));
+		_markSource.Verify(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()), Times.Once);
+		_markSource.VerifyNoOtherCalls();
 	}
 
 	[TestMethod]
@@ -347,6 +390,10 @@ public class UnrealizedPnlMarkEvaluatorTests
 		RealizedPnL = realizedPnL,
 		AccumulatedFees = 0.03m,
 		AverageOpenPrice = averageOpenPrice,
+		AverageEntryPrice = null,
+		AverageClosePrice = null,
+		IsLong = residual > 0m,
+		TotalPnL = null,
 		MarkPrice = null,
 		UnrealizedPnL = null,
 		OpenedAt = At(10),
@@ -363,6 +410,10 @@ public class UnrealizedPnlMarkEvaluatorTests
 		RealizedPnL = realizedPnL,
 		AccumulatedFees = 0.03m,
 		AverageOpenPrice = null,
+		AverageEntryPrice = null,
+		AverageClosePrice = null,
+		IsLong = true,
+		TotalPnL = realizedPnL,
 		MarkPrice = null,
 		UnrealizedPnL = 0m,
 		OpenedAt = At(0),

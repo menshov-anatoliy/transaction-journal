@@ -57,6 +57,19 @@ public sealed class PositionFifoEngine
 		var layers = new Queue<FifoLayer>();
 		var matchedPnL = 0m;
 		var fees = 0m;
+
+		// Накопители открывающих частей (ушедших в слои) и закрывающих частей
+		// (сопоставленных слоям): количество-взвешенная стоимость — цена × |количество|.
+		// Количества копятся по абсолютной величине: у частей одного вида знак может
+		// различаться после переброса направления посреди потока, знаковая сумма
+		// обнулила бы вес и разрушила среднюю.
+		// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
+		// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
+		var openingQuantity = 0m;
+		var openingCost = 0m;
+		var closingQuantity = 0m;
+		var closingCost = 0m;
+
 		foreach (var entry in ordered)
 		{
 			ArgumentException.ThrowIfNullOrWhiteSpace(entry.SourceKey);
@@ -81,6 +94,12 @@ public sealed class PositionFifoEngine
 				matchedPnL += (entry.Price - layer.Price) * matched * direction;
 				layer.Quantity -= direction * matched;
 				remaining -= Math.Sign(remaining) * matched;
+
+				// Сопоставленная слойному остатку часть — закрывающая: её эффективная
+				// цена взвешивает среднюю цену закрытия позиции.
+				closingQuantity += matched;
+				closingCost += matched * entry.Price;
+
 				if (layer.Quantity == 0m)
 				{
 					layers.Dequeue();
@@ -90,6 +109,11 @@ public sealed class PositionFifoEngine
 			if (remaining != 0m)
 			{
 				layers.Enqueue(new FifoLayer(remaining, entry.Price));
+
+				// Часть, ушедшая в слой, — открывающая: она взвешивает среднюю цену
+				// входа по всем открывающим частям, включая впоследствии закрытые.
+				openingQuantity += Math.Abs(remaining);
+				openingCost += Math.Abs(remaining) * entry.Price;
 			}
 		}
 
@@ -105,10 +129,16 @@ public sealed class PositionFifoEngine
 			absoluteQuantity += Math.Abs(layer.Quantity);
 		}
 
+		// Средние цены выводятся из накопителей частей того же прохода: null —
+		// частей соответствующего вида в потоке не было.
+		// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
+		// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
 		return new PositionFifoResult
 		{
 			Residual = residual,
 			AverageOpenPrice = residual == 0m ? null : weightedPrice / absoluteQuantity,
+			AverageEntryPrice = openingQuantity == 0m ? null : openingCost / openingQuantity,
+			AverageClosePrice = closingQuantity == 0m ? null : closingCost / closingQuantity,
 			RealizedPnL = matchedPnL - fees,
 			AccumulatedFees = fees,
 		};

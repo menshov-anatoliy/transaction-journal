@@ -16,6 +16,23 @@ public sealed record PositionFifoResult
 	/// <summary>Средняя цена открытого остатка — количество-взвешенная цена непокрытых FIFO-слоёв; null у закрытой позиции.</summary>
 	public required decimal? AverageOpenPrice { get; init; }
 
+	/// <summary>
+	/// Средняя цена входа — количество-взвешенная цена всех открывающих частей
+	/// FIFO-потока (частей, добавившихся в слои), включая впоследствии закрытые;
+	/// null, если открывающих частей нет. Это цена, по которой входили, а не цена
+	/// текущего остатка: AverageOpenPrice остаётся базой нереализованной оценки.
+	// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
+	/// </summary>
+	public required decimal? AverageEntryPrice { get; init; }
+
+	/// <summary>
+	/// Средняя цена закрытия — количество-взвешенная эффективная цена всех
+	/// закрывающих частей потока (частей, сопоставленных слоям); null, если
+	/// закрывающих частей нет — позиция ещё не закрывалась.
+	// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
+	/// </summary>
+	public required decimal? AverageClosePrice { get; init; }
+
 	/// <summary>Реализованный PnL: FIFO-результат встречных частей, уменьшенный на комиссии всех записей потока.</summary>
 	public required decimal RealizedPnL { get; init; }
 

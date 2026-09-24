@@ -10,7 +10,8 @@ namespace TransactionJournal.Analytics;
 /// умноженная на знаковый остаток; вместе с оценкой возвращается отметка
 /// времени марок. Недоступность тикеров — деградация, а не ошибка: сбой обнуляет
 /// только нереализованную часть и отметку времени, реализованные метрики
-/// позиций возвращаются нетронутыми.
+/// позиций возвращаются нетронутыми. Успешная оценка открытых остатков заодно
+/// собирает их общий PnL — реализованный плюс нереализованный.
 // Traceability: openspec:analytics/performance#requirement-unrealized-pnl-current-marks
 // Traceability: change:add-analytics/design#d3
 /// </summary>
@@ -128,13 +129,16 @@ public sealed class UnrealizedPnlMarkEvaluator
 	/// Подставляет позиции марку и нереализованную оценку: разница марки и средней
 	/// цены открытого остатка, умноженная на знаковый остаток, — направление
 	/// остатка задаёт знак результата и для длинных, и для коротких позиций.
-	/// Позиции без марки возвращаются как есть: их нереализованная часть остаётся
-	/// null, остальные метрики не меняются.
+	/// Здесь же собирается общий PnL позиции из реализованной и только что
+	/// оценённой нереализованной частей; позиции без марки возвращаются как есть:
+	/// их нереализованная часть и общий PnL остаются null, остальные метрики
+	/// не меняются.
 	/// </summary>
 	private static PositionMetrics EvaluatePosition(PositionMetrics position, Dictionary<string, InstrumentMarkSnapshot> marks)
 	{
 		// Закрытая позиция оценку не получает: её нереализованная часть уже ноль,
-		// марка и средняя цена закрытой позиции не вычисляются.
+		// марка и средняя цена закрытой позиции не вычисляются, общий PnL равен
+		// реализованному ещё в калькуляторе.
 		if (position.Residual == 0m)
 		{
 			return position;
@@ -145,10 +149,17 @@ public sealed class UnrealizedPnlMarkEvaluator
 			return position;
 		}
 
+		// Общий PnL собирается из реализованной и только что оценённой
+		// нереализованной частей тем же жестом, что и сама оценка: null остаётся
+		// только у позиций без марки — вместе со сбоем марок.
+		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
+		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-mark-failure
+		var unrealizedPnL = (mark.MarkPrice - position.AverageOpenPrice.Value) * position.Residual;
 		return position with
 		{
 			MarkPrice = mark.MarkPrice,
-			UnrealizedPnL = (mark.MarkPrice - position.AverageOpenPrice.Value) * position.Residual,
+			UnrealizedPnL = unrealizedPnL,
+			TotalPnL = position.RealizedPnL + unrealizedPnL,
 		};
 	}
 

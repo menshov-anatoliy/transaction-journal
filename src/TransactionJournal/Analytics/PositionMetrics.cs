@@ -29,6 +29,42 @@ public sealed record PositionMetrics
 	public required decimal? AverageOpenPrice { get; init; }
 
 	/// <summary>
+	/// Средняя цена входа — количество-взвешенная цена всех открывающих частей
+	/// FIFO-потока, включая впоследствии закрытые; null, если открывающих частей
+	/// нет. Не путать со средней ценой открытого остатка (AverageOpenPrice):
+	/// вход — вся открывающая часть потока и «цена, по которой входили»,
+	/// остаток — база нереализованной оценки текущей позиции.
+	// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
+	/// </summary>
+	public required decimal? AverageEntryPrice { get; init; }
+
+	/// <summary>
+	/// Средняя цена закрытия — количество-взвешенная эффективная цена всех
+	/// закрывающих частей потока; null, если закрывающих частей нет.
+	// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
+	/// </summary>
+	public required decimal? AverageClosePrice { get; init; }
+
+	/// <summary>
+	/// Направление позиции по стороне открывающей записи — знак количества первой
+	/// записи потока: покупка — длинная, продажа — короткая. Правило едино для
+	/// открытых и закрытых позиций; при перебросе стороны посреди жизни позиция
+	/// показывает сторону первого входа.
+	// Traceability: openspec:analytics/performance#scenario-position-direction-from-opening-entry
+	/// </summary>
+	public required bool IsLong { get; init; }
+
+	/// <summary>
+	/// Общий PnL позиции — реализованный плюс нереализованная оценка: у закрытой
+	/// позиции равен реализованному и марок не требует; у открытой собирается
+	/// слоем марок после оценки остатка и до неё, как и при сбое марок, остаётся
+	/// null.
+	// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
+	// Traceability: openspec:analytics/performance#scenario-position-total-pnl-mark-failure
+	/// </summary>
+	public required decimal? TotalPnL { get; init; }
+
+	/// <summary>
 	/// Текущая марка инструмента при открытом остатке — заполняется слоем марок
 	/// при запросе из кэша провайдера. Закрытой позиции марка не нужна и не вычисляется.
 	// Traceability: openspec:analytics/performance#scenario-open-position-average-and-mark
