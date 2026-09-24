@@ -683,9 +683,11 @@ else
 
 	#region Форматирование
 
-	/// <summary>Время исполнения: «2026-06-20 14:30».</summary>
+	/// <summary>Время исполнения: «2026-06-20 14:30» в локальном времени.</summary>
+	// Даты сделок приходят из синхронизации в UTC и показываются в локальной зоне.
+	// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local
 	private static string FormatTime(DateTimeOffset moment) =>
-		moment.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+		DisplayTime.FormatMoment(moment);
 
 	/// <summary>Направление по знаку количества: покупка положительна, продажа отрицательна.</summary>
 	private static string DirectionText(decimal quantity) => quantity > 0 ? "покупка" : "продажа";

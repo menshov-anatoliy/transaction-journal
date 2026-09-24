@@ -8,6 +8,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
 using TransactionJournal.Analytics;
+using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
@@ -754,9 +755,11 @@ public class InboxScreenTests
 	private static long MonthsAgoMs(int monthsAgo, int hour, int minute) =>
 		AtMs(DateOnly.FromDateTime(DateTime.Now).AddMonths(-monthsAgo), hour, minute);
 
-	/// <summary>Ожидаемый текст времени сделки: экран форматирует UTC-представление биржевого штампа.</summary>
+	/// <summary>Ожидаемый текст времени сделки: экран показывает UTC-штамп локальным временем.</summary>
+	// Даты сделок хранятся в UTC и рендерятся локальной стеночной частью.
+	// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local
 	private static string ExecText(long execTimeMs) =>
-		DateTimeOffset.FromUnixTimeMilliseconds(execTimeMs).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+		DisplayTime.FormatMoment(DateTimeOffset.FromUnixTimeMilliseconds(execTimeMs));
 
 	/// <summary>Дата в формате input type="date" — для подстановки в поле фильтра и проверки значения.</summary>
 	private static string DateText(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);

@@ -1091,7 +1091,7 @@ else
 		{
 			var lastMark = await MarkSource.GetLastMarkAsync(symbol);
 			_markPriceInput = lastMark is { } mark ? FormatAmount(mark) : string.Empty;
-			_markTimeInput = DateTimeOffset.Now.ToString(MarkTimeFormat, CultureInfo.InvariantCulture);
+			_markTimeInput = DisplayTime.FormatMoment(DateTimeOffset.Now);
 			_markFormSymbol = symbol;
 			_markPriceInvalid = false;
 			_markTimeInvalid = false;
@@ -1280,7 +1280,7 @@ else
 	private void BeginAdjustmentAdd()
 	{
 		_adjustFormOpen = true;
-		_adjustDateInput = DateTimeOffset.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+		_adjustDateInput = DisplayTime.FormatDay(DateTimeOffset.Now);
 		_adjustSource = PnLAdjustmentSource.Manual;
 		_adjustAmountInput = string.Empty;
 		_adjustDescriptionInput = string.Empty;
@@ -1526,8 +1526,8 @@ else
 		}
 	}
 
-	/// <summary>Формат ввода и отображения времени пометки закрытия.</summary>
-	private const string MarkTimeFormat = "yyyy-MM-dd HH:mm";
+	/// <summary>Формат ввода времени пометки закрытия: тот же локальный вид, что даёт FormatDate.</summary>
+	private const string MarkTimeFormat = DisplayTime.DateTimeFormat;
 
 	/// <summary>Допустимые форматы ввода времени пометки закрытия.</summary>
 	private static readonly string[] MarkTimeFormats = ["yyyy-MM-dd HH:mm", "yyyy-MM-ddTHH:mm"];
@@ -1562,13 +1562,17 @@ else
 	private static string FormatQuantity(decimal value) =>
 		value.ToString("+0.####;-0.####;0", CultureInfo.InvariantCulture);
 
-	/// <summary>Дата-время записи: «2026-06-20 14:30»; отсутствие — прочерк.</summary>
+	/// <summary>Дата-время записи: «2026-06-20 14:30» в локальном времени.</summary>
+	// Даты сделок и закрывающих записей приходят из синхронизации в UTC и показываются
+	// в локальной зоне; предзаполнение форм правки использует тот же локальный вид,
+	// что и разбор ввода, поэтому сохранение без правки времени сохраняет мгновение.
+	// Traceability: openspec:ui/screens#scenario-entry-edit-preserves-instant
 	private static string FormatDate(DateTimeOffset moment) =>
-		moment.ToString(MarkTimeFormat, CultureInfo.InvariantCulture);
+		DisplayTime.FormatMoment(moment);
 
-	/// <summary>Дата корректировки без времени: «2026-09-20».</summary>
+	/// <summary>Дата корректировки без времени: «2026-09-20» локальным календарным днём.</summary>
 	private static string FormatDay(DateTimeOffset moment) =>
-		moment.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+		DisplayTime.FormatDay(moment);
 
 	/// <summary>Длительность периода: «92 дн. 3 ч.» / «5 ч. 40 мин.»; отсутствие — прочерк.</summary>
 	private static string FormatDuration(TimeSpan? duration)

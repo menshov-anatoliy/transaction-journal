@@ -304,9 +304,11 @@ else
 	private static string FormatAmount(decimal value) =>
 		value.ToString("0.##", CultureInfo.InvariantCulture);
 
-	/// <summary>Дата-время записи: «2026-06-20 14:30»; отсутствие — прочерк.</summary>
+	/// <summary>Дата-время записи: «2026-06-20 14:30» в локальном времени; отсутствие — прочерк.</summary>
+	// Даты сделок приходят из синхронизации в UTC и показываются в локальной зоне.
+	// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local
 	private static string FormatDate(DateTimeOffset? moment) => moment is { } value
-		? value.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+		? DisplayTime.FormatMoment(value)
 		: "—";
 
 	/// <summary>Класс статуса конструкции в таблице — цвет текста по ручному статусу.</summary>

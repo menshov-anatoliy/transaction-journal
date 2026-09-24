@@ -1,10 +1,12 @@
 using Bunit;
 using AngleSharp.Dom;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Bybit;
+using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
@@ -177,7 +179,9 @@ public class SettingsScreenTests
 		// Traceability: openspec:ui/screens#scenario-settings-sync-log-mode-warnings
 		cut.WaitForAssertion(() =>
 		{
-			Assert.That(cut.Markup, Does.Contain("2026-01-01 00:00"));
+			// Даты хранятся в UTC и рендерятся локальным временем.
+			// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local
+			Assert.That(cut.Markup, Does.Contain(DisplayTime.FormatMoment(Now)));
 			Assert.That(cut.Markup, Does.Contain("первичная загрузка (backfill)"));
 			Assert.That(cut.Markup, Does.Contain("исполнений 2 · delivery 1 · инструментов 1"));
 			Assert.That(cut.Markup, Does.Contain("успех"));
@@ -193,11 +197,12 @@ public class SettingsScreenTests
 	{
 		// Arrange: в журнале уже есть прерванный запуск — режим система выбрала
 		// инкрементальный, причиной прерывания стал отказ биржи.
+		var startedAt = new DateTimeOffset(2025, 12, 31, 23, 0, 0, TimeSpan.Zero);
 		using (var db = new JournalDbContext(_options))
 		{
 			db.SyncRuns.Add(new SyncRun
 			{
-				StartedAt = new DateTimeOffset(2025, 12, 31, 23, 0, 0, TimeSpan.Zero),
+				StartedAt = startedAt,
 				FinishedAt = new DateTimeOffset(2025, 12, 31, 23, 5, 0, TimeSpan.Zero),
 				Mode = SyncRunMode.Incremental,
 				Status = SyncRunStatus.Failed,
@@ -213,10 +218,44 @@ public class SettingsScreenTests
 		// прерывания как результат и статус «ошибка» — прерванный запуск не исчезает.
 		// Требование: журнал показывает время, режим, результат и статус каждой строки.
 		// Traceability: openspec:ui/screens#scenario-settings-sync-log-mode-warnings
-		Assert.That(cut.Markup, Does.Contain("2025-12-31 23:00"));
+		Assert.That(cut.Markup, Does.Contain(DisplayTime.FormatMoment(startedAt)));
 		Assert.That(cut.Markup, Does.Contain("инкрементальная догрузка"));
 		Assert.That(cut.Markup, Does.Contain("прерван: retCode=10006 превышение частоты запросов"));
 		Assert.That(cut.Markup, Does.Contain("ошибка"));
+	}
+
+	[TestMethod]
+	[Description("Даты строк журнала, хранимые в UTC, рендерятся локальным временем")]
+	public void TryIfJournalDatesRenderedInLocalTime()
+	{
+		// Arrange: в журнале запуск, начатый в 23:00 UTC 2025-12-31 — при смещении
+		// зоны +03:00 локальное время уже 2026-01-01.
+		var startedAt = new DateTimeOffset(2025, 12, 31, 23, 0, 0, TimeSpan.Zero);
+		using (var db = new JournalDbContext(_options))
+		{
+			db.SyncRuns.Add(new SyncRun
+			{
+				StartedAt = startedAt,
+				FinishedAt = startedAt.AddMinutes(1),
+				Mode = SyncRunMode.Incremental,
+				Status = SyncRunStatus.Succeeded,
+			});
+			db.SaveChanges();
+		}
+
+		// Act: пользователь открывает «Настройки».
+		var cut = _context.RenderComponent<SettingsPage>();
+
+		// Assert: время строки показано локальной зоной; при ненулевом смещении
+		// UTC-стеночная часть в разметке отсутствует — хранимое значение не меняется.
+		// Требование: даты из синхронизации показываются в локальном времени.
+		// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local
+		Assert.That(cut.Markup, Does.Contain(DisplayTime.FormatMoment(startedAt)));
+		if (TimeZoneInfo.Local.GetUtcOffset(startedAt) != TimeSpan.Zero)
+		{
+			Assert.That(cut.Markup, Does.Not.Contain(
+				startedAt.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)));
+		}
 	}
 
 	[TestMethod]

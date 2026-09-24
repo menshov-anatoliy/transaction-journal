@@ -5,6 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
 using TransactionJournal.Bybit;
+using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
@@ -87,6 +88,7 @@ public class ConstructionListScreenTests
 	{
 		// Arrange: журнал с итогом, отметкой марок и четырьмя конструкциями,
 		// из которых открыта одна.
+		var marksAsOf = new DateTimeOffset(2026, 9, 19, 12, 34, 0, TimeSpan.Zero);
 		_list
 			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
 			.ReturnsAsync(CreateData(
@@ -97,7 +99,7 @@ public class ConstructionListScreenTests
 				with
 			{
 				TotalPnL = 125.5m,
-				MarksAsOf = new DateTimeOffset(2026, 9, 19, 12, 34, 0, TimeSpan.Zero),
+				MarksAsOf = marksAsOf,
 				OpenCount = 1,
 			});
 
@@ -111,7 +113,9 @@ public class ConstructionListScreenTests
 		cut.WaitForAssertion(() =>
 		{
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("+125.5 USDT"));
-			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("2026-09-19 12:34"));
+			// Даты хранятся в UTC и рендерятся локальным временем.
+			// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain(DisplayTime.FormatMoment(marksAsOf)));
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("4 (1 открыта)"));
 		});
 	}

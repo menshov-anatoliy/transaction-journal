@@ -6,6 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
 using TransactionJournal.Analytics;
+using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
@@ -101,12 +102,13 @@ public class ConstructionDetailScreenTests
 	public void TryIfSummaryShowsMetricsPeriodAndMarks()
 	{
 		// Arrange: открытая конструкция с итогом 399 (+13.3% от капитала 3000),
-		// реализованным −1, нереализованным +400 и отметкой марок 2026-09-20 12:00.
+		// реализованным −1, нереализованным +400 и отметкой марок 2026-09-20 12:00 UTC.
+		var marksAsOf = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
 		_detail
 			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync(CreateData(MetricsOf(realized: -1m, unrealized: 400m, adjustments: 0m, percent: 13.3m)) with
 			{
-				MarksAsOf = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero),
+				MarksAsOf = marksAsOf,
 				HasOpenResidual = true,
 			});
 
@@ -126,7 +128,9 @@ public class ConstructionDetailScreenTests
 			Assert.That(summary, Does.Contain("+13.3%"));
 			Assert.That(summary, Does.Contain("-1"));
 			Assert.That(summary, Does.Contain("+400"));
-			Assert.That(summary, Does.Contain("2026-09-20 12:00"));
+			// Даты хранятся в UTC и рендерятся локальным временем.
+			// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local
+			Assert.That(summary, Does.Contain(DisplayTime.FormatMoment(marksAsOf)));
 		});
 	}
 
@@ -153,7 +157,8 @@ public class ConstructionDetailScreenTests
 		cut.WaitForAssertion(() =>
 		{
 			var summary = cut.Find(".kstrip").TextContent;
-			Assert.That(summary, Does.Contain("2026-06-20 09:30 — 2026-09-15 18:00"));
+			Assert.That(summary, Does.Contain(
+				$"{DisplayTime.FormatMoment(openedAt)} — {DisplayTime.FormatMoment(closedAt)}"));
 			Assert.That(summary, Does.Contain("87 дн. 4 ч."));
 			Assert.That(summary, Does.Contain("не нужны"));
 		});
@@ -971,6 +976,7 @@ public class ConstructionDetailScreenTests
 	{
 		// Arrange: пометка поставлена на позицию с уже нулевым остатком — read-модель
 		// возвращает предупреждение об избыточной закрывающей записи.
+		var redundantClosedAt = new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero);
 		_detail
 			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync(CreateData(MetricsOf(), positions:
@@ -983,7 +989,7 @@ public class ConstructionDetailScreenTests
 					ConstructionId = 7,
 					Symbol = "BTCUSDT",
 					Kind = PositionClosingKind.ManualMark,
-					ClosedAt = new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero),
+					ClosedAt = redundantClosedAt,
 					SourceKey = "manual:9",
 				},
 			]));
@@ -1000,7 +1006,7 @@ public class ConstructionDetailScreenTests
 			Assert.That(warning.TextContent, Does.Contain("Избыточная закрывающая запись"));
 			Assert.That(warning.TextContent, Does.Contain("ручная пометка"));
 			Assert.That(warning.TextContent, Does.Contain("BTCUSDT"));
-			Assert.That(warning.TextContent, Does.Contain("2026-09-20 14:30"));
+			Assert.That(warning.TextContent, Does.Contain(DisplayTime.FormatMoment(redundantClosedAt)));
 		});
 	}
 
@@ -1009,13 +1015,14 @@ public class ConstructionDetailScreenTests
 	public void TryIfManualMarkEditedFromClosingEntries()
 	{
 		// Arrange: у конструкции ручная пометка BTCUSDT по цене 42100
-		// от 2026-09-20 14:30.
+		// от 2026-09-20 14:30 UTC.
+		var markedAt = new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero);
 		_detail
 			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync(CreateData(MetricsOf(), closingEntries:
 			[
 				new ConstructionClosingEntryRow(
-					new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero),
+					markedAt,
 					PositionClosingKind.ManualMark,
 					"BTCUSDT",
 					-0.01m,
@@ -1031,10 +1038,10 @@ public class ConstructionDetailScreenTests
 		// Act: пользователь открывает правку пометки из закрывающих записей.
 		FindRowButton(cut.FindAll("table")[2], "править").Click();
 
-		// Assert: форма предзаполнена ценой и временем существующей записи.
+		// Assert: форма предзаполнена ценой и локальным временем существующей записи.
 		var inputs = cut.FindAll(".action-form .action-input");
 		Assert.That(inputs[0].GetAttribute("value"), Is.EqualTo("42100"));
-		Assert.That(inputs[1].GetAttribute("value"), Is.EqualTo("2026-09-20 14:30"));
+		Assert.That(inputs[1].GetAttribute("value"), Is.EqualTo(DisplayTime.FormatMoment(markedAt)));
 
 		// Act: пользователь меняет цену и время и сохраняет.
 		inputs[0].Change("42300");
@@ -1059,19 +1066,62 @@ public class ConstructionDetailScreenTests
 	}
 
 	[TestMethod]
+	[Description("Правка пометки без изменения времени сохраняет исходное мгновение")]
+	public void TryIfMarkEditedWithoutTimeChangePreservesInstant()
+	{
+		// Arrange: у конструкции ручная пометка BTCUSDT от 2026-09-20 14:30 UTC.
+		var markedAt = new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero);
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(), closingEntries:
+			[
+				new ConstructionClosingEntryRow(
+					markedAt,
+					PositionClosingKind.ManualMark,
+					"BTCUSDT",
+					-0.01m,
+					42100m,
+					421m,
+					5),
+			]));
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.FindAll("table")[2].TextContent, Does.Contain("ручная пометка")));
+
+		// Act: пользователь открывает правку и сохраняет, не меняя предзаполненное
+		// локальное время.
+		FindRowButton(cut.FindAll("table")[2], "править").Click();
+		FindButton(cut, "Сохранить пометку").Click();
+
+		// Assert: сервис домена получил исходное мгновение — предзаполнение формы
+		// и разбор ввода работают в одной локальной зоне, смещения не возникает.
+		// Требование: правка закрывающей записи без изменения времени сохраняет мгновение.
+		// Traceability: openspec:ui/screens#scenario-entry-edit-preserves-instant
+		_marks.Verify(service =>
+			service.EditAsync(
+				5,
+				"BTCUSDT",
+				markedAt,
+				42100m,
+				It.IsAny<CancellationToken>()), Times.Once);
+	}
+
+	[TestMethod]
 	[Description("Корректировка добавляется формой из деталей и входит в таблицу и сводку")]
 	public void TryIfAdjustmentAddedFromDetailShowsInTableAndSummary()
 	{
 		// Arrange: конструкция без корректировок; после добавления read-модель
 		// возвращает снимок с корректировкой +87.4 от 2026-09-20 и суммой
 		// корректировок в метриках.
+		var adjustmentDate = new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero);
 		var withAdjustment = CreateData(
 			MetricsOf(adjustments: 87.4m),
 			adjustments:
 			[
 				new ConstructionAdjustmentRow(
 					3,
-					new DateTimeOffset(2026, 9, 20, 0, 0, 0, TimeSpan.Zero),
+					adjustmentDate,
 					"PnL робота grid-ETH за сентябрь",
 					PnLAdjustmentSource.Manual,
 					87.4m),
@@ -1114,7 +1164,7 @@ public class ConstructionDetailScreenTests
 		cut.WaitForAssertion(() =>
 		{
 			var table = cut.FindAll("table")[3].TextContent;
-			Assert.That(table, Does.Contain("2026-09-20"));
+			Assert.That(table, Does.Contain(DisplayTime.FormatDay(adjustmentDate)));
 			Assert.That(table, Does.Contain("PnL робота grid-ETH за сентябрь"));
 			Assert.That(table, Does.Contain("ручная"));
 			Assert.That(table, Does.Contain("+87.4"));
@@ -1132,13 +1182,14 @@ public class ConstructionDetailScreenTests
 		// Arrange: у конструкции корректировка −12 «старая поправка»; после
 		// правки read-модель возвращает строку +87.4 источником «робот», после
 		// удаления — пустую таблицу.
+		var originalAdjustmentDate = new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero);
 		var original = CreateData(
 			MetricsOf(adjustments: -12m),
 			adjustments:
 			[
 				new ConstructionAdjustmentRow(
 					3,
-					new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero),
+					originalAdjustmentDate,
 					"старая поправка",
 					PnLAdjustmentSource.Manual,
 					-12m),
@@ -1169,7 +1220,7 @@ public class ConstructionDetailScreenTests
 		FindRowButton(cut.FindAll("table")[3], "править").Click();
 		var rowInputs = cut.FindAll("table")[3].QuerySelectorAll("input.cell-input");
 		Assert.That(rowInputs.Count, Is.EqualTo(3));
-		Assert.That(rowInputs[0].GetAttribute("value"), Is.EqualTo("2026-09-20"));
+		Assert.That(rowInputs[0].GetAttribute("value"), Is.EqualTo(DisplayTime.FormatDay(originalAdjustmentDate)));
 		Assert.That(rowInputs[1].GetAttribute("value"), Is.EqualTo("старая поправка"));
 		Assert.That(rowInputs[2].GetAttribute("value"), Is.EqualTo("-12"));
 

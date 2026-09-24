@@ -134,7 +134,7 @@ else
 				{
 					<li>
 						@warning.Symbol
-						(@warning.DeliveryTime.ToString("u", CultureInfo.InvariantCulture)):
+						(@DisplayTime.FormatMoment(warning.DeliveryTime)):
 						расхождение @warning.Difference.ToString("0.0###", CultureInfo.InvariantCulture)
 					</li>
 				}
@@ -301,9 +301,11 @@ else if (_reparseResult is not null)
 		await Changes.RaiseAsync();
 	}
 
-	/// <summary>Дата-время запуска: «2026-01-01 14:30».</summary>
+	/// <summary>Дата-время запуска: «2026-01-01 14:30» в локальном времени.</summary>
+	// Даты запусков синхронизации приходят из журнала в UTC и показываются в локальной зоне.
+	// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local
 	private static string FormatDate(DateTimeOffset moment) =>
-		moment.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+		DisplayTime.FormatMoment(moment);
 
 	/// <summary>Название режима запуска, выбранного системой: backfill при первом запуске, далее инкремент.</summary>
 	private static string ModeLabel(SyncRunMode mode) => mode == SyncRunMode.Backfill

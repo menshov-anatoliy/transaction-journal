@@ -105,13 +105,15 @@ else
 			else
 			{
 				@* Предупреждение сверки не блокирует синк: собственный расчёт остаётся источником результата. *@
+				@* Время доставки хранится в UTC и показывается локальным временем. *@
+				@* Traceability: openspec:ui/screens#scenario-sync-dates-shown-local *@
 				<h2>Предупреждения сверки с биржей</h2>
 				<ul>
 					@foreach (var warning in projection.ReconciliationWarnings)
 					{
 						<li>
 							@warning.Symbol
-							(@warning.DeliveryTime.ToString("u", CultureInfo.InvariantCulture)):
+							(@DisplayTime.FormatMoment(warning.DeliveryTime)):
 							расхождение @warning.Difference.ToString("0.0###", CultureInfo.InvariantCulture)
 						</li>
 					}
