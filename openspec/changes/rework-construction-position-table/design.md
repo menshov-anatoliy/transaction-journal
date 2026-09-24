@@ -40,7 +40,7 @@ Traceability-метки в коде: `scenario-position-total-pnl-includes-unrea
 
 ### d4 — Строка таблицы позиций приводится к выводимым столбцам
 
-`ConstructionPositionRow` расширяется до: `Symbol`, `Residual`, `AverageEntryPrice`, `AverageClosePrice`, `TotalPnL`, `TotalPnLPercent`, `AccumulatedFees`, `OpenedAt`, `ClosedAt`, `IsOpen`, `Comment`. Поля `AverageOpenPrice`, `MarkPrice`, `UnrealizedPnL` из строки уходят вместе с колонками «Средняя», «Марка», «Нереализов.» — read-модель остаётся «ровно те столбцы, что выводит экран». «Результат» отдельным полем не хранится: категория «Прибыль»/«Убыток» выводится разметкой по знаку общего PnL (у открытой с `null` — признак сбоя марок). Форматы чисел и времён — существующие хелперы экрана, знак P&L — существующая цветовая индикация.
+`ConstructionPositionRow` расширяется до: `Symbol`, `Residual`, `AverageEntryPrice`, `AverageClosePrice`, `TotalPnL`, `TotalPnLPercent`, `AccumulatedFees`, `OpenedAt`, `ClosedAt`, `IsOpen`, `Comment`. Поля `AverageOpenPrice`, `MarkPrice`, `UnrealizedPnL` из строки уходят вместе с колонками «Средняя», «Марка», «Нереализов.» — read-модель остаётся «ровно те столбцы, что выводит экран». Отдельной колонки-категории «Результат» нет: знак результата виден из самого общего PnL и его цветовой индикации (у открытой с `null` — признак сбоя марок). Форматы чисел и времён — существующие хелперы экрана, знак P&L — существующая цветовая индикация.
 
 Traceability-метки в коде: `scenario-detail-position-row-entry-close-total`, `scenario-detail-position-total-pnl-marks-failure`.
 

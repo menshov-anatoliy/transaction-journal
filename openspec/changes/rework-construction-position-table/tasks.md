@@ -20,10 +20,16 @@
 
 ## 4. Экран деталей: таблица позиций
 
-- [x] 4.1 Перестроить таблицу позиций в `ConstructionDetail.razor`: колонки «Инструмент», «Остаток», «Сред. цена входа», «Сред. цена закрытия», «Результат» («Прибыль»/«Убыток» по знаку общего P&L), «Общий P&L» (абсолют со знаком, цвет по знаку, процент от капитала в скобках), «Всего комиссий», «Время открытия», «Время закрытия» (прочерк открытой), «Статус», «Комментарий», «Действия»; удалить колонки «Средняя», «Марка», «Нереализов.» с их ветками сбоя марок; метки `scenario-detail-position-row-entry-close-total` на блоке колонок; проверить сборку
-- [x] 4.2 Признак сбоя марок для открытой позиции выводить в «Общий P&L» и «Результат» (существующий стиль `markfail`), не трогая остальные колонки; метка `scenario-detail-position-total-pnl-marks-failure`; дополнить `ConstructionDetailScreenTests` (состав колонок, результаты, процент в скобках, сбой марок, пустая таблица) и запустить `dotnet test tests/TransactionJournal.Tests --filter ConstructionDetailScreenTests`
+- [x] 4.1 Перестроить таблицу позиций в `ConstructionDetail.razor`: колонки «Инструмент», «Остаток», «Сред. цена входа», «Сред. цена закрытия», «Общий P&L» (абсолют со знаком, цвет по знаку, процент от капитала в скобках), «Всего комиссий», «Время открытия», «Время закрытия» (прочерк открытой), «Статус», «Комментарий», «Действия»; удалить колонки «Средняя», «Марка», «Нереализов.», «Результат» с их ветками сбоя марок; метки `scenario-detail-position-row-entry-close-total` на блоке колонок; проверить сборку
+- [x] 4.2 Признак сбоя марок для открытой позиции выводить в «Общий P&L» (существующий стиль `markfail`), не трогая остальные колонки; метка `scenario-detail-position-total-pnl-marks-failure`; дополнить `ConstructionDetailScreenTests` (состав колонок, процент в скобках, сбой марок, пустая таблица) и запустить `dotnet test tests/TransactionJournal.Tests --filter ConstructionDetailScreenTests`
 
 ## 5. Проверка change
 
 - [x] 5.1 Запустить полный набор тестов `dotnet test tests/TransactionJournal.Tests` и убедиться в отсутствии регрессий аналитики и UI
 - [x] 5.2 Прогнать `openspec validate rework-construction-position-table --strict` и устранить замечания валидации
+
+## 6. Раздельные части P&L в таблице позиций
+
+- [ ] 6.1 Добавить в `ConstructionPositionRow` поля `RealizedPnL` (`decimal`) и `UnrealizedPnL` (`decimal?`, `null` при сбое марок) с пробросом из метрик позиции и XML-документацией; метка `scenario-detail-position-pnl-parts` на строке-контракте; дополнить `ConstructionDetailReadModelTests` (проброс раздельных частей, `null` нереализованной при сбое марок) и запустить `dotnet test tests/TransactionJournal.Tests --filter ConstructionDetailReadModelTests`; проверить сборку
+- [ ] 6.2 Дополнить таблицу позиций в `ConstructionDetail.razor` колонками «Реализованный» и «Нереализованный» перед «Общий P&L»: абсолют со знаком и цвет по знаку, у закрытой позиции в «Нереализованном» — прочерк; при сбое марок стиль `markfail` выводить в «Нереализованном» и «Общий P&L», не трогая «Реализованный» и остальные колонки; метки `scenario-detail-position-pnl-parts` и `scenario-detail-position-total-pnl-marks-failure` на блоке колонок; дополнить `ConstructionDetailScreenTests` (состав колонок, значения частей, прочерк закрытой, сбой марок) и запустить `dotnet test tests/TransactionJournal.Tests --filter ConstructionDetailScreenTests`; проверить сборку
+- [ ] 6.3 Прогнать полный набор `dotnet test tests/TransactionJournal.Tests` и `openspec validate rework-construction-position-table --strict`, устранить замечания
