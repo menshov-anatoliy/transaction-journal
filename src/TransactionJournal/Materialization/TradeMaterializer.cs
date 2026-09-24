@@ -9,6 +9,9 @@ namespace TransactionJournal.Materialization;
 /// записей исполнения RawExecution без сетевых запросов — каждый атрибут берётся
 /// из биржевой записи. Один execId даёт одну сделку, поэтому повторные синки
 /// и повторные материализации не создают дубликатов доменных сущностей.
+/// Сделкой становится только сырая запись исполнения с биржевым типом Trade;
+/// записи прочих типов исполнения (фандинг и иные не-Trade события) хранятся
+/// в сырье, но сделками не становятся.
 // Traceability: openspec:sync/bybit-history#requirement-new-records-land-in-inbox
 /// Traceability: openspec:sync/bybit-history#requirement-sync-idempotency
 /// Traceability: change:add-bybit-sync/design#d7
@@ -20,6 +23,9 @@ public sealed class TradeMaterializer
 
 	/// <summary>Сторона исполнения Sell биржи: продажа уменьшает остаток.</summary>
 	private const string SellSide = "Sell";
+
+	/// <summary>Единственный тип исполнения биржи, из которого выводится сделка «Входящих».</summary>
+	private const string TradeExecType = "Trade";
 
 	private readonly InstrumentResolver _instrumentResolver;
 
@@ -39,9 +45,12 @@ public sealed class TradeMaterializer
 	/// <summary>
 	/// Выводит сделки «Входящих» из сырых записей исполнения. Результат упорядочен
 	/// по времени исполнения, затем по execId, и не зависит от порядка входных записей.
-	/// Символ опциона, отсутствующий в справочнике, откладывает запись: сделка
-	/// не материализуется, символ попадает в перечень неразрешённых результата;
-	/// прочие причины сверки и повреждённые записи остаются ошибками.
+	/// Сделкой становится только запись с биржевым типом исполнения Trade (без учёта
+	/// регистра); записи прочих типов пропускаются до торговых проверок — без сделки,
+	/// ошибки и предупреждений, повреждённый payload остаётся ошибкой. Символ опциона,
+	/// отсутствующий в справочнике, откладывает запись: сделка не материализуется,
+	/// символ попадает в перечень неразрешённых результата; прочие причины сверки
+	/// и повреждённые записи остаются ошибками.
 	/// </summary>
 	/// <param name="rawExecutions">Сырые записи исполнения из хранилища журнала.</param>
 	/// <exception cref="ArgumentNullException">Записи не заданы.</exception>
@@ -55,10 +64,30 @@ public sealed class TradeMaterializer
 		var unresolvedSymbols = new SortedSet<string>(StringComparer.Ordinal);
 		foreach (var rawExecution in rawExecutions)
 		{
+			// Разбор payload вынесен до построения сделки: тип исполнения доступен
+			// только в полезной нагрузке, поэтому решение «сделка или нет» принимается
+			// раньше любых торговых проверок записи. Повреждённый JSON остаётся ошибкой.
+			var execution = ParsePayload(rawExecution);
+
+			// Фандинг и прочие не-Trade события исполнения — регулярные записи linear-
+			// торговли: они хранятся в сырье целиком и доступны переразбору и диагностической
+			// сверке, но сделкой «Входящих» не становятся, поэтому и в результат материализации
+			// не попадают ни сделкой, ни неразрешённым символом. Пропуск тихий — без ошибки
+			// и предупреждения: предупреждение на каждый фандинг превратило бы синк в шум.
+			// Сделкой считается только значение Trade без учёта регистра; пустое и любое
+			// неизвестное будущее значение биржи — не сделка по умолчанию.
+			// Traceability: openspec:sync/bybit-history#requirement-new-records-land-in-inbox
+			// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+			// Traceability: openspec:sync/bybit-history#requirement-raw-record-storage
+			if (string.Equals(execution.ExecType, TradeExecType, StringComparison.OrdinalIgnoreCase) == false)
+			{
+				continue;
+			}
+
 			MaterializedTrade trade;
 			try
 			{
-				trade = ParseTrade(rawExecution);
+				trade = BuildTrade(rawExecution, execution);
 			}
 			catch (InstrumentResolveException exception)
 				when (exception.Reason == InstrumentResolveFailureReason.UnknownSymbol)
@@ -105,13 +134,11 @@ public sealed class TradeMaterializer
 
 	#region Вспомогательные методы
 
-	/// <summary>Разбирает одну сырую запись в сделку «Входящих».</summary>
+	/// <summary>Строит сделку «Входящих» из сырой записи и её разобранного payload.</summary>
 	/// <exception cref="TradeMaterializationException">Запись повреждена или неполна.</exception>
 	/// <exception cref="InstrumentResolveException">Символ опциона не прошёл сверку со справочником.</exception>
-	private MaterializedTrade ParseTrade(RawExecution rawExecution)
+	private MaterializedTrade BuildTrade(RawExecution rawExecution, BybitExecution execution)
 	{
-		var execution = ParsePayload(rawExecution);
-
 		// Идентичность строки хранилища и полезной нагрузки — залог идемпотентности:
 		// execId служит ключом дедупликации, расхождение означает повреждение сырья.
 		if (string.Equals(execution.ExecId, rawExecution.ExecId, StringComparison.Ordinal) == false)

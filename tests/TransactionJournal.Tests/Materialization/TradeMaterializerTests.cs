@@ -189,6 +189,136 @@ public class TradeMaterializerTests
 	}
 
 	[TestMethod]
+	[Description("Запись Funding с заполненными торговыми атрибутами не материализуется сделкой")]
+	public void TryIfFundingRecordIsNotMaterializedAsTrade()
+	{
+		// Фандинг linear-инструмента приходит с заполненными количеством, ценой
+		// по марк-цене и валидной стороной, но сделкой «Входящих» не является:
+		// запись остаётся в сырье, сделку из неё журнал не выводит, а материализация
+		// завершается без неразрешённых символов, ошибок и исключений.
+		// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+		// Traceability: openspec:sync/bybit-history#scenario-funding-record-is-not-a-trade
+		// Arrange
+		var materializer = CreateMaterializer();
+		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
+		var rawExecutions = new[]
+		{
+			Raw("exec-funding-1", "linear", "BTCUSDT", execTimeMs,
+				ExecutionPayload("exec-funding-1", "BTCUSDT", "Buy", "42000", "0.01", "0.0042", "USDT", execTimeMs,
+					execType: "Funding")),
+		};
+
+		// Act
+		var result = materializer.Materialize(rawExecutions);
+
+		// Assert: сделки нет, запись не отложена по символу.
+		Assert.That(result.Trades, Is.Empty);
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
+	}
+
+	[TestMethod]
+	[DataRow("AdlTrade")]
+	[DataRow("")]
+	[Description("Запись не-Trade типа исполнения пропускается без ошибок, соседняя Trade-запись материализуется")]
+	public void TryIfNonTradeExecTypeIsSkippedAndNeighborTradeMaterialized(string execType)
+	{
+		// Неизвестный или пустой тип исполнения журнал не относит к сделкам: запись
+		// пропускается тихо — без ошибки, предупреждения и неразрешённых символов, —
+		// а соседняя Trade-запись того же вызова материализуется как прежде.
+		// Traceability: openspec:sync/bybit-history#scenario-unknown-exec-type-is-not-a-trade
+		// Arrange
+		var materializer = CreateMaterializer();
+		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
+		var rawExecutions = new[]
+		{
+			Raw("exec-non-trade-1", "linear", "BTCUSDT", execTimeMs,
+				ExecutionPayload("exec-non-trade-1", "BTCUSDT", "Buy", "42000", "0.01", "0.0042", "USDT", execTimeMs,
+					execType: execType)),
+			RawOption("exec-trade-1", "Buy", ExecMs(2023, 12, 28, 10, 30)),
+		};
+
+		// Act
+		var result = materializer.Materialize(rawExecutions);
+
+		// Assert: материализована только Trade-запись.
+		Assert.That(result.Trades.Select(trade => trade.ExecId).ToList(), Is.EqualTo(new[] { "exec-trade-1" }));
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Повторная материализация набора Trade- и Funding-записей даёт идентичный результат")]
+	public void TryIfRepeatMaterializationOfTradeAndFundingSetIsIdentical()
+	{
+		// Повторный синк отдаёт то же сырье, включая Funding-записи: результат
+		// материализации детерминирован — сделки не задваиваются, фандинг не даёт
+		// сделок, неразрешённых символов и ошибок нет.
+		// Traceability: openspec:sync/bybit-history#requirement-sync-idempotency
+		// Arrange
+		var materializer = CreateMaterializer();
+		var tradeExecTimeMs = ExecMs(2023, 12, 28, 10, 0);
+		var fundingExecTimeMs = ExecMs(2023, 12, 28, 10, 30);
+		var rawExecutions = new[]
+		{
+			Raw("exec-1", "linear", "BTCUSDT", tradeExecTimeMs,
+				ExecutionPayload("exec-1", "BTCUSDT", "Buy", "42000", "0.01", "0.0042", "USDT", tradeExecTimeMs)),
+			Raw("exec-funding-1", "linear", "BTCUSDT", fundingExecTimeMs,
+				ExecutionPayload("exec-funding-1", "BTCUSDT", "Buy", "42050", "0.01", "0", "USDT", fundingExecTimeMs,
+					execType: "Funding")),
+		};
+
+		// Act: вторая материализация получает тот же набор, включая идентичный дубликат Trade-записи.
+		var firstPass = materializer.Materialize(rawExecutions);
+		var secondPass = materializer.Materialize(rawExecutions.Append(rawExecutions[0]));
+
+		// Assert: результат идентичен, единственная сделка — от Trade-записи.
+		Assert.That(firstPass.Trades.Select(trade => trade.ExecId).ToList(), Is.EqualTo(new[] { "exec-1" }));
+		Assert.That(secondPass.Trades.ToArray(), Is.EqualTo(firstPass.Trades.ToArray()));
+		Assert.That(secondPass.UnresolvedSymbols, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Конфликт Trade-записей с одним execId роняет материализацию, Funding-двойник дубликата не создаёт")]
+	public void TryIfFundingTwinOfTradeExecIdCreatesNoDuplicateWhileTradeConflictStillFails()
+	{
+		// Два разных Trade-payload с одним execId — конфликт источника: материализация
+		// останавливается ошибкой, правило не ослаблено фильтром типов. Funding-запись
+		// с тем же execId, что у Trade-записи, сделкой не становится и дубликата
+		// не создаёт: единственная сделка остаётся от Trade-записи.
+		// Traceability: openspec:sync/bybit-history#requirement-sync-idempotency
+		// Arrange
+		var materializer = CreateMaterializer();
+		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
+		var conflictingTrades = new[]
+		{
+			Raw("exec-dup", "linear", "BTCUSDT", execTimeMs,
+				ExecutionPayload("exec-dup", "BTCUSDT", "Buy", "42000", "0.01", "0.0042", "USDT", execTimeMs)),
+			Raw("exec-dup", "linear", "BTCUSDT", execTimeMs,
+				ExecutionPayload("exec-dup", "BTCUSDT", "Sell", "42000", "0.01", "0.0042", "USDT", execTimeMs)),
+		};
+
+		// Act — Assert: конфликт Trade-записей по-прежнему останавливает материализацию.
+		Assert.Throws<TradeMaterializationException>(() => materializer.Materialize(conflictingTrades));
+
+		// Arrange: Funding-двойник отличается от Trade-записи ценой по марк-цене.
+		var tradeWithFundingTwin = new[]
+		{
+			Raw("exec-dup", "linear", "BTCUSDT", execTimeMs,
+				ExecutionPayload("exec-dup", "BTCUSDT", "Buy", "42000", "0.01", "0.0042", "USDT", execTimeMs)),
+			Raw("exec-dup", "linear", "BTCUSDT", execTimeMs,
+				ExecutionPayload("exec-dup", "BTCUSDT", "Buy", "42050", "0.01", "0", "USDT", execTimeMs,
+					execType: "Funding")),
+		};
+
+		// Act
+		var result = materializer.Materialize(tradeWithFundingTwin);
+
+		// Assert: сделка одна — от Trade-записи; Funding-двойник дубликата не создал.
+		Assert.That(result.Trades.Select(trade => trade.ExecId).ToList(), Is.EqualTo(new[] { "exec-dup" }));
+		Assert.That(result.Trades[0].Price, Is.EqualTo(42000m));
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
+	}
+
+	[TestMethod]
 	[Description("Null-коллекция сырых записей отклоняется")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnNullRawExecutions()
@@ -438,7 +568,11 @@ public class TradeMaterializerTests
 		FetchedAt = FetchedAt,
 	};
 
-	/// <summary>Запись исполнения в форме ответа execution-list: числа биржа шлёт строками.</summary>
+	/// <summary>
+	/// Запись исполнения в форме ответа execution-list: числа биржа шлёт строками.
+	/// Тип исполнения по умолчанию Trade — торговые записи составляют большинство синка;
+	/// не-Trade типы тесты фильтра задают явно.
+	/// </summary>
 	private static string ExecutionPayload(
 		string execId,
 		string symbol,
@@ -448,11 +582,12 @@ public class TradeMaterializerTests
 		string execFee,
 		string? feeCurrency,
 		long execTimeMs,
-		bool isMaker = false)
+		bool isMaker = false,
+		string execType = "Trade")
 	{
 		var feeCurrencyJson = feeCurrency is null ? "null" : $"\"{feeCurrency}\"";
 		var isMakerJson = isMaker ? "true" : "false";
-		return $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"Trade","execTime":"{{execTimeMs}}","feeCurrency":{{feeCurrencyJson}},"isMaker":{{isMakerJson}}}""";
+		return $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"{{execType}}","execTime":"{{execTimeMs}}","feeCurrency":{{feeCurrencyJson}},"isMaker":{{isMakerJson}}}""";
 	}
 
 	private static long ExecMs(int year, int month, int day, int hour, int minute) =>

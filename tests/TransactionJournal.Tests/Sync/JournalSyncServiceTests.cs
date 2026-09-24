@@ -518,6 +518,9 @@ public class JournalSyncServiceTests
 		ExecQty = 0.01m,
 		ExecFee = 0.0042m,
 		FeeCurrency = "USDT",
+		// Исполнение фикстуры — торговая запись: биржа в ответе execution-list
+		// всегда раскрывает тип исполнения, и сделка материализуется только из Trade.
+		ExecType = "Trade",
 		ExecTimeMs = NowMs - DayMs,
 	};
 
@@ -530,6 +533,9 @@ public class JournalSyncServiceTests
 		ExecQty = 0.0003m,
 		ExecFee = 0.0002m,
 		FeeCurrency = "USDC",
+		// Исполнение фикстуры — торговая запись: биржа в ответе execution-list
+		// всегда раскрывает тип исполнения, и сделка материализуется только из Trade.
+		ExecType = "Trade",
 		ExecTimeMs = NowMs - 4 * DayMs,
 	};
 

@@ -407,7 +407,7 @@ public class ConstructionServiceTests
 			Category = "linear",
 			Symbol = "BTCUSDT",
 			ExecTimeMs = 0,
-			PayloadJson = $$"""{"symbol":"BTCUSDT","side":"Buy","execId":"{{execId}}","execPrice":"42000","execQty":"0.01","execFee":"0.0042","execTime":"0","isMaker":false}""",
+			PayloadJson = $$"""{"symbol":"BTCUSDT","side":"Buy","execId":"{{execId}}","execPrice":"42000","execQty":"0.01","execFee":"0.0042","execTime":"0","execType":"Trade","isMaker":false}""",
 			FetchedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
 		});
 		await db.SaveChangesAsync();
