@@ -59,7 +59,7 @@ public class JournalDbReaderTests
 			symbol: "BTCUSDT",
 			execTimeMs: InRangeMs,
 			payload: """
-				{"symbol":"BTCUSDT","side":"Buy","orderQty":"0.001","execPrice":"10969.5","execFee":"0.00000219","execTime":%MS%,"execType":"Trade","execId":"exec-linear-1"}
+				{"symbol":"BTCUSDT","side":"Buy","orderQty":"0.01","execQty":"0.001","execPrice":"10969.5","execFee":"0.00000219","execTime":%MS%,"execType":"Trade","execId":"exec-linear-1"}
 				""".Replace("%MS%", InRangeMs.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal));
 		InsertExecution(
 			execId: "exec-option-1",
@@ -67,7 +67,7 @@ public class JournalDbReaderTests
 			symbol: "BTC-25SEP26-45000-C",
 			execTimeMs: InRangeMs + 1500,
 			payload: """
-				{"symbol":"BTC-25SEP26-45000-C","side":"Sell","orderQty":"0.5","execPrice":"310.5","execFee":"","execTime":%MS%,"execType":"Trade","execId":"exec-option-1"}
+				{"symbol":"BTC-25SEP26-45000-C","side":"Sell","orderQty":"10","execQty":"0.5","execPrice":"310.5","execFee":"","execTime":%MS%,"execType":"Trade","execId":"exec-option-1"}
 				""".Replace("%MS%", (InRangeMs + 1500).ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal));
 		InsertExecution(
 			execId: "exec-outside",
@@ -83,19 +83,23 @@ public class JournalDbReaderTests
 		var data = reader.ReadInRange(InRangeMs - 5000, InRangeMs + 5000);
 
 		// Assert: атрибуты разобраны из PayloadJson, запись вне диапазона учтена счётчиком.
+		// Количество берётся из execQty — исполненного количества фактического заполнения,
+		// как в строке выгрузки: orderQty заявок дробится частями и ключу пары не служит.
 		// Traceability: change:reconcile-bybit-statement/design#d2
+		// Traceability: change:reconcile-bybit-statement/design#d9
 		Assert.That(data.Executions, Has.Count.EqualTo(2));
 		Assert.That(data.ExecutionsOutsideRange, Is.EqualTo(1));
 		var linear = data.Executions.Single(execution => execution.ExecId == "exec-linear-1");
 		Assert.That(linear.Symbol, Is.EqualTo("BTCUSDT"));
 		Assert.That(linear.Side, Is.EqualTo("BUY"));
-		Assert.That(linear.Quantity, Is.EqualTo(0.001m));
+		Assert.That(linear.ExecType, Is.EqualTo("Trade"));
+		Assert.That(linear.Quantity, Is.EqualTo(0.001m), "количество берётся из execQty, а не из orderQty");
 		Assert.That(linear.Price, Is.EqualTo(10969.5m));
 		Assert.That(linear.Fee, Is.EqualTo(0.00000219m));
 		Assert.That(linear.TimeUtc, Is.EqualTo(DateTimeOffset.FromUnixTimeMilliseconds(InRangeMs).UtcDateTime));
 		var option = data.Executions.Single(execution => execution.ExecId == "exec-option-1");
 		Assert.That(option.Side, Is.EqualTo("SELL"));
-		Assert.That(option.Quantity, Is.EqualTo(0.5m));
+		Assert.That(option.Quantity, Is.EqualTo(0.5m), "для опционов orderQty кратно parts, execQty соответствует строке выгрузки");
 		Assert.That(option.Fee, Is.Null, "пустая строка комиссии трактуется как отсутствие значения");
 	}
 

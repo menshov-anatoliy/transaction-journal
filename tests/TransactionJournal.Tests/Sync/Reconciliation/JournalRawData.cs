@@ -9,7 +9,8 @@ namespace TransactionJournal.Tests.Sync.Reconciliation;
 /// <param name="ExecId">Биржевой идентификатор исполнения для локализации в отчёте.</param>
 /// <param name="Symbol">Инструмент записи.</param>
 /// <param name="Side">Сторона записи, приведённая к верхнему регистру.</param>
-/// <param name="Quantity">Заявленное количество ордера (orderQty).</param>
+/// <param name="ExecType">Тип исполнения биржи (execType): Trade, Funding и прочие.</param>
+/// <param name="Quantity">Исполненное количество (execQty) — размер фактического заполнения, как в строке выгрузки.</param>
 /// <param name="Price">Цена исполнения (execPrice).</param>
 /// <param name="Fee">Комиссия исполнения (execFee); null, если биржа не раскрыла значение.</param>
 /// <param name="TimeUtc">Время исполнения в UTC.</param>
@@ -18,6 +19,7 @@ public sealed record JournalExecution(
 	string ExecId,
 	string Symbol,
 	string Side,
+	string ExecType,
 	decimal? Quantity,
 	decimal? Price,
 	decimal? Fee,

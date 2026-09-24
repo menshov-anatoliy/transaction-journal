@@ -14,6 +14,11 @@ public sealed record OutOfScopeTypeCount(StatementFileKind FileKind, string Type
 /// <param name="Count">Количество строк.</param>
 public sealed record UnknownTypeCount(string Type, int Count);
 
+/// <summary>Количество записей исполнения журнала одного типа вне сверяемой TRADE-вселенной.</summary>
+/// <param name="ExecType">Тип исполнения как в PayloadJson биржи (например, Funding).</param>
+/// <param name="Count">Количество записей.</param>
+public sealed record JournalNonTradeTypeCount(string ExecType, int Count);
+
 /// <summary>Итоги сверки по одному инструменту — контрольная агрегатная секция отчёта.</summary>
 /// <param name="Symbol">Инструмент.</param>
 /// <param name="StatementRows">Торговых строк выгрузки по инструменту.</param>
@@ -61,6 +66,12 @@ public sealed record ReconciliationSummary
 
 	/// <summary>Записей исполнения журнала в диапазоне.</summary>
 	public required int JournalExecutionsInRange { get; init; }
+
+	/// <summary>Записей исполнения журнала вне сверяемой TRADE-вселенной (execType не Trade).</summary>
+	public required int JournalNonTradeExecutionsInRange { get; init; }
+
+	/// <summary>Записи исполнения вне TRADE-вселенной по типам биржи.</summary>
+	public required IReadOnlyList<JournalNonTradeTypeCount> NonTradeExecutionTypes { get; init; }
 
 	/// <summary>Delivery-записей журнала в диапазоне.</summary>
 	public required int JournalDeliveriesInRange { get; init; }
@@ -180,8 +191,11 @@ public sealed record ReconciliationReport
 			$"Период строк выгрузки: {summary.PeriodFromUtc.ToString(TimeFormat, CultureInfo.InvariantCulture)} – {summary.PeriodToUtc.ToString(TimeFormat, CultureInfo.InvariantCulture)} UTC"));
 		builder.AppendLine(string.Create(CultureInfo.InvariantCulture,
 			$"Выгрузка: строк {summary.StatementRowsTotal} (TRADE {summary.TradeRows}, DELIVERY {summary.DeliveryRows}, вне области {summary.OutOfScopeRows}, неизвестные {summary.UnknownRows})"));
+		var nonTradeTypes = summary.NonTradeExecutionTypes.Count == 0
+			? string.Empty
+			: $", вне TRADE-сверки {summary.JournalNonTradeExecutionsInRange} ({string.Join(", ", summary.NonTradeExecutionTypes.Select(type => $"{type.ExecType} {type.Count}"))})";
 		builder.AppendLine(string.Create(CultureInfo.InvariantCulture,
-			$"Журнал: исполнений в диапазоне {summary.JournalExecutionsInRange}, delivery-записей {summary.JournalDeliveriesInRange}; исключено по диапазону: исполнений {summary.ExecutionsOutsideRange}, delivery-записей {summary.DeliveriesOutsideRange}"));
+			$"Журнал: исполнений в диапазоне {summary.JournalExecutionsInRange}{nonTradeTypes}, delivery-записей {summary.JournalDeliveriesInRange}; исключено по диапазону: исполнений {summary.ExecutionsOutsideRange}, delivery-записей {summary.DeliveriesOutsideRange}"));
 		builder.AppendLine(string.Create(CultureInfo.InvariantCulture,
 			$"Сопоставлено: TRADE {summary.MatchedTrades}, DELIVERY {summary.MatchedDeliveries}"));
 		builder.AppendLine(string.Create(CultureInfo.InvariantCulture,
@@ -449,6 +463,13 @@ public sealed record ReconciliationReport
 			OutOfScopeRows = outOfScopeRows,
 			UnknownRows = unknownRows,
 			JournalExecutionsInRange = journal.Executions.Count,
+			JournalNonTradeExecutionsInRange = journal.Executions.Count(execution => StatementMatcher.IsTradeExecution(execution) == false),
+			NonTradeExecutionTypes = journal.Executions
+				.Where(execution => StatementMatcher.IsTradeExecution(execution) == false)
+				.GroupBy(execution => execution.ExecType, StringComparer.Ordinal)
+				.Select(group => new JournalNonTradeTypeCount(group.Key, group.Count()))
+				.OrderBy(type => type.ExecType, StringComparer.Ordinal)
+				.ToList(),
 			JournalDeliveriesInRange = journal.Deliveries.Count,
 			ExecutionsOutsideRange = journal.ExecutionsOutsideRange,
 			DeliveriesOutsideRange = journal.DeliveriesOutsideRange,
@@ -493,7 +514,11 @@ public sealed record ReconciliationReport
 			}
 		}
 
-		foreach (var execution in journal.Executions)
+		// В контрольных итогах по инструментам считаются только записи сверяемой
+		// TRADE-вселенной: записи вне неё (Funding и прочие) пар не образуют и
+		// итоги пар не контролируют.
+		// Traceability: change:reconcile-bybit-statement/design#d9
+		foreach (var execution in journal.Executions.Where(execution => StatementMatcher.IsTradeExecution(execution)))
 		{
 			CounterOf(execution.Symbol)[1]++;
 		}

@@ -10,8 +10,12 @@ namespace TransactionJournal.Tests.Sync.Reconciliation;
 /// </summary>
 public static class StatementMatcher
 {
-	/// <summary>Допуск времени точных и остаточных пар TRADE.</summary>
-	public static readonly TimeSpan TradeTimeTolerance = TimeSpan.FromSeconds(2);
+	/// <summary>Допуск времени точных и остаточных пар TRADE. Откалиброван по живому
+	/// прогону: серия из пяти исполнений одного ордера XAUT-30OCT26-4400-C растянута
+	/// по времени биржи примерно на 4.8 секунды, допуск ±2 сек оставлял крайние
+	/// записи серий непарными.
+	/// Traceability: change:reconcile-bybit-statement/design#d9</summary>
+	public static readonly TimeSpan TradeTimeTolerance = TimeSpan.FromSeconds(5);
 
 	/// <summary>Допуск времени пар DELIVERY.</summary>
 	public static readonly TimeSpan DeliveryTimeTolerance = TimeSpan.FromMinutes(10);
@@ -20,11 +24,24 @@ public static class StatementMatcher
 	public const decimal FeeRelativeTolerance = 0.005m;
 
 	/// <summary>
+	/// Признак того, что запись исполнения входит в сверяемую TRADE-вселенную:
+	/// калибровка живого прогона показала, что историческая выгрузка исполнения
+	/// linear-категории содержит записи Funding, соответствующие SETTLEMENT-строкам
+	/// выгрузки вне области сверки; оставить их в матчинге — значит получить
+	/// ложные «отсутствует в выгрузке». Сверяемые записи — только исполненные
+	/// сделки (execType=Trade).
+	/// Traceability: change:reconcile-bybit-statement/design#d9
+	/// </summary>
+	public static bool IsTradeExecution(JournalExecution execution) =>
+		string.Equals(execution.ExecType, "Trade", StringComparison.OrdinalIgnoreCase);
+
+	/// <summary>
 	/// Сопоставляет торговые строки выгрузки с записями исполнения. Этап 1 — точные
 	/// ключи (инструмент, сторона, количество, цена) с выбором ближайшего по времени
 	/// в допуске; этап 2 — остатки по (инструмент, сторона) образуют пары «расхождение
 	/// атрибутов»; итоговые остатки дают классификации «отсутствует в журнале» и
 	/// «отсутствует в выгрузке». Каждая строка и запись участвуют не более одного раза.
+	/// Записи вне сверяемой вселенной (execType не Trade) исключаются до матчинга.
 	/// </summary>
 	/// <param name="rows">Торговые строки выгрузки.</param>
 	/// <param name="executions">Записи исполнения журнала в диапазоне сверки.</param>
@@ -35,7 +52,7 @@ public static class StatementMatcher
 		ArgumentNullException.ThrowIfNull(executions);
 
 		// Список доступен для изъятия пар: изъятая запись не может быть сопоставлена дважды.
-		var available = new List<JournalExecution>(executions);
+		var available = new List<JournalExecution>(executions.Where(IsTradeExecution));
 		var matched = new List<TradeMatchPair>();
 		var attributeMismatches = new List<TradeAttributeMismatch>();
 		var stageOneUnpaired = new List<StatementRow>();

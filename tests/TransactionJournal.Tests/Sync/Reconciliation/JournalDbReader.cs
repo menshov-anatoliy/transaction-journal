@@ -95,7 +95,8 @@ public sealed class JournalDbReader
 					ExecId: reader.GetString(1),
 					Symbol: GetString(payload, "symbol") ?? string.Empty,
 					Side: (GetString(payload, "side") ?? string.Empty).ToUpperInvariant(),
-					Quantity: GetDecimal(payload, "orderQty"),
+					ExecType: GetString(payload, "execType") ?? string.Empty,
+					Quantity: GetDecimal(payload, "execQty"),
 					Price: GetDecimal(payload, "execPrice"),
 					Fee: GetDecimal(payload, "execFee"),
 					TimeUtc: DateTimeOffset.FromUnixTimeMilliseconds(timeMs).UtcDateTime));

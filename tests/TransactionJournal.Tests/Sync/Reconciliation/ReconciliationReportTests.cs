@@ -39,6 +39,9 @@ public class ReconciliationReportTests
 			Execution("BTCUSDT", "BUY", 1m, 100m, 0.05m, BaseTime, id: 1, execId: "exec-1"),
 			Execution("BTCUSDT", "BUY", 1m, 100m, 0.05m, BaseTime.AddSeconds(1), id: 2, execId: "exec-2"),
 			Execution("ETHUSDT", "BUY", 1m, 200m, 0.1m, BaseTime.AddSeconds(2), id: 3, execId: "exec-3"),
+			// Запись Funding вне сверяемой TRADE-вселенной: видна в сводке журнала,
+			// но не образует пар и не попадает в «отсутствует в выгрузке».
+			Execution("BTCUSDT", "SELL", 0.04m, 100m, -0.01m, BaseTime, id: 4, execId: "exec-4", execType: "Funding"),
 		};
 		var deliveries = new List<JournalDelivery>
 		{
@@ -66,7 +69,9 @@ public class ReconciliationReportTests
 		Assert.That(summary.DeliveryRows, Is.EqualTo(1));
 		Assert.That(summary.OutOfScopeRows, Is.EqualTo(4));
 		Assert.That(summary.UnknownRows, Is.EqualTo(1));
-		Assert.That(summary.JournalExecutionsInRange, Is.EqualTo(3));
+		Assert.That(summary.JournalExecutionsInRange, Is.EqualTo(4));
+		Assert.That(summary.JournalNonTradeExecutionsInRange, Is.EqualTo(1), "запись Funding видна в сводке, но вне TRADE-сверки");
+		Assert.That(summary.NonTradeExecutionTypes.Single(type => type.ExecType == "Funding").Count, Is.EqualTo(1));
 		Assert.That(summary.JournalDeliveriesInRange, Is.EqualTo(1));
 		Assert.That(summary.ExecutionsOutsideRange, Is.EqualTo(2));
 		Assert.That(summary.DeliveriesOutsideRange, Is.EqualTo(1));
@@ -96,6 +101,7 @@ public class ReconciliationReportTests
 		// Traceability: openspec:sync/bybit-statement-reconciliation#scenario-report-enables-locating-discrepancies
 		var text = report.Render();
 		Assert.That(text, Does.Contain("Период строк выгрузки: 2026-09-22 18:59:59 – 2026-09-22 19:00:10 UTC"));
+		Assert.That(text, Does.Contain("исполнений в диапазоне 4, вне TRADE-сверки 1 (Funding 1)"));
 		Assert.That(text, Does.Contain("исключено по диапазону: исполнений 2, delivery-записей 1"));
 		Assert.That(text, Does.Contain("--- Отсутствует в журнале (TRADE): 1 ---"));
 		Assert.That(text, Does.Contain("XAUTUSDT | SELL | qty=0.02 | price=4356 | fee=-0.08712 | uta-R2.csv:4"));
@@ -266,9 +272,10 @@ public class ReconciliationReportTests
 	/// Создаёт синтетическую запись исполнения журнала.
 	/// </summary>
 	private static JournalExecution Execution(
-		string symbol, string side, decimal quantity, decimal price, decimal fee, DateTime time, long id, string execId)
+		string symbol, string side, decimal quantity, decimal price, decimal fee, DateTime time, long id, string execId,
+		string execType = "Trade")
 	{
-		return new JournalExecution(id, execId, symbol, side, quantity, price, fee, time);
+		return new JournalExecution(id, execId, symbol, side, execType, quantity, price, fee, time);
 	}
 
 	/// <summary>

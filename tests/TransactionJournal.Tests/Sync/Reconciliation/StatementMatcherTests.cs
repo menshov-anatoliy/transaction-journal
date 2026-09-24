@@ -213,6 +213,27 @@ public class StatementMatcherTests
 	}
 
 	[TestMethod]
+	[Description("Запись Funding с совпадающими атрибутами исключается из TRADE-сверки и не даёт пары")]
+	public void TryIfFundingExecutionExcludedFromTradeMatching()
+	{
+		// Arrange: запись Funding, чьи ключевые атрибуты полностью совпадают со строкой выгрузки:
+		// по факту это фандинг линейной категории, которому соответствует SETTLEMENT-строка
+		// вне области сверки, а не торговая пара.
+		// Traceability: change:reconcile-bybit-statement/design#d9
+		var row = TradeRow(time: BaseTime);
+		var funding = Execution(time: BaseTime, execType: "Funding");
+
+		// Act
+		var result = StatementMatcher.MatchTrades([row], [funding]);
+
+		// Assert: пара не образована, строка осталась без пары в журнале,
+		// а запись Funding не попала в «отсутствует в выгрузке».
+		Assert.That(result.Matched, Is.Empty);
+		Assert.That(result.MissingInJournal, Has.Count.EqualTo(1));
+		Assert.That(result.MissingInStatement, Is.Empty);
+	}
+
+	[TestMethod]
 	[Description("Каждая строка и запись участвуют в сопоставлении не более одного раза")]
 	public void TryIfEachRowAndRecordUsedOnceInMultiset()
 	{
@@ -233,9 +254,10 @@ public class StatementMatcherTests
 	[Description("Строка и запись за пределами допуска времени остаются непарными")]
 	public void TryIfTimeBeyondToleranceLeavesBothUnmatched()
 	{
-		// Arrange: атрибуты совпадают, время различается на три секунды.
+		// Arrange: атрибуты совпадают, время различается на шесть секунд — за границей
+		// допуска ±5 сек, откалиброванного по живому прогону.
 		var row = TradeRow(time: BaseTime);
-		var execution = Execution(time: BaseTime.AddSeconds(3));
+		var execution = Execution(time: BaseTime.AddSeconds(6));
 
 		// Act
 		var result = StatementMatcher.MatchTrades([row], [execution]);
@@ -411,9 +433,10 @@ public class StatementMatcherTests
 		decimal? fee = 0.05m,
 		DateTime? time = null,
 		long id = 1,
-		string execId = "exec-1")
+		string execId = "exec-1",
+		string execType = "Trade")
 	{
-		return new JournalExecution(id, execId, symbol, side.ToUpperInvariant(), quantity, price, fee, time ?? BaseTime);
+		return new JournalExecution(id, execId, symbol, side.ToUpperInvariant(), execType, quantity, price, fee, time ?? BaseTime);
 	}
 
 	/// <summary>
