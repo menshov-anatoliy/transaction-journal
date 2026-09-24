@@ -188,36 +188,6 @@ public class PositionMetricsCalculatorTests
 	}
 
 	[TestMethod]
-	[Description("Направление позиции задаётся стороной первой записи потока")]
-	public void TryIfDirectionFollowsFirstEntrySide()
-	{
-		// Arrange: покупка первой записью против продажи первой записью; состав
-		// потоков зеркальный, различается только сторона открывающей записи.
-		// Требование: направление позиции определяется знаком первой записи
-		// потока — покупка делает позицию длинной, продажа короткой; правило
-		// едино для открытых и закрытых позиций.
-		// Traceability: openspec:analytics/performance#scenario-position-direction-from-opening-entry
-		var longEntries = new[]
-		{
-			Trade(0, "exec-buy-1", 1m, 100m),
-			Trade(10, "exec-sell-1", -0.4m, 110m),
-		};
-		var shortEntries = new[]
-		{
-			Trade(0, "exec-sell-1", -1m, 100m),
-			Trade(10, "exec-buy-1", 0.4m, 90m),
-		};
-
-		// Act
-		var longMetrics = _calculator.Calculate(ConstructionId, Symbol, longEntries);
-		var shortMetrics = _calculator.Calculate(ConstructionId, Symbol, shortEntries);
-
-		// Assert: обе позиции открыты, сторона каждой задана её первой записью.
-		Assert.That(longMetrics.IsLong, Is.True);
-		Assert.That(shortMetrics.IsLong, Is.False);
-	}
-
-	[TestMethod]
 	[Description("Закрытая позиция имеет средние цены входа и закрытия и общий PnL, равный реализованному")]
 	public void TryIfClosedPositionHasEntryCloseAveragesAndTotalPnL()
 	{

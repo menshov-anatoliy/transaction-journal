@@ -8,23 +8,35 @@ using TransactionJournal.Materialization;
 namespace TransactionJournal.Components.Pages;
 
 /// <summary>
-/// Строка таблицы позиций деталей конструкции: метрики позиции аналитики
-/// с комментарием позиции — ровно те столбцы, что выводит экран, без чужих
-/// производных величин.
+/// Строка таблицы позиций деталей конструкции: итоговая картина позиции
+/// в терминах её записей — вход, выход, результат, общий P&L,
+/// комиссии, времена — с комментарием позиции; ровно те столбцы, что выводит
+/// экран, без служебных величин оценки открытого остатка.
 /// </summary>
 /// <param name="Symbol">Инструмент позиции.</param>
 /// <param name="Residual">Чистый остаток: положителен для длинной, отрицателен для короткой; ноль — закрыта.</param>
-/// <param name="AverageOpenPrice">Средняя цена открытого остатка; null у закрытой позиции.</param>
-/// <param name="MarkPrice">Текущая марка открытого остатка; null — оценка не построена.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое марок открытого остатка, ноль у закрытой.</param>
+/// <param name="AverageEntryPrice">Средняя цена входа — количество-взвешенная цена всех открывающих частей FIFO-потока; null, если открывающих частей нет.</param>
+/// <param name="AverageClosePrice">Средняя цена закрытия — количество-взвешенная цена всех закрывающих частей потока; null, если закрывающих частей нет.</param>
+/// <param name="TotalPnL">Общий PnL позиции: реализованный плюс нереализованная оценка; null у открытой позиции при сбое марок.</param>
+/// <param name="TotalPnLPercent">Общий P&L процентом от выделенного капитала конструкции; null вместе с общим P&L или при нулевом капитале.</param>
+/// <param name="AccumulatedFees">Накопленные комиссии записей позиции: уплаченные складываются, rebate снижает сумму.</param>
+/// <param name="OpenedAt">Время открытия — время первой записи позиции.</param>
+/// <param name="ClosedAt">Время закрытия — момент обнуления остатка; null, пока позиция открыта.</param>
 /// <param name="IsOpen">Позиция открыта, пока остаток не нулевой.</param>
 /// <param name="Comment">Комментарий позиции по ключу «конструкция × инструмент»; null — комментария нет.</param>
+// Строка показывает картину позиции её записями: вход, выход,
+// результат, общий P&L с процентом от капитала, комиссии и времена.
+// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
 public sealed record ConstructionPositionRow(
 	string Symbol,
 	decimal Residual,
-	decimal? AverageOpenPrice,
-	decimal? MarkPrice,
-	decimal? UnrealizedPnL,
+	decimal? AverageEntryPrice,
+	decimal? AverageClosePrice,
+	decimal? TotalPnL,
+	decimal? TotalPnLPercent,
+	decimal AccumulatedFees,
+	DateTimeOffset OpenedAt,
+	DateTimeOffset? ClosedAt,
 	bool IsOpen,
 	string? Comment);
 
@@ -202,7 +214,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			throw new ConstructionNotFoundException(constructionId);
 		}
 
-		var positions = await ReadPositionsAsync(db, constructionId, metrics, cancellationToken).ConfigureAwait(false);
+		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, cancellationToken).ConfigureAwait(false);
 		var trades = await ReadTradesAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
@@ -233,11 +245,14 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 
 	/// <summary>
 	/// Строки таблицы позиций: метрики позиций конструкции из аналитики
-	/// с комментариями позиций по ключу «конструкция × инструмент».
+	/// с комментариями позиций по ключу «конструкция × инструмент»; процент
+	/// общего P&L считается здесь, потому что метрики позиции капиталом
+	/// конструкции не владеют.
 	/// </summary>
 	private static async Task<List<ConstructionPositionRow>> ReadPositionsAsync(
 		JournalDbContext db,
 		long constructionId,
+		decimal allocatedCapitalUsdt,
 		JournalMetrics metrics,
 		CancellationToken cancellationToken)
 	{
@@ -247,15 +262,27 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				.ToListAsync(cancellationToken)
 				.ConfigureAwait(false))
 			.ToDictionary(comment => comment.Symbol, comment => comment.Text);
+
+		// Процент общего P&L — от текущего выделенного капитала, как в метриках
+		// конструкции: нулевой капитал базы не образует, процент остаётся null
+		// вместе с общим P&L.
+		decimal? TotalPnLPercent(decimal? totalPnL) => totalPnL == null || allocatedCapitalUsdt == 0m
+			? null
+			: totalPnL.Value / allocatedCapitalUsdt * 100m;
+
 		return metrics.Positions
 			.Where(position => position.ConstructionId == constructionId)
 			.OrderBy(position => position.Symbol, StringComparer.Ordinal)
 			.Select(position => new ConstructionPositionRow(
 				position.Symbol,
 				position.Residual,
-				position.AverageOpenPrice,
-				position.MarkPrice,
-				position.UnrealizedPnL,
+				position.AverageEntryPrice,
+				position.AverageClosePrice,
+				position.TotalPnL,
+				TotalPnLPercent(position.TotalPnL),
+				position.AccumulatedFees,
+				position.OpenedAt,
+				position.ClosedAt,
 				position.Residual != 0m,
 				commentsBySymbol.GetValueOrDefault(position.Symbol)))
 			.ToList();

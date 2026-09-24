@@ -114,6 +114,14 @@ public class ConstructionDetailReadModelTests
 		Assert.That(data.HasOpenResidual, Is.True);
 		Assert.That(data.HasMarkFailure, Is.False);
 		Assert.That(data.MarksAsOf, Is.EqualTo(receivedAt));
+
+		// Строка позиции несёт общий P&L (реализованный плюс нереализованный) и его
+		// процент от выделенного капитала конструкции: 199 от 1000 — 19.9%.
+		// Требование: строка позиции показывает общий P&L с процентом от капитала.
+		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
+		var position = data.Positions.Single();
+		Assert.That(position.TotalPnL, Is.EqualTo(199m));
+		Assert.That(position.TotalPnLPercent, Is.EqualTo(19.9m));
 	}
 
 	[TestMethod]
@@ -134,15 +142,21 @@ public class ConstructionDetailReadModelTests
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
 
-		// Assert: позиция несёт остаток, среднюю, марку и нереализованную оценку
+		// Assert: позиция несёт картину своих записей — средние цены входа и
+		// закрытия, общий P&L, комиссии и времена —
 		// с комментарием позиции; сделки перечислены хронологически с атрибутами
 		// биржевой записи и комментарием своей сделки.
+		// Требование: строка позиции показывает вход, выход и итог.
+		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
 		var position = data.Positions.Single();
 		Assert.That(position.Symbol, Is.EqualTo(LinearSymbol));
 		Assert.That(position.Residual, Is.EqualTo(0.06m));
-		Assert.That(position.AverageOpenPrice, Is.EqualTo(42000m));
-		Assert.That(position.MarkPrice, Is.EqualTo(44000m));
-		Assert.That(position.UnrealizedPnL, Is.EqualTo(120m));
+		Assert.That(position.AverageEntryPrice, Is.EqualTo(42000m));
+		Assert.That(position.AverageClosePrice, Is.EqualTo(42500m));
+		Assert.That(position.TotalPnL, Is.EqualTo(138.5m));
+		Assert.That(position.AccumulatedFees, Is.EqualTo(1.5m));
+		Assert.That(position.OpenedAt, Is.EqualTo(new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero)));
+		Assert.That(position.ClosedAt, Is.Null);
 		Assert.That(position.IsOpen, Is.True);
 		Assert.That(position.Comment, Is.EqualTo("частичный выход"));
 
@@ -159,6 +173,33 @@ public class ConstructionDetailReadModelTests
 		Assert.That(second.IsBuy, Is.False);
 		Assert.That(second.AmountUsdt, Is.EqualTo(1700m));
 		Assert.That(second.Comment, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Строка позиции несёт ровно выводимые столбцы — служебные величины остатка убраны")]
+	public void TryIfPositionRowCarriesExactlyDisplayedColumns()
+	{
+		// Assert: контракт строки зафиксирован составом публичных свойств — поля
+		// служебных величин оценки открытого остатка (средняя остатка, марка,
+		// нереализованный PnL) из строки убраны вместе с их колонками.
+		// Требование: строка позиции показывает вход, выход и итог,
+		// колонки «Средняя», «Марка» и «Нереализов.» отсутствуют.
+		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
+		var columns = typeof(ConstructionPositionRow).GetProperties().Select(property => property.Name).ToArray();
+		Assert.That(columns, Is.EqualTo(new[]
+		{
+			nameof(ConstructionPositionRow.Symbol),
+			nameof(ConstructionPositionRow.Residual),
+			nameof(ConstructionPositionRow.AverageEntryPrice),
+			nameof(ConstructionPositionRow.AverageClosePrice),
+			nameof(ConstructionPositionRow.TotalPnL),
+			nameof(ConstructionPositionRow.TotalPnLPercent),
+			nameof(ConstructionPositionRow.AccumulatedFees),
+			nameof(ConstructionPositionRow.OpenedAt),
+			nameof(ConstructionPositionRow.ClosedAt),
+			nameof(ConstructionPositionRow.IsOpen),
+			nameof(ConstructionPositionRow.Comment),
+		}));
 	}
 
 	[TestMethod]
@@ -292,11 +333,12 @@ public class ConstructionDetailReadModelTests
 
 		// Assert: сбой марок оставил нереализованную оценку и итог непостроенными
 		// с признаком сбоя и неизвестной отметкой времени; реализованный результат
-		// (−1 комиссия) виден; строка позиции без марки и оценки.
+		// (−1 комиссия) виден; строка позиции без общего P&L и его процента.
 		// Требование: нереализованные величины сопровождаются отметкой времени
-		// марок, сбой показывается признаком.
+		// марок, сбой показывается признаком; общий PnL открытой позиции при сбое —
+		// null вместе с нереализованной частью.
 		// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
-		// Traceability: change:add-ui-screens/design#d4
+		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-mark-failure
 		Assert.That(data.HasMarkFailure, Is.True);
 		Assert.That(data.HasOpenResidual, Is.True);
 		Assert.That(data.MarksAsOf, Is.Null);
@@ -304,9 +346,10 @@ public class ConstructionDetailReadModelTests
 		Assert.That(data.Metrics.TotalPnL, Is.Null);
 		Assert.That(data.Metrics.RealizedPnL, Is.EqualTo(-1m));
 		var position = data.Positions.Single();
-		Assert.That(position.MarkPrice, Is.Null);
-		Assert.That(position.UnrealizedPnL, Is.Null);
+		Assert.That(position.TotalPnL, Is.Null);
+		Assert.That(position.TotalPnLPercent, Is.Null);
 		Assert.That(position.Residual, Is.EqualTo(0.1m));
+		Assert.That(position.AverageEntryPrice, Is.EqualTo(42000m));
 	}
 
 	[TestMethod]

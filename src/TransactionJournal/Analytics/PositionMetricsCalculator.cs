@@ -68,12 +68,6 @@ public sealed class PositionMetricsCalculator
 		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-unrealized
 		var isOpen = fifo.Residual != 0m;
 
-		// Направление — сторона открывающей записи: первая запись хронологии всегда
-		// открывает слой (пустой поток отклонён выше), поэтому её знак и есть сторона
-		// позиции — покупка делает позицию длинной, продажа короткой.
-		// Traceability: openspec:analytics/performance#scenario-position-direction-from-opening-entry
-		var isLong = ordered[0].Quantity > 0m;
-
 		// Общий PnL закрытой позиции — реализованный: марок закрытая не требует.
 		// Открытая ждёт слой марок: он соберёт общий PnL из реализованной и
 		// нереализованной частей, до него общий PnL остаётся null.
@@ -91,7 +85,6 @@ public sealed class PositionMetricsCalculator
 			AverageOpenPrice = fifo.AverageOpenPrice,
 			AverageEntryPrice = fifo.AverageEntryPrice,
 			AverageClosePrice = fifo.AverageClosePrice,
-			IsLong = isLong,
 			TotalPnL = totalPnL,
 			MarkPrice = null,
 			UnrealizedPnL = isOpen ? null : 0m,

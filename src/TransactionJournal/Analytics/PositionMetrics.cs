@@ -46,15 +46,6 @@ public sealed record PositionMetrics
 	public required decimal? AverageClosePrice { get; init; }
 
 	/// <summary>
-	/// Направление позиции по стороне открывающей записи — знак количества первой
-	/// записи потока: покупка — длинная, продажа — короткая. Правило едино для
-	/// открытых и закрытых позиций; при перебросе стороны посреди жизни позиция
-	/// показывает сторону первого входа.
-	// Traceability: openspec:analytics/performance#scenario-position-direction-from-opening-entry
-	/// </summary>
-	public required bool IsLong { get; init; }
-
-	/// <summary>
 	/// Общий PnL позиции — реализованный плюс нереализованная оценка: у закрытой
 	/// позиции равен реализованному и марок не требует; у открытой собирается
 	/// слоем марок после оценки остатка и до неё, как и при сбое марок, остаётся
