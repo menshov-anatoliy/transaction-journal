@@ -285,7 +285,7 @@ public class ConstructionDetailScreenTests
 
 		var cut = RenderDetail();
 
-		// Assert: признак сбоя марок занимает «Общий P&L» и «Результат» строки
+		// Assert: признак сбоя марок занимает «Общий P&L» строки
 		// позиции; реализованные величины — средняя цена входа,
 		// комиссии и время открытия — остаются видимыми.
 		// Требование: сбой марок — видимое состояние, реализованные величины
@@ -296,7 +296,7 @@ public class ConstructionDetailScreenTests
 			Assert.That(cut.FindAll(".kstrip .markfail").Count, Is.EqualTo(3));
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("-1"));
 			var row = cut.Find("tbody tr");
-			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(2));
+			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
 			Assert.That(row.TextContent, Does.Contain("42000"));
 			Assert.That(row.TextContent, Does.Contain("1"));
 			Assert.That(row.TextContent, Does.Contain(DisplayTime.FormatMoment(new DateTimeOffset(2026, 9, 19, 21, 32, 0, TimeSpan.Zero))));
@@ -304,8 +304,8 @@ public class ConstructionDetailScreenTests
 	}
 
 	[TestMethod]
-	[Description("Таблица позиций показывает состав колонок, вход, выход, результат и общий P&L с процентом")]
-	public void TryIfPositionsTableShowsEntryCloseResultAndTotalPnl()
+	[Description("Таблица позиций показывает состав колонок, вход, выход и общий P&L с процентом")]
+	public void TryIfPositionsTableShowsEntryCloseAndTotalPnl()
 	{
 		// Arrange: закрытая прибыльная и закрытая убыточная позиции
 		// с ценами входа и выхода, комиссиями и временами открытия/закрытия.
@@ -321,10 +321,9 @@ public class ConstructionDetailScreenTests
 
 		var cut = RenderDetail();
 
-		// Assert: состав колонок ровно выводимый — колонки «Средняя», «Марка»
-		// и «Нереализов.» отсутствуют; результат — категория по знаку общего P&L,
-		// общий P&L — абсолют со знаком и процент
-		// от капитала в скобках.
+		// Assert: состав колонок ровно выводимый — колонки «Средняя», «Марка»,
+		// «Нереализов.» и «Результат» отсутствуют; общий P&L — абсолют со знаком
+		// и процент от капитала в скобках.
 		// Требование: строка позиции показывает вход, выход и итог.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
 		cut.WaitForAssertion(() =>
@@ -336,7 +335,6 @@ public class ConstructionDetailScreenTests
 				"Остаток",
 				"Сред. цена входа",
 				"Сред. цена закрытия",
-				"Результат",
 				"Общий P&L",
 				"Всего комиссий",
 				"Время открытия",
@@ -348,14 +346,12 @@ public class ConstructionDetailScreenTests
 
 			var rows = cut.FindAll("table")[0].QuerySelectorAll("tbody tr");
 			Assert.That(rows, Has.Length.EqualTo(2));
-			Assert.That(rows[0].TextContent, Does.Contain("Прибыль"));
 			Assert.That(rows[0].TextContent, Does.Contain("+199 (+6.6%)"));
 			Assert.That(rows[0].TextContent, Does.Contain("42000"));
 			Assert.That(rows[0].TextContent, Does.Contain("44000"));
 			Assert.That(rows[0].TextContent, Does.Contain("1.5"));
 			Assert.That(rows[0].TextContent, Does.Contain(DisplayTime.FormatMoment(openedAt)));
 			Assert.That(rows[0].TextContent, Does.Contain(DisplayTime.FormatMoment(closedAt)));
-			Assert.That(rows[1].TextContent, Does.Contain("Убыток"));
 			Assert.That(rows[1].TextContent, Does.Contain("-45 (-1.5%)"));
 		});
 	}
@@ -752,7 +748,7 @@ public class ConstructionDetailScreenTests
 		// Traceability: openspec:ui/screens#scenario-position-comment-without-residual-edit
 		var row = cut.FindAll("table")[0].QuerySelectorAll("tbody tr").Single();
 		Assert.That(row.QuerySelectorAll("input"), Has.Length.EqualTo(1));
-		Assert.That(row.QuerySelectorAll("td")[10].QuerySelectorAll("input"), Has.Length.EqualTo(1));
+		Assert.That(row.QuerySelectorAll("td")[9].QuerySelectorAll("input"), Has.Length.EqualTo(1));
 		Assert.That(row.QuerySelectorAll("td")[1].QuerySelectorAll("input"), Is.Empty);
 		Assert.That(row.QuerySelectorAll("td")[1].TextContent.Trim(), Is.EqualTo("+0.1"));
 

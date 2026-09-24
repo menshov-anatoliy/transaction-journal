@@ -231,7 +231,7 @@ else
 		</div>
 	}
 	@* Колонки таблицы позиций выводят картину позиции её записями: вход, выход,
-	   результат, общий P&L с процентом от капитала, комиссии,
+	   общий P&L с процентом от капитала, комиссии,
 	   времена; служебные величины оценки открытого остатка (средняя остатка,
 	   марка, нереализованный PnL) из таблицы убраны. *@
 	@* Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total *@
@@ -242,7 +242,6 @@ else
 				<th>Остаток</th>
 				<th>Сред. цена входа</th>
 				<th>Сред. цена закрытия</th>
-				<th>Результат</th>
 				<th>Общий P&L</th>
 				<th>Всего комиссий</th>
 				<th>Время открытия</th>
@@ -257,7 +256,7 @@ else
 			{
 				@* Пустая таблица — явное сообщение об отсутствии, а не пустая разметка. *@
 				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
-				<tr><td colspan="12" class="empty">позиций нет</td></tr>
+				<tr><td colspan="11" class="empty">позиций нет</td></tr>
 			}
 			@foreach (var position in _data.Positions)
 			{
@@ -266,28 +265,10 @@ else
 					<td>@FormatQuantity(position.Residual)</td>
 					<td>@FormatAmount(position.AverageEntryPrice)</td>
 					<td>@FormatAmount(position.AverageClosePrice)</td>
-					@* Признак сбоя марок открытой позиции занимает «Общий P&L» и
-					   «Результат»: нереализованная часть не оценена, реализованные
+					@* Признак сбоя марок открытой позиции занимает «Общий P&L»:
+					   нереализованная часть не оценена, реализованные
 					   величины и остальные колонки остаются видимыми. *@
 					@* Traceability: openspec:ui/screens#scenario-detail-position-total-pnl-marks-failure *@
-					<td>
-						@if (position.IsOpen && position.TotalPnL is null)
-						{
-							<span class="markfail" title="Провайдер марок недоступен — общий P&L не оценён">сбой марок</span>
-						}
-						else if (position.TotalPnL > 0)
-						{
-							<span>Прибыль</span>
-						}
-						else if (position.TotalPnL < 0)
-						{
-							<span>Убыток</span>
-						}
-						else
-						{
-							<span>—</span>
-						}
-					</td>
 					<td>
 						@if (position.IsOpen && position.TotalPnL is null)
 						{
