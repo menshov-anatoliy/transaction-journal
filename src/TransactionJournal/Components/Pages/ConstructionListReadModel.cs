@@ -134,7 +134,9 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				header.Id,
 				header.Name,
 				header.Status,
-				header.AllocatedCapitalUsdt,
+				// Промежуточная совместимость до nullable-капитала в DTO: незаданный
+				// капитал передаётся нулём до правки read-модели списка (4.1).
+				header.AllocatedCapitalUsdt ?? 0m,
 				item.RealizedPnL,
 				item.UnrealizedPnL,
 				item.AdjustmentsPnL,

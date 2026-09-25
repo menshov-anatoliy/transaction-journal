@@ -226,7 +226,9 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			throw new ConstructionNotFoundException(constructionId);
 		}
 
-		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, cancellationToken).ConfigureAwait(false);
+		// Промежуточная совместимость до перехода read-модели на nullable-капитал:
+		// незаданный капитал ведёт себя как нулевой — проценты позиций не строятся.
+		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt ?? 0m, metrics, cancellationToken).ConfigureAwait(false);
 		var trades = await ReadTradesAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
@@ -240,7 +242,9 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			construction.Id,
 			construction.Name,
 			construction.Status,
-			construction.AllocatedCapitalUsdt,
+			// Промежуточная совместимость до nullable-капитала в DTO: незаданный
+			// капитал передаётся нулём и скрытие процентов приходит задачей 5.5.
+			construction.AllocatedCapitalUsdt ?? 0m,
 			construction.Comment,
 			constructionMetrics,
 			hasOpenResidual,

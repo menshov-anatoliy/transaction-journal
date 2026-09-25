@@ -2,13 +2,13 @@
 
 ## 1. Модель данных и миграция
 
-- [ ] 1.1 В `Data/Construction.cs` сменить `AllocatedCapitalUsdt` на `decimal?`, добавить enum `TargetUnit { Percent, Usdt }` и nullable-поля `RiskValue`, `RiskUnit`, `ProfitValue`, `ProfitUnit` с XML-документацией и traceability-метками (`openspec:domain/constructions#requirement-risk-profit-params`, `#requirement-allocated-capital`); проверить сборку `dotnet build`
-- [ ] 1.2 Добавить EF-миграцию (nullable-капитал + четыре колонки риск/профит), убедиться, что снапшот модели обновился и миграция применяется к пустой и существующей базе без потери значений капитала
+- [x] 1.1 В `Data/Construction.cs` сменить `AllocatedCapitalUsdt` на `decimal?`, добавить enum `TargetUnit { Percent, Usdt }` и nullable-поля `RiskValue`, `RiskUnit`, `ProfitValue`, `ProfitUnit` с XML-документацией и traceability-метками (`openspec:domain/constructions#requirement-risk-profit-params`, `#requirement-allocated-capital`); проверить сборку `dotnet build`
+- [x] 1.2 Добавить EF-миграцию (nullable-капитал + четыре колонки риск/профит), убедиться, что снапшот модели обновился и миграция применяется к пустой и существующей базе без потери значений капитала
 
 ## 2. Домен: сервис контрактов и тесты
 
-- [ ] 2.1 Обновить `IConstructionService`/`ConstructionService`: `CreateAsync` принимает `decimal?` капитал, `UpdateAllocatedCapitalAsync` принимает `decimal?` (null убирает значение), добавить `UpdateRiskAsync`/`UpdateProfitAsync(long, decimal? value, TargetUnit? unit)` с инвариантом «оба заданы или оба null» и положительным значением; проверить `dotnet build` после правки всех вызовов
-- [ ] 2.2 Доменные тесты: создание без капитала (`scenario-construction-created-without-capital`), убирание капитала у существующей (`scenario-capital-removable`), установка риска в одной единице (`scenario-risk-entered-in-single-unit`), правка с заменой единицы (`scenario-risk-profit-edit-replaces-unit`), очистка (`scenario-risk-profit-clear-removes-param`), независимость риск/профит (`scenario-risk-profit-independent`), отказ неполной пары; убедиться, что `dotnet test --filter ConstructionService` проходит
+- [x] 2.1 Обновить `IConstructionService`/`ConstructionService`: `CreateAsync` принимает `decimal?` капитал, `UpdateAllocatedCapitalAsync` принимает `decimal?` (null убирает значение), добавить `UpdateRiskAsync`/`UpdateProfitAsync(long, decimal? value, TargetUnit? unit)` с инвариантом «оба заданы или оба null» и положительным значением; проверить `dotnet build` после правки всех вызовов
+- [x] 2.2 Доменные тесты: создание без капитала (`scenario-construction-created-without-capital`), убирание капитала у существующей (`scenario-capital-removable`), установка риска в одной единице (`scenario-risk-entered-in-single-unit`), правка с заменой единицы (`scenario-risk-profit-edit-replaces-unit`), очистка (`scenario-risk-profit-clear-removes-param`), независимость риск/профит (`scenario-risk-profit-independent`), отказ неполной пары; убедиться, что `dotnet test --filter ConstructionService` проходит
 
 ## 3. Аналитика: проценты и конвертация единиц
 

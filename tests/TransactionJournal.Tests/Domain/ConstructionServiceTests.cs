@@ -9,9 +9,10 @@ namespace TransactionJournal.Tests.Domain;
 
 /// <summary>
 /// Проверки use-case сервиса управления конструкциями: создание со статусом
-/// «открыта», свободное переименование без побочных эффектов, ручная смена
-/// статуса с архивацией, активные и полные списки чтения и удаление только
-/// конструкций без сделок и корректировок.
+/// «открыта» с капиталом и без него, свободное переименование без побочных
+/// эффектов, задание/правка/убирание капитала и плановых границ результата
+/// (риск, профит), ручная смена статуса с архивацией, активные и полные
+/// списки чтения и удаление только конструкций без сделок и корректировок.
 /// </summary>
 [TestClass]
 public class ConstructionServiceTests
@@ -381,6 +382,258 @@ public class ConstructionServiceTests
 	{
 		// Act: удаляем конструкцию, которой нет в журнале.
 		_service.DeleteAsync(12345).GetAwaiter().GetResult();
+	}
+
+	[TestMethod]
+	[Description("Конструкция создаётся без выделенного капитала: статус «открыта», капитал отсутствует")]
+	public async Task TryIfConstructionCreatedWithoutCapital()
+	{
+		// Act: создаём конструкцию, оставив поле выделенного капитала пустым.
+		var created = await _service.CreateAsync("Без бюджета", null);
+
+		// Assert: конструкция получает статус «открыта» и создаётся без значения
+		// выделенного капитала; параметры риск/профит у новой конструкции тоже пусты.
+		// Требование: конструкция создаётся без выделенного капитала.
+		// Traceability: openspec:domain/constructions#scenario-construction-created-without-capital
+		Assert.That(created.Status, Is.EqualTo(ConstructionStatus.Open));
+		Assert.That(created.AllocatedCapitalUsdt, Is.Null);
+		Assert.That(created.RiskValue, Is.Null);
+		Assert.That(created.ProfitValue, Is.Null);
+
+		// Assert: конструкция видна в активном списке, пустой капитал сохранён.
+		var activeIds = (await _service.ListActiveAsync()).Select(construction => construction.Id).ToList();
+		Assert.That(activeIds, Does.Contain(created.Id));
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.Constructions.Single().AllocatedCapitalUsdt, Is.Null);
+		}
+	}
+
+	[TestMethod]
+	[Description("Капитал убирается у существующей конструкции: значение отсутствует, прочие данные не тронуты")]
+	public async Task TryIfCapitalRemovedFromExistingConstruction()
+	{
+		// Arrange: конструкция с капиталом и комментарием.
+		var construction = await _service.CreateAsync("С капиталом", 2500m, "Комментарий конструкции");
+
+		// Act: очищаем поле выделенного капитала.
+		await _service.UpdateAllocatedCapitalAsync(construction.Id, null);
+
+		// Assert: значение капитала отсутствует, имя, статус и комментарий
+		// не изменены — убирание капитала не затрагивает прочие данные.
+		// Требование: капитал можно убрать у существующей конструкции.
+		// Traceability: openspec:domain/constructions#scenario-capital-removable
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.AllocatedCapitalUsdt, Is.Null);
+			Assert.That(stored.Name, Is.EqualTo("С капиталом"));
+			Assert.That(stored.Status, Is.EqualTo(ConstructionStatus.Open));
+			Assert.That(stored.Comment, Is.EqualTo("Комментарий конструкции"));
+		}
+	}
+
+	[TestMethod]
+	[Description("Риск вводится значением ровно в одной единице — USDT: единица хранится первоисточником")]
+	public async Task TryIfRiskEnteredInSingleUnit()
+	{
+		// Arrange: существующая конструкция с капиталом.
+		var construction = await _service.CreateAsync("С риском", 1000m);
+
+		// Act: вводим риск «150» в USDT.
+		await _service.UpdateRiskAsync(construction.Id, 150m, TargetUnit.Usdt);
+
+		// Assert: хранится значение 150 с единицей ввода USDT как первоисточником;
+		// параметр профита при этом отсутствует.
+		// Требование: параметр вводится значением ровно в одной единице, введённая
+		// единица хранится как первоисточник.
+		// Traceability: openspec:domain/constructions#scenario-risk-entered-in-single-unit
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.RiskValue, Is.EqualTo(150m));
+			Assert.That(stored.RiskUnit, Is.EqualTo(TargetUnit.Usdt));
+			Assert.That(stored.ProfitValue, Is.Null);
+			Assert.That(stored.ProfitUnit, Is.Null);
+		}
+	}
+
+	[TestMethod]
+	[Description("Правка риска заменяет и значение, и единицу первоисточника без следов прежнего ввода")]
+	public async Task TryIfRiskEditReplacesValueAndUnit()
+	{
+		// Arrange: конструкция с риском «150 USDT».
+		var construction = await _service.CreateAsync("С правкой риска", 3000m);
+		await _service.UpdateRiskAsync(construction.Id, 150m, TargetUnit.Usdt);
+
+		// Act: правим риск с «150 USDT» на «5» в процентах.
+		await _service.UpdateRiskAsync(construction.Id, 5m, TargetUnit.Percent);
+
+		// Assert: первоисточником стала пара «5, проценты»; прежнее значение
+		// и единица не оставили следов.
+		// Требование: правка заменяет значение и единицу первоисточника.
+		// Traceability: openspec:domain/constructions#scenario-risk-profit-edit-replaces-unit
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.RiskValue, Is.EqualTo(5m));
+			Assert.That(stored.RiskUnit, Is.EqualTo(TargetUnit.Percent));
+		}
+	}
+
+	[TestMethod]
+	[Description("Очистка профита убирает параметр и не затрагивает риск")]
+	public async Task TryIfProfitClearRemovesParamAndKeepsRisk()
+	{
+		// Arrange: конструкция с риском «150 USDT» и профитом «5%».
+		var construction = await _service.CreateAsync("С границами", 3000m);
+		await _service.UpdateRiskAsync(construction.Id, 150m, TargetUnit.Usdt);
+		await _service.UpdateProfitAsync(construction.Id, 5m, TargetUnit.Percent);
+
+		// Act: очищаем профит существующей конструкции.
+		await _service.UpdateProfitAsync(construction.Id, null, null);
+
+		// Assert: параметр профита отсутствует, риск не затронут.
+		// Требование: очистка убирает параметр, соседний параметр остаётся на месте.
+		// Traceability: openspec:domain/constructions#scenario-risk-profit-clear-removes-param
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.ProfitValue, Is.Null);
+			Assert.That(stored.ProfitUnit, Is.Null);
+			Assert.That(stored.RiskValue, Is.EqualTo(150m));
+			Assert.That(stored.RiskUnit, Is.EqualTo(TargetUnit.Usdt));
+		}
+	}
+
+	[TestMethod]
+	[Description("Риск и профит независимы: задание и очистка профита не меняют заданный риск")]
+	public async Task TryIfRiskAndProfitIndependent()
+	{
+		// Arrange: конструкция, у которой задан только риск.
+		var construction = await _service.CreateAsync("Только риск", 1000m);
+		await _service.UpdateRiskAsync(construction.Id, 100m, TargetUnit.Usdt);
+
+		// Act: задаём профит, затем очищаем его.
+		await _service.UpdateProfitAsync(construction.Id, 10m, TargetUnit.Percent);
+		await _service.UpdateProfitAsync(construction.Id, null, null);
+
+		// Assert: профит отсутствует, риск оставался заданным всё время —
+		// задание и очистка одного параметра не влияют на другой.
+		// Требование: риск и профит независимы друг от друга.
+		// Traceability: openspec:domain/constructions#scenario-risk-profit-independent
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.RiskValue, Is.EqualTo(100m));
+			Assert.That(stored.RiskUnit, Is.EqualTo(TargetUnit.Usdt));
+			Assert.That(stored.ProfitValue, Is.Null);
+			Assert.That(stored.ProfitUnit, Is.Null);
+		}
+	}
+
+	[TestMethod]
+	[Description("Риск с неполной парой «значение/единица» отклоняется, прежний риск сохраняется")]
+	public async Task ThrowOnUpdateRiskWithIncompletePair()
+	{
+		// Arrange: существующая конструкция с заданным риском «150 USDT».
+		var construction = await _service.CreateAsync("Неполный риск", 1000m);
+		await _service.UpdateRiskAsync(construction.Id, 150m, TargetUnit.Usdt);
+
+		// Act/Assert: неполная пара «только значение» отклоняется.
+		// Требование: параметр задаётся парой «значение + единица», неполная
+		// пара отклоняется и не сохраняется.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		Assert.ThrowsAsync<ArgumentException>(
+			async () => await _service.UpdateRiskAsync(construction.Id, 5m, null));
+
+		// Act/Assert: неполная пара «только единица» отклоняется.
+		Assert.ThrowsAsync<ArgumentException>(
+			async () => await _service.UpdateRiskAsync(construction.Id, null, TargetUnit.Percent));
+
+		// Assert: отклонённые правки не изменили сохранённый риск.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.RiskValue, Is.EqualTo(150m));
+			Assert.That(stored.RiskUnit, Is.EqualTo(TargetUnit.Usdt));
+		}
+	}
+
+	[TestMethod]
+	[Description("Профит с неполной парой «значение/единица» отклоняется, прежний профит сохраняется")]
+	public async Task ThrowOnUpdateProfitWithIncompletePair()
+	{
+		// Arrange: существующая конструкция с заданным профитом «5%».
+		var construction = await _service.CreateAsync("Неполный профит", 1000m);
+		await _service.UpdateProfitAsync(construction.Id, 5m, TargetUnit.Percent);
+
+		// Act/Assert: неполная пара «только значение» отклоняется.
+		// Требование: параметр задаётся парой «значение + единица», неполная
+		// пара отклоняется и не сохраняется.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		Assert.ThrowsAsync<ArgumentException>(
+			async () => await _service.UpdateProfitAsync(construction.Id, 10m, null));
+
+		// Act/Assert: неполная пара «только единица» отклоняется.
+		Assert.ThrowsAsync<ArgumentException>(
+			async () => await _service.UpdateProfitAsync(construction.Id, null, TargetUnit.Usdt));
+
+		// Assert: отклонённые правки не изменили сохранённый профит.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.ProfitValue, Is.EqualTo(5m));
+			Assert.That(stored.ProfitUnit, Is.EqualTo(TargetUnit.Percent));
+		}
+	}
+
+	[TestMethod]
+	[Description("Риск с нулевым или отрицательным значением отклоняется")]
+	public async Task ThrowOnUpdateRiskWithNonPositiveValue()
+	{
+		// Arrange: существующая конструкция.
+		var construction = await _service.CreateAsync("Риск неположительный", 1000m);
+
+		// Act/Assert: нулевое и отрицательное значения отклоняются.
+		// Требование: значение параметра вводится положительным числом.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		Assert.ThrowsAsync<ArgumentException>(
+			async () => await _service.UpdateRiskAsync(construction.Id, 0m, TargetUnit.Usdt));
+		Assert.ThrowsAsync<ArgumentException>(
+			async () => await _service.UpdateRiskAsync(construction.Id, -5m, TargetUnit.Percent));
+
+		// Assert: параметр риска остался незаданным.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.RiskValue, Is.Null);
+			Assert.That(stored.RiskUnit, Is.Null);
+		}
+	}
+
+	[TestMethod]
+	[Description("Профит с нулевым или отрицательным значением отклоняется")]
+	public async Task ThrowOnUpdateProfitWithNonPositiveValue()
+	{
+		// Arrange: существующая конструкция.
+		var construction = await _service.CreateAsync("Профит неположительный", 1000m);
+
+		// Act/Assert: нулевое и отрицательное значения отклоняются.
+		// Требование: значение параметра вводится положительным числом.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		Assert.ThrowsAsync<ArgumentException>(
+			async () => await _service.UpdateProfitAsync(construction.Id, 0m, TargetUnit.Usdt));
+		Assert.ThrowsAsync<ArgumentException>(
+			async () => await _service.UpdateProfitAsync(construction.Id, -5m, TargetUnit.Percent));
+
+		// Assert: параметр профита остался незаданным.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.Constructions.Single();
+			Assert.That(stored.ProfitValue, Is.Null);
+			Assert.That(stored.ProfitUnit, Is.Null);
+		}
 	}
 
 	#region Помощники

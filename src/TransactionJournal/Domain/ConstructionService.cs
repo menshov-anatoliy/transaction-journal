@@ -13,10 +13,10 @@ namespace TransactionJournal.Domain;
 // Traceability: openspec:ui/screens#requirement-construction-actions
 public interface IConstructionService
 {
-	/// <summary>Создаёт конструкцию с именем, капиталом и статусом «открыта».</summary>
+	/// <summary>Создаёт конструкцию с именем, необязательным капиталом и статусом «открыта».</summary>
 	Task<Construction> CreateAsync(
 		string name,
-		decimal allocatedCapitalUsdt,
+		decimal? allocatedCapitalUsdt,
 		string? comment = null,
 		CancellationToken cancellationToken = default);
 
@@ -26,10 +26,32 @@ public interface IConstructionService
 		string newName,
 		CancellationToken cancellationToken = default);
 
-	/// <summary>Меняет выделенный капитал — базу процентов результата.</summary>
+	/// <summary>
+	/// Меняет выделенный капитал — базу процентов результата; null убирает значение.
+	/// </summary>
 	Task UpdateAllocatedCapitalAsync(
 		long constructionId,
-		decimal allocatedCapitalUsdt,
+		decimal? allocatedCapitalUsdt,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Задаёт или очищает риск конструкции: значение и единица ввода меняются
+	/// только парой — оба заданы или оба отсутствуют.
+	/// </summary>
+	Task UpdateRiskAsync(
+		long constructionId,
+		decimal? value,
+		TargetUnit? unit,
+		CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Задаёт или очищает профит конструкции: значение и единица ввода меняются
+	/// только парой — оба заданы или оба отсутствуют.
+	/// </summary>
+	Task UpdateProfitAsync(
+		long constructionId,
+		decimal? value,
+		TargetUnit? unit,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>Свободно меняет ручной статус конструкции, включая архив.</summary>
@@ -52,8 +74,9 @@ public interface IConstructionService
 }
 
 /// <summary>
-/// Use-case сервис управления конструкциями: создание с именем и выделенным
-/// капиталом, свободное переименование, ручная смена статуса с архивацией,
+/// Use-case сервис управления конструкциями: создание с именем и необязательным
+/// выделенным капиталом, свободное переименование, правка капитала и плановых
+/// границ результата (риск, профит), ручная смена статуса с архивацией,
 /// чтение активных и полных списков и удаление только пустых конструкций.
 /// Позиции и результаты — производные и через этот сервис не меняются.
 /// Каждый вызов создаёт собственный короткоживущий контекст, поэтому сервис
@@ -77,18 +100,19 @@ public sealed class ConstructionService : IConstructionService
 
 	/// <summary>
 	/// Создаёт конструкцию с именем, выделенным капиталом и комментарием.
-	/// Новая конструкция открывается с ручным статусом «открыта» и появляется
-	/// в активном списке.
+	/// Капитал необязателен: без него конструкция создаётся без бюджета, и
+	/// процентные величины результата не вычисляются. Новая конструкция
+	/// открывается с ручным статусом «открыта» и появляется в активном списке.
 	/// </summary>
 	/// <param name="name">Имя конструкции.</param>
-	/// <param name="allocatedCapitalUsdt">Выделенный капитал в USDT.</param>
+	/// <param name="allocatedCapitalUsdt">Выделенный капитал в USDT; null — капитал не задан.</param>
 	/// <param name="comment">Свободный комментарий конструкции; может отсутствовать.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Созданная конструкция.</returns>
 	/// <exception cref="ArgumentException">Имя не задано или состоит из пробелов.</exception>
 	public async Task<Construction> CreateAsync(
 		string name,
-		decimal allocatedCapitalUsdt,
+		decimal? allocatedCapitalUsdt,
 		string? comment = null,
 		CancellationToken cancellationToken = default)
 	{
@@ -97,6 +121,8 @@ public sealed class ConstructionService : IConstructionService
 		// Новая конструкция открывается со статусом «открыта»: стартовое значение
 		// фиксировано, автоматических статусов нет.
 		// Traceability: openspec:domain/constructions#scenario-new-construction-default-open
+		// Капитал необязателен: конструкция создаётся и без выделенного бюджета.
+		// Traceability: openspec:domain/constructions#scenario-construction-created-without-capital
 		using var db = CreateContext();
 		var construction = new Construction
 		{
@@ -145,28 +171,121 @@ public sealed class ConstructionService : IConstructionService
 	#region Выделенный капитал
 
 	/// <summary>
-	/// Меняет выделенный капитал конструкции в USDT. Капитал хранится как текущее
-	/// значение без истории изменений и служит базой процентов результата:
-	/// изменение меняет только процентные величины, абсолютные результаты и позиции
-	/// не затрагиваются.
+	/// Меняет выделенный капитал конструкции в USDT; null убирает значение.
+	/// Капитал хранится как текущее значение без истории изменений и служит базой
+	/// процентов результата: изменение и убирание меняют только процентные
+	/// величины, абсолютные результаты и позиции не затрагиваются.
 	/// </summary>
 	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="allocatedCapitalUsdt">Новое значение выделенного капитала в USDT.</param>
+	/// <param name="allocatedCapitalUsdt">Новое значение выделенного капитала в USDT; null убирает капитал.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <exception cref="ConstructionNotFoundException">Конструкция не найдена.</exception>
 	public async Task UpdateAllocatedCapitalAsync(
 		long constructionId,
-		decimal allocatedCapitalUsdt,
+		decimal? allocatedCapitalUsdt,
 		CancellationToken cancellationToken = default)
 	{
-		// Капитал — текущее значение без истории: правка заменяет число, а проценты
-		// результата пересчитываются от нового значения ближайшим чтением аналитики;
+		// Капитал — текущее значение без истории: правка заменяет число или убирает
+		// его, а проценты результата пересчитываются ближайшим чтением аналитики;
 		// абсолютные величины и позиции от капитала не зависят.
 		// Traceability: openspec:domain/constructions#requirement-allocated-capital
+		// Капитал можно убрать у существующей конструкции: null стирает значение.
+		// Traceability: openspec:domain/constructions#scenario-capital-removable
 		using var db = CreateContext();
 		var construction = await FindConstructionAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 		construction.AllocatedCapitalUsdt = allocatedCapitalUsdt;
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	#endregion
+
+	#region Риск и профит
+
+	/// <summary>
+	/// Задаёт или очищает риск конструкции. Риск вводится положительным числом
+	/// в одной единице — процентах или USDT, и введённая единица хранится
+	/// первоисточником; правка заменяет и значение, и единицу. Значение и
+	/// единица меняются только парой: оба заданы — установить, оба null —
+	/// очистить, неполная пара отклоняется.
+	/// </summary>
+	/// <param name="constructionId">Идентификатор конструкции.</param>
+	/// <param name="value">Значение риска; null вместе с null единицы убирает параметр.</param>
+	/// <param name="unit">Единица ввода риска; null вместе с null значения убирает параметр.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	/// <exception cref="ArgumentException">Задано ровно одно из двух: значение или единица; значение не положительное.</exception>
+	/// <exception cref="ConstructionNotFoundException">Конструкция не найдена.</exception>
+	public async Task UpdateRiskAsync(
+		long constructionId,
+		decimal? value,
+		TargetUnit? unit,
+		CancellationToken cancellationToken = default)
+	{
+		// Риск задаётся значением ровно в одной единице, и введённая единица
+		// хранится первоисточником; правка целиком заменяет пару.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		ValidateTargetPair(value, unit);
+		using var db = CreateContext();
+		var construction = await FindConstructionAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
+		construction.RiskValue = value;
+		construction.RiskUnit = unit;
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Задаёт или очищает профит конструкции. Профит вводится положительным
+	/// числом в одной единице — процентах или USDT, и введённая единица хранится
+	/// первоисточником; правка заменяет и значение, и единицу. Значение и
+	/// единица меняются только парой: оба заданы — установить, оба null —
+	/// очистить, неполная пара отклоняется.
+	/// </summary>
+	/// <param name="constructionId">Идентификатор конструкции.</param>
+	/// <param name="value">Значение профита; null вместе с null единицы убирает параметр.</param>
+	/// <param name="unit">Единица ввода профита; null вместе с null значения убирает параметр.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	/// <exception cref="ArgumentException">Задано ровно одно из двух: значение или единица; значение не положительное.</exception>
+	/// <exception cref="ConstructionNotFoundException">Конструкция не найдена.</exception>
+	public async Task UpdateProfitAsync(
+		long constructionId,
+		decimal? value,
+		TargetUnit? unit,
+		CancellationToken cancellationToken = default)
+	{
+		// Профит задаётся значением ровно в одной единице, и введённая единица
+		// хранится первоисточником; правка целиком заменяет пару.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		ValidateTargetPair(value, unit);
+		using var db = CreateContext();
+		var construction = await FindConstructionAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
+		construction.ProfitValue = value;
+		construction.ProfitUnit = unit;
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Проверяет пару «значение + единица» риск/профит: пара либо задана целиком,
+	/// либо оба поля пусты; заданное значение обязано быть положительным числом.
+	/// </summary>
+	/// <param name="value">Значение параметра.</param>
+	/// <param name="unit">Единица ввода параметра.</param>
+	/// <exception cref="ArgumentException">Задано ровно одно из двух или значение не положительное.</exception>
+	private static void ValidateTargetPair(decimal? value, TargetUnit? unit)
+	{
+		// Неполная пара оставила бы параметр в невалидном состоянии: значение
+		// без единицы или единица без значения не допускаются к хранению.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		if (value.HasValue != unit.HasValue)
+		{
+			throw new ArgumentException(
+				"Параметр задаётся парой «значение и единица ввода»: оба поля должны быть заданы или оба пусты.");
+		}
+
+		// Риск — допустимый убыток, профит — целевая прибыль: оба параметра
+		// выражаются положительным числом, знак подсказка добавляет сама.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		if (value is { } positive && positive <= 0m)
+		{
+			throw new ArgumentException("Значение параметра должно быть положительным числом.");
+		}
 	}
 
 	#endregion
