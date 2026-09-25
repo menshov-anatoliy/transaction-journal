@@ -8,11 +8,16 @@
 	<link rel="stylesheet" href="@Assets["app.css"]" />
 	<link rel="stylesheet" href="@Assets["TransactionJournal.styles.css"]" />
 	<ImportMap />
-	<HeadOutlet />
+	@* Интерактивность включается на всё дерево вместе с MainLayout: крестик
+	   закрытия транзитной вкладки конструкции живёт в каркасе, а @rendermode
+	   на самих экранах каркас интерактивным не делает. *@
+	@* Traceability: openspec:ui/screens#scenario-transit-tab-closes-to-list *@
+	<HeadOutlet @rendermode="InteractiveServer" />
 </head>
 
 <body>
-	<Routes />
+	@* Traceability: openspec:ui/screens#scenario-transit-tab-closes-to-list *@
+	<Routes @rendermode="InteractiveServer" />
 	<script src="_framework/blazor.web.js"></script>
 </body>
 
