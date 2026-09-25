@@ -1,0 +1,191 @@
+@namespace TransactionJournal.Components
+@using System.Globalization
+
+@* Подсказка «риск — итог — профит»: шкала плановых границ результата
+   конструкции с заполнением от нулевой отметки до текущего итога. Шкала
+   строится в USDT-величинах; подписи границ выводят обе доступные единицы. *@
+@* Traceability: openspec:ui/screens#requirement-risk-profit-hint *@
+@if (HasUsdtBounds)
+{
+	@if (TotalPnL is null)
+	{
+		@* Итог, недоступный из-за сбоя марок, не подменяется реализованным
+		   результатом: подсказка показывается признаком сбоя. *@
+		@* Traceability: openspec:ui/screens#scenario-hint-unavailable-on-marks-failure *@
+		<span class="markfail rp-fail" title="Итог недоступен из-за сбоя марок — подсказка не построена">сбой марок</span>
+	}
+	else if (Compact)
+	{
+		@* Компактный вид списка: тонкая полоса, величины границ — в подсказке
+		   наведения, текстовые подписи не выводятся. *@
+		<div class="rp-hint rp-compact" title="@Tooltip">
+			@Bar
+		</div>
+	}
+	else
+	{
+		@* Полный вид сводки деталей: подписи границ обеими единицами рядом
+		   с полосой шкалы. *@
+		<div class="rp-hint">
+			@if (RiskUsdt is { } riskUsdt)
+			{
+				<span class="rp-bound">риск @BoundLabel(RiskPercent, riskUsdt)</span>
+			}
+			@Bar
+			@if (ProfitUsdt is { } profitUsdt)
+			{
+				<span class="rp-bound">профит @BoundLabel(ProfitPercent, profitUsdt)</span>
+			}
+		</div>
+	}
+}
+
+@code {
+	/// <summary>Риск в процентах от капитала; null, когда величины нет.</summary>
+	[Parameter] public decimal? RiskPercent { get; set; }
+
+	/// <summary>Риск в USDT; null — сторона риска на шкале не показывается.</summary>
+	[Parameter] public decimal? RiskUsdt { get; set; }
+
+	/// <summary>Профит в процентах от капитала; null, когда величины нет.</summary>
+	[Parameter] public decimal? ProfitPercent { get; set; }
+
+	/// <summary>Профит в USDT; null — сторона профита на шкале не показывается.</summary>
+	[Parameter] public decimal? ProfitUsdt { get; set; }
+
+	/// <summary>Текущий итог конструкции; null — итог недоступен из-за сбоя марок.</summary>
+	[Parameter] public decimal? TotalPnL { get; set; }
+
+	/// <summary>Компактный вид: тонкая полоса без текстовых подписей (строка списка).</summary>
+	[Parameter] public bool Compact { get; set; }
+
+	/// <summary>Есть ли хоть одна USDT-величина границы: без обеих полоса не строится.</summary>
+	// Граница без USDT-величины (параметр в процентах при незаданном капитале)
+	// свою сторону не показывает; отсутствие обеих убирает подсказку целиком.
+	// Traceability: openspec:ui/screens#scenario-hint-absent-without-params
+	private bool HasUsdtBounds => RiskUsdt is not null || ProfitUsdt is not null;
+
+	/// <summary>Разметка полосы шкалы: зоны границ, нулевая отметка и заполнение итогом.</summary>
+	// Заполнение идёт от нулевой отметки к достигнутому итогу: в сторону профита
+	// при положительном итоге, в сторону риска — при отрицательном.
+	// Traceability: openspec:ui/screens#scenario-hint-inside-bounds
+	private RenderFragment Bar => @<div class="rp-bar">
+		<div class="@RiskZoneClass" style="@ZoneStyle(RiskSide)">
+			@if (RiskSide.FillPercent is { } riskFill)
+			{
+				<div class="rp-fill rp-fill-risk @BreakoutClass(RiskSide)" style="@FillStyle(riskFill)"></div>
+			}
+		</div>
+		<div class="rp-zero"></div>
+		<div class="@ProfitZoneClass" style="@ZoneStyle(ProfitSide)">
+			@if (ProfitSide.FillPercent is { } profitFill)
+			{
+				<div class="rp-fill rp-fill-profit @BreakoutClass(ProfitSide)" style="@FillStyle(profitFill)"></div>
+			}
+		</div>
+	</div>;
+
+	/// <summary>Текст подсказки наведения компактного вида: величины обеих границ.</summary>
+	private string Tooltip
+	{
+		get
+		{
+			var parts = new List<string>();
+			if (RiskUsdt is { } riskUsdt)
+			{
+				parts.Add($"риск {BoundLabel(RiskPercent, riskUsdt)}");
+			}
+
+			if (ProfitUsdt is { } profitUsdt)
+			{
+				parts.Add($"профит {BoundLabel(ProfitPercent, profitUsdt)}");
+			}
+
+			return string.Join(", ", parts);
+		}
+	}
+
+	/// <summary>Класс зоны риска: граница или открытая сторона без границы.</summary>
+	private string RiskZoneClass => RiskUsdt is null ? "rp-zone rp-zone-open" : "rp-zone rp-zone-risk";
+
+	/// <summary>Класс зоны профита: граница или открытая сторона без границы.</summary>
+	private string ProfitZoneClass => ProfitUsdt is null ? "rp-zone rp-zone-open" : "rp-zone rp-zone-profit";
+
+	/// <summary>Геометрия стороны риска: ширина зоны, заполнение и признак пробоя.</summary>
+	private HintSide RiskSide => ComputeSide(isRisk: true);
+
+	/// <summary>Геометрия стороны профита: ширина зоны, заполнение и признак пробоя.</summary>
+	private HintSide ProfitSide => ComputeSide(isRisk: false);
+
+	/// <summary>Подпись границы обеими доступными единицами: «5% / 150» или «150».</summary>
+	// Граница выводит обе доступные единицы: введённую и вычисленную.
+	// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+	private static string BoundLabel(decimal? percent, decimal usdt)
+	{
+		var parts = new List<string>();
+		if (percent is { } knownPercent)
+		{
+			parts.Add($"{knownPercent.ToString("0.##", CultureInfo.InvariantCulture)}%");
+		}
+
+		parts.Add(usdt.ToString("0.##", CultureInfo.InvariantCulture));
+		return string.Join(" / ", parts);
+	}
+
+	/// <summary>Стиль ширины зоны стороны шкалы.</summary>
+	private static string ZoneStyle(HintSide side) => $"width:{side.ZoneWidthPercent.ToString("0.##", CultureInfo.InvariantCulture)}%";
+
+	/// <summary>Стиль ширины заполнения зоны — доли самой зоны от нулевой отметки.</summary>
+	private static string FillStyle(decimal fillPercent) => $"width:{fillPercent.ToString("0.##", CultureInfo.InvariantCulture)}%";
+
+	/// <summary>Класс признака пробоя границы: заполненная до конца сторона выделена.</summary>
+	// Итог за границей запоминается цветом заполнения, пропорции шкалы не меняются.
+	// Traceability: openspec:ui/screens#scenario-hint-boundary-breakout
+	private static string BreakoutClass(HintSide side) => side.Breakout ? "rp-breakout" : string.Empty;
+
+	/// <summary>Вычисляет геометрию одной стороны шкалы: нормированную ширину зоны
+	/// и заполнение от нулевой отметки текущим итогом.</summary>
+	private HintSide ComputeSide(bool isRisk)
+	{
+		var own = isRisk ? RiskUsdt : ProfitUsdt;
+		var other = isRisk ? ProfitUsdt : RiskUsdt;
+		var ownMagnitude = own is { } ownValue ? Math.Abs(ownValue) : 0m;
+		var otherMagnitude = other is { } otherValue ? Math.Abs(otherValue) : 0m;
+
+		// Ширина зоны нормируется на сумму USDT-величин обеих границ; у
+		// односторонней шкалы граница и открытая сторона делят полосу пополам.
+		var zoneWidth = own is not null && other is not null
+			? ownMagnitude / (ownMagnitude + otherMagnitude) * 100m
+			: 50m;
+
+		decimal? fillPercent = null;
+		var breakout = false;
+		if (TotalPnL is { } total)
+		{
+			// Заполнение рисуется только в сторону знака итога: положительный —
+			// к профиту, отрицательный — к риску.
+			var towardOwn = isRisk ? total < 0m : total > 0m;
+			if (towardOwn)
+			{
+				var magnitude = Math.Abs(total);
+				if (own is { } bound)
+				{
+					var boundMagnitude = Math.Abs(bound);
+					fillPercent = Math.Min(magnitude, boundMagnitude) / boundMagnitude * 100m;
+					breakout = magnitude > boundMagnitude;
+				}
+				else if (otherMagnitude > 0m)
+				{
+					// Открытая сторона без границы заполнение показывает без
+					// признака пробоя: пробовать нечего — границы нет.
+					fillPercent = Math.Min(magnitude / otherMagnitude, 1m) * 100m;
+				}
+			}
+		}
+
+		return new HintSide(zoneWidth, fillPercent, breakout);
+	}
+
+	/// <summary>Геометрия одной стороны шкалы: ширина зоны, заполнение и признак пробоя.</summary>
+	private sealed record HintSide(decimal ZoneWidthPercent, decimal? FillPercent, bool Breakout);
+}

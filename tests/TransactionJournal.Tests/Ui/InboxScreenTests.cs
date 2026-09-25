@@ -365,6 +365,55 @@ public class InboxScreenTests
 	}
 
 	[TestMethod]
+	[Description("Создание конструкции с пустым полем капитала создаёт её без выделенного бюджета")]
+	public async Task TryIfCreateWithoutCapitalCreatesConstructionWithoutBudget()
+	{
+		// Arrange: две непривязанные сделки; форма создания открыта.
+		SeedExecution("exec-1", "BTCUSDT", "Buy", "45000", "0.01", "0.5", "USDT", TodayMs(10, 0));
+		SeedExecution("exec-2", "ETHUSDT", "Sell", "2400", "0.5", "0.1", "USDT", TodayMs(10, 5));
+		var cut = _context.RenderComponent<Inbox>();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tbody tr"), Has.Count.EqualTo(2)));
+		cut.Find("input.select-all").Change(true);
+		FindToolbarButton(cut, "Создать конструкцию из выбранных…").Click();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll(ActionFormSelector + " .action-input"), Has.Count.EqualTo(2)));
+
+		// Assert: подпись поля капитала выводится с заглавной буквы —
+		// «Выделенный капитал, USDT».
+		// Требование: форма создания несёт подпись «Выделенный капитал, USDT».
+		// Traceability: openspec:ui/screens#requirement-inbox-screen
+		Assert.That(cut.Find(ActionFormSelector).TextContent, Does.Contain("Выделенный капитал, USDT"));
+
+		// Act: имя задано, поле капитала оставлено пустым.
+		cut.FindAll(ActionFormSelector + " .action-input")[0].Change("Без бюджета");
+		FindButton(cut, "Создать и привязать").Click();
+
+		// Assert: конструкция создана без капитала, все выбранные сделки
+		// привязаны к ней; список «Входящих» пуст, выбор очищен.
+		// Сценарий: создание без капитала проходит с пустым полем.
+		// Traceability: openspec:ui/screens#scenario-inbox-create-without-capital
+		await using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var created = await db.Constructions.SingleAsync();
+			Assert.That(created.Name, Is.EqualTo("Без бюджета"));
+			Assert.That(created.Status, Is.EqualTo(ConstructionStatus.Open));
+			Assert.That(created.AllocatedCapitalUsdt, Is.Null);
+
+			var bindings = await db.TradeUserdata
+				.Where(userdata => userdata.ConstructionId == created.Id)
+				.Select(userdata => userdata.ExecId)
+				.ToListAsync();
+			Assert.That(bindings, Is.EquivalentTo(new[] { "exec-1", "exec-2" }));
+		}
+
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("Входящие пусты"));
+			Assert.That(cut.FindAll(ActionFormSelector), Has.Count.EqualTo(0));
+		});
+		Assert.That(await ReadInboxCountAsync(), Is.EqualTo(0));
+	}
+
+	[TestMethod]
 	[Description("Отмена форм разбора закрывает форму без привязки и создания")]
 	public void TryIfCancelClosesFormsWithoutBindingOrCreating()
 	{

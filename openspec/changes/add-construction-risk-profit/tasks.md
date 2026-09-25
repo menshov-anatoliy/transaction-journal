@@ -22,13 +22,13 @@
 
 ## 5. UI: формы, подсказка, проценты
 
-- [ ] 5.1 `Inbox.razor`: подпись «Выделенный капитал, USDT», поле необязательно (валидация числа только при непустом вводе, пусто → `CreateAsync(name, null)`); экранный тест создания без капитала (`scenario-inbox-create-without-capital`)
-- [ ] 5.2 `ConstructionDetail.razor`, форма капитала: подпись с заглавной, пустое поле при сохранении убирает капитал, пояснение «пусто — капитал не задан»; экранный тест `scenario-detail-capital-removal-hides-percent`
-- [ ] 5.3 `ConstructionDetail.razor`: команды «Риск…»/«Профит…» и формы с двумя полями единиц (ровно одно заполнено, вторая — вычисленное readonly-значение при заданном капитале, «Убрать» для очистки); экранные тесты `scenario-detail-risk-profit-edit` и валидации двух заполненных полей
-- [ ] 5.4 Подсказка «риск — итог — профит»: разметка шкалы в строке списка и сводке деталей (нормировка на USDT-величины, заполнение от нуля до итога, признак пробоя, признак сбоя марок вместо полосы, скрытие без USDT-величин) и стили; экранные тесты `scenario-hint-inside-bounds`, `scenario-hint-boundary-breakout`, `scenario-hint-single-bound`, `scenario-hint-absent-without-params`, `scenario-hint-unavailable-on-marks-failure`
-- [ ] 5.5 Скрытие процентов при незаданном капитале: список — прочерки в «Капитал» и «% капитала», детали — прочерк процента в сводке и отсутствие скобок «(—)» в строках позиций; экранные тесты `scenario-list-no-capital-percent-dash`, `scenario-detail-no-capital-no-percent`
+- [x] 5.1 `Inbox.razor`: подпись «Выделенный капитал, USDT», поле необязательно (валидация числа только при непустом вводе, пусто → `CreateAsync(name, null)`); экранный тест создания без капитала (`scenario-inbox-create-without-capital`)
+- [x] 5.2 `ConstructionDetail.razor`, форма капитала: подпись с заглавной, пустое поле при сохранении убирает капитал, пояснение «пусто — капитал не задан»; экранный тест `scenario-detail-capital-removal-hides-percent`
+- [x] 5.3 `ConstructionDetail.razor`: команды «Риск…»/«Профит…» и формы с двумя полями единиц (ровно одно заполнено, вторая — вычисленное readonly-значение при заданном капитале, «Убрать» для очистки); экранные тесты `scenario-detail-risk-profit-edit` и валидации двух заполненных полей
+- [x] 5.4 Подсказка «риск — итог — профит»: разметка шкалы в строке списка и сводке деталей (нормировка на USDT-величины, заполнение от нуля до итога, признак пробоя, признак сбоя марок вместо полосы, скрытие без USDT-величин) и стили; экранные тесты `scenario-hint-inside-bounds`, `scenario-hint-boundary-breakout`, `scenario-hint-single-bound`, `scenario-hint-absent-without-params`, `scenario-hint-unavailable-on-marks-failure`
+- [x] 5.5 Скрытие процентов при незаданном капитале: список — прочерки в «Капитал» и «% капитала», детали — прочерк процента в сводке и отсутствие скобок «(—)» в строках позиций; экранные тесты `scenario-list-no-capital-percent-dash`, `scenario-detail-no-capital-no-percent`
 
 ## 6. Сквозная проверка
 
-- [ ] 6.1 Полные `dotnet build` и `dotnet test`; убедиться grep-ом, что в решении не осталось вызовов старых сигнатур `CreateAsync(decimal`/`Calculate(` с ненулевым капиталом
-- [ ] 6.2 Прогнать `openspec validate "add-construction-risk-profit" --strict` и проверить, что новые требования имеют обратные ссылки из кода/тестов; отметить в change `add-mcp-server`, что контракты сервиса изменились
+- [x] 6.1 Полные `dotnet build` и `dotnet test`; убедиться grep-ом, что в решении не осталось вызовов старых сигнатур `CreateAsync(decimal`/`Calculate(` с ненулевым капиталом
+- [x] 6.2 Прогнать `openspec validate "add-construction-risk-profit" --strict` и проверить, что новые требования имеют обратные ссылки из кода/тестов; отметить в change `add-mcp-server`, что контракты сервиса изменились

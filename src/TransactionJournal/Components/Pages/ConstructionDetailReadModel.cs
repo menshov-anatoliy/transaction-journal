@@ -126,6 +126,8 @@ public sealed record ConstructionAdjustmentRow(
 /// <param name="RiskUsdt">Риск в USDT: введённые USDT либо вычисленные из введённых процентов; null, когда величины нет.</param>
 /// <param name="ProfitPercent">Профит в процентах от капитала: введённые проценты либо вычисленные из введённых USDT; null, когда величины нет.</param>
 /// <param name="ProfitUsdt">Профит в USDT: введённые USDT либо вычисленные из введённых процентов; null, когда величины нет.</param>
+/// <param name="RiskUnit">Единица ввода риска — первоисточник параметра; null, когда риск не задан.</param>
+/// <param name="ProfitUnit">Единица ввода профита — первоисточник параметра; null, когда профит не задан.</param>
 /// <param name="Comment">Комментарий конструкции; null — комментария нет.</param>
 /// <param name="Metrics">Метрики конструкции: итог, разбивка, проценты, период и длительность.</param>
 /// <param name="HasOpenResidual">У конструкции есть открытый остаток — марки нужны её нереализованной оценке.</param>
@@ -160,7 +162,9 @@ public sealed record ConstructionDetailData(
 	IReadOnlyList<ConstructionTradeRow> Trades,
 	IReadOnlyList<ConstructionClosingEntryRow> ClosingEntries,
 	IReadOnlyList<RedundantClosingEntryWarning> ClosingWarnings,
-	IReadOnlyList<ConstructionAdjustmentRow> Adjustments);
+	IReadOnlyList<ConstructionAdjustmentRow> Adjustments,
+	TargetUnit? RiskUnit = null,
+	TargetUnit? ProfitUnit = null);
 
 /// <summary>
 /// Read-модель экрана деталей конструкции: соединяет метрики аналитики, поток
@@ -277,7 +281,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			trades,
 			closing.Rows,
 			closing.Warnings,
-			adjustments);
+			adjustments,
+			// Единица ввода проходит в DTO: форма правки предзаполняет поле
+			// первоисточника, не подменяя введённую единицу вычисленной.
+			RiskUnit: construction.RiskUnit,
+			ProfitUnit: construction.ProfitUnit);
 	}
 
 	#region Чтение таблиц

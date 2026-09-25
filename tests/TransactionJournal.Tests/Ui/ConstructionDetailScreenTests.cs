@@ -606,6 +606,338 @@ public class ConstructionDetailScreenTests
 	}
 
 	[TestMethod]
+	[Description("Пустое сохранение формы капитала убирает капитал и скрывает проценты")]
+	public void TryIfCapitalClearedByEmptySaveHidesPercent()
+	{
+		// Arrange: конструкция с капиталом 3000; после очистки капитал не задан,
+		// процентные величины отсутсвуют.
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(percent: 13.3m)))
+			.ReturnsAsync(CreateData(MetricsOf(percent: null)) with
+			{
+				AllocatedCapitalUsdt = null,
+			});
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("(3000)")));
+
+		// Act: пользователь сохраняет пустое поле капитала.
+		FindButton(cut, "Изменить капитал").Click();
+		cut.Find(".action-input").Change("");
+		FindButton(cut, "Сохранить капитал").Click();
+
+		// Assert: капитал убран командой с null; сводка показывает «% капитала»
+		// без скобочной величины, строки позиций без процентного «(—)».
+		// Требование: пустое сохранение формы капитала убирает капитал.
+		// Traceability: openspec:ui/screens#scenario-detail-capital-removal-hides-percent
+		_constructions.Verify(service =>
+			service.UpdateAllocatedCapitalAsync(7, null, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("% капитала"));
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Not.Contain("(3000)"));
+		});
+		Assert.That(cut.Markup, Does.Not.Contain("(—)"));
+	}
+
+	[TestMethod]
+	[Description("Незаданный капитал оставляет сводку и строки позиций без процентных скобок")]
+	public void TryIfNoCapitalSummaryAndRowsOmitPercentParens()
+	{
+		// Arrange: конструкция без капитала, у позиции итог без процента.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(realized: 10m, unrealized: 5m)) with
+			{
+				AllocatedCapitalUsdt = null,
+				Positions =
+				[
+					new ConstructionPositionRow(
+						"BTCUSDT",
+						0.05m,
+						63000m,
+						null,
+						10m,
+						null,
+						5m,
+						null,
+						15m,
+						null,
+						0.1m,
+						new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero),
+						null,
+						true,
+						null),
+				],
+			});
+
+		var cut = RenderDetail();
+
+		// Assert: сводка показывает «% капитала» без скобки с величиной, строка
+		// позиции выводит итог без «(—)» — проценты скрыты целиком.
+		// Требование: без капитала процентные величины не показываются.
+		// Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("% капитала"));
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Not.Contain("("));
+			Assert.That(cut.Markup, Does.Contain("+15"));
+			Assert.That(cut.Markup, Does.Not.Contain("(—)"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Риск вводится в процентах: вторая единица вычисляется только для чтения, домену уходит процент")]
+	public void TryIfRiskSavedInPercentShowsUsdtEcho()
+	{
+		// Arrange: конструкция с капиталом 3000, риск не задан.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()));
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".kstrip"), Is.Not.Null));
+
+		// Act: пользователь вводит риск 5% — при заданном капитале USDT-поле
+		// получает вычисленное значение и блокируется; сохранение уходит в домен.
+		FindButton(cut, "Риск…").Click();
+		cut.FindAll(".action-form .target-input")[0].Input("5");
+
+		// Assert: вычисленное эхо «150» только для чтения в поле USDT.
+		// Требование: вторая единица вычисляется для подсказки и не редактируется.
+		// Traceability: openspec:ui/screens#scenario-detail-risk-profit-edit
+		var inputs = cut.FindAll(".action-form .target-input");
+		Assert.That(inputs[1].GetAttribute("value"), Is.EqualTo("150"));
+		Assert.That(inputs[1].HasAttribute("readonly"), Is.True);
+
+		FindButton(cut, "Сохранить").Click();
+
+		// Assert: домен получает значение ровно введённой единицы — процент.
+		// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+		_constructions.Verify(service =>
+			service.UpdateRiskAsync(7, 5m, TargetUnit.Percent, It.IsAny<CancellationToken>()), Times.Once);
+	}
+
+	[TestMethod]
+	[Description("Профит вводится в USDT: вторая единица вычисляется только для чтения, домену уходят USDT")]
+	public void TryIfProfitSavedInUsdtShowsPercentEcho()
+	{
+		// Arrange: конструкция с капиталом 3000, профит не задан.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()));
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".kstrip"), Is.Not.Null));
+
+		// Act: пользователь вводит профит 150 USDT — процентное поле получает
+		// вычисленные «5» и блокируется; сохранение уходит в домен.
+		FindButton(cut, "Профит…").Click();
+		cut.FindAll(".action-form .target-input")[1].Input("150");
+		var inputs = cut.FindAll(".action-form .target-input");
+		Assert.That(inputs[0].GetAttribute("value"), Is.EqualTo("5"));
+		Assert.That(inputs[0].HasAttribute("readonly"), Is.True);
+
+		FindButton(cut, "Сохранить").Click();
+
+		// Assert: домен получает значение ровно введённой единицы — USDT.
+		// Требование: сохраняется пара «значение + введённая единица».
+		// Traceability: openspec:ui/screens#scenario-detail-risk-profit-edit
+		_constructions.Verify(service =>
+			service.UpdateProfitAsync(7, 150m, TargetUnit.Usdt, It.IsAny<CancellationToken>()), Times.Once);
+	}
+
+	[TestMethod]
+	[Description("Заполненные обе единицы риска не уходят в домен: форма требует значение только одной")]
+	public void TryIfRiskWithBothUnitsFilledRejectedWithoutCall()
+	{
+		// Arrange: конструкция без капитала — оба поля остаются доступными вводу.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with
+			{
+				AllocatedCapitalUsdt = null,
+			});
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".kstrip"), Is.Not.Null));
+
+		// Act: пользователь заполняет обе единицы и сохраняет.
+		FindButton(cut, "Риск…").Click();
+		var inputs = cut.FindAll(".action-form .target-input");
+		inputs[0].Input("5");
+		cut.FindAll(".action-form .target-input")[1].Input("150");
+		FindButton(cut, "Сохранить").Click();
+
+		// Assert: форма показывает ошибку одной единицы, команда в домен не уходит
+		// и снимок не перечитывается.
+		// Требование: значение вводится ровно в одной единице.
+		// Traceability: openspec:ui/screens#scenario-detail-risk-profit-edit
+		Assert.That(cut.Markup, Does.Contain("Введите значение только в одной единице"));
+		_constructions.Verify(service =>
+			service.UpdateRiskAsync(It.IsAny<long>(), It.IsAny<decimal>(), It.IsAny<TargetUnit>(), It.IsAny<CancellationToken>()), Times.Never);
+		_detail.Verify(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Once);
+	}
+
+	[TestMethod]
+	[Description("Кнопка «Убрать» очищает риск целиком командой с пустыми величинами")]
+	public void TryIfRiskRemoveClearsParameter()
+	{
+		// Arrange: риск задан процентами — «Убрать» предложена в форме.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with
+			{
+				RiskPercent = 5m,
+				RiskUsdt = 150m,
+				RiskUnit = TargetUnit.Percent,
+			});
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".kstrip"), Is.Not.Null));
+
+		// Act: пользователь убирает риск.
+		FindButton(cut, "Риск…").Click();
+		FindButton(cut, "Убрать").Click();
+
+		// Assert: домен получил очистку параметра null-величиной и null-единицей.
+		// Требование: «Убрать» в форме очищает параметр целиком.
+		// Traceability: openspec:ui/screens#scenario-detail-risk-profit-edit
+		// Traceability: openspec:domain/constructions#scenario-risk-profit-clear-removes-param
+		_constructions.Verify(service =>
+			service.UpdateRiskAsync(7, null, null, It.IsAny<CancellationToken>()), Times.Once);
+	}
+
+	[TestMethod]
+	[Description("Сводка показывает шкалу «риск — итог — профит» с подписями границ и заполнением внутри границ")]
+	public void TryIfSummaryShowsHintScaleWithBounds()
+	{
+		// Arrange: границы риск 5%/150 и профит 10%/300, итог 100 — внутри профита.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(realized: -50m, unrealized: 150m)) with
+			{
+				RiskPercent = 5m,
+				RiskUsdt = 150m,
+				ProfitPercent = 10m,
+				ProfitUsdt = 300m,
+			});
+
+		var cut = RenderDetail();
+
+		// Assert: подсказка показывает обе границы обеими единицами; заполнение
+		// идёт от нулевой отметки в сторону профита, риска не касается, пробоя нет.
+		// Требование: шкала нормирована в USDT, заполнение по текущему итогу.
+		// Traceability: openspec:ui/screens#scenario-hint-inside-bounds
+		cut.WaitForAssertion(() =>
+		{
+			var hint = cut.Find(".rp-detail .rp-hint");
+			Assert.That(hint.TextContent, Does.Contain("риск 5% / 150"));
+			Assert.That(hint.TextContent, Does.Contain("профит 10% / 300"));
+			Assert.That(cut.FindAll(".rp-detail .rp-fill-profit"), Has.Count.EqualTo(1));
+			Assert.That(cut.FindAll(".rp-detail .rp-fill-risk"), Has.Count.EqualTo(0));
+			Assert.That(cut.FindAll(".rp-detail .rp-breakout"), Has.Count.EqualTo(0));
+		});
+	}
+
+	[TestMethod]
+	[Description("Итог за границей запоминается признаком пробоя, пропорции шкалы не меняются")]
+	public void TryIfHintMarksBoundaryBreakout()
+	{
+		// Arrange: итог 400 за границей профита 300.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(realized: 100m, unrealized: 300m)) with
+			{
+				RiskUsdt = 150m,
+				ProfitUsdt = 300m,
+			});
+
+		var cut = RenderDetail();
+
+		// Assert: сторона профита заполнена до конца с признаком пробоя.
+		// Требование: итог за границей виден признаком пробоя границы.
+		// Traceability: openspec:ui/screens#scenario-hint-boundary-breakout
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.FindAll(".rp-detail .rp-fill-profit.rp-breakout"), Has.Count.EqualTo(1)));
+	}
+
+	[TestMethod]
+	[Description("Односторонняя шкала показывает только доступную границу, вторая сторона открыта")]
+	public void TryIfHintShowsSingleOpenSide()
+	{
+		// Arrange: задан только риск в USDT — процента нет без капитала.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with
+			{
+				RiskUsdt = 150m,
+			});
+
+		var cut = RenderDetail();
+
+		// Assert: подпись риска без процентов, стороны профита с границей нет —
+		// полоса содержит открытую зону и нулевую отметку, заполнения нет.
+		// Требование: граница без USDT-величины свою сторону не показывает.
+		// Traceability: openspec:ui/screens#scenario-hint-single-bound
+		cut.WaitForAssertion(() =>
+		{
+			var hint = cut.Find(".rp-detail .rp-hint");
+			Assert.That(hint.TextContent, Does.Contain("риск 150"));
+			Assert.That(hint.TextContent, Does.Not.Contain("профит"));
+			Assert.That(cut.FindAll(".rp-detail .rp-zone-open"), Has.Count.EqualTo(1));
+			Assert.That(cut.FindAll(".rp-detail .rp-zero"), Has.Count.EqualTo(1));
+			Assert.That(cut.FindAll(".rp-detail .rp-fill"), Has.Count.EqualTo(0));
+		});
+	}
+
+	[TestMethod]
+	[Description("Без обеих USDT-величин подсказка целиком отсутствует")]
+	public void TryIfHintAbsentWithoutUsdtParams()
+	{
+		// Arrange: риск и профит не заданы вовсе.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()));
+
+		var cut = RenderDetail();
+
+		// Assert: ни полосы, ни подписей — подсказка не выводится.
+		// Требование: отсутствие обоих параметров убирает подсказку целиком.
+		// Traceability: openspec:ui/screens#scenario-hint-absent-without-params
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.FindAll(".rp-detail .rp-hint"), Has.Count.EqualTo(0)));
+	}
+
+	[TestMethod]
+	[Description("Недоступный из-за сбоя марок итог показывается признаком вместо полосы шкалы")]
+	public void TryIfHintShowsFailureSignWhenTotalUnavailable()
+	{
+		// Arrange: границы заданы, но итог не построен — нереализованная часть
+		// не оценена из-за сбоя марок.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(unrealized: null), hasMarkFailure: true) with
+			{
+				RiskUsdt = 150m,
+				ProfitUsdt = 300m,
+			});
+
+		var cut = RenderDetail();
+
+		// Assert: подсказка показывает признак сбоя марок вместо полосы — итог
+		// не подменяется реализованным результатом.
+		// Требование: недоступный итог занят признаком сбоя, а не частичной шкалой.
+		// Traceability: openspec:ui/screens#scenario-hint-unavailable-on-marks-failure
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Find(".rp-detail").TextContent, Does.Contain("сбой марок"));
+			Assert.That(cut.FindAll(".rp-detail .rp-bar"), Has.Count.EqualTo(0));
+		});
+	}
+
+	[TestMethod]
 	[Description("Удаление не предлагается конструкции со сделками или корректировками")]
 	public void TryIfDeleteNotOfferedForNonEmptyConstruction()
 	{

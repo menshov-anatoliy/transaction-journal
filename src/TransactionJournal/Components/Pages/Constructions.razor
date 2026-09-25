@@ -132,6 +132,13 @@ else
 								<span class="@SignClass(item.TotalPnL)">@FormatTotal(item.TotalPnL.Value)</span>
 							}
 						</b>
+						@* Компактная подсказка «риск — итог — профит» по текущему итогу строки;
+						   без USDT-величин границ компонент ничего не выводит. *@
+						@* Traceability: openspec:ui/screens#scenario-hint-inside-bounds *@
+						<RiskProfitHint Compact="true"
+							RiskPercent="item.RiskPercent" RiskUsdt="item.RiskUsdt"
+							ProfitPercent="item.ProfitPercent" ProfitUsdt="item.ProfitUsdt"
+							TotalPnL="item.TotalPnL" />
 					</td>
 					<td><span class="@SignClass(item.TotalPnLPercent)">@FormatPercent(item.TotalPnLPercent)</span></td>
 					<td>@FormatDate(item.OpenedAt)</td>

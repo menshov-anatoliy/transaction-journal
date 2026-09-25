@@ -307,6 +307,147 @@ public class ConstructionListScreenTests
 	}
 
 	[TestMethod]
+	[Description("Строка без капитала показывает прочерки в капитале и проценте")]
+	public void TryIfNoCapitalRowShowsPercentDash()
+	{
+		// Arrange: конструкция без выделенного капитала — процентные величины
+		// не построены.
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(Item(7, "Календарь сентябрь", ConstructionStatus.Open,
+				capital: null, realized: 214.32m, unrealized: -58.2m, total: 156.12m)));
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: капитал и процент строки заняты прочерком — нулевой подмены нет.
+		// Требование: строка без капитала показывает прочерк в капитале и проценте.
+		// Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
+		cut.WaitForAssertion(() =>
+		{
+			var row = cut.Find("tr.clickable");
+			Assert.That(row.TextContent, Does.Contain("—"));
+			Assert.That(row.TextContent, Does.Contain("+156.12"));
+			Assert.That(row.TextContent, Does.Not.Contain("%"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Строка списка показывает компактную шкалу «риск — итог — профит» с величинами в подсказке наведения")]
+	public void TryIfRowShowsCompactHintInsideBounds()
+	{
+		// Arrange: границы риск 5%/150 и профит 10%/300, итог 100 — внутри профита.
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(Item(7, "Календарь сентябрь", ConstructionStatus.Open,
+				capital: 3000m, riskPercent: 5m, riskUsdt: 150m, profitPercent: 10m, profitUsdt: 300m,
+				realized: -50m, unrealized: 150m, total: 100m)));
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: компактная подсказка несёт величины обеих границ в подсказке
+		// наведения; заполнение идёт в сторону профита, пробоя нет.
+		// Требование: в списке подсказка компактная — тонкая полоса строки.
+		// Traceability: openspec:ui/screens#scenario-hint-inside-bounds
+		cut.WaitForAssertion(() =>
+		{
+			var hint = cut.Find(".rp-compact");
+			Assert.That(hint.GetAttribute("title"), Does.Contain("риск 5% / 150"));
+			Assert.That(hint.GetAttribute("title"), Does.Contain("профит 10% / 300"));
+			Assert.That(cut.FindAll(".rp-fill-profit"), Has.Count.EqualTo(1));
+			Assert.That(cut.FindAll(".rp-breakout"), Has.Count.EqualTo(0));
+		});
+	}
+
+	[TestMethod]
+	[Description("Компактная шкала строки помечает пробой границы итогом за ней")]
+	public void TryIfRowHintMarksBreakout()
+	{
+		// Arrange: итог 400 за границей профита 300.
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(Item(7, "Календарь сентябрь", ConstructionStatus.Open,
+				capital: 3000m, riskUsdt: 150m, profitUsdt: 300m,
+				realized: 100m, unrealized: 300m, total: 400m)));
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: сторона профита заполнена до конца с признаком пробоя.
+		// Требование: итог за границей виден признаком пробоя.
+		// Traceability: openspec:ui/screens#scenario-hint-boundary-breakout
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.FindAll(".rp-fill-profit.rp-breakout"), Has.Count.EqualTo(1)));
+	}
+
+	[TestMethod]
+	[Description("Компактная шкала с одной границей показывает открытую сторону и величину в подсказке")]
+	public void TryIfRowHintSingleBound()
+	{
+		// Arrange: задан только риск в USDT — процента нет без капитала.
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(Item(7, "Календарь сентябрь", ConstructionStatus.Open,
+				capital: null, riskUsdt: 150m)));
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: подсказка наведения несёт только риск, открытая зона и нулевая
+		// отметка на месте, стороны профита с границей нет.
+		// Требование: граница без USDT-величины свою сторону не показывает.
+		// Traceability: openspec:ui/screens#scenario-hint-single-bound
+		cut.WaitForAssertion(() =>
+		{
+			var hint = cut.Find(".rp-compact");
+			Assert.That(hint.GetAttribute("title"), Does.Contain("риск 150"));
+			Assert.That(hint.GetAttribute("title"), Does.Not.Contain("профит"));
+			Assert.That(cut.FindAll(".rp-zone-open"), Has.Count.EqualTo(1));
+			Assert.That(cut.FindAll(".rp-zero"), Has.Count.EqualTo(1));
+		});
+	}
+
+	[TestMethod]
+	[Description("Строка без обеих USDT-величин не показывает компактную шкалу")]
+	public void TryIfRowHintAbsentWithoutParams()
+	{
+		// Arrange: риск и профит не заданы вовсе.
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(Item(7, "Календарь сентябрь", ConstructionStatus.Open)));
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: ни полосы, ни подсказки наведения в строке нет.
+		// Требование: отсутствие обоих параметров убирает подсказку целиком.
+		// Traceability: openspec:ui/screens#scenario-hint-absent-without-params
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.FindAll(".rp-compact"), Has.Count.EqualTo(0)));
+	}
+
+	[TestMethod]
+	[Description("Компактная шкала показывает признак сбоя марок вместо полосы при недоступном итоге")]
+	public void TryIfRowHintFailureSignWhenTotalUnavailable()
+	{
+		// Arrange: границы заданы, но нереализованная часть не оценена — итог
+		// недоступен из-за сбоя марок.
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(Item(7, "Календарь сентябрь", ConstructionStatus.Open,
+				capital: 3000m, riskUsdt: 150m, profitUsdt: 300m,
+				realized: 100m, unrealized: null)));
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: подсказка строки занята признаком сбоя марок, полоса не строится.
+		// Требование: недоступный итог занят признаком сбоя, а не частичной шкалой.
+		// Traceability: openspec:ui/screens#scenario-hint-unavailable-on-marks-failure
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll(".rp-fail"), Has.Count.EqualTo(1));
+			Assert.That(cut.Find(".rp-fail").TextContent, Does.Contain("сбой марок"));
+			Assert.That(cut.FindAll(".rp-bar"), Has.Count.EqualTo(0));
+		});
+	}
+
+	[TestMethod]
 	[Description("Недоступный журнал показывается явным состоянием, а не пустым экраном")]
 	public void TryIfUnavailableJournalShowsExplicitState()
 	{

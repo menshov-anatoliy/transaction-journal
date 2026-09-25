@@ -74,8 +74,11 @@
 		{
 			<span class="validation-message">Введите имя конструкции</span>
 		}
+		@* Поле капитала необязательно: пустой ввод создаёт конструкцию без
+		   выделенного бюджета, процентные величины у неё не вычисляются. *@
+		@* Traceability: openspec:ui/screens#scenario-inbox-create-without-capital *@
 		<label class="action-label">
-			выделенный капитал, USDT
+			Выделенный капитал, USDT
 			<input class="action-input" placeholder="3000" @bind="_createCapitalInput" />
 		</label>
 		@if (_createCapitalInvalid)
@@ -624,10 +627,20 @@ else
 			return Task.CompletedTask;
 		}
 
-		if (decimal.TryParse(_createCapitalInput, NumberStyles.Number, CultureInfo.InvariantCulture, out var capital) == false)
+		// Капитал необязателен: пустое поле создаёт конструкцию без выделенного
+		// бюджета, непустое должно быть числом в USDT — проверка числа работает
+		// только при непустом вводе.
+		// Traceability: openspec:ui/screens#scenario-inbox-create-without-capital
+		decimal? capital = null;
+		if (string.IsNullOrWhiteSpace(_createCapitalInput) == false)
 		{
-			_createCapitalInvalid = true;
-			return Task.CompletedTask;
+			if (decimal.TryParse(_createCapitalInput, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedCapital) == false)
+			{
+				_createCapitalInvalid = true;
+				return Task.CompletedTask;
+			}
+
+			capital = parsedCapital;
 		}
 
 		_createNameInvalid = false;

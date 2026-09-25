@@ -70,6 +70,12 @@ else
 			<button type="button" class="btn" disabled="@_busy" @onclick="() => ChangeStatusAsync(ConstructionStatus.Archived)">В архив</button>
 		}
 		<button type="button" class="btn" disabled="@_busy" @onclick="BeginCapitalChange">Изменить капитал</button>
+		@* Правка плановых границ результата: риск и профит вводятся значением
+		   ровно в одной единице — процентах или USDT — и очищаются командой
+		   «Убрать» в своей форме. *@
+		@* Traceability: openspec:ui/screens#requirement-construction-actions *@
+		<button type="button" class="btn" disabled="@_busy" @onclick="BeginRisk">Риск…</button>
+		<button type="button" class="btn" disabled="@_busy" @onclick="BeginProfit">Профит…</button>
 		@if (CanDelete)
 		{
 			@* Удаление предлагается только конструкции без сделок и корректировок:
@@ -101,17 +107,76 @@ else
 	else if (_action == DetailAction.Capital)
 	{
 		@* Форма капитала: значение в USDT; правка капитала меняет только
-		   процентные величины, абсолютный результат не затрагивается. *@
+		   процентные величины, абсолютный результат не затрагивается.
+		   Пустое поле при сохранении убирает капитал у конструкции. *@
+		@* Traceability: openspec:ui/screens#scenario-detail-capital-removal-hides-percent *@
 		<div class="action-form">
 			<label class="action-label">
-				выделенный капитал, USDT
+				Выделенный капитал, USDT
 				<input class="action-input" @bind="_capitalInput" />
 			</label>
+			<span class="action-hint">пусто — капитал не задан</span>
 			<button type="button" class="btn primary" disabled="@_busy" @onclick="ChangeCapitalAsync">Сохранить капитал</button>
 			<button type="button" class="btn" disabled="@_busy" @onclick="CancelAction">Отмена</button>
 			@if (_capitalInvalid)
 			{
 				<span class="validation-message">Введите число в USDT, например 3000</span>
+			}
+		</div>
+	}
+	else if (_action == DetailAction.Risk)
+	{
+		@* Форма риска: значение вводится ровно в одной единице — процентах или
+		   USDT; при заданном капитале вторая единица показывает вычисленное
+		   значение только для чтения, оба пустых поля равносильны «Убрать». *@
+		@* Traceability: openspec:ui/screens#requirement-construction-actions *@
+		<div class="action-form">
+			<label class="action-label">
+				риск, %
+				<input class="action-input target-input" @bind="_riskPercentInput" @bind:event="oninput" @bind:after="() => OnRiskDraftChanged(TargetUnit.Percent)" readonly="@IsRiskReadonly(TargetUnit.Percent)" />
+			</label>
+			<label class="action-label">
+				риск, USDT
+				<input class="action-input target-input" @bind="_riskUsdtInput" @bind:event="oninput" @bind:after="() => OnRiskDraftChanged(TargetUnit.Usdt)" readonly="@IsRiskReadonly(TargetUnit.Usdt)" />
+			</label>
+			<button type="button" class="btn primary" disabled="@_busy" @onclick="SaveRiskAsync">Сохранить</button>
+			@if (_data.RiskUnit is not null)
+			{
+				@* «Убрать» очищает параметр целиком и предложена, только пока
+				   риск задан: незаданный параметр убирать нечего. *@
+				<button type="button" class="btn" disabled="@_busy" @onclick="RemoveRiskAsync">Убрать</button>
+			}
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelAction">Отмена</button>
+			@if (_riskError is not null)
+			{
+				<span class="validation-message">@_riskError</span>
+			}
+		</div>
+	}
+	else if (_action == DetailAction.Profit)
+	{
+		@* Форма профита: те же правила ввода, что у риска, — значение ровно
+		   в одной единице, вычисленное эхо второй единицы только для чтения,
+		   оба пустых поля равносильны «Убрать». *@
+		@* Traceability: openspec:ui/screens#requirement-construction-actions *@
+		<div class="action-form">
+			<label class="action-label">
+				профит, %
+				<input class="action-input target-input" @bind="_profitPercentInput" @bind:event="oninput" @bind:after="() => OnProfitDraftChanged(TargetUnit.Percent)" readonly="@IsProfitReadonly(TargetUnit.Percent)" />
+			</label>
+			<label class="action-label">
+				профит, USDT
+				<input class="action-input target-input" @bind="_profitUsdtInput" @bind:event="oninput" @bind:after="() => OnProfitDraftChanged(TargetUnit.Usdt)" readonly="@IsProfitReadonly(TargetUnit.Usdt)" />
+			</label>
+			<button type="button" class="btn primary" disabled="@_busy" @onclick="SaveProfitAsync">Сохранить</button>
+			@if (_data.ProfitUnit is not null)
+			{
+				<button type="button" class="btn" disabled="@_busy" @onclick="RemoveProfitAsync">Убрать</button>
+			}
+			<button type="button" class="btn" disabled="@_busy" @onclick="CancelAction">Отмена</button>
+			@if (_profitError is not null)
+			{
+				<span class="validation-message">@_profitError</span>
 			}
 		</div>
 	}
@@ -144,7 +209,20 @@ else
 				<b class="@SignClass(_data.Metrics.TotalPnL)">@FormatPnL(_data.Metrics.TotalPnL.Value) USDT</b>
 			}
 		</div>
-		<div>% капитала (@FormatAmount(_data.AllocatedCapitalUsdt))<b class="@SignClass(_data.Metrics.TotalPnLPercent)">@FormatPercent(_data.Metrics.TotalPnLPercent)</b></div>
+		<div>
+			@* Процент от капитала выводится только при заданном капитале:
+			   незаданный капитал оставляет прочерк без скобок с величиной. *@
+			@* Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent *@
+			@if (_data.AllocatedCapitalUsdt is { } capital)
+			{
+				@:% капитала (@FormatAmount(capital))
+			}
+			else
+			{
+				@:% капитала
+			}
+			<b class="@SignClass(_data.Metrics.TotalPnLPercent)">@FormatPercent(_data.Metrics.TotalPnLPercent)</b>
+		</div>
 		<div>реализованный<b class="@SignClass(_data.Metrics.RealizedPnL)">@FormatPnL(_data.Metrics.RealizedPnL)</b></div>
 		<div>нереализованный
 			@if (_data.HasMarkFailure)
@@ -178,6 +256,17 @@ else
 			}
 		</div>
 		<div>период<b>@PeriodLabel</b></div>
+	</div>
+
+	@* Подсказка «риск — итог — профит» в сводке деталей: подписи границ обеими
+	   единицами и полоса заполнения по текущему итогу; без USDT-величин
+	   компонент ничего не выводит, сбой марок показывается признаком. *@
+	@* Traceability: openspec:ui/screens#requirement-risk-profit-hint *@
+	<div class="rp-detail">
+		<RiskProfitHint
+			RiskPercent="_data.RiskPercent" RiskUsdt="_data.RiskUsdt"
+			ProfitPercent="_data.ProfitPercent" ProfitUsdt="_data.ProfitUsdt"
+			TotalPnL="_data.Metrics.TotalPnL" />
 	</div>
 
 	@* Комментарий конструкции — в шапке деталей рядом со сводкой: правка
@@ -280,7 +369,7 @@ else
 					<td>@FormatQuantity(position.Residual)</td>
 					<td>@FormatAmount(position.AverageEntryPrice)</td>
 					<td>@FormatAmount(position.AverageClosePrice)</td>
-					<td><span class="@SignClass(position.RealizedPnL)">@FormatPnL(position.RealizedPnL) (@FormatPercent(position.RealizedPnLPercent))</span></td>
+					<td><span class="@SignClass(position.RealizedPnL)">@FormatPnLWithPercent(position.RealizedPnL, position.RealizedPnLPercent)</span></td>
 					@* Нереализованная часть: закрытой позиции — прочерк, открытой
 					   без марок — признак сбоя, иначе оценка марками со знаком
 					   с процентом от капитала. *@
@@ -295,7 +384,7 @@ else
 						}
 						else
 						{
-							<span class="@SignClass(position.UnrealizedPnL)">@FormatPnL(position.UnrealizedPnL.Value) (@FormatPercent(position.UnrealizedPnLPercent))</span>
+							<span class="@SignClass(position.UnrealizedPnL)">@FormatPnLWithPercent(position.UnrealizedPnL.Value, position.UnrealizedPnLPercent)</span>
 						}
 					</td>
 					@* Признак сбоя марок открытой позиции занимает и «Общий P&L»:
@@ -308,7 +397,7 @@ else
 						}
 						else
 						{
-							<span class="@SignClass(position.TotalPnL)">@FormatPnL(position.TotalPnL.GetValueOrDefault()) (@FormatPercent(position.TotalPnLPercent))</span>
+							<span class="@SignClass(position.TotalPnL)">@FormatPnLWithPercent(position.TotalPnL.GetValueOrDefault(), position.TotalPnLPercent)</span>
 						}
 					</td>
 					<td>@FormatAmount(position.AccumulatedFees)</td>
@@ -694,6 +783,8 @@ else
 		None,
 		Rename,
 		Capital,
+		Risk,
+		Profit,
 		Delete,
 	}
 
@@ -706,6 +797,18 @@ else
 	private string _renameValue = string.Empty;
 	private string _capitalInput = string.Empty;
 	private bool _capitalInvalid;
+
+	/// <summary>Черновики формы риска: проценты, USDT и единица пользовательского ввода.</summary>
+	private string _riskPercentInput = string.Empty;
+	private string _riskUsdtInput = string.Empty;
+	private TargetUnit? _riskSourceUnit;
+	private string? _riskError;
+
+	/// <summary>Черновики формы профита: проценты, USDT и единица пользовательского ввода.</summary>
+	private string _profitPercentInput = string.Empty;
+	private string _profitUsdtInput = string.Empty;
+	private TargetUnit? _profitSourceUnit;
+	private string? _profitError;
 
 	/// <summary>Уровень редактируемого комментария: сделка, позиция или сама конструкция.</summary>
 	private enum CommentTarget
@@ -901,6 +1004,8 @@ else
 	{
 		_action = DetailAction.None;
 		_capitalInvalid = false;
+		_riskError = null;
+		_profitError = null;
 		_actionError = null;
 	}
 
@@ -926,14 +1031,27 @@ else
 		"Смена статуса не выполнена");
 
 	/// <summary>
-	/// Меняет выделенный капитал: проценты результата пересчитываются при
-	/// следующем чтении, абсолютные величины и позиции не затрагиваются.
+	/// Сохраняет выделенный капитал из формы: число задаёт новое значение базы
+	/// процентов, пустое поле убирает капитал; проценты результата пересчитываются
+	/// при следующем чтении, абсолютные величины и позиции не затрагиваются.
 	/// </summary>
 	// Капитал — база процентов: экран перечитывает снимок, процент от капитала
 	// в сводке пересчитывается немедленно, абсолютные величины остаются.
 	// Traceability: openspec:ui/screens#scenario-detail-capital-change-percent-only
+	// Пустое поле сохранения убирает капитал: ноль — легитимное значение,
+	// подменять им «не задан» нельзя.
+	// Traceability: openspec:ui/screens#scenario-detail-capital-removal-hides-percent
 	private Task ChangeCapitalAsync()
 	{
+		// Пустое поле означает «капитал не задан»: значение убирается полностью.
+		if (string.IsNullOrWhiteSpace(_capitalInput))
+		{
+			_capitalInvalid = false;
+			return RunActionAsync(
+				() => Constructions.UpdateAllocatedCapitalAsync(ConstructionId, null),
+				"Изменение капитала не выполнено");
+		}
+
 		// Нечисловое значение капитала не уходит в домен: форма просит
 		// корректное число, команда не выполняется.
 		if (decimal.TryParse(_capitalInput, NumberStyles.Number, CultureInfo.InvariantCulture, out var capital) == false)
@@ -946,6 +1064,224 @@ else
 		return RunActionAsync(
 			() => Constructions.UpdateAllocatedCapitalAsync(ConstructionId, capital),
 			"Изменение капитала не выполнено");
+	}
+
+	/// <summary>
+	/// Открывает форму риска: поле введённой единицы предзаполняется значением
+	/// первоисточника, вторая единица пуста — ввод всегда заменяет пару
+	/// «значение + единица» целиком.
+	/// </summary>
+	// Введённая единица — первоисточник параметра: правка предзаполняет именно её.
+	// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+	private void BeginRisk()
+	{
+		if (_data is not { } data)
+		{
+			return;
+		}
+
+		_action = DetailAction.Risk;
+		_riskPercentInput = data.RiskUnit == TargetUnit.Percent && data.RiskPercent is { } percent
+			? percent.ToString("0.####", CultureInfo.InvariantCulture)
+			: string.Empty;
+		_riskUsdtInput = data.RiskUnit == TargetUnit.Usdt && data.RiskUsdt is { } usdt
+			? usdt.ToString("0.####", CultureInfo.InvariantCulture)
+			: string.Empty;
+		_riskSourceUnit = null;
+		_riskError = null;
+		_actionError = null;
+	}
+
+	/// <summary>Открывает форму профита с теми же правилами предзаполнения, что у риска.</summary>
+	// Введённая единица — первоисточник параметра: правка предзаполняет именно её.
+	// Traceability: openspec:domain/constructions#requirement-risk-profit-params
+	private void BeginProfit()
+	{
+		if (_data is not { } data)
+		{
+			return;
+		}
+
+		_action = DetailAction.Profit;
+		_profitPercentInput = data.ProfitUnit == TargetUnit.Percent && data.ProfitPercent is { } percent
+			? percent.ToString("0.####", CultureInfo.InvariantCulture)
+			: string.Empty;
+		_profitUsdtInput = data.ProfitUnit == TargetUnit.Usdt && data.ProfitUsdt is { } usdt
+			? usdt.ToString("0.####", CultureInfo.InvariantCulture)
+			: string.Empty;
+		_profitSourceUnit = null;
+		_profitError = null;
+		_actionError = null;
+	}
+
+	/// <summary>
+	/// Сохраняет риск: доступное вводу поле уходит в домен ровно с одной единицей;
+	/// оба пустых поля равносильны «Убрать», оба заполненных — ошибка.
+	/// </summary>
+	// Параметр вводится значением ровно в одной единице, значение положительно;
+	// вычисленное эхо второй единицы доступно только для чтения и вводом не
+	// считается.
+	// Traceability: openspec:ui/screens#requirement-construction-actions
+	private Task SaveRiskAsync() => SaveTargetForm(
+		_riskPercentInput,
+		_riskUsdtInput,
+		IsRiskReadonly(TargetUnit.Percent),
+		IsRiskReadonly(TargetUnit.Usdt),
+		(value, unit) => Constructions.UpdateRiskAsync(ConstructionId, value, unit),
+		error => _riskError = error,
+		() => RemoveRiskAsync(),
+		"Правка риска не выполнена");
+
+	/// <summary>Очищает риск целиком: параметр отсутствует, профит не затрагивается.</summary>
+	// Риск и профит независимы: очистка одного не меняет другой.
+	// Traceability: openspec:domain/constructions#scenario-risk-profit-clear-removes-param
+	private Task RemoveRiskAsync() => RunActionAsync(
+		() => Constructions.UpdateRiskAsync(ConstructionId, null, null),
+		"Очистка риска не выполнена");
+
+	/// <summary>Сохраняет профит с теми же правилами одной единицы, что у риска.</summary>
+	// Параметр вводится значением ровно в одной единице, значение положительно.
+	// Traceability: openspec:ui/screens#requirement-construction-actions
+	private Task SaveProfitAsync() => SaveTargetForm(
+		_profitPercentInput,
+		_profitUsdtInput,
+		IsProfitReadonly(TargetUnit.Percent),
+		IsProfitReadonly(TargetUnit.Usdt),
+		(value, unit) => Constructions.UpdateProfitAsync(ConstructionId, value, unit),
+		error => _profitError = error,
+		() => RemoveProfitAsync(),
+		"Правка профита не выполнена");
+
+	/// <summary>Очищает профит целиком: параметр отсутствует, риск не затрагивается.</summary>
+	// Риск и профит независимы: очистка одного не меняет другой.
+	// Traceability: openspec:domain/constructions#scenario-risk-profit-clear-removes-param
+	private Task RemoveProfitAsync() => RunActionAsync(
+		() => Constructions.UpdateProfitAsync(ConstructionId, null, null),
+		"Очистка профита не выполнена");
+
+	/// <summary>
+	/// Общая логика сохранения формы плановой границы: заполненным считается
+	/// только доступное вводу поле — ровно одно уходит в домен с положительным
+	/// значением, оба пустых равносильны очистке, оба заполненных дают ошибку.
+	/// </summary>
+	private Task SaveTargetForm(
+		string percentInput,
+		string usdtInput,
+		bool percentReadonly,
+		bool usdtReadonly,
+		Func<decimal, TargetUnit, Task> save,
+		Action<string> showError,
+		Func<Task> clear,
+		string errorPrefix)
+	{
+		// Заполненными считаются только доступные вводу поля: вычисленное
+		// значение второй единицы доступно только для чтения и не считается.
+		var percentFilled = percentReadonly == false && HasTargetText(percentInput);
+		var usdtFilled = usdtReadonly == false && HasTargetText(usdtInput);
+
+		if (percentFilled && usdtFilled)
+		{
+			showError("Введите значение только в одной единице");
+			return Task.CompletedTask;
+		}
+
+		if (percentFilled == false && usdtFilled == false)
+		{
+			// Оба пустых поля равносильны «Убрать»: параметр очищается целиком.
+			return clear();
+		}
+
+		if (TryParseTargetValue(percentFilled ? percentInput : usdtInput, out var value) == false)
+		{
+			showError("Введите положительное число");
+			return Task.CompletedTask;
+		}
+
+		return RunActionAsync(
+			() => save(value, percentFilled ? TargetUnit.Percent : TargetUnit.Usdt),
+			errorPrefix);
+	}
+
+	/// <summary>Есть ли в поле границы непустой текст — кандидат на ввод значения.</summary>
+	private static bool HasTargetText(string input) => input.Trim().Length > 0;
+
+	/// <summary>Разбирает значение границы: положительное число в USDT или процентах.</summary>
+	private static bool TryParseTargetValue(string input, out decimal value) =>
+		decimal.TryParse(input.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out value) && value > 0m;
+
+	/// <summary>Капитал задан и ненулевой — база вычисления второй единицы формы.</summary>
+	private bool HasTargetCapital => _data?.AllocatedCapitalUsdt is { } capital && capital != 0m;
+
+	/// <summary>Вторая единица риска заблокирована, когда пользователь вводит первую при заданном капитале.</summary>
+	private bool IsRiskReadonly(TargetUnit unit) =>
+		HasTargetCapital && _riskSourceUnit is { } source && source != unit;
+
+	/// <summary>Вторая единица профита заблокирована, когда пользователь вводит первую при заданном капитале.</summary>
+	private bool IsProfitReadonly(TargetUnit unit) =>
+		HasTargetCapital && _profitSourceUnit is { } source && source != unit;
+
+	/// <summary>Пересчитывает черновик риска после ввода: при заданном капитале вторая единица получает вычисленное значение.</summary>
+	// Незаполненная единица вычисляется для подсказки формы, сохраняется только
+	// введённая пара «значение + единица».
+	// Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
+	private void OnRiskDraftChanged(TargetUnit editedUnit)
+	{
+		_riskSourceUnit = editedUnit;
+		_riskError = null;
+		if (HasTargetCapital == false)
+		{
+			return;
+		}
+
+		if (editedUnit == TargetUnit.Percent)
+		{
+			_riskUsdtInput = ComputeTargetEcho(_riskPercentInput, TargetUnit.Percent);
+		}
+		else
+		{
+			_riskPercentInput = ComputeTargetEcho(_riskUsdtInput, TargetUnit.Usdt);
+		}
+	}
+
+	/// <summary>Пересчитывает черновик профита после ввода по тем же правилам, что у риска.</summary>
+	// Незаполненная единица вычисляется для подсказки формы, сохраняется только
+	// введённая пара «значение + единица».
+	// Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
+	private void OnProfitDraftChanged(TargetUnit editedUnit)
+	{
+		_profitSourceUnit = editedUnit;
+		_profitError = null;
+		if (HasTargetCapital == false)
+		{
+			return;
+		}
+
+		if (editedUnit == TargetUnit.Percent)
+		{
+			_profitUsdtInput = ComputeTargetEcho(_profitPercentInput, TargetUnit.Percent);
+		}
+		else
+		{
+			_profitPercentInput = ComputeTargetEcho(_profitUsdtInput, TargetUnit.Usdt);
+		}
+	}
+
+	/// <summary>Вычисленное значение второй единицы для подсказки формы: проценты
+	/// переводятся в USDT умножением на капитал, USDT — в проценты делением;
+	/// пустой или нечисловой ввод и незаданный капитал эхо не дают.</summary>
+	private string ComputeTargetEcho(string text, TargetUnit unit)
+	{
+		if (decimal.TryParse(text.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value) == false
+			|| _data?.AllocatedCapitalUsdt is not { } capital
+			|| capital == 0m)
+		{
+			return string.Empty;
+		}
+
+		var computed = unit == TargetUnit.Percent
+			? value / 100m * capital
+			: value / capital * 100m;
+		return computed.ToString("0.##", CultureInfo.InvariantCulture);
 	}
 
 	/// <summary>
@@ -1023,6 +1359,8 @@ else
 
 		_action = DetailAction.None;
 		_capitalInvalid = false;
+		_riskError = null;
+		_profitError = null;
 		// Успешное действие перечитало снимок целиком: открытая inline-правка
 		// комментария закрывается, строки показывают актуальный текст.
 		_commentTarget = CommentTarget.None;
@@ -1613,6 +1951,16 @@ else
 	private static string FormatPercent(decimal? value) => value is null
 		? "—"
 		: $"{value.Value.ToString("+0.#;-0.#;0", CultureInfo.InvariantCulture)}%";
+
+	/// <summary>Абсолютный P&L с процентом от капитала в скобках; без заданного
+	/// капитала процент не выводится и скобки опускаются.</summary>
+	// Проценты в скобках строк позиций выводятся только при заданном капитале:
+	// незаданный капитал убирает скобки вместе с процентом, абсолютная величина
+	// остаётся.
+	// Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
+	private static string FormatPnLWithPercent(decimal value, decimal? percent) => percent is { } known
+		? $"{FormatPnL(value)} ({FormatPercent(known)})"
+		: FormatPnL(value);
 
 	/// <summary>Количество или цена без знака: «0.0002» / «42000»; отсутствие — прочерк.</summary>
 	private static string FormatAmount(decimal? value) => value is null
