@@ -17,6 +17,10 @@ namespace TransactionJournal.Components.Pages;
 /// <param name="Residual">Чистый остаток: положителен для длинной, отрицателен для короткой; ноль — закрыта.</param>
 /// <param name="AverageEntryPrice">Средняя цена входа — количество-взвешенная цена всех открывающих частей FIFO-потока; null, если открывающих частей нет.</param>
 /// <param name="AverageClosePrice">Средняя цена закрытия — количество-взвешенная цена всех закрывающих частей потока; null, если закрывающих частей нет.</param>
+/// <param name="RealizedPnL">Реализованный PnL — FIFO-результат встречных частей минус комиссии записей; виден всегда, в том числе при сбое марок.</param>
+/// <param name="RealizedPnLPercent">Реализованный P&L процентом от выделенного капитала конструкции; null при нулевом капитале.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL открытой позиции — оценка марками на момент запроса; null при сбое марок, у закрытой позиции нереализованной части нет.</param>
+/// <param name="UnrealizedPnLPercent">Нереализованный P&L процентом от выделенного капитала конструкции; null вместе с нереализованным P&L или при нулевом капитале.</param>
 /// <param name="TotalPnL">Общий PnL позиции: реализованный плюс нереализованная оценка; null у открытой позиции при сбое марок.</param>
 /// <param name="TotalPnLPercent">Общий P&L процентом от выделенного капитала конструкции; null вместе с общим P&L или при нулевом капитале.</param>
 /// <param name="AccumulatedFees">Накопленные комиссии записей позиции: уплаченные складываются, rebate снижает сумму.</param>
@@ -25,13 +29,21 @@ namespace TransactionJournal.Components.Pages;
 /// <param name="IsOpen">Позиция открыта, пока остаток не нулевой.</param>
 /// <param name="Comment">Комментарий позиции по ключу «конструкция × инструмент»; null — комментария нет.</param>
 // Строка показывает картину позиции её записями: вход, выход,
-// результат, общий P&L с процентом от капитала, комиссии и времена.
+// раздельные части реализованного и нереализованного результата
+// с процентом от капитала, общий P&L с процентом, комиссии и времена.
 // Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
+// Раздельные части выводятся колонками «Реализ. P&L» и «Нереализ. P&L»:
+// реализованная часть видна всегда, нереализованная деградирует вместе с марками.
+// Traceability: openspec:ui/screens#scenario-detail-position-pnl-parts
 public sealed record ConstructionPositionRow(
 	string Symbol,
 	decimal Residual,
 	decimal? AverageEntryPrice,
 	decimal? AverageClosePrice,
+	decimal RealizedPnL,
+	decimal? RealizedPnLPercent,
+	decimal? UnrealizedPnL,
+	decimal? UnrealizedPnLPercent,
 	decimal? TotalPnL,
 	decimal? TotalPnLPercent,
 	decimal AccumulatedFees,
@@ -263,12 +275,12 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				.ConfigureAwait(false))
 			.ToDictionary(comment => comment.Symbol, comment => comment.Text);
 
-		// Процент общего P&L — от текущего выделенного капитала, как в метриках
+		// Проценты величин P&L — от текущего выделенного капитала, как в метриках
 		// конструкции: нулевой капитал базы не образует, процент остаётся null
-		// вместе с общим P&L.
-		decimal? TotalPnLPercent(decimal? totalPnL) => totalPnL == null || allocatedCapitalUsdt == 0m
+		// вместе со своей величиной.
+		decimal? PercentOfCapital(decimal? pnl) => pnl == null || allocatedCapitalUsdt == 0m
 			? null
-			: totalPnL.Value / allocatedCapitalUsdt * 100m;
+			: pnl.Value / allocatedCapitalUsdt * 100m;
 
 		return metrics.Positions
 			.Where(position => position.ConstructionId == constructionId)
@@ -278,8 +290,12 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				position.Residual,
 				position.AverageEntryPrice,
 				position.AverageClosePrice,
+				position.RealizedPnL,
+				PercentOfCapital(position.RealizedPnL),
+				position.UnrealizedPnL,
+				PercentOfCapital(position.UnrealizedPnL),
 				position.TotalPnL,
-				TotalPnLPercent(position.TotalPnL),
+				PercentOfCapital(position.TotalPnL),
 				position.AccumulatedFees,
 				position.OpenedAt,
 				position.ClosedAt,

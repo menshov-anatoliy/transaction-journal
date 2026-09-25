@@ -274,6 +274,10 @@ public class ConstructionDetailScreenTests
 						0.1m,
 						42000m,
 						null,
+						-1m,
+						-0.1m,
+						null,
+						null,
 						null,
 						null,
 						1m,
@@ -285,9 +289,9 @@ public class ConstructionDetailScreenTests
 
 		var cut = RenderDetail();
 
-		// Assert: признак сбоя марок занимает «Общий P&L» строки
-		// позиции; реализованные величины — средняя цена входа,
-		// комиссии и время открытия — остаются видимыми.
+		// Assert: признаки сбоя марок занимают «Нереализованный» и «Общий P&L»
+		// строки позиции; реализованные величины — реализованный P&L, средняя
+		// цена входа, комиссии и время открытия — остаются видимыми.
 		// Требование: сбой марок — видимое состояние, реализованные величины
 		// остаются видимыми.
 		// Traceability: openspec:ui/screens#scenario-detail-position-total-pnl-marks-failure
@@ -296,7 +300,11 @@ public class ConstructionDetailScreenTests
 			Assert.That(cut.FindAll(".kstrip .markfail").Count, Is.EqualTo(3));
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("-1"));
 			var row = cut.Find("tbody tr");
-			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
+			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(2));
+			var cells = row.QuerySelectorAll("td");
+			Assert.That(cells[4].TextContent.Trim(), Is.EqualTo("-1 (-0.1%)"));
+			Assert.That(cells[5].QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
+			Assert.That(cells[6].QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
 			Assert.That(row.TextContent, Does.Contain("42000"));
 			Assert.That(row.TextContent, Does.Contain("1"));
 			Assert.That(row.TextContent, Does.Contain(DisplayTime.FormatMoment(new DateTimeOffset(2026, 9, 19, 21, 32, 0, TimeSpan.Zero))));
@@ -315,14 +323,14 @@ public class ConstructionDetailScreenTests
 			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync(CreateData(MetricsOf(), positions:
 			[
-				new ConstructionPositionRow("BTCUSDT", 0m, 42000m, 44000m, 199m, 6.6m, 1.5m, openedAt, closedAt, false, null),
-				new ConstructionPositionRow("ETHUSDT", 0m, 3000m, 2900m, -45m, -1.5m, 0.8m, openedAt, closedAt, false, null),
+				new ConstructionPositionRow("BTCUSDT", 0m, 42000m, 44000m, 199m, 6.6m, 0m, 0m, 199m, 6.6m, 1.5m, openedAt, closedAt, false, null),
+				new ConstructionPositionRow("ETHUSDT", 0m, 3000m, 2900m, -45m, -1.5m, 0m, 0m, -45m, -1.5m, 0.8m, openedAt, closedAt, false, null),
 			]));
 
 		var cut = RenderDetail();
 
-		// Assert: состав колонок ровно выводимый — колонки «Средняя», «Марка»,
-		// «Нереализов.» и «Результат» отсутствуют; общий P&L — абсолют со знаком
+		// Assert: состав колонок ровно выводимый — колонки «Средняя», «Марка»
+		// и «Результат» отсутствуют; общий P&L — абсолют со знаком
 		// и процент от капитала в скобках.
 		// Требование: строка позиции показывает вход, выход и итог.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
@@ -335,6 +343,8 @@ public class ConstructionDetailScreenTests
 				"Остаток",
 				"Сред. цена входа",
 				"Сред. цена закрытия",
+				"Реализ. P&L",
+				"Нереализ. P&L",
 				"Общий P&L",
 				"Всего комиссий",
 				"Время открытия",
@@ -353,6 +363,43 @@ public class ConstructionDetailScreenTests
 			Assert.That(rows[0].TextContent, Does.Contain(DisplayTime.FormatMoment(openedAt)));
 			Assert.That(rows[0].TextContent, Does.Contain(DisplayTime.FormatMoment(closedAt)));
 			Assert.That(rows[1].TextContent, Does.Contain("-45 (-1.5%)"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Таблица позиций показывает раздельные части P&L, нереализованная закрытой — прочерком")]
+	public void TryIfPositionsTableShowsSeparatePnlParts()
+	{
+		// Arrange: открытая позиция с доступными марками — реализованная часть 150
+		// (5% капитала), нереализованная 49 (1.6% капитала), общий 199 (6.6%);
+		// рядом закрытая позиция, у которой нереализованной части нет.
+		var openedAt = new DateTimeOffset(2026, 6, 20, 9, 30, 0, TimeSpan.Zero);
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(), hasOpenResidual: true, positions:
+			[
+				new ConstructionPositionRow("BTCUSDT", 0.1m, 42000m, null, 150m, 5m, 49m, 1.6m, 199m, 6.6m, 1.5m, openedAt, null, true, null),
+				new ConstructionPositionRow("ETHUSDT", 0m, 3000m, 2900m, -45m, -1.5m, 0m, 0m, -45m, -1.5m, 0.8m, openedAt, openedAt, false, null),
+			]));
+
+		var cut = RenderDetail();
+
+		// Assert: реализованная и нереализованная части выводятся отдельными
+		// колонками перед «Общий P&L» с процентом от выделенного капитала,
+		// общий равен их сумме с процентом; у закрытой позиции реализованный
+		// виден, нереализованная часть — прочерком.
+		// Требование: строка позиции показывает раздельные части P&L.
+		// Traceability: openspec:ui/screens#scenario-detail-position-pnl-parts
+		cut.WaitForAssertion(() =>
+		{
+			var rows = cut.FindAll("table")[0].QuerySelectorAll("tbody tr");
+			var openCells = rows[0].QuerySelectorAll("td");
+			Assert.That(openCells[4].TextContent.Trim(), Is.EqualTo("+150 (+5%)"));
+			Assert.That(openCells[5].TextContent.Trim(), Is.EqualTo("+49 (+1.6%)"));
+			Assert.That(openCells[6].TextContent.Trim(), Is.EqualTo("+199 (+6.6%)"));
+			var closedCells = rows[1].QuerySelectorAll("td");
+			Assert.That(closedCells[4].TextContent.Trim(), Is.EqualTo("-45 (-1.5%)"));
+			Assert.That(closedCells[5].TextContent.Trim(), Is.EqualTo("—"));
 		});
 	}
 
@@ -724,6 +771,10 @@ public class ConstructionDetailScreenTests
 					0.1m,
 					42000m,
 					42100m,
+					9.5m,
+					0.3m,
+					0.5m,
+					0m,
 					10m,
 					0.3m,
 					1.5m,
@@ -748,7 +799,7 @@ public class ConstructionDetailScreenTests
 		// Traceability: openspec:ui/screens#scenario-position-comment-without-residual-edit
 		var row = cut.FindAll("table")[0].QuerySelectorAll("tbody tr").Single();
 		Assert.That(row.QuerySelectorAll("input"), Has.Length.EqualTo(1));
-		Assert.That(row.QuerySelectorAll("td")[9].QuerySelectorAll("input"), Has.Length.EqualTo(1));
+		Assert.That(row.QuerySelectorAll("td")[11].QuerySelectorAll("input"), Has.Length.EqualTo(1));
 		Assert.That(row.QuerySelectorAll("td")[1].QuerySelectorAll("input"), Is.Empty);
 		Assert.That(row.QuerySelectorAll("td")[1].TextContent.Trim(), Is.EqualTo("+0.1"));
 
@@ -951,6 +1002,10 @@ public class ConstructionDetailScreenTests
 					0.1m,
 					42000m,
 					null,
+					19m,
+					0.6m,
+					1m,
+					0m,
 					20m,
 					0.7m,
 					1m,
@@ -963,6 +1018,10 @@ public class ConstructionDetailScreenTests
 					0m,
 					3000m,
 					3100m,
+					5m,
+					0.2m,
+					0m,
+					0m,
 					5m,
 					0.2m,
 					0.5m,
@@ -1035,6 +1094,10 @@ public class ConstructionDetailScreenTests
 				1m,
 				0m,
 				0m,
+				0m,
+				1m,
+				0m,
+				0m,
 				new DateTimeOffset(2026, 9, 19, 21, 32, 0, TimeSpan.Zero),
 				new DateTimeOffset(2026, 9, 20, 14, 30, 0, TimeSpan.Zero),
 				false,
@@ -1057,6 +1120,10 @@ public class ConstructionDetailScreenTests
 				0.01m,
 				42000m,
 				null,
+				1m,
+				0m,
+				0m,
+				0m,
 				1m,
 				0m,
 				0m,
@@ -1107,6 +1174,10 @@ public class ConstructionDetailScreenTests
 					0m,
 					42000m,
 					42100m,
+					1m,
+					0m,
+					0m,
+					0m,
 					1m,
 					0m,
 					0m,

@@ -116,10 +116,19 @@ public class ConstructionDetailReadModelTests
 		Assert.That(data.MarksAsOf, Is.EqualTo(receivedAt));
 
 		// Строка позиции несёт общий P&L (реализованный плюс нереализованный) и его
-		// процент от выделенного капитала конструкции: 199 от 1000 — 19.9%.
-		// Требование: строка позиции показывает общий P&L с процентом от капитала.
+		// процент от выделенного капитала конструкции: 199 от 1000 — 19.9%;
+		// части результата передаются из метрик раздельно со своими процентами:
+		// реализованный −1 (комиссия) — −0.1% капитала, нереализованный 200
+		// (оценка остатка маркой 44000) — 20% капитала.
+		// Требование: строка позиции показывает общий P&L с процентом от капитала,
+		// реализованная и нереализованная части — отдельными величинами с процентом.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
+		// Traceability: openspec:ui/screens#scenario-detail-position-pnl-parts
 		var position = data.Positions.Single();
+		Assert.That(position.RealizedPnL, Is.EqualTo(-1m));
+		Assert.That(position.RealizedPnLPercent, Is.EqualTo(-0.1m));
+		Assert.That(position.UnrealizedPnL, Is.EqualTo(200m));
+		Assert.That(position.UnrealizedPnLPercent, Is.EqualTo(20m));
 		Assert.That(position.TotalPnL, Is.EqualTo(199m));
 		Assert.That(position.TotalPnLPercent, Is.EqualTo(19.9m));
 	}
@@ -192,6 +201,10 @@ public class ConstructionDetailReadModelTests
 			nameof(ConstructionPositionRow.Residual),
 			nameof(ConstructionPositionRow.AverageEntryPrice),
 			nameof(ConstructionPositionRow.AverageClosePrice),
+			nameof(ConstructionPositionRow.RealizedPnL),
+			nameof(ConstructionPositionRow.RealizedPnLPercent),
+			nameof(ConstructionPositionRow.UnrealizedPnL),
+			nameof(ConstructionPositionRow.UnrealizedPnLPercent),
 			nameof(ConstructionPositionRow.TotalPnL),
 			nameof(ConstructionPositionRow.TotalPnLPercent),
 			nameof(ConstructionPositionRow.AccumulatedFees),
@@ -348,6 +361,15 @@ public class ConstructionDetailReadModelTests
 		var position = data.Positions.Single();
 		Assert.That(position.TotalPnL, Is.Null);
 		Assert.That(position.TotalPnLPercent, Is.Null);
+		// Раздельные части при сбое марок: нереализованная деградирует в null
+		// вместе с общим P&L и своим процентом, реализованный результат остаётся
+		// видимым с процентом от капитала (−1 от 1000 — −0.1%).
+		// Требование: сбой марок не подменяет реализованные величины.
+		// Traceability: openspec:ui/screens#scenario-detail-position-pnl-parts
+		Assert.That(position.RealizedPnL, Is.EqualTo(-1m));
+		Assert.That(position.RealizedPnLPercent, Is.EqualTo(-0.1m));
+		Assert.That(position.UnrealizedPnL, Is.Null);
+		Assert.That(position.UnrealizedPnLPercent, Is.Null);
 		Assert.That(position.Residual, Is.EqualTo(0.1m));
 		Assert.That(position.AverageEntryPrice, Is.EqualTo(42000m));
 	}
