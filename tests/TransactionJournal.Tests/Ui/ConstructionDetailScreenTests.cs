@@ -1,6 +1,7 @@
 using AngleSharp.Dom;
 using Bunit;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -742,7 +743,9 @@ public class ConstructionDetailScreenTests
 		var tradesTable = cut.FindAll("table")[1];
 		FindRowButton(tradesTable, "изменить").Click();
 		tradesTable = cut.FindAll("table")[1];
-		tradesTable.QuerySelectorAll(".cell-input").Single().Change("вход половиной");
+		// Привязка черновика комментария идёт по oninput — ввод имитируется
+		// событием input, а не change.
+		tradesTable.QuerySelectorAll(".cell-input").Single().Input("вход половиной");
 		// Bind обновляет черновик и перерисовывает строку — кнопка берётся из
 		// свежего дерева после ре-рендера.
 		FindRowButton(cut.FindAll("table")[1], "Сохранить").Click();
@@ -804,7 +807,7 @@ public class ConstructionDetailScreenTests
 		Assert.That(row.QuerySelectorAll("td")[1].TextContent.Trim(), Is.EqualTo("+0.1"));
 
 		// Act: пользователь сохраняет новый текст комментария позиции.
-		cut.FindAll("table")[0].QuerySelectorAll(".cell-input").Single().Change("переворот ближе к экспирации");
+		cut.FindAll("table")[0].QuerySelectorAll(".cell-input").Single().Input("переворот ближе к экспирации");
 		FindRowButton(cut.FindAll("table")[0], "Сохранить").Click();
 
 		// Assert: комментарий позиции сохранён по ключу «конструкция × инструмент».
@@ -827,7 +830,7 @@ public class ConstructionDetailScreenTests
 
 		// Act: пользователь правит комментарий конструкции в шапке деталей.
 		cut.Find(".detail-comment button").Click();
-		cut.Find(".detail-comment .cell-input").Change("стратегия календаря");
+		cut.Find(".detail-comment .cell-input").Input("стратегия календаря");
 		FindHeaderButton(cut, "Сохранить").Click();
 
 		// Assert: комментарий сохранён сервисом домена и сразу виден в шапке.
@@ -857,7 +860,7 @@ public class ConstructionDetailScreenTests
 		// Act: пользователь вводит текст в несколько строк в textarea шапки
 		// и сохраняет.
 		cut.Find(".detail-comment button").Click();
-		cut.Find(".detail-comment textarea.cell-input").Change("цель: набор\nстоп под минимумом");
+		cut.Find(".detail-comment textarea.cell-input").Input("цель: набор\nстоп под минимумом");
 		FindHeaderButton(cut, "Сохранить").Click();
 
 		// Assert: переносы строк сохранены при записи сервиса и отображение
@@ -869,6 +872,47 @@ public class ConstructionDetailScreenTests
 		// InnerHtml сериализуется без самозакрывающего слэша у void-элементов.
 		cut.WaitForAssertion(() => Assert.That(
 			cut.Find(".detail-comment .comment-md").InnerHtml, Does.Contain("<br>")));
+	}
+
+	[TestMethod]
+	[Description("Ctrl+Enter в textarea сохраняет комментарий сразу, Enter без Ctrl не сохраняет и оставляет редактор открытым")]
+	public void TryIfCommentCtrlEnterSavesAndPlainEnterKeepsEditing()
+	{
+		// Arrange: у конструкции комментария нет; после сохранения read-модель
+		// возвращает снимок с комментарием из Markdown.
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Comment = "**удержание** до конца недели" });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".detail-comment").TextContent, Does.Contain("—")));
+
+		cut.Find(".detail-comment button").Click();
+		var editor = cut.Find(".detail-comment textarea.cell-input");
+		// Привязка черновика идёт по oninput — ввод имитируется событием input.
+		editor.Input("**удержание** до конца недели");
+
+		// Act: пользователь нажимает Enter без Ctrl в textarea шапки.
+		editor.KeyDown(new KeyboardEventArgs { Key = "Enter" });
+
+		// Assert: сохранения нет, редактор остался открытым. Требование: Enter
+		// без Ctrl вставляет перенос строки и не сохраняет комментарий.
+		_comments.Verify(service =>
+			service.SetConstructionCommentAsync(7, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+		Assert.That(cut.FindAll(".detail-comment textarea.cell-input"), Has.Count.EqualTo(1));
+
+		// Act: пользователь нажимает Ctrl+Enter в той же textarea.
+		cut.Find(".detail-comment textarea.cell-input").KeyDown(new KeyboardEventArgs { Key = "Enter", CtrlKey = true });
+
+		// Assert: комментарий сохранён с актуальным черновиком и сразу показан
+		// отрендеренным из Markdown. Требование: Ctrl+Enter сохраняет комментарий
+		// и сразу отображает его в отрендеренном виде.
+		// Traceability: openspec:ui/screens#scenario-comment-saved-on-ctrl-enter
+		_comments.Verify(service =>
+			service.SetConstructionCommentAsync(7, "**удержание** до конца недели", It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(
+			cut.Find(".detail-comment .comment-md").InnerHtml, Does.Contain("<strong>удержание</strong>")));
 	}
 
 	[TestMethod]

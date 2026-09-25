@@ -190,8 +190,9 @@ else
 		{
 			<span class="cell-editor">
 				@* Многострочный ввод: textarea допускает переносы строк, сохранённый
-				   текст воспроизводится без искажений. *@
-				<textarea class="cell-input" rows="4" placeholder="комментарий конструкции" @bind="_commentDraft"></textarea>
+				   текст воспроизводится без искажений; Ctrl+Enter сохраняет, привязка
+				   по oninput держит черновик актуальным к моменту нажатия. *@
+				<textarea class="cell-input" rows="4" placeholder="комментарий конструкции" @bind="_commentDraft" @bind:event="oninput" @onkeydown="e => HandleCommentKeyDown(e, SaveConstructionCommentAsync)"></textarea>
 				<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="SaveConstructionCommentAsync">Сохранить</button>
 				<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
 			</span>
@@ -323,8 +324,9 @@ else
 						{
 							<span class="cell-editor">
 								@* Многострочный ввод: textarea допускает переносы строк,
-								   сохранённый текст воспроизводится без искажений. *@
-								<textarea class="cell-input" rows="4" placeholder="комментарий позиции" @bind="_commentDraft"></textarea>
+								   сохранённый текст воспроизводится без искажений; Ctrl+Enter
+								   сохраняет, привязка по oninput держит черновик актуальным. *@
+								<textarea class="cell-input" rows="4" placeholder="комментарий позиции" @bind="_commentDraft" @bind:event="oninput" @onkeydown="e => HandleCommentKeyDown(e, () => SavePositionCommentAsync(position.Symbol))"></textarea>
 								<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="() => SavePositionCommentAsync(position.Symbol)">Сохранить</button>
 								<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
 							</span>
@@ -427,8 +429,9 @@ else
 						{
 							<span class="cell-editor">
 								@* Многострочный ввод: textarea допускает переносы строк,
-								   сохранённый текст воспроизводится без искажений. *@
-								<textarea class="cell-input" rows="4" placeholder="комментарий сделки" @bind="_commentDraft"></textarea>
+								   сохранённый текст воспроизводится без искажений; Ctrl+Enter
+								   сохраняет, привязка по oninput держит черновик актуальным. *@
+								<textarea class="cell-input" rows="4" placeholder="комментарий сделки" @bind="_commentDraft" @bind:event="oninput" @onkeydown="e => HandleCommentKeyDown(e, () => SaveTradeCommentAsync(trade.ExecId))"></textarea>
 								<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="() => SaveTradeCommentAsync(trade.ExecId)">Сохранить</button>
 								<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
 							</span>
@@ -1513,6 +1516,16 @@ else
 		_commentKey = null;
 		_actionError = null;
 	}
+
+	/// <summary>
+	/// Обрабатывает нажатие в поле комментария: Ctrl+Enter сохраняет комментарий
+	/// вызванным обработчиком уровня, Enter без Ctrl не перехватывается и даёт
+	/// перенос строки поведением textarea по умолчанию.
+	/// </summary>
+	// Ctrl+Enter в поле ввода сохраняет комментарий любого уровня сразу.
+	// Traceability: openspec:ui/screens#scenario-comment-saved-on-ctrl-enter
+	private Task HandleCommentKeyDown(KeyboardEventArgs e, Func<Task> save)
+		=> e.CtrlKey && e.Key == "Enter" ? save() : Task.CompletedTask;
 
 	/// <summary>
 	/// Сохраняет комментарий сделки: домен пишет текст по ключу execId, экран
