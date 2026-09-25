@@ -297,6 +297,71 @@ fieldset.filter-direction-group {
 
 .btn.cell-btn { padding: 2px 8px; font-size: 11px; margin-left: 6px; }
 
+/* ===== Отображение комментария, отрендеренного из Markdown ===== */
+/* Ширина рендера ограничена, переносы текста разрешены: таблица не
+   растягивается длинным комментарием. */
+.comment-md {
+	max-width: 320px;
+	color: #c9d1d9;
+	white-space: normal;
+	text-align: left;
+	font-family: "Segoe UI", system-ui, sans-serif;
+	font-size: 12px;
+}
+
+.comment-md > *:first-child { margin-top: 0; }
+.comment-md > *:last-child { margin-bottom: 0; }
+
+/* В ячейках таблиц рендер ограничен по высоте с прокруткой: длинный или
+   высокий Markdown не раздувает строку; полная высота — только в шапке. */
+.screen td .comment-md {
+	display: block;
+	max-height: 120px;
+	overflow-y: auto;
+}
+
+.comment-md h1, .comment-md h2, .comment-md h3,
+.comment-md h4, .comment-md h5, .comment-md h6 {
+	color: #f0f6fc;
+	font-size: 12px;
+	font-weight: 600;
+	margin: 6px 0 2px;
+}
+
+.comment-md ul, .comment-md ol { margin: 4px 0; padding-left: 18px; }
+.comment-md li { margin: 1px 0; }
+
+.comment-md code {
+	background: #161b22;
+	border: 1px solid #30363d;
+	border-radius: 3px;
+	padding: 0 4px;
+	font-family: ui-monospace, Consolas, monospace;
+	font-size: 11px;
+}
+
+.comment-md pre {
+	background: #161b22;
+	border: 1px solid #30363d;
+	border-radius: 4px;
+	padding: 6px 8px;
+	margin: 4px 0;
+	overflow-x: auto;
+}
+
+.comment-md pre code { background: none; border: none; padding: 0; }
+
+.comment-md a { color: #58a6ff; }
+
+.comment-md blockquote {
+	border-left: 3px solid #30363d;
+	color: #8b949e;
+	margin: 4px 0;
+	padding: 0 8px;
+}
+
+.comment-md hr { border: none; border-top: 1px solid #30363d; margin: 6px 0; }
+
 /* ===== Плотные таблицы экранов «Терминала» ===== */
 .screen table {
 	border-collapse: collapse;

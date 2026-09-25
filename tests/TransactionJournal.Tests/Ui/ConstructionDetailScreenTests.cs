@@ -792,15 +792,15 @@ public class ConstructionDetailScreenTests
 		var positionsTable = cut.FindAll("table")[0];
 		FindRowButton(positionsTable, "изменить").Click();
 
-		// Assert: в строке появилось ровно одно текстовое поле — поле комментария
-		// в своей колонке; остаток и прочие величины позиции остаются текстом.
-		// Требование: доступно только текстовое поле комментария, остаток позиции
-		// не редактируется.
+		// Assert: в строке появилось ровно одно многострочное поле — поле
+		// комментария в своей колонке; остаток и прочие величины позиции
+		// остаются текстом. Требование: доступно только текстовое поле
+		// комментария, остаток позиции не редактируется.
 		// Traceability: openspec:ui/screens#scenario-position-comment-without-residual-edit
 		var row = cut.FindAll("table")[0].QuerySelectorAll("tbody tr").Single();
-		Assert.That(row.QuerySelectorAll("input"), Has.Length.EqualTo(1));
-		Assert.That(row.QuerySelectorAll("td")[11].QuerySelectorAll("input"), Has.Length.EqualTo(1));
-		Assert.That(row.QuerySelectorAll("td")[1].QuerySelectorAll("input"), Is.Empty);
+		Assert.That(row.QuerySelectorAll("textarea"), Has.Length.EqualTo(1));
+		Assert.That(row.QuerySelectorAll("td")[11].QuerySelectorAll("textarea"), Has.Length.EqualTo(1));
+		Assert.That(row.QuerySelectorAll("td")[1].QuerySelectorAll("textarea"), Is.Empty);
 		Assert.That(row.QuerySelectorAll("td")[1].TextContent.Trim(), Is.EqualTo("+0.1"));
 
 		// Act: пользователь сохраняет новый текст комментария позиции.
@@ -838,6 +838,67 @@ public class ConstructionDetailScreenTests
 			service.SetConstructionCommentAsync(7, "стратегия календаря", It.IsAny<CancellationToken>()), Times.Once);
 		cut.WaitForAssertion(() => Assert.That(
 			cut.Find(".detail-comment").TextContent, Does.Contain("стратегия календаря")));
+	}
+
+	[TestMethod]
+	[Description("Многострочный комментарий через textarea сохраняется с переносами и отображается разрывами строк")]
+	public void TryIfCommentTextareaSavesMultilineText()
+	{
+		// Arrange: у конструкции комментария нет; после сохранения read-модель
+		// возвращает снимок с многострочным комментарием.
+		_detail
+			.SetupSequence(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()))
+			.ReturnsAsync(CreateData(MetricsOf()) with { Comment = "цель: набор\nстоп под минимумом" });
+
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(cut.Find(".detail-comment").TextContent, Does.Contain("—")));
+
+		// Act: пользователь вводит текст в несколько строк в textarea шапки
+		// и сохраняет.
+		cut.Find(".detail-comment button").Click();
+		cut.Find(".detail-comment textarea.cell-input").Change("цель: набор\nстоп под минимумом");
+		FindHeaderButton(cut, "Сохранить").Click();
+
+		// Assert: переносы строк сохранены при записи сервиса и отображение
+		// рендерит их разрывом строки. Требование: комментарий сохраняется
+		// вместе с переносами строк и воспроизводится без искажений.
+		// Traceability: openspec:ui/screens#scenario-comment-multiline-textarea-edit
+		_comments.Verify(service =>
+			service.SetConstructionCommentAsync(7, "цель: набор\nстоп под минимумом", It.IsAny<CancellationToken>()), Times.Once);
+		// InnerHtml сериализуется без самозакрывающего слэша у void-элементов.
+		cut.WaitForAssertion(() => Assert.That(
+			cut.Find(".detail-comment .comment-md").InnerHtml, Does.Contain("<br>")));
+	}
+
+	[TestMethod]
+	[Description("Комментарий в шапке рендерится из Markdown, сырой HTML экранируется")]
+	public void TryIfCommentDisplayRendersMarkdownAndEscapesHtml()
+	{
+		// Arrange: комментарий со списком, выделением, кодом и попыткой
+		// внедрить сырой HTML.
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf()) with
+			{
+				Comment = "- пункт\n**выделено** `код`\n<script>alert('x')</script>",
+			});
+
+		// Act: пользователь открывает детали конструкции.
+		var cut = RenderDetail();
+		cut.WaitForAssertion(() => Assert.That(
+			cut.Find(".detail-comment .comment-md").InnerHtml, Does.Contain("<ul>")));
+
+		// Assert: разметка Markdown показана форматированной, а сырой HTML —
+		// экранированным текстом без исполняемых тегов. Требование: отображение
+		// рендерит Markdown, сырой HTML не исполняется браузером.
+		// Traceability: openspec:ui/screens#scenario-comment-renders-markdown
+		// Traceability: openspec:ui/screens#scenario-comment-raw-html-escaped
+		var html = cut.Find(".detail-comment .comment-md").InnerHtml;
+		Assert.That(html, Does.Contain("<strong>выделено</strong>"));
+		Assert.That(html, Does.Contain("<code>код</code>"));
+		Assert.That(html, Does.Contain("&lt;script&gt;"));
+		Assert.That(html, Does.Not.Contain("<script"));
 	}
 
 	[TestMethod]

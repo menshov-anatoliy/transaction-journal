@@ -189,14 +189,19 @@ else
 		@if (IsEditingComment(CommentTarget.Construction, null))
 		{
 			<span class="cell-editor">
-				<input class="cell-input" placeholder="комментарий конструкции" @bind="_commentDraft" />
+				@* Многострочный ввод: textarea допускает переносы строк, сохранённый
+				   текст воспроизводится без искажений. *@
+				<textarea class="cell-input" rows="4" placeholder="комментарий конструкции" @bind="_commentDraft"></textarea>
 				<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="SaveConstructionCommentAsync">Сохранить</button>
 				<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
 			</span>
 		}
 		else
 		{
-			<span class="detail-comment-text">@(_data.Comment ?? "—")</span>
+			@* Отображение рендерится из Markdown: заголовки, списки, выделение
+			   и код показываются форматированными; сырой HTML экранируется. *@
+			@* Traceability: openspec:ui/screens#scenario-comment-renders-markdown *@
+			<span class="detail-comment-text comment-md">@((MarkupString)(CommentMarkdown.Render(_data.Comment) ?? "—"))</span>
 			<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCommentEdit(CommentTarget.Construction, null, _data.Comment)">изменить</button>
 		}
 	</div>
@@ -317,14 +322,19 @@ else
 						@if (IsEditingComment(CommentTarget.Position, position.Symbol))
 						{
 							<span class="cell-editor">
-								<input class="cell-input" placeholder="комментарий позиции" @bind="_commentDraft" />
+								@* Многострочный ввод: textarea допускает переносы строк,
+								   сохранённый текст воспроизводится без искажений. *@
+								<textarea class="cell-input" rows="4" placeholder="комментарий позиции" @bind="_commentDraft"></textarea>
 								<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="() => SavePositionCommentAsync(position.Symbol)">Сохранить</button>
 								<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
 							</span>
 						}
 						else
 						{
-							<span>@(position.Comment ?? "—")</span>
+							@* Отображение рендерится из Markdown, сырой HTML
+							   экранируется; прочерк — для отсутствующего комментария. *@
+							@* Traceability: openspec:ui/screens#scenario-comment-renders-markdown *@
+							<span class="comment-md">@((MarkupString)(CommentMarkdown.Render(position.Comment) ?? "—"))</span>
 							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCommentEdit(CommentTarget.Position, position.Symbol, position.Comment)">изменить</button>
 						}
 					</td>
@@ -416,14 +426,19 @@ else
 						@if (IsEditingComment(CommentTarget.Trade, trade.ExecId))
 						{
 							<span class="cell-editor">
-								<input class="cell-input" placeholder="комментарий сделки" @bind="_commentDraft" />
+								@* Многострочный ввод: textarea допускает переносы строк,
+								   сохранённый текст воспроизводится без искажений. *@
+								<textarea class="cell-input" rows="4" placeholder="комментарий сделки" @bind="_commentDraft"></textarea>
 								<button type="button" class="btn cell-btn primary" disabled="@_busy" @onclick="() => SaveTradeCommentAsync(trade.ExecId)">Сохранить</button>
 								<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="CancelCommentEdit">Отмена</button>
 							</span>
 						}
 						else
 						{
-							<span>@(trade.Comment ?? "—")</span>
+							@* Отображение рендерится из Markdown, сырой HTML
+							   экранируется; прочерк — для отсутствующего комментария. *@
+							@* Traceability: openspec:ui/screens#scenario-comment-renders-markdown *@
+							<span class="comment-md">@((MarkupString)(CommentMarkdown.Render(trade.Comment) ?? "—"))</span>
 							<button type="button" class="btn cell-btn" disabled="@_busy" @onclick="() => BeginCommentEdit(CommentTarget.Trade, trade.ExecId, trade.Comment)">изменить</button>
 						}
 					</td>
