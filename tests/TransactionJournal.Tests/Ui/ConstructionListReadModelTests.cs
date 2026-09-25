@@ -96,6 +96,60 @@ public class ConstructionListReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Строка конструкции без капитала несёт незаданный капитал и только введённые единицы риск/профит")]
+	public async Task TryIfRowWithoutCapitalKeepsNullCapitalAndOnlyEnteredTargetUnit()
+	{
+		// Arrange: конструкция без выделенного капитала с риском 5% и профитом
+		// 150 USDT; метрики аналитики соответствуют отсутствию базы процентов.
+		await SeedAsync(new Construction
+		{
+			Name = "Без бюджета",
+			Status = ConstructionStatus.Open,
+			AllocatedCapitalUsdt = null,
+			RiskValue = 5m,
+			RiskUnit = TargetUnit.Percent,
+			ProfitValue = 150m,
+			ProfitUnit = TargetUnit.Usdt,
+		});
+		SetupMetrics(20m, new ConstructionMetrics
+		{
+			ConstructionId = 1,
+			AllocatedCapitalUsdt = null,
+			RealizedPnL = 20m,
+			UnrealizedPnL = 0m,
+			AdjustmentsPnL = 0m,
+			TotalPnL = 20m,
+			RealizedPnLPercent = null,
+			UnrealizedPnLPercent = null,
+			AdjustmentsPnLPercent = null,
+			TotalPnLPercent = null,
+			OpenedAt = OpenedAt,
+			ClosedAt = null,
+			Duration = TimeSpan.FromDays(1),
+		});
+
+		// Act: читаем данные экрана.
+		var data = await _readModel.ReadAsync();
+
+		// Assert: незаданный капитал доходит до строки как null — прочерк ставит
+		// представление; абсолютные величины результата видимы, процент от
+		// капитала отсутствует; без капитала конвертер вернул только введённые
+		// единицы: проценты риска без USDT и USDT профита без процентов.
+		// Требование: строка без капитала показывает прочерк вместо процентов.
+		// Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
+		// Traceability: openspec:analytics/performance#scenario-conversion-needs-capital
+		var row = data.Items.Single();
+		Assert.That(row.AllocatedCapitalUsdt, Is.Null);
+		Assert.That(row.RealizedPnL, Is.EqualTo(20m));
+		Assert.That(row.TotalPnL, Is.EqualTo(20m));
+		Assert.That(row.TotalPnLPercent, Is.Null);
+		Assert.That(row.RiskPercent, Is.EqualTo(5m));
+		Assert.That(row.RiskUsdt, Is.Null);
+		Assert.That(row.ProfitUsdt, Is.EqualTo(150m));
+		Assert.That(row.ProfitPercent, Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Строки списка соединяют заголовки хранилища с метриками аналитики")]
 	public async Task TryIfRowsJoinHeadersWithAnalyticsMetrics()
 	{

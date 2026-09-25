@@ -12,19 +12,33 @@ namespace TransactionJournal.Components.Pages;
 /// <param name="ConstructionId">Идентификатор конструкции.</param>
 /// <param name="Name">Имя конструкции.</param>
 /// <param name="Status">Ручной статус конструкции.</param>
-/// <param name="AllocatedCapitalUsdt">Выделенный капитал конструкции в USDT.</param>
+/// <param name="AllocatedCapitalUsdt">Выделенный капитал конструкции в USDT; null, когда капитал не задан.</param>
+/// <param name="RiskPercent">Риск в процентах от капитала: введённые проценты либо вычисленные из введённых USDT; null, когда величины нет.</param>
+/// <param name="RiskUsdt">Риск в USDT: введённые USDT либо вычисленные из введённых процентов; null, когда величины нет.</param>
+/// <param name="ProfitPercent">Профит в процентах от капитала: введённые проценты либо вычисленные из введённых USDT; null, когда величины нет.</param>
+/// <param name="ProfitUsdt">Профит в USDT: введённые USDT либо вычисленные из введённых процентов; null, когда величины нет.</param>
 /// <param name="RealizedPnL">Реализованный PnL конструкции.</param>
 /// <param name="UnrealizedPnL">Нереализованный PnL; null при недоступной оценке марок.</param>
 /// <param name="AdjustmentsPnL">Сумма внешних корректировок PnL конструкции.</param>
 /// <param name="TotalPnL">Итог конструкции; null при недоступной оценке марок.</param>
-/// <param name="TotalPnLPercent">Итог в процентах от капитала; null при нулевом капитале или недоступном итоге.</param>
+/// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы процентов или при недоступном итоге.</param>
 /// <param name="OpenedAt">Дата открытия — время первой сделки; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой конструкции.</param>
+// Капитал передаётся незаданным как есть: прочерк вместо значения — решение
+// представления, подмена нулём вводила бы ложную базу процентов.
+// Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
+// Величины риска и профита выводятся обеими единицами чистым конвертером:
+// введённая единица первоисточника, незаполненная вычисляется от капитала.
+// Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
 public sealed record ConstructionListItem(
 	long ConstructionId,
 	string Name,
 	ConstructionStatus Status,
-	decimal AllocatedCapitalUsdt,
+	decimal? AllocatedCapitalUsdt,
+	decimal? RiskPercent,
+	decimal? RiskUsdt,
+	decimal? ProfitPercent,
+	decimal? ProfitUsdt,
 	decimal RealizedPnL,
 	decimal? UnrealizedPnL,
 	decimal AdjustmentsPnL,
@@ -130,13 +144,23 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				continue;
 			}
 
+			// Величины риска и профита обеих единиц вычисляются при чтении чистым
+			// конвертером от текущего капитала строки: вычисленная пара не хранится.
+			// Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
+			var risk = ConstructionTargetConverter.Convert(header.RiskValue, header.RiskUnit, header.AllocatedCapitalUsdt);
+			var profit = ConstructionTargetConverter.Convert(header.ProfitValue, header.ProfitUnit, header.AllocatedCapitalUsdt);
+
 			items.Add(new ConstructionListItem(
 				header.Id,
 				header.Name,
 				header.Status,
-				// Промежуточная совместимость до nullable-капитала в DTO: незаданный
-				// капитал передаётся нулём до правки read-модели списка (4.1).
-				header.AllocatedCapitalUsdt ?? 0m,
+				// Незаданный капитал передаётся как есть: представление решает,
+				// как показать его отсутствие.
+				header.AllocatedCapitalUsdt,
+				risk.Percent,
+				risk.Usdt,
+				profit.Percent,
+				profit.Usdt,
 				item.RealizedPnL,
 				item.UnrealizedPnL,
 				item.AdjustmentsPnL,

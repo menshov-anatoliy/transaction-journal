@@ -879,7 +879,11 @@ else
 		}
 
 		_action = DetailAction.Capital;
-		_capitalInput = FormatAmount(data.AllocatedCapitalUsdt);
+		// Незаданный капитал предзаполняет форму пустым полем: сохранение пустого
+		// значения убирает капитал.
+		_capitalInput = data.AllocatedCapitalUsdt is { } capital
+			? capital.ToString("0.####", CultureInfo.InvariantCulture)
+			: string.Empty;
 		_capitalInvalid = false;
 		_actionError = null;
 	}

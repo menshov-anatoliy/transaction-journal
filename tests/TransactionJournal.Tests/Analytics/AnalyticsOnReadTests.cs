@@ -413,9 +413,9 @@ public class AnalyticsOnReadTests
 				.ToListAsync();
 			constructionMetrics.Add(constructionCalculator.Calculate(
 				construction.Id,
-				// Промежуточная совместимость до перехода калькулятора на nullable-капитал:
-				// незаданный капитал ведёт себя как нулевой — без базы процентов.
-				construction.AllocatedCapitalUsdt ?? 0m,
+				// Незаданный капитал передаётся как есть: без базы процентов калькулятор
+				// возвращает процентные величины отсутствующими.
+				construction.AllocatedCapitalUsdt,
 				positions.Where(position => position.ConstructionId == construction.Id),
 				adjustments.Select(adjustment => new ConstructionPnLAdjustment
 				{

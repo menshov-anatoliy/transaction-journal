@@ -304,6 +304,14 @@ else
 	private static string FormatAmount(decimal value) =>
 		value.ToString("0.##", CultureInfo.InvariantCulture);
 
+	/// <summary>Капитал без знака; незаданный капитал — прочерк в колонке списка.</summary>
+	// Незаданный капитал показывается прочерком, абсолютные величины результата
+	// остаются видимыми.
+	// Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
+	private static string FormatAmount(decimal? value) => value is null
+		? "—"
+		: FormatAmount(value.Value);
+
 	/// <summary>Дата-время записи: «2026-06-20 14:30» в локальном времени; отсутствие — прочерк.</summary>
 	// Даты сделок приходят из синхронизации в UTC и показываются в локальной зоне.
 	// Traceability: openspec:ui/screens#scenario-sync-dates-shown-local

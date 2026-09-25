@@ -14,8 +14,12 @@ public sealed record ConstructionMetrics
 	/// <summary>Конструкция, к которой относятся метрики.</summary>
 	public required long ConstructionId { get; init; }
 
-	/// <summary>Текущий выделенный капитал конструкции в USDT — база процентных величин.</summary>
-	public required decimal AllocatedCapitalUsdt { get; init; }
+	/// <summary>
+	/// Текущий выделенный капитал конструкции в USDT — база процентных величин;
+	/// null, когда капитал не задан: незаданный капитал базы процентов не образует.
+	// Traceability: openspec:analytics/performance#scenario-no-capital-no-percent-metrics
+	/// </summary>
+	public required decimal? AllocatedCapitalUsdt { get; init; }
 
 	/// <summary>Реализованный PnL — сумма реализованных PnL позиций конструкции.</summary>
 	public required decimal RealizedPnL { get; init; }

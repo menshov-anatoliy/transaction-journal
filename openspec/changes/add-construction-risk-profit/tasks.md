@@ -12,13 +12,13 @@
 
 ## 3. Аналитика: проценты и конвертация единиц
 
-- [ ] 3.1 Сменить в `ConstructionMetricsCalculator.Calculate` и `ConstructionMetrics` капитал на `decimal?`; функция `Percent` возвращает null при null/0 капитала; тест: незаданный капитал → процентные метрики null, абсолютные/даты/длительность без изменений (`scenario-no-capital-no-percent-metrics`)
-- [ ] 3.2 Добавить чистый конвертер единиц риск/профит от капитала (`Percent↔USDT`; null/0 капитал → вычисляемая единица null); тесты сценариев `scenario-risk-percent-to-usdt`, `scenario-profit-usdt-to-percent`, `scenario-conversion-needs-capital`, `scenario-unset-param-no-values`
+- [x] 3.1 Сменить в `ConstructionMetricsCalculator.Calculate` и `ConstructionMetrics` капитал на `decimal?`; функция `Percent` возвращает null при null/0 капитала; тест: незаданный капитал → процентные метрики null, абсолютные/даты/длительность без изменений (`scenario-no-capital-no-percent-metrics`)
+- [x] 3.2 Добавить чистый конвертер единиц риск/профит от капитала (`Percent↔USDT`; null/0 капитал → вычисляемая единица null); тесты сценариев `scenario-risk-percent-to-usdt`, `scenario-profit-usdt-to-percent`, `scenario-conversion-needs-capital`, `scenario-unset-param-no-values`
 
 ## 4. Read-модели экранов
 
-- [ ] 4.1 `ConstructionListReadModel`: капитал в DTO как `decimal?`, добавить величины риск/профит обеими единицами через конвертер; тест read-модели списка с конструкцией без капитала
-- [ ] 4.2 `ConstructionDetailReadModel`: проценты позиций null при незаданном капитале, добавить величины риск/профит в DTO сводки; тест read-модели деталей
+- [x] 4.1 `ConstructionListReadModel`: капитал в DTO как `decimal?`, добавить величины риск/профит обеими единицами через конвертер; тест read-модели списка с конструкцией без капитала
+- [x] 4.2 `ConstructionDetailReadModel`: проценты позиций null при незаданном капитале, добавить величины риск/профит в DTO сводки; тест read-модели деталей
 
 ## 5. UI: формы, подсказка, проценты
 

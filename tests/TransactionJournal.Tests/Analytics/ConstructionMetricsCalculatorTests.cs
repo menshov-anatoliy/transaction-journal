@@ -228,6 +228,36 @@ public class ConstructionMetricsCalculatorTests
 	}
 
 	[TestMethod]
+	[Description("Незаданный капитал не образует процентных метрик")]
+	public void TryIfNoCapitalLeavesPercentMetricsNull()
+	{
+		// Arrange: закрытая позиция с результатом 100 и корректировка +50 при
+		// незаданном капитале; позиция открыта в минуту 0 и закрыта в 30.
+		// Требование: при незаданном капитале процентные метрики отсутствуют,
+		// абсолютные метрики, даты и длительность возвращаются без изменений.
+		// Traceability: openspec:analytics/performance#scenario-no-capital-no-percent-metrics
+		var positions = new[] { ClosedPosition(FirstSymbol, 0, 30, 100m) };
+		var adjustments = new[] { Adjustment(60, 50m) };
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, null, positions, adjustments, Now);
+
+		// Assert: все процентные величины null, итог и слагаемые на месте,
+		// капитал передаётся незаданным, даты и длительность не задеты.
+		Assert.That(metrics.AllocatedCapitalUsdt, Is.Null);
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(100m));
+		Assert.That(metrics.AdjustmentsPnL, Is.EqualTo(50m));
+		Assert.That(metrics.TotalPnL, Is.EqualTo(150m));
+		Assert.That(metrics.RealizedPnLPercent, Is.Null);
+		Assert.That(metrics.UnrealizedPnLPercent, Is.Null);
+		Assert.That(metrics.AdjustmentsPnLPercent, Is.Null);
+		Assert.That(metrics.TotalPnLPercent, Is.Null);
+		Assert.That(metrics.OpenedAt, Is.EqualTo(At(0)));
+		Assert.That(metrics.ClosedAt, Is.EqualTo(At(30)));
+		Assert.That(metrics.Duration, Is.EqualTo(TimeSpan.FromMinutes(30)));
+	}
+
+	[TestMethod]
 	[Description("Null-набор позиций отклоняется")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnNullPositions()

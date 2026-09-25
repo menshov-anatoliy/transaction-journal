@@ -134,6 +134,53 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Детали без капитала дают абсолютные величины без процентов и введённые единицы риск/профит")]
+	public async Task TryIfDetailsWithoutCapitalHidePercentsAndCarryEnteredTargetUnit()
+	{
+		// Arrange: конструкция без выделенного капитала с риском 5% и профитом
+		// 300 USDT; покупка 0.1 BTC по 42000 с комиссией 1 привязана к ней;
+		// свежая марка провайдера — 44000.
+		var construction = await _constructionService.CreateAsync("Без бюджета", null);
+		await _constructionService.UpdateRiskAsync(construction.Id, 5m, TargetUnit.Percent);
+		await _constructionService.UpdateProfitAsync(construction.Id, 300m, TargetUnit.Usdt);
+		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: сводка и строки позиций показывают абсолютные величины
+		// результата; процент от капитала в сводке не вычисляется, проценты
+		// в скобках строк позиций отсутствуют — процентные поля null, а не ноль.
+		// Требование: детали без капитала показывают абсолютные величины
+		// без процентов.
+		// Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
+		Assert.That(data.AllocatedCapitalUsdt, Is.Null);
+		Assert.That(data.Metrics.RealizedPnL, Is.EqualTo(-1m));
+		Assert.That(data.Metrics.UnrealizedPnL, Is.EqualTo(200m));
+		Assert.That(data.Metrics.TotalPnL, Is.EqualTo(199m));
+		Assert.That(data.Metrics.TotalPnLPercent, Is.Null);
+		var position = data.Positions.Single();
+		Assert.That(position.RealizedPnL, Is.EqualTo(-1m));
+		Assert.That(position.UnrealizedPnL, Is.EqualTo(200m));
+		Assert.That(position.TotalPnL, Is.EqualTo(199m));
+		Assert.That(position.RealizedPnLPercent, Is.Null);
+		Assert.That(position.UnrealizedPnLPercent, Is.Null);
+		Assert.That(position.TotalPnLPercent, Is.Null);
+
+		// Assert: сводка несёт величины риск/профит обеими единицами; без капитала
+		// конвертер вернул только введённые единицы: проценты риска без USDT
+		// и USDT профита без процентов.
+		// Требование: без капитала вторая единица не вычисляется.
+		// Traceability: openspec:analytics/performance#scenario-conversion-needs-capital
+		Assert.That(data.RiskPercent, Is.EqualTo(5m));
+		Assert.That(data.RiskUsdt, Is.Null);
+		Assert.That(data.ProfitUsdt, Is.EqualTo(300m));
+		Assert.That(data.ProfitPercent, Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Строки позиций и сделок несут атрибуты таблиц с комментариями своих уровней")]
 	public async Task TryIfPositionAndTradeRowsCarryAttributesAndComments()
 	{

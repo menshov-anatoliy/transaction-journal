@@ -121,7 +121,11 @@ public sealed record ConstructionAdjustmentRow(
 /// <param name="ConstructionId">Идентификатор конструкции.</param>
 /// <param name="Name">Имя конструкции.</param>
 /// <param name="Status">Ручной статус конструкции.</param>
-/// <param name="AllocatedCapitalUsdt">Выделенный капитал конструкции в USDT.</param>
+/// <param name="AllocatedCapitalUsdt">Выделенный капитал конструкции в USDT; null, когда капитал не задан.</param>
+/// <param name="RiskPercent">Риск в процентах от капитала: введённые проценты либо вычисленные из введённых USDT; null, когда величины нет.</param>
+/// <param name="RiskUsdt">Риск в USDT: введённые USDT либо вычисленные из введённых процентов; null, когда величины нет.</param>
+/// <param name="ProfitPercent">Профит в процентах от капитала: введённые проценты либо вычисленные из введённых USDT; null, когда величины нет.</param>
+/// <param name="ProfitUsdt">Профит в USDT: введённые USDT либо вычисленные из введённых процентов; null, когда величины нет.</param>
 /// <param name="Comment">Комментарий конструкции; null — комментария нет.</param>
 /// <param name="Metrics">Метрики конструкции: итог, разбивка, проценты, период и длительность.</param>
 /// <param name="HasOpenResidual">У конструкции есть открытый остаток — марки нужны её нереализованной оценке.</param>
@@ -132,11 +136,21 @@ public sealed record ConstructionAdjustmentRow(
 /// <param name="ClosingEntries">Строки таблицы закрывающих записей в хронологическом порядке.</param>
 /// <param name="ClosingWarnings">Предупреждения об избыточных закрывающих записях конструкции.</param>
 /// <param name="Adjustments">Строки таблицы корректировок, упорядоченные по дате.</param>
+// Капитал передаётся незаданным как есть: скрытие процентов — решение
+// представления, подмена нулём вводила бы ложную базу процентов.
+// Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
+// Величины риска и профита сводки выводятся обеими единицами чистым
+// конвертером: введённая единица первоисточник, вторая вычисляется от капитала.
+// Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
 public sealed record ConstructionDetailData(
 	long ConstructionId,
 	string Name,
 	ConstructionStatus Status,
-	decimal AllocatedCapitalUsdt,
+	decimal? AllocatedCapitalUsdt,
+	decimal? RiskPercent,
+	decimal? RiskUsdt,
+	decimal? ProfitPercent,
+	decimal? ProfitUsdt,
 	string? Comment,
 	ConstructionMetrics Metrics,
 	bool HasOpenResidual,
@@ -226,9 +240,9 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			throw new ConstructionNotFoundException(constructionId);
 		}
 
-		// Промежуточная совместимость до перехода read-модели на nullable-капитал:
-		// незаданный капитал ведёт себя как нулевой — проценты позиций не строятся.
-		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt ?? 0m, metrics, cancellationToken).ConfigureAwait(false);
+		// Проценты позиций строятся от текущего капитала конструкции: незаданный
+		// капитал передаётся как есть, без базы процентов величины остаются null.
+		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, cancellationToken).ConfigureAwait(false);
 		var trades = await ReadTradesAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
@@ -238,13 +252,22 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		// Сводка сопровождает нереализованные величины отметкой времени марок.
 		// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
 		var hasOpenResidual = positions.Any(position => position.IsOpen);
+		// Величины риска и профита сводки вычисляются обеими единицами чистым
+		// конвертером от текущего капитала при чтении; вычисленная пара не хранится.
+		// Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
+		var risk = ConstructionTargetConverter.Convert(construction.RiskValue, construction.RiskUnit, construction.AllocatedCapitalUsdt);
+		var profit = ConstructionTargetConverter.Convert(construction.ProfitValue, construction.ProfitUnit, construction.AllocatedCapitalUsdt);
 		return new ConstructionDetailData(
 			construction.Id,
 			construction.Name,
 			construction.Status,
-			// Промежуточная совместимость до nullable-капитала в DTO: незаданный
-			// капитал передаётся нулём и скрытие процентов приходит задачей 5.5.
-			construction.AllocatedCapitalUsdt ?? 0m,
+			// Незаданный капитал передаётся как есть: представление решает,
+			// как показать его отсутствие.
+			construction.AllocatedCapitalUsdt,
+			risk.Percent,
+			risk.Usdt,
+			profit.Percent,
+			profit.Usdt,
 			construction.Comment,
 			constructionMetrics,
 			hasOpenResidual,
@@ -263,12 +286,13 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// Строки таблицы позиций: метрики позиций конструкции из аналитики
 	/// с комментариями позиций по ключу «конструкция × инструмент»; процент
 	/// общего P&L считается здесь, потому что метрики позиции капиталом
-	/// конструкции не владеют.
+	/// конструкции не владеют. Незаданный или нулевой капитал базы процентов
+	/// не образует — проценты строк остаются null.
 	/// </summary>
 	private static async Task<List<ConstructionPositionRow>> ReadPositionsAsync(
 		JournalDbContext db,
 		long constructionId,
-		decimal allocatedCapitalUsdt,
+		decimal? allocatedCapitalUsdt,
 		JournalMetrics metrics,
 		CancellationToken cancellationToken)
 	{
@@ -280,11 +304,12 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			.ToDictionary(comment => comment.Symbol, comment => comment.Text);
 
 		// Проценты величин P&L — от текущего выделенного капитала, как в метриках
-		// конструкции: нулевой капитал базы не образует, процент остаётся null
-		// вместе со своей величиной.
-		decimal? PercentOfCapital(decimal? pnl) => pnl == null || allocatedCapitalUsdt == 0m
+		// конструкции: незаданный или нулевой капитал базы не образует, процент
+		// остаётся null вместе со своей величиной.
+		// Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
+		decimal? PercentOfCapital(decimal? pnl) => pnl == null || allocatedCapitalUsdt is null or 0m
 			? null
-			: pnl.Value / allocatedCapitalUsdt * 100m;
+			: pnl.Value / allocatedCapitalUsdt.Value * 100m;
 
 		return metrics.Positions
 			.Where(position => position.ConstructionId == constructionId)

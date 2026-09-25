@@ -274,6 +274,10 @@ public class FrameNavigationTests
 		status,
 		3000m,
 		null,
+		null,
+		null,
+		null,
+		null,
 		new ConstructionMetrics
 		{
 			ConstructionId = 7,

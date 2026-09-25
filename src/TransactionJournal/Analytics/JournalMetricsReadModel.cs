@@ -165,9 +165,9 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		var constructionMetrics = constructions
 			.Select(construction => constructionCalculator.Calculate(
 				construction.Id,
-				// Промежуточная совместимость до перехода калькулятора на nullable-капитал:
-				// незаданный капитал ведёт себя как нулевой — без базы процентов.
-				construction.AllocatedCapitalUsdt ?? 0m,
+				// Незаданный капитал передаётся как есть: калькулятор сам не строит
+				// проценты без базы процентов.
+				construction.AllocatedCapitalUsdt,
 				evaluation.Positions.Where(position => position.ConstructionId == construction.Id),
 				adjustments
 					.Where(adjustment => adjustment.ConstructionId == construction.Id)

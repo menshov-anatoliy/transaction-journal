@@ -19,14 +19,15 @@ public sealed class ConstructionMetricsCalculator
 	/// PnL. Итог — сумма реализованного и нереализованного PnL позиций и
 	/// корректировок; неоцененный открытый остаток обнуляет только нереализованную
 	/// часть и зависящий от неё итог, остальные метрики возвращаются как есть.
-	/// Проценты считаются от текущего значения выделенного капитала; нулевой
-	/// капитал не образует базы процентов. Даты выводятся из записей: открытие —
+	/// Проценты считаются от текущего значения выделенного капитала; незаданный
+	/// или нулевой капитал не образует базы процентов — процентные величины
+	/// возвращаются отсутствующими. Даты выводятся из записей: открытие —
 	/// время первой сделки, закрытие — момент обнуления последней позиции;
 	/// длительность открытой конструкции считается от первой сделки до переданного
 	/// текущего момента.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, для которой вычисляются метрики.</param>
-	/// <param name="allocatedCapitalUsdt">Текущий выделенный капитал конструкции в USDT — база процентов.</param>
+	/// <param name="allocatedCapitalUsdt">Текущий выделенный капитал конструкции в USDT — база процентов; null, когда капитал не задан.</param>
 	/// <param name="positions">Метрики позиций конструкции.</param>
 	/// <param name="adjustments">Внешние корректировки PnL конструкции.</param>
 	/// <param name="now">Текущий момент — граница длительности открытой конструкции.</param>
@@ -35,7 +36,7 @@ public sealed class ConstructionMetricsCalculator
 	/// <exception cref="ArgumentException">Среди позиций есть позиция другой конструкции.</exception>
 	public ConstructionMetrics Calculate(
 		long constructionId,
-		decimal allocatedCapitalUsdt,
+		decimal? allocatedCapitalUsdt,
 		IEnumerable<PositionMetrics> positions,
 		IEnumerable<ConstructionPnLAdjustment> adjustments,
 		DateTimeOffset now)
@@ -72,12 +73,14 @@ public sealed class ConstructionMetricsCalculator
 
 		// Проценты — чистые функции текущих данных: базой служит текущее значение
 		// выделенного капитала, поэтому правка капитала меняет только процентные
-		// величины; нулевой капитал базы не образует — проценты остаются null.
+		// величины; незаданный или нулевой капитал базы не образует — проценты
+		// остаются null при неизменных абсолютных величинах, датах и длительности.
 		// Traceability: openspec:analytics/performance#scenario-percent-from-current-capital
+		// Traceability: openspec:analytics/performance#scenario-no-capital-no-percent-metrics
 		// Traceability: openspec:domain/constructions#requirement-allocated-capital
-		decimal? Percent(decimal? value) => value == null || allocatedCapitalUsdt == 0m
+		decimal? Percent(decimal? value) => value == null || allocatedCapitalUsdt is null or 0m
 			? null
-			: value.Value / allocatedCapitalUsdt * 100m;
+			: value.Value / allocatedCapitalUsdt.Value * 100m;
 
 		// Даты выводятся из записей позиций: открытие — время первой сделки (первая
 		// запись самой ранней позиции), закрытие — момент обнуления последней
