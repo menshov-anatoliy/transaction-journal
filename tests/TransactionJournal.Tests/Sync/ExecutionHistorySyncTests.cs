@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Bybit;
 using TransactionJournal.Data;
+using TransactionJournal.Domain;
 using TransactionJournal.Sync;
 using TransactionJournal.Tests.Bybit;
 using Assert = NUnit.Framework.Assert;
@@ -29,6 +30,7 @@ public class ExecutionHistorySyncTests
 	private JournalSyncStore _store = null!;
 	private ScriptedGateway _gateway = null!;
 	private ExecutionHistorySync _orchestrator = null!;
+	private InboxReadModel _inbox = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -47,6 +49,7 @@ public class ExecutionHistorySyncTests
 		var engine = new ExecutionCategorySync(
 			new ExecutionWindowPass(_gateway, _store), _gateway, _store, new FakeOptionBaseCoinSource("BTC"), new ManualTimeProvider(), _store);
 		_orchestrator = new ExecutionHistorySync(engine, _store, _store);
+		_inbox = new InboxReadModel(CreateOptions());
 	}
 
 	[TestCleanup]
@@ -207,6 +210,70 @@ public class ExecutionHistorySyncTests
 		// Assert: водяной знак зафиксирован как при обычном успешном проходе.
 		Assert.That(LoadState("linear")!.ExecWatermarkMs, Is.EqualTo(NowMs));
 	}
+
+	[TestMethod]
+	[Description("Фандинг-запись синхронизации не создаёт сырой записи и не попадает во «Входящие»")]
+	public async Task TryIfSyncedFundingRecordLeavesNoRawRowAndNoInboxTrade()
+	{
+		// WHEN: синхронизация получила в одном окне Trade-сделку и фандинг-запись
+		// с заполненными количеством и ценой по марк-цене — как в живом ответе биржи.
+		// THEN: сырая запись фандинга не создаётся и во «Входящих» сделки по ней нет.
+		// AND: повторный проход того же окна снова отфильтровывает фандинг — без ошибок,
+		// дублей и предупреждений. Сценарий идёт сквозь проход окна и реальное хранилище
+		// с read-моделью «Входящих».
+		// Traceability: openspec:sync/bybit-history#scenario-funding-record-is-not-a-trade
+		// Traceability: change:drop-funding-executions/design#d1
+		_gateway.Enqueue(Page(Trade(), Funding("funding-1", NowMs - 2 * 3600_000L)));
+
+		// Act (первый прогон): backfill одного окна.
+		var first = await _orchestrator.RunAsync(
+			categories: new[] { "linear" },
+			options: new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs });
+
+		// Assert: в хранилище легла только Trade-запись — фандинг отсечён до писателя.
+		Assert.That(first.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(LoadRawExecutions().Select(execution => execution.ExecId),
+			Is.EqualTo(new[] { "exec-trade-1" }));
+
+		// Assert: «Входящие» показывают единственную сделку — фандинг сделкой не стал,
+		// хотя количество и цена по марк-цене у него заполнены.
+		var inboxAfterFirst = await _inbox.ListAsync();
+		Assert.That(inboxAfterFirst.Select(trade => trade.ExecId).ToList(),
+			Is.EqualTo(new[] { "exec-trade-1" }));
+
+		// Arrange (второй прогон): биржа снова отдаёт то же окно с той же сделкой
+		// и тем же фандингом; инкремент перечитывает хвост с суточным перекрытием.
+		_gateway.Enqueue(Page(Trade(), Funding("funding-1", NowMs - 2 * 3600_000L)));
+
+		// Act (повторный проход того же окна)
+		var second = await _orchestrator.RunAsync(
+			categories: new[] { "linear" });
+
+		// Assert: повторный проход завершился успешно, фандинг снова отфильтрован —
+		// новых вставок и дублей нет, сделка во «Входящих» та же одна.
+		Assert.That(second.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(second.Run.NewExecutions, Is.Zero);
+		Assert.That(LoadRawExecutions().Select(execution => execution.ExecId),
+			Is.EqualTo(new[] { "exec-trade-1" }));
+		var inboxAfterSecond = await _inbox.ListAsync();
+		Assert.That(inboxAfterSecond.Select(trade => trade.ExecId).ToList(),
+			Is.EqualTo(new[] { "exec-trade-1" }));
+	}
+
+	// Trade-запись живого ответа биржи: тип Trade, количество и цена заполнены —
+	// сделка материализуется во «Входящих» и служит контролю фильтра фандинга.
+	private static BybitExecution Trade() => new()
+	{
+		Symbol = "BTCUSDT",
+		ExecId = "exec-trade-1",
+		Side = "Buy",
+		ExecType = "Trade",
+		ExecTimeMs = NowMs - DayMs,
+		ExecQty = 0.01m,
+		ExecPrice = 42_000m,
+		ExecFee = 0.0042m,
+		FeeCurrency = "USDT",
+	};
 
 	[TestMethod]
 	[Description("Категории одного запуска делят общую строку SyncRun и сумму счётчиков")]
