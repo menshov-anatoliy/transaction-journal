@@ -613,7 +613,7 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 		// Производные атрибуты существующих конструкций пишутся точечно:
 		// только фактически изменившиеся имя (у незафиксированного вручную)
 		// и статус; архивный статус и ручное имя приходят из плана неизменными.
-		// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-status-follows-option-cover
+		// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#requirement-status-follows-all-positions
 		// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-derived-construction-naming
 		var seededIds = plan.Constructions
 			.Where(construction => construction.IsSeeded)
