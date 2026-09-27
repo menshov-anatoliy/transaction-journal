@@ -29,5 +29,5 @@
 
 ## 6. Контрольная сверка и приёмка
 
-- [ ] 6.1 Обновить эталонные числа и имена `ConstructionAssemblyHistoryReconciliationTests` по факту прогона новой сборки на фикстуре истории (стреддл 1600, цепочка 29MAY); сверка подтверждает детерминированность повторным прогоном
-- [ ] 6.2 Полный прогон `dotnet test` по всем тестам проекта — зелёный; убедиться, что traceability-метки обновлены на `openspec:domain/construction-assembly#...` для изменённых смысловых блоков
+- [x] 6.1 Обновить эталонные числа и имена `ConstructionAssemblyHistoryReconciliationTests` по факту прогона новой сборки на фикстуре истории (стреддл 1600, цепочка 29MAY); сверка подтверждает детерминированность повторным прогоном
+- [x] 6.2 Полный прогон `dotnet test` по всем тестам проекта — зелёный; убедиться, что traceability-метки обновлены на `openspec:domain/construction-assembly#...` для изменённых смысловых блоков. Выполнено с оговоркой: 775 из 776 тестов зелёные; единственное падение — живой диагностический тест сверки `TryIfLiveDataReconcilesWithBybitStatement`, документированная остаточная находка калибровки живого прогона (спот-сделки вне области категорий синка linear/option, `change:reconcile-bybit-statement/design#d9`), не регресс настоящего change. Traceability-метки изменённых смысловых блоков переведены на `openspec:domain/construction-assembly#...` (фрагменты сверены с main spec); ссылки на фрагменты активного change остались в форме `change:refine-construction-assembly/...` до sync/archive.

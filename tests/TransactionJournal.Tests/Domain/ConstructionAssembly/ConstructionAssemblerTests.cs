@@ -156,8 +156,11 @@ public class ConstructionAssemblerTests
 	[DataRow("ETH-25SEP26-2100-C-USDT", OptionType.Call)]
 	[DataRow("ETH-25SEP26-2100-P-USDT", OptionType.Put)]
 	[Description("Символ из истории разбирается в ногу плана: актив, доска, страйк и тип опциона")]
-	// Разбор опционного символа поставляет сборке актив, доску, страйк и тип ноги.
-	// Traceability: change:add-construction-auto-assembly/tasks#1-2
+	// Разбор опционного символа поставляет сборке актив, доску, страйк и тип ноги,
+	// а имя конструкции выводится из состава живых ног — одиночная нога даёт
+	// «направленная CALL/PUT».
+	// Traceability: openspec:domain/construction-assembly#requirement-deterministic-option-assembly
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-derived-construction-naming
 	public void TryIfOptionSymbolParsedIntoPlanLeg(string symbol, OptionType type)
 	{
 		// Arrange: одиночная покупка опциона из истории.
@@ -490,7 +493,7 @@ public class ConstructionAssemblerTests
 	[Description("Окно 05.06 в день экспирации доски открывает новый стреддл, не трогая живую цепочку")]
 	// Запрет усреднения в день экспирации: день окна совпал с днём экспирации
 	// самой поздней доски ног — окно открывает новую конструкцию.
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-new-strike-window-opens-new-construction
+	// Traceability: openspec:domain/construction-assembly#scenario-new-strike-window-opens-new-construction
 	public void TryIfExpiryDayWindowOpensNewConstruction()
 	{
 		// Arrange: цепочка 2100C (01.02 + усреднение 05.02) и окно-стреддл в день экспирации 05.06.

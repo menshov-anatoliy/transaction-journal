@@ -21,8 +21,8 @@ namespace TransactionJournal.Domain.ConstructionAssembly;
 /// инкрементной сборки. Сделки робота привязываются по базовому активу
 /// и периоду жизни конструкции. Прогон детерминирован: повторная сборка над
 /// тем же сырьём даёт тот же план.
-// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
-/// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-robot-trade-binding
+// Traceability: openspec:domain/construction-assembly#requirement-deterministic-option-assembly
+/// Traceability: openspec:domain/construction-assembly#requirement-robot-trade-binding
 /// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
 /// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-status-follows-option-cover
 /// Traceability: change:add-construction-auto-assembly/design#d2
@@ -298,7 +298,7 @@ public sealed class ConstructionAssembler
 		// погашение обнуляет ногу раньше, чем окно рефинансирует конструкцию новыми
 		// ногами, поэтому промежуточный ноль внутри окна конструкцию не закрывает —
 		// финальное состояние вычисляется по итогу всех сделок окна.
-		// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-roll-inherits-surviving-owner
+		// Traceability: openspec:domain/construction-assembly#scenario-roll-inherits-surviving-owner
 		// Traceability: change:refine-construction-assembly/design#d5
 		var windowEndTimeMs = window[^1].Execution.ExecTimeMs;
 		UpdateDerivedState(target, windowEndTimeMs);
@@ -323,7 +323,7 @@ public sealed class ConstructionAssembler
 	// Усреднение ищется только среди конструкций своего базового актива: чужая
 	// живая конструкция другого актива не может принимать окно — иначе окна
 	// разных активов сливаются в одну конструкцию.
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
+	// Traceability: openspec:domain/construction-assembly#requirement-deterministic-option-assembly
 	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-single-leg-averages-by-board-among-alive
 	private static ConstructionState? FindAveragingTarget(AssemblyRun run, string baseCoin, IReadOnlyList<WindowItem> window)
 	{

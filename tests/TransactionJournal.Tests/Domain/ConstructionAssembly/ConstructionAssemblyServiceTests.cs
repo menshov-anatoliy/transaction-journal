@@ -95,7 +95,7 @@ public class ConstructionAssemblyServiceTests
 	[Description("Повторная сборка над тем же сырьём воспроизводит состав конструкций и привязки")]
 	// Состав конструкций, их атрибуты и привязки сделок совпадают с предыдущим
 	// прогоном: алгоритм детерминирован, применение плана идемпотентно.
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-rebuild-reproduces-result
+	// Traceability: openspec:domain/construction-assembly#scenario-rebuild-reproduces-result
 	public async Task TryIfSecondRebuildReproducesFirstResult()
 	{
 		// Arrange: сырьё загружено, первый прогон зафиксировал состояние базы.
@@ -117,7 +117,7 @@ public class ConstructionAssemblyServiceTests
 	[Description("Пересбор стирает конструкции с ручными данными и строит их заново по правилам сборки")]
 	// Все конструкции и ручные данные — привязки, комментарии, корректировки,
 	// пометки закрытия — удаляются безвозвратно, конструкции строятся заново.
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-rebuild-wipes-manual-data
+	// Traceability: openspec:domain/construction-assembly#scenario-rebuild-wipes-manual-data
 	public async Task TryIfRebuildWipesManualData()
 	{
 		// Arrange: старая конструкция с капиталом, комментарием, корректировкой,
@@ -205,7 +205,7 @@ public class ConstructionAssemblyServiceTests
 	[Description("Пересбор не изменяет сырьё, справочник инструментов и состояние синхронизации")]
 	// Сырые записи, справочник инструментов и состояние синхронизации после
 	// пересборки не изменены.
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-rebuild-preserves-raw-storage
+	// Traceability: openspec:domain/construction-assembly#scenario-rebuild-preserves-raw-storage
 	public async Task TryIfRebuildPreservesRawStorage()
 	{
 		// Arrange: сырьё с delivery-записью датированного фьючерса и журналом синхронизации.

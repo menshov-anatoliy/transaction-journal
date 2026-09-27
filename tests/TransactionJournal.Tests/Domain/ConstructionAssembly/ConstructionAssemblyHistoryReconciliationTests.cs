@@ -29,11 +29,19 @@ public class ConstructionAssemblyHistoryReconciliationTests
 
 	private const int ExpectedInbox = 1;
 
-	/// <summary>Имя конструкции цепочки 29MAY, в которую роллом переходят ноги 1900 C/P.</summary>
-	private const string Chain29MayName = "ETH направленная CALL 29MAY26 2400";
+	/// <summary>
+	/// Имя конструкции цепочки 29MAY, в которую роллом переходят ноги 1900 C/P:
+	/// нейминг v2 выводит имя из конечных живых ног — ненулевыми остались только
+	/// 1900 C/P доски 25DEC26 равных размеров, поэтому вид — «стреддл».
+	/// </summary>
+	private const string Chain29MayName = "ETH стреддл 25DEC26 1900";
 
-	/// <summary>Имя отдельного стреддла 1600, не слившегося с цепочкой; имя производное — окно открытия имел акцент вверх 2:1.</summary>
-	private const string Straddle1600Name = "ETH стреддл с акцентом вверх 2:1 25SEP26 1600";
+	/// <summary>
+	/// Имя отдельной конструкции 1600, не слившейся с цепочкой: при полном
+	/// обнулении ног сохраняется последнее производное имя — колл закрылся
+	/// раньше пута, и последнее живое состояние было одиночной ногой пута.
+	/// </summary>
+	private const string Straddle1600Name = "ETH направленная PUT 25SEP26 1600";
 
 	private static readonly DateTimeOffset FixedNow = new(2026, 9, 27, 0, 0, 0, TimeSpan.Zero);
 
@@ -70,8 +78,8 @@ public class ConstructionAssemblyHistoryReconciliationTests
 	// Контрольная сверка эталонного алгоритма на фиксированной истории: план
 	// детерминирован, deliveries погашены, стреддл 1600 открыт отдельно, ноги
 	// 1900 C/P перешли роллом в цепочку 29MAY, пересбор воспроизводит план в базе.
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-robot-trade-binding
+	// Traceability: openspec:domain/construction-assembly#requirement-deterministic-option-assembly
+	// Traceability: openspec:domain/construction-assembly#requirement-robot-trade-binding
 	public async Task TryIfHistoryAssemblyMatchesReferenceNumbers()
 	{
 		// Arrange: фиксированный снимок сырья загружен в изолированную базу.
@@ -80,6 +88,20 @@ public class ConstructionAssemblyHistoryReconciliationTests
 
 		// Act: строим план и выполняем пересбор над тем же сырьём.
 		var plan = service.BuildPlan(LoadSnapshot());
+
+		// Повторный прогон над тем же сырьём обязан дать структурно тот же план:
+		// состав, имена, статусы, остатки ног, привязки и «Входящие» совпадают.
+		// Traceability: openspec:domain/construction-assembly#scenario-rebuild-reproduces-result
+		var rerun = service.BuildPlan(LoadSnapshot());
+		Assert.That(rerun.Constructions.Select(construction => (construction.Id, construction.Name, construction.Status)),
+			Is.EqualTo(plan.Constructions.Select(construction => (construction.Id, construction.Name, construction.Status))),
+			"Повторный прогон воспроизводит состав, имена и статусы конструкций");
+		Assert.That(rerun.Constructions.Select(construction => construction.Legs.Select(leg => (leg.Symbol, leg.Quantity))),
+			Is.EqualTo(plan.Constructions.Select(construction => construction.Legs.Select(leg => (leg.Symbol, leg.Quantity)))),
+			"Повторный прогон воспроизводит остатки ног");
+		Assert.That(rerun.Bindings, Is.EqualTo(plan.Bindings), "Повторный прогон воспроизводит привязки");
+		Assert.That(rerun.InboxCount, Is.EqualTo(plan.InboxCount), "Повторный прогон воспроизводит «Входящие»");
+
 		var result = await service.RebuildAsync();
 
 		// Assert: контрольные числа истории и согласованность плана с пересбором.

@@ -57,7 +57,7 @@ public sealed record ConstructionRebuildResult
 /// конструкций: пересборка — массовая операция, карв-аут из запрета удаления
 /// непустой конструкции. Каждый вызов создаёт короткоживущий контекст, поэтому
 /// сервис безопасен в длительных сессиях Blazor Server.
-// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-full-rebuild-semantics
+// Traceability: openspec:domain/construction-assembly#requirement-full-rebuild-semantics
 /// Traceability: change:add-construction-auto-assembly/design#d1
 /// </summary>
 public sealed class ConstructionAssemblyService : IConstructionAssemblyService
@@ -87,7 +87,7 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 		// Пересбор работает только над локальным сырьём: снимок читается целиком,
 		// план строится в памяти и применяется одной транзакцией — сырьё, справочник
 		// инструментов и состояние синхронизации операция не трогает.
-		// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-rebuild-preserves-raw-storage
+		// Traceability: openspec:domain/construction-assembly#scenario-rebuild-preserves-raw-storage
 		var snapshot = await _rawSnapshotStore.LoadAsync(cancellationToken).ConfigureAwait(false);
 		var plan = BuildPlan(snapshot);
 
@@ -285,7 +285,7 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 	/// прогон над тем же сырьём даёт тот же план. Публичен для контрольных сверок:
 	/// диагностический тест сверяет план с контрольными показателями истории.
 	// Traceability: change:add-construction-auto-assembly/design#d1
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-rebuild-reproduces-result
+	// Traceability: openspec:domain/construction-assembly#scenario-rebuild-reproduces-result
 	/// </summary>
 	public AssemblyPlan BuildPlan(JournalRawSnapshot snapshot)
 	{
@@ -467,7 +467,7 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 	/// ручные пометки закрытия и сами конструкции с любым содержимым) и создаёт
 	/// конструкции и привязки заново. Сырьё и служебные таблицы синхронизации
 	/// остаются нетронутыми.
-	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-rebuild-wipes-manual-data
+	// Traceability: openspec:domain/construction-assembly#scenario-rebuild-wipes-manual-data
 	/// </summary>
 	private async Task ApplyPlanAsync(AssemblyPlan plan, CancellationToken cancellationToken)
 	{

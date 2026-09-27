@@ -10,7 +10,7 @@ namespace TransactionJournal.Domain.ConstructionAssembly;
 /// конструкций или ключ БД для существующих, переданных в seed'е; нумерация
 /// воспроизводима, потому что порядок записей, активов и seed'а зафиксирован
 /// правилами сборки.
-// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
+// Traceability: openspec:domain/construction-assembly#requirement-deterministic-option-assembly
 /// Traceability: change:add-construction-auto-assembly/design#d4
 /// Traceability: change:refine-construction-assembly/design#d7
 /// </summary>
