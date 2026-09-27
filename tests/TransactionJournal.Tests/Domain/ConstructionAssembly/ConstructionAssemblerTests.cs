@@ -802,6 +802,30 @@ public class ConstructionAssemblerTests
 		Assert.That(plan.InboxCount, Is.EqualTo(1));
 	}
 
+	[TestMethod]
+	[Description("Фьючерсные исполнения при отсутствии живых конструкций не порождают конструкций")]
+	// Инвариант опционной основы: конструкцию создаёт только опционное окно —
+	// фьючерсные сделки без покрывающей конструкции остаются во «Входящих».
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-futures-only-window-never-opens-construction
+	public void TryIfFuturesOnlyWindowNeverOpensConstruction()
+	{
+		// Arrange: только фьючерсные сделки двух активов, опционных исполнений нет.
+		var executions = new List<AssemblyExecution>
+		{
+			Linear("r1", "ETHUSDT", Ms(2026, 7, 12)),
+			Linear("r2", "ETHUSDT", Ms(2026, 7, 15)),
+			Linear("r3", "BTCUSDT", Ms(2026, 7, 20), -1m),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>());
+
+		// Assert: конструкций не создано, все сделки остались во «Входящих».
+		Assert.That(plan.Constructions, Is.Empty, "Фьючерсное окно не порождает конструкцию");
+		Assert.That(plan.Bindings, Is.Empty, "Фьючерсные сделки без покрывающей конструкции не привязываются");
+		Assert.That(plan.InboxCount, Is.EqualTo(3), "Все фьючерсные сделки остаются во «Входящих»");
+	}
+
 	#endregion
 
 	#region Seed-состояние и производные атрибуты

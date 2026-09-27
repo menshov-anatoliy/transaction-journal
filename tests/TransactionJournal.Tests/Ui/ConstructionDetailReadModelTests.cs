@@ -6,6 +6,9 @@ using TransactionJournal.Analytics;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Domain.ConstructionAssembly;
+using TransactionJournal.Materialization;
+using TransactionJournal.Sync;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -25,6 +28,17 @@ public class ConstructionDetailReadModelTests
 {
 	private const string CallSymbol = "BTC-29DEC23-45000-C";
 	private const string LinearSymbol = "BTCUSDT";
+
+	// Инструменты сценариев автоматической сборки: затухающий стреддл доски
+	// 25SEP26 с фьючерсом ETHUSDT и живой стреддл доски 25DEC27.
+	private const string EthCallSep = "ETH-25SEP26-1600-C-USDT";
+	private const string EthPutSep = "ETH-25SEP26-1600-P-USDT";
+	private const string EthCallDec27 = "ETH-25DEC27-2100-C-USDT";
+	private const string EthPutDec27 = "ETH-25DEC27-2100-P-USDT";
+	private const string EthPerpSymbol = "ETHUSDT";
+
+	/// <summary>Момент «сейчас» пересбора: сделки истории позади, доска 25DEC27 ещё жива.</summary>
+	private static readonly DateTimeOffset AssemblyNow = new(2026, 12, 10, 12, 0, 0, TimeSpan.Zero);
 
 	private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -482,6 +496,80 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Перечень позиций любой конструкции содержит опционную позицию, включая закрытые с нулевым остатком")]
+	public async Task TryIfEveryConstructionListsOptionPositionIncludingZeroResidual()
+	{
+		// Arrange: сырьё двух конструкций — затухающей (прикрытие продано, фьючерс
+		// +0.5 остался) и живого стреддла дальней доски; пересбор собирает их
+		// и привязывает все сделки.
+		SeedAssemblyRawStorage();
+		var assembly = new ConstructionAssemblyService(
+			new JournalSyncStore(CreateOptions()),
+			CreateOptions(),
+			new FixedTimeProvider(AssemblyNow));
+		await assembly.RebuildAsync();
+
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var assembled = db.Constructions.OrderBy(construction => construction.Id).ToList();
+			Assert.That(assembled, Has.Count.EqualTo(2), "Сырьё собрано в две конструкции");
+			Assert.That(assembled[0].Status, Is.EqualTo(ConstructionStatus.Open), "Затухающая конструкция с живым фьючерсом открыта");
+		}
+
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(3000m, FetchedAt));
+
+		// Act: пользователь открывает состав позиций каждой конструкции.
+		var positionsByConstruction = new List<IReadOnlyList<ConstructionPositionRow>>();
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			foreach (var construction in db.Constructions.OrderBy(construction => construction.Id).ToList())
+			{
+				var data = await readModel.ReadAsync(construction.Id);
+				positionsByConstruction.Add(data.Positions);
+			}
+		}
+
+		// Assert: инвариант опционной основы — у каждой конструкции в перечне
+		// позиций присутствует хотя бы одна опционная позиция.
+		// Требование: конструкция не существует без опционной основы, перечень
+		// позиций всегда содержит опционный инструмент её базового актива.
+		// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-construction-always-has-option-position
+		foreach (var positions in positionsByConstruction)
+		{
+			Assert.That(
+				positions.Any(position => OptionSymbolParser.TryParse(position.Symbol, out _)),
+				Is.True,
+				"Перечень позиций конструкции содержит опционную позицию");
+		}
+
+		// Assert: у затухающей конструкции опционные позиции показываются закрытыми
+		// с нулевым остатком, живой фьючерс — открытой позицией 0.5.
+		var fading = positionsByConstruction[0];
+		Assert.That(fading.Select(position => position.Symbol).ToArray(), Is.EqualTo(new[]
+		{
+			EthCallSep,
+			EthPutSep,
+			EthPerpSymbol,
+		}));
+		Assert.That(fading.Single(position => position.Symbol == EthCallSep).Residual, Is.EqualTo(0m), "Проданный колл показывается нулевой позицией");
+		Assert.That(fading.Single(position => position.Symbol == EthCallSep).IsOpen, Is.False);
+		Assert.That(fading.Single(position => position.Symbol == EthPutSep).Residual, Is.EqualTo(0m), "Проданный пут показывается нулевой позицией");
+		Assert.That(fading.Single(position => position.Symbol == EthPutSep).IsOpen, Is.False);
+		Assert.That(fading.Single(position => position.Symbol == EthPerpSymbol).Residual, Is.EqualTo(0.5m), "Фьючерсный остаток затухающей конструкции жив");
+
+		// Assert: живой стреддл показывает обе опционные позиции с ненулевым остатком.
+		var live = positionsByConstruction[1];
+		Assert.That(live.Select(position => position.Symbol).ToArray(), Is.EqualTo(new[]
+		{
+			EthCallDec27,
+			EthPutDec27,
+		}));
+		Assert.That(live.Single(position => position.Symbol == EthCallDec27).Residual, Is.EqualTo(1m));
+		Assert.That(live.Single(position => position.Symbol == EthPutDec27).Residual, Is.EqualTo(1m));
+		Assert.That(live.All(position => position.IsOpen), Is.True);
+	}
+
+	[TestMethod]
 	[Description("Чтение деталей неизвестной конструкции отказывает")]
 	[ExpectedException(typeof(ConstructionNotFoundException))]
 	public async Task ThrowOnUnknownConstruction()
@@ -611,6 +699,58 @@ public class ConstructionDetailReadModelTests
 
 	private static long ExecMs(int year, int month, int day, int hour, int minute) =>
 		new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+	/// <summary>Наполняет сырьё двух конструкций: затухающий стреддл 25SEP26 с фьючерсом и живой стреддл 25DEC27.</summary>
+	private void SeedAssemblyRawStorage()
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawInstruments.Add(EthOptionInstrument(EthCallSep, "Call", ExecMs(2026, 9, 25, 8, 0)));
+		db.RawInstruments.Add(EthOptionInstrument(EthPutSep, "Put", ExecMs(2026, 9, 25, 8, 0)));
+		db.RawInstruments.Add(EthOptionInstrument(EthCallDec27, "Call", ExecMs(2027, 12, 25, 8, 0)));
+		db.RawInstruments.Add(EthOptionInstrument(EthPutDec27, "Put", ExecMs(2027, 12, 25, 8, 0)));
+		db.RawInstruments.Add(new RawInstrument
+		{
+			Symbol = EthPerpSymbol,
+			Category = "linear",
+			PayloadJson = """{"symbol":"ETHUSDT","contractType":"LinearPerpetual","status":"Trading","baseCoin":"ETH","quoteCoin":"USDT","settleCoin":"USDT","deliveryTime":"0","optionsType":""}""",
+			FetchedAt = FetchedAt,
+		});
+
+		db.RawExecutions.Add(EthExecution("f1", EthCallSep, ExecMs(2026, 7, 10, 9, 0), "Buy", "1", "100", "USDC"));
+		db.RawExecutions.Add(EthExecution("f2", EthPutSep, ExecMs(2026, 7, 10, 9, 10), "Buy", "1", "80", "USDC"));
+		db.RawExecutions.Add(EthExecution("f3", EthPerpSymbol, ExecMs(2026, 7, 12, 10, 0), "Buy", "0.5", "3000", "USDT"));
+		db.RawExecutions.Add(EthExecution("f4", EthCallSep, ExecMs(2026, 8, 3, 10, 0), "Sell", "1", "150", "USDC"));
+		db.RawExecutions.Add(EthExecution("f5", EthPutSep, ExecMs(2026, 8, 4, 10, 0), "Sell", "1", "40", "USDC"));
+		db.RawExecutions.Add(EthExecution("g1", EthCallDec27, ExecMs(2026, 12, 1, 10, 0), "Buy", "1", "300", "USDC"));
+		db.RawExecutions.Add(EthExecution("g2", EthPutDec27, ExecMs(2026, 12, 1, 10, 10), "Buy", "1", "250", "USDC"));
+		db.SaveChanges();
+	}
+
+	/// <summary>Спецификация опциона ETH в справочнике с каноническим временем доставки 08:00 UTC.</summary>
+	private static RawInstrument EthOptionInstrument(string symbol, string optionsType, long deliveryTimeMs) => new()
+	{
+		Symbol = symbol,
+		Category = "option",
+		PayloadJson = $$"""{"symbol":"{{symbol}}","baseCoin":"ETH","quoteCoin":"USDT","settleCoin":"USDT","status":"Trading","optionsType":"{{optionsType}}","deliveryTime":"{{deliveryTimeMs}}","deliveryFeeRate":"0.00015"}""",
+		FetchedAt = FetchedAt,
+	};
+
+	/// <summary>Запись исполнения ETH в форме ответа execution-list: числа биржа шлёт строками.</summary>
+	private static RawExecution EthExecution(string execId, string symbol, long execTimeMs, string side, string execQty, string execPrice, string feeCurrency) => new()
+	{
+		ExecId = execId,
+		Category = string.Equals(symbol, EthPerpSymbol, StringComparison.Ordinal) ? "linear" : "option",
+		Symbol = symbol,
+		ExecTimeMs = execTimeMs,
+		PayloadJson = $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"0.01","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"Trade","execTime":"{{execTimeMs}}","feeCurrency":"{{feeCurrency}}","isMaker":false}""",
+		FetchedAt = FetchedAt,
+	};
+
+	/// <summary>Поставщик фиксированного времени для детерминированного пересбора.</summary>
+	private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+	{
+		public override DateTimeOffset GetUtcNow() => utcNow;
+	}
 
 	/// <summary>Заглушка источника свежих марок: фиксированная марка со временем получения.</summary>
 	private sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt) : IFreshInstrumentMarkSource
