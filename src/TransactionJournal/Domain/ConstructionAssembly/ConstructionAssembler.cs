@@ -539,7 +539,11 @@ public sealed class ConstructionAssembler
 		else if (construction.IsAlive
 			&& construction.Legs.Count > 0)
 		{
-			construction.ClosedAtMs = eventTimeMs;
+			// Момент закрытия не отступает в прошлое от последнего события позиций:
+			// запоздало привязанные сделки не «закрывают» конструкцию раньше
+			// события, уже применённого читающим слоем.
+			// Traceability: change:close-construction-on-all-positions/design#d3
+			construction.ClosedAtMs = construction.ClosedAtWithContinuity(eventTimeMs);
 		}
 
 		if (construction.IsArchived)
@@ -701,7 +705,7 @@ public sealed class ConstructionAssembler
 		{
 			var isFlat = construction.Legs.All(leg => leg.Quantity == 0m)
 				&& construction.FuturesQuantity == 0m;
-			construction.ClosedAtMs = isFlat ? eventTimeMs : null;
+			construction.ClosedAtMs = isFlat ? construction.ClosedAtWithContinuity(eventTimeMs) : null;
 		}
 
 		RefreshStatusAfterFuturesChange(construction);
@@ -801,6 +805,20 @@ public sealed class ConstructionAssembler
 		/// <summary>Время закрытия; null — конструкция жива.</summary>
 		public long? ClosedAtMs { get; set; }
 
+		/// <summary>
+		/// Время последнего события позиций из seed'а: база непрерывности
+		/// момента закрытия — закрытие не наступает раньше последнего события
+		/// истории конструкции.
+		/// </summary>
+		// Traceability: change:close-construction-on-all-positions/design#d3
+		public long? SeedLastEventAtMs { get; init; }
+
+		/// <summary>Момент закрытия с учётом непрерывности истории: не раньше последнего события позиций.</summary>
+		public long ClosedAtWithContinuity(long eventTimeMs) =>
+			SeedLastEventAtMs is { } seedLastEventAtMs && seedLastEventAtMs > eventTimeMs
+				? seedLastEventAtMs
+				: eventTimeMs;
+
 		/// <summary>Ноги по символу — доступ к балансу по закрывающим событиям.</summary>
 		public Dictionary<string, LegState> LegsBySymbol { get; } = new(StringComparer.Ordinal);
 
@@ -851,6 +869,8 @@ public sealed class ConstructionAssembler
 						.FirstOrDefault(coin => coin is not null) ?? string.Empty,
 					OpenedAtMs = seeded.OpenedAtMs,
 					ClosedAtMs = seeded.ClosedAtMs,
+					FuturesQuantity = seeded.FuturesQuantity,
+					SeedLastEventAtMs = seeded.LastPositionEventAtMs,
 				};
 				foreach (var leg in seeded.Legs)
 				{

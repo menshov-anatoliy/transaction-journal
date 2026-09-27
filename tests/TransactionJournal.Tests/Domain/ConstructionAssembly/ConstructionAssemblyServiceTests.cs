@@ -461,6 +461,80 @@ public class ConstructionAssemblyServiceTests
 	}
 
 	[TestMethod]
+	[Description("Инкремент пересчитывает статус существующей конструкции по фьючерсному остатку seed'а")]
+	// Seed несёт фьючерсный остаток из read-модели позиций: ненулевой остаток
+	// возвращает конструкцию в «открыта» после гибели прикрытия, а ручная
+	// пометка, обнулившая остаток между прогонами, закрывает её снова.
+	// Traceability: change:close-construction-on-all-positions/design#d3
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-cover-loss-with-open-futures-keeps-open
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-last-position-flat-closes-construction
+	public async Task TryIfInboxAssemblyRecalculatesStatusBySeedFuturesResidual()
+	{
+		// Arrange: конструкция со связанным стреддлом (ноги обнулены продажами),
+		// связанной покупкой фьючерса и статусом «закрыта» от прежнего правила —
+		// обнуляющая фьючерс запись ещё не приходила.
+		SeedFadingStorage();
+		long constructionId;
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var construction = new Construction
+			{
+				Name = "ETH направленная PUT 25SEP26 1600",
+				Status = ConstructionStatus.Closed,
+			};
+			db.Constructions.Add(construction);
+			foreach (var execId in new[] { "e1", "e2", "e3", "e4", "e5" })
+			{
+				db.TradeUserdata.Add(new TradeUserdata { ExecId = execId, Construction = construction });
+			}
+
+			db.SaveChanges();
+			constructionId = construction.Id;
+		}
+
+		var service = CreateService();
+
+		// Act: инкремент без новых записей пересчитывает производные атрибуты по seed'у.
+		var result = await service.AssembleInboxAsync();
+
+		// Assert: read-модель даёт ненулевой фьючерсный остаток — конструкция открыта.
+		Assert.That(result.ConstructionsCount, Is.EqualTo(0), "Новые конструкции не созданы");
+		Assert.That(result.BoundCount, Is.EqualTo(0), "«Входящие» пусты — привязки не созданы");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(
+				db.Constructions.Single(construction => construction.Id == constructionId).Status,
+				Is.EqualTo(ConstructionStatus.Open),
+				"Ненулевой фьючерсный остаток возвращает статус «открыта»");
+		}
+
+		// Act: ручная пометка закрывает фьючерсную позицию между прогонами;
+		// повторный инкремент пересчитывает остаток через read-модель.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.ManualCloseMarks.Add(new ManualCloseMark
+			{
+				ConstructionId = constructionId,
+				Symbol = "ETHUSDT",
+				Price = 3000m,
+				MarkedAt = Now,
+			});
+			db.SaveChanges();
+		}
+
+		await service.AssembleInboxAsync();
+
+		// Assert: обнулённый остаток закрывает конструкцию.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(
+				db.Constructions.Single(construction => construction.Id == constructionId).Status,
+				Is.EqualTo(ConstructionStatus.Closed),
+				"Пометка, обнулившая фьючерсный остаток, закрывает конструкцию");
+		}
+	}
+
+	[TestMethod]
 	[Description("Ролл, разрезанный привязкой закрывающей ноги, открывает новую конструкцию")]
 	// Закрывающая нога ролла привязана ранее и обнулила ногу владельца, поэтому
 	// открывающая нога «Входящих» открывает новую конструкцию — принятое
@@ -619,6 +693,37 @@ public class ConstructionAssemblyServiceTests
 			ExecutionPayload("e5", EthPut1600, "Sell", "40", "1", "0.01", "USDC", Ms(2026, 8, 4, 10, 0))));
 		db.RawExecutions.Add(Raw("e6", "linear", "ETHUSDT", Ms(2026, 8, 10, 10, 0),
 			ExecutionPayload("e6", "ETHUSDT", "Sell", "3200", "0.5", "-0.01", "USDT", Ms(2026, 8, 10, 10, 0))));
+
+		db.SaveChanges();
+	}
+
+	/// <summary>
+	/// Наполняет сырьё затухающей конструкции: справочник инструментов, стреддл
+	/// с продажами и покупка фьючерса — без обнуляющей фьючерсной сделки.
+	/// </summary>
+	private void SeedFadingStorage()
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawInstruments.Add(OptionInstrument(EthCall1600, "Call"));
+		db.RawInstruments.Add(OptionInstrument(EthPut1600, "Put"));
+		db.RawInstruments.Add(new RawInstrument
+		{
+			Symbol = "ETHUSDT",
+			Category = "linear",
+			PayloadJson = """{"symbol":"ETHUSDT","contractType":"LinearPerpetual","status":"Trading","baseCoin":"ETH","quoteCoin":"USDT","settleCoin":"USDT","deliveryTime":"0","optionsType":""}""",
+			FetchedAt = FetchedAt,
+		});
+
+		db.RawExecutions.Add(Raw("e1", "option", EthCall1600, Ms(2026, 7, 10, 9, 0),
+			ExecutionPayload("e1", EthCall1600, "Buy", "100", "1", "0.01", "USDC", Ms(2026, 7, 10, 9, 0))));
+		db.RawExecutions.Add(Raw("e2", "option", EthPut1600, Ms(2026, 7, 10, 9, 10),
+			ExecutionPayload("e2", EthPut1600, "Buy", "80", "1", "0.01", "USDC", Ms(2026, 7, 10, 9, 10))));
+		db.RawExecutions.Add(Raw("e3", "linear", "ETHUSDT", Ms(2026, 7, 12, 10, 0),
+			ExecutionPayload("e3", "ETHUSDT", "Buy", "3000", "0.5", "-0.01", "USDT", Ms(2026, 7, 12, 10, 0))));
+		db.RawExecutions.Add(Raw("e4", "option", EthCall1600, Ms(2026, 8, 3, 10, 0),
+			ExecutionPayload("e4", EthCall1600, "Sell", "150", "1", "0.01", "USDC", Ms(2026, 8, 3, 10, 0))));
+		db.RawExecutions.Add(Raw("e5", "option", EthPut1600, Ms(2026, 8, 4, 10, 0),
+			ExecutionPayload("e5", EthPut1600, "Sell", "40", "1", "0.01", "USDC", Ms(2026, 8, 4, 10, 0))));
 
 		db.SaveChanges();
 	}

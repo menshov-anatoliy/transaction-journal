@@ -157,7 +157,8 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 
 	/// <summary>
 	/// Читает существующие конструкции как начальное состояние сборки: ключ базы,
-	/// имя с признаком ручной фиксации, статус и ноги с текущими остатками.
+	/// имя с признаком ручной фиксации, статус, ноги с текущими остатками и
+	/// фьючерсный остаток.
 	/// Символы ног выводятся из опционных сделок, привязанных к конструкции, —
 	/// нога известна и с обнулённым остатком; количества остатков вычисляются
 	/// читающим слоем позиций — агрегатом привязанных сделок и закрывающих
@@ -165,8 +166,8 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 	/// формулы. Конструкции без привязанных сделок в seed не
 	/// попадают: их период жизни не выводится из данных, контекста остатков
 	/// они не дают. Период жизни — агрегат времён привязанных исполнений;
-	/// конструкция с полностью обнуленными ногами передаётся закрытой в момент
-	/// последнего события своей истории.
+	/// конструкция с полностью обнуленными позициями — ногами и фьючерсом —
+	/// передаётся закрытой в момент последнего события своей истории.
 	// Traceability: change:refine-construction-assembly/design#d2
 	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-incremental-inbox-assembly
 	/// </summary>
@@ -239,16 +240,36 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 				})
 				.ToList();
 
-			// Полное обнуление ног делает конструкцию мёртвой для инкремента: усреднение
-			// ищет только живые конструкции, ролл может реанимировать закрытую по ноге
-			// с ненулевым остатком. Момент закрытия — последнее событие истории.
-			// Статус выводится из ног, а не берётся из базы: статус следует за
-			// опционным прикрытием, а читающий слой уже применил закрывающие записи
-			// (включая экспирации между прогонами), поэтому обнулённые ноги обязаны
-			// прийти в план закрытыми даже без событий в этом прогоне. Архивный
-			// статус сборкой не меняется; конструкция без известных ног сохраняет
-			// статус базы — её прикрытие не выводится из данных.
-			var isFullyClosed = legs.Count > 0 && legs.All(leg => leg.Quantity == 0m);
+			// Фьючерсный остаток — агрегат linear-позиций конструкции из того же
+			// вызова read-модели позиций: сделки робота и закрывающие записи
+			// (включая ручные пометки между прогонами) уже применены читающим
+			// слоем, поэтому seed получает актуальный остаток без дублирования
+			// формулы.
+			// Traceability: change:close-construction-on-all-positions/design#d3
+			var futuresQuantity = constructionPositions?
+				.Where(position => LinearSymbolParser.TryParseBaseCoin(position.Symbol, out _)
+					&& OptionSymbolParser.TryParse(position.Symbol, out _) == false)
+				.Sum(position => position.Residual) ?? 0m;
+
+			// Полное обнуление всех позиций — ног и фьючерса — делает конструкцию
+			// мёртвой для инкремента: усреднение ищет только живые конструкции,
+			// ролл может реанимировать закрытую по ноге с ненулевым остатком.
+			// Момент закрытия — последнее событие позиций: привязанное исполнение
+			// либо применённая закрывающая запись read-модели.
+			// Статус выводится из всех позиций, а не берётся из базы: ненулевой
+			// фьючерсный остаток возвращает конструкцию в «открыта», а читающий
+			// слой уже применил закрывающие записи (включая экспирации и ручные
+			// пометки между прогонами), поэтому обнулённые позиции обязаны прийти
+			// в план закрытыми даже без событий в этом прогоне. Архивный статус
+			// сборкой не меняется; конструкция без известных ног сохраняет статус
+			// базы — её прикрытие не выводится из данных.
+			// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#requirement-status-follows-all-positions
+			var lastEventAtMs = Math.Max(
+				boundExecutions[^1].ExecTimeMs,
+				lastClosingByConstruction.GetValueOrDefault(construction.Id));
+			var isFullyClosed = legs.Count > 0
+				&& legs.All(leg => leg.Quantity == 0m)
+				&& futuresQuantity == 0m;
 			var derivedStatus = construction.Status == ConstructionStatus.Archived
 				? ConstructionStatus.Archived
 				: legs.Count > 0
@@ -261,9 +282,9 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 				NameIsManual = construction.NameIsManual,
 				Status = derivedStatus,
 				OpenedAtMs = boundExecutions[0].ExecTimeMs,
-				ClosedAtMs = isFullyClosed
-					? Math.Max(boundExecutions[^1].ExecTimeMs, lastClosingByConstruction.GetValueOrDefault(construction.Id))
-					: null,
+				ClosedAtMs = isFullyClosed ? lastEventAtMs : null,
+				FuturesQuantity = futuresQuantity,
+				LastPositionEventAtMs = lastEventAtMs,
 				Legs = legs,
 			});
 		}
