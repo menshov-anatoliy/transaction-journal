@@ -5,7 +5,9 @@ namespace TransactionJournal.Materialization;
 /// {BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}], находит спецификацию в справочнике и проверяет,
 /// что базовый актив, тип опциона и дата экспирации совпадают с каноническими
 /// значениями биржи. Канонические свойства результата берутся из справочника,
-/// а не из строки символа.
+/// а не из строки символа; исключение — делистинговый опцион с уже доставленной
+/// доской: спецификацию биржи для него получить неоткуда, поэтому он разрешается
+/// из частей самого символа.
 /// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
 /// Traceability: change:add-bybit-sync/design#d7
 /// </summary>
@@ -16,12 +18,17 @@ public sealed class InstrumentResolver
 
 	private readonly InstrumentCatalog _catalog;
 
+	/// <summary>Часы для границы «доска доставлена»; по умолчанию системное время читающей стороны.</summary>
+	private readonly TimeProvider _timeProvider;
+
 	/// <summary>Создаёт сверщик над готовым справочником инструментов.</summary>
 	/// <param name="catalog">Справочник инструментов, построенный из сырых записей.</param>
+	/// <param name="timeProvider">Часы для проверки доставки доски делистингового символа; по умолчанию системные.</param>
 	/// <exception cref="ArgumentNullException">Справочник не задан.</exception>
-	public InstrumentResolver(InstrumentCatalog catalog)
+	public InstrumentResolver(InstrumentCatalog catalog, TimeProvider? timeProvider = null)
 	{
 		_catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
 	/// <summary>
@@ -45,13 +52,12 @@ public sealed class InstrumentResolver
 
 		if (_catalog.TryGet(symbol, out var entry) == false)
 		{
-			// Неизвестный инструмент должен пополнять справочник загрузкой спецификации
-			// из биржи до материализации сделок — сама сверка здесь останавливается.
-			// Traceability: openspec:sync/bybit-history#scenario-new-instrument-registered
-			throw new InstrumentResolveException(
-				InstrumentResolveFailureReason.UnknownSymbol,
-				symbol,
-				$"Инструмент «{symbol}» отсутствует в справочнике; загрузите его спецификацию из биржи.");
+			// Промах справочника разрешается из символа, только если доска уже
+			// доставлена: для делистингового инструмента спецификацию биржи получить
+			// неоткуда, а живому инструменту она обязана попасть в справочник синком,
+			// иначе предупреждение деградации теряет смысл стимула её дозагрузить.
+			// Traceability: change:resolve-delisted-option-instruments/design#d1
+			return ResolveDelistedFromSymbol(symbol, parts!);
 		}
 
 		if (string.Equals(entry.Category, OptionsCategory, StringComparison.Ordinal) == false)
@@ -98,6 +104,45 @@ public sealed class InstrumentResolver
 			OptionsType = entry.OptionsType.Value,
 			Strike = parts.Strike,
 			DeliveryTime = entry.DeliveryTime.Value,
+		};
+	}
+
+	/// <summary>
+	/// Разрешает символ опциона из частей разбора, когда доска уже доставлена:
+	/// временем delivery считается 08:00 UTC даты доски — та же конвенция вывода
+	/// времени из символа, что применяет сборщик конструкций.
+	/// Traceability: change:resolve-delisted-option-instruments/design#d1
+	/// </summary>
+	/// <param name="symbol">Символ опциона, отсутствующий в справочнике.</param>
+	/// <param name="parts">Разобранные части символа.</param>
+	/// <exception cref="InstrumentResolveException">Доска символа ещё не доставлена.</exception>
+	private ResolvedOptionInstrument ResolveDelistedFromSymbol(string symbol, OptionSymbolParts parts)
+	{
+		var deliveryTime = new DateTimeOffset(parts.ExpiryDate, TimeSpan.Zero).AddHours(8);
+		if (deliveryTime > _timeProvider.GetUtcNow())
+		{
+			// Доска ещё не доставлена: инструмент живой, его спецификация обязана
+			// попасть в справочник синком до материализации — прежнее исключение
+			// сохраняет деградацию предупреждением у материализаторов.
+			// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+			throw new InstrumentResolveException(
+				InstrumentResolveFailureReason.UnknownSymbol,
+				symbol,
+				$"Инструмент «{symbol}» отсутствует в справочнике; загрузите его спецификацию из биржи.");
+		}
+
+		// Доска доставлена: спецификация делистингового инструмента биржей не
+		// отдаётся, поэтому разрешение строится из символа; категория option следует
+		// из самого пути сверки — парсер допускает только формат опциона Bybit.
+		// Traceability: openspec:sync/bybit-history#scenario-delisted-option-resolves-from-symbol
+		return new ResolvedOptionInstrument
+		{
+			Symbol = symbol,
+			Category = OptionsCategory,
+			BaseCoin = parts.BaseCoin,
+			OptionsType = parts.Type,
+			Strike = parts.Strike,
+			DeliveryTime = deliveryTime,
 		};
 	}
 }

@@ -73,14 +73,18 @@ public class InstrumentResolverTests
 	}
 
 	[TestMethod]
-	[Description("Неизвестный справочнику инструмент останавливает сверку — его спецификацию нужно загрузить из биржи")]
+	[Description("Неизвестный справочнику инструмент с недоставленной доской останавливает сверку — его спецификацию нужно загрузить из биржи")]
 	[ExpectedException(typeof(InstrumentResolveException))]
 	public void ThrowOnUnknownSymbol()
 	{
-		// Arrange: справочник пуст — инструмент встретился в записях впервые.
+		// Arrange: справочник пуст — инструмент встретился в записях впервые, а часы
+		// стоят до доставки доски 27DEC24: живому инструменту спецификация обязана
+		// попасть в справочник до материализации сделок.
 		// Требование: неизвестный инструмент должен пополнять справочник до материализации.
 		// Traceability: openspec:sync/bybit-history#scenario-new-instrument-registered
-		var resolver = Resolver();
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+		var resolver = Resolver(
+			new FixedTimeProvider(new DateTimeOffset(2024, 12, 1, 0, 0, 0, TimeSpan.Zero)));
 
 		try
 		{
@@ -89,7 +93,7 @@ public class InstrumentResolverTests
 		}
 		catch (InstrumentResolveException exception)
 		{
-			// Assert: причина — отсутствие в справочнике.
+			// Assert: причина — отсутствие в справочнике, а не разрешение из символа.
 			Assert.That(exception.Reason, Is.EqualTo(InstrumentResolveFailureReason.UnknownSymbol));
 			Assert.That(exception.Symbol, Is.EqualTo("BTC-27DEC24-2800-C"));
 			throw;
@@ -97,15 +101,69 @@ public class InstrumentResolverTests
 	}
 
 	[TestMethod]
+	[DataRow(0, "текущий момент совпал со временем доставки доски")]
+	[DataRow(24, "доска доставлена сутки назад")]
+	[Description("Делистинговый опцион с доставленной доской разрешается из частей символа, когда справочник молчит")]
+	public void TryIfDelistedOptionResolvesFromSymbol(int hoursAfterDelivery, string caseDescription)
+	{
+		// Arrange: справочник не содержит спецификации ETH-27DEC24-3100-C — биржа
+		// отвечает отказом «контракт недоступен» и никогда её не отдаст; часы стоят
+		// на момент доставки доски 27DEC24 08:00 UTC или позже.
+		// Требование: истёкшая доска разрешается из символа, чтобы записи делистингового
+		// инструмента материализовались без пополнения справочника.
+		// Traceability: openspec:sync/bybit-history#scenario-delisted-option-resolves-from-symbol
+		var deliveryTime = new DateTimeOffset(2024, 12, 27, 8, 0, 0, TimeSpan.Zero);
+		var resolver = Resolver(new FixedTimeProvider(deliveryTime.AddHours(hoursAfterDelivery)));
+
+		// Act
+		var resolved = resolver.ResolveOption("ETH-27DEC24-3100-C");
+
+		// Assert: спецификация выведена из символа — базовый актив, тип и страйк из
+		// разбора, категория option, delivery — 08:00 UTC даты доски.
+		Assert.That(resolved.Symbol, Is.EqualTo("ETH-27DEC24-3100-C"), caseDescription);
+		Assert.That(resolved.Category, Is.EqualTo("option"), caseDescription);
+		Assert.That(resolved.BaseCoin, Is.EqualTo("ETH"), caseDescription);
+		Assert.That(resolved.OptionsType, Is.EqualTo(OptionType.Call), caseDescription);
+		Assert.That(resolved.Strike, Is.EqualTo(3100d), caseDescription);
+		Assert.That(resolved.DeliveryTime, Is.EqualTo(deliveryTime), caseDescription);
+	}
+
+	[TestMethod]
+	[Description("Fallback делистинговой доски действует и без явных часов — по системному времени читающей стороны")]
+	public void TryIfDelistedOptionResolvesWithSystemClockByDefault()
+	{
+		// Arrange: справочник пуст, часы не заданы — конструктор по умолчанию берёт
+		// системное время; доска BTC-30DEC22 давно доставлена, поэтому существующие
+		// места вызова резолвера получают разрешение из символа без изменений.
+		// Требование: разрешение выполняется при чтении read-моделью, без пересборки.
+		// Traceability: openspec:sync/bybit-history#scenario-delisted-option-resolves-from-symbol
+		var resolver = Resolver();
+
+		// Act
+		var resolved = resolver.ResolveOption("BTC-30DEC22-18000-C");
+
+		// Assert: инструмент разрешён из символа с delivery 08:00 UTC даты доски.
+		Assert.That(resolved.Symbol, Is.EqualTo("BTC-30DEC22-18000-C"));
+		Assert.That(resolved.BaseCoin, Is.EqualTo("BTC"));
+		Assert.That(resolved.OptionsType, Is.EqualTo(OptionType.Call));
+		Assert.That(resolved.Strike, Is.EqualTo(18000d));
+		Assert.That(resolved.DeliveryTime, Is.EqualTo(new DateTimeOffset(2022, 12, 30, 8, 0, 0, TimeSpan.Zero)));
+	}
+
+	[TestMethod]
 	[DataRow("BTCUSDT")]
 	[DataRow("BTC-27DEC24-2800")]
 	[DataRow("BTC-27DEC24-2800-X")]
-	[Description("Символ вне формата опциона останавливает сверку с причиной MalformedOptionSymbol")]
+	[Description("Символ вне формата опциона останавливает сверку с причиной MalformedOptionSymbol даже при доставленной доске")]
 	[ExpectedException(typeof(InstrumentResolveException))]
 	public void ThrowOnMalformedOptionSymbol(string symbol)
 	{
-		// Arrange
-		var resolver = Resolver(Raw(symbol == "BTCUSDT" ? symbol : "BTC-27DEC24-2800-C", "option", Payload("BTC", "Call", Btc27Dec24DeliveryMs)));
+		// Arrange: часы стоят после доставки доски — неразбираемый символ не
+		// разрешается из себя и fallback'ом: fallback опирается на разбор символа.
+		// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
+		var resolver = Resolver(
+			DeliveredBoardClock(),
+			Raw(symbol == "BTCUSDT" ? symbol : "BTC-27DEC24-2800-C", "option", Payload("BTC", "Call", Btc27Dec24DeliveryMs)));
 
 		try
 		{
@@ -121,12 +179,17 @@ public class InstrumentResolverTests
 	}
 
 	[TestMethod]
-	[Description("Запись справочника категории linear не сворачивается с символом опциона")]
+	[Description("Запись справочника категории linear не сворачивается с символом опциона даже при доставленной доске")]
 	[ExpectedException(typeof(InstrumentResolveException))]
 	public void ThrowOnCategoryMismatch()
 	{
-		// Arrange: символ опциона есть в справочнике, но записан категорией linear.
-		var resolver = Resolver(Raw("BTC-27DEC24-2800-C", "linear", Payload("BTC", "Call", Btc27Dec24DeliveryMs)));
+		// Arrange: символ опциона есть в справочнике, но записан категорией linear;
+		// часы стоят после доставки доски — fallback применяется только к промаху
+		// справочника и не смягчает расхождение с имеющейся спецификацией.
+		// Traceability: openspec:sync/bybit-history#scenario-instrument-mismatch-still-fails
+		var resolver = Resolver(
+			DeliveredBoardClock(),
+			Raw("BTC-27DEC24-2800-C", "linear", Payload("BTC", "Call", Btc27Dec24DeliveryMs)));
 
 		try
 		{
@@ -142,12 +205,17 @@ public class InstrumentResolverTests
 	}
 
 	[TestMethod]
-	[Description("Базовый актив из символа расходится со справочником — сверка не проходит")]
+	[Description("Базовый актив из символа расходится со справочником — сверка не проходит даже при доставленной доске")]
 	[ExpectedException(typeof(InstrumentResolveException))]
 	public void ThrowOnBaseCoinMismatch()
 	{
-		// Arrange: биржа считает базовым активом ETH, а символ начинается с BTC.
-		var resolver = Resolver(Raw("BTC-27DEC24-2800-C", "option", Payload("ETH", "Call", Btc27Dec24DeliveryMs)));
+		// Arrange: биржа считает базовым активом ETH, а символ начинается с BTC;
+		// часы стоят после доставки доски — расхождение со справочником остаётся
+		// ошибкой сверки, а не разрешается fallback'ом.
+		// Traceability: openspec:sync/bybit-history#scenario-instrument-mismatch-still-fails
+		var resolver = Resolver(
+			DeliveredBoardClock(),
+			Raw("BTC-27DEC24-2800-C", "option", Payload("ETH", "Call", Btc27Dec24DeliveryMs)));
 
 		try
 		{
@@ -163,12 +231,16 @@ public class InstrumentResolverTests
 	}
 
 	[TestMethod]
-	[Description("Тип опциона из символа расходится со справочником — сверка не проходит")]
+	[Description("Тип опциона из символа расходится со справочником — сверка не проходит даже при доставленной доске")]
 	[ExpectedException(typeof(InstrumentResolveException))]
 	public void ThrowOnOptionsTypeMismatch()
 	{
-		// Arrange: последний сегмент символа — C (Call), справочник говорит Put.
-		var resolver = Resolver(Raw("BTC-27DEC24-2800-C", "option", Payload("BTC", "Put", Btc27Dec24DeliveryMs)));
+		// Arrange: последний сегмент символа — C (Call), справочник говорит Put;
+		// часы стоят после доставки доски — расхождение не смягчается fallback'ом.
+		// Traceability: openspec:sync/bybit-history#scenario-instrument-mismatch-still-fails
+		var resolver = Resolver(
+			DeliveredBoardClock(),
+			Raw("BTC-27DEC24-2800-C", "option", Payload("BTC", "Put", Btc27Dec24DeliveryMs)));
 
 		try
 		{
@@ -187,12 +259,17 @@ public class InstrumentResolverTests
 	[DataRow(Btc27Dec24DeliveryMs + 86_400_000L, "сдвиг на сутки вперёд")]
 	[DataRow(Btc27Dec24DeliveryMs - 86_400_000L, "сдвиг на сутки назад")]
 	[DataRow(0L, "отсутствие доставки у записи")]
-	[Description("Дата экспирации из символа расходится со временем delivery справочника — сверка не проходит")]
+	[Description("Дата экспирации из символа расходится со временем delivery справочника — сверка не проходит даже при доставленной доске")]
 	[ExpectedException(typeof(InstrumentResolveException))]
 	public void ThrowOnDeliveryTimeMismatch(long deliveryTimeMs, string caseDescription)
 	{
-		// Arrange: символ кодирует 27DEC24, а справочник — другую дату доставки.
-		var resolver = Resolver(Raw("BTC-27DEC24-2800-C", "option", Payload("BTC", "Call", deliveryTimeMs)));
+		// Arrange: символ кодирует 27DEC24, а справочник — другую дату доставки;
+		// часы стоят после доставки доски — расхождение со справочником остаётся
+		// ошибкой сверки, fallback делистинговых досок на него не действует.
+		// Traceability: openspec:sync/bybit-history#scenario-instrument-mismatch-still-fails
+		var resolver = Resolver(
+			DeliveredBoardClock(),
+			Raw("BTC-27DEC24-2800-C", "option", Payload("BTC", "Call", deliveryTimeMs)));
 
 		try
 		{
@@ -236,6 +313,14 @@ public class InstrumentResolverTests
 	{
 		return new InstrumentResolver(new InstrumentCatalog(rawInstruments));
 	}
+
+	private static InstrumentResolver Resolver(TimeProvider timeProvider, params RawInstrument[] rawInstruments)
+	{
+		return new InstrumentResolver(new InstrumentCatalog(rawInstruments), timeProvider);
+	}
+
+	/// <summary>Часы после доставки фикстурных досок (декабрь 2024 и ранее): доски уже доставлены.</summary>
+	private static FixedTimeProvider DeliveredBoardClock() => new(FetchedAt);
 
 	private static RawInstrument Raw(string symbol, string category, string payloadJson) => new()
 	{
