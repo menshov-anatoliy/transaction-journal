@@ -383,15 +383,16 @@ public class ExpiryMaterializerTests
 	}
 
 	[TestMethod]
-	[Description("Delivery-запись символа без спецификации откладывается, символ перечислен в неразрешённых")]
+	[Description("Delivery-запись символа без спецификации с недоставленной доской откладывается, символ перечислен в неразрешённых")]
 	public void TryIfUnknownDeliverySymbolSkipsClosingAndReportsSymbol()
 	{
-		// Arrange: delivery-запись делистнутого опциона ETH, чьей спецификации нет
-		// в справочнике, и разрешимая ITM-запись колла BTC.
+		// Arrange: delivery-запись опциона ETH, чьей спецификации нет в справочнике;
+		// часы стоят до доставки доски 29DEC23 — инструмент живой, и разрешимая
+		// ITM-запись колла BTC.
 		// Требование: символ без спецификации не прерывает материализацию — закрывающая
 		// запись по нему не строится, символ перечислен, остальные записи строятся.
 		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
-		var materializer = CreateMaterializer();
+		var materializer = CreateMaterializer(UndeliveredEthBoardClock());
 		var unknown = Delivery("ETH-29DEC23-2000-C", OptionDeliveryMs, deliveryPrice: "2400", strike: "2000", fee: "0", deliveryRpl: "0.4");
 		var known = Delivery(CallSymbol, OptionDeliveryMs, deliveryPrice: "46000", strike: "45000", fee: "0", deliveryRpl: "0.4");
 		var rawExecutions = new[] { RawOption("exec-a1", "Buy", "0.0001", "100") };
@@ -408,16 +409,16 @@ public class ExpiryMaterializerTests
 	}
 
 	[TestMethod]
-	[Description("OTM-автозакрытие по символу без спецификации не строится")]
+	[Description("OTM-автозакрытие по символу без спецификации с недоставленной доской не строится")]
 	public void TryIfOtmAutoCloseSkippedForUnknownSymbol()
 	{
-		// Arrange: покупки делистнутого опциона ETH без delivery-записи, deliveryTime
-		// уже наступил; спецификации символа в справочнике нет.
+		// Arrange: покупки опциона ETH без delivery-записи, спецификации символа
+		// в справочнике нет; часы стоят до доставки доски 29DEC23.
 		// Требование: OTM-автозакрытие выводит каноническое время delivery из
-		// справочника — без спецификации позиция не закрывается нулевой записью,
-		// а остаётся отложенной вместе с записями символа.
+		// справочника или символа — при недоставленной доске позиция не закрывается
+		// нулевой записью, а остаётся отложенной вместе с записями символа.
 		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
-		var materializer = CreateMaterializer();
+		var materializer = CreateMaterializer(UndeliveredEthBoardClock());
 		var rawExecutions = new[]
 		{
 			Raw("exec-eth-1", "option", "ETH-29DEC23-2000-C", ExecMs(2023, 12, 28, 10, 0),
@@ -433,13 +434,88 @@ public class ExpiryMaterializerTests
 		Assert.That(result.UnresolvedSymbols, Is.EqualTo(new[] { "ETH-29DEC23-2000-C" }));
 	}
 
+	[TestMethod]
+	[Description("Delivery-запись делистингового символа с доставленной доской материализуется в закрывающую запись")]
+	public void TryIfDelistedSymbolDeliveryMaterializesClosingEntry()
+	{
+		// Arrange: сделка и ITM delivery-запись опциона ETH, чьей спецификации нет
+		// в справочнике; доска 29DEC23 08:00 UTC уже доставлена — биржа спецификацию
+		// делистингового инструмента больше не отдаёт.
+		// Требование: delivery-запись делистингового инструмента материализуется
+		// в закрывающую запись по спецификации, выведенной из символа; символ не
+		// попадает в перечень неразрешённых.
+		// Traceability: openspec:sync/bybit-history#scenario-delisted-option-resolves-from-symbol
+		var materializer = CreateMaterializer();
+		var rawExecutions = new[] { RawOption("exec-eth", "Buy", "0.0002", "200", DelistedSymbol) };
+		var rawDeliveries = new[]
+		{
+			Delivery(DelistedSymbol, OptionDeliveryMs, deliveryPrice: "2400", strike: "2000", fee: "0", deliveryRpl: "0.04"),
+		};
+
+		// Act
+		var result = materializer.Materialize(rawExecutions, rawDeliveries, null, AfterDelivery());
+
+		// Assert: закрывающая запись обнуляет остаток по внутренней стоимости
+		// (2400 − 2000 = 400) в момент delivery; перечень неразрешённых пуст,
+		// сверка deliveryRpl сходится без предупреждений.
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
+		Assert.That(result.Warnings, Is.Empty);
+		Assert.That(result.ClosingEntries.Count, Is.EqualTo(1));
+		var entry = result.ClosingEntries[0];
+		Assert.That(entry.Symbol, Is.EqualTo(DelistedSymbol));
+		Assert.That(entry.Kind, Is.EqualTo(ExpiryClosingKind.Delivery));
+		Assert.That(entry.ConstructionId, Is.Null);
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0002m));
+		Assert.That(entry.EffectivePrice, Is.EqualTo(400m));
+		Assert.That(entry.ClosedAt, Is.EqualTo(OptionDelivery));
+	}
+
+	[TestMethod]
+	[Description("OTM-автозакрытие делистингового символа выводится из времени доски символа")]
+	public void TryIfOtmAutoCloseClosesDelistedSymbolAtSymbolBoardTime()
+	{
+		// Arrange: покупки делистингового опциона ETH без delivery-записи; доска
+		// 29DEC23 08:00 UTC доставлена, спецификации в справочнике нет.
+		// Требование: OTM-экспирация делистингового инструмента закрывается по нулевой
+		// цене в deliveryTime, выведенном из символа.
+		// Traceability: openspec:sync/bybit-history#scenario-delisted-option-resolves-from-symbol
+		var materializer = CreateMaterializer();
+		var rawExecutions = new[] { RawOption("exec-eth", "Buy", "0.0002", "200", DelistedSymbol) };
+
+		// Act
+		var result = materializer.Materialize(rawExecutions, Array.Empty<RawDelivery>(), null, AfterDelivery());
+
+		// Assert: позиция закрыта нулевой записью в момент доски символа; символ
+		// не числится неразрешённым.
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
+		Assert.That(result.ClosingEntries.Count, Is.EqualTo(1));
+		var entry = result.ClosingEntries[0];
+		Assert.That(entry.Symbol, Is.EqualTo(DelistedSymbol));
+		Assert.That(entry.Kind, Is.EqualTo(ExpiryClosingKind.OtmExpiry));
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0002m));
+		Assert.That(entry.EffectivePrice, Is.EqualTo(0m));
+		Assert.That(entry.ClosedAt, Is.EqualTo(OptionDelivery));
+		Assert.That(entry.SourceKey, Is.EqualTo($"{DelistedSymbol}|{OptionDeliveryMs}"));
+	}
+
 	#region Помощники
+
+	private const string DelistedSymbol = "ETH-29DEC23-2000-C";
 
 	private static ExpiryMaterializer CreateMaterializer()
 	{
 		var resolver = new InstrumentResolver(CreateCatalog());
 		return new ExpiryMaterializer(new TradeMaterializer(resolver), resolver);
 	}
+
+	private static ExpiryMaterializer CreateMaterializer(TimeProvider timeProvider)
+	{
+		var resolver = new InstrumentResolver(CreateCatalog(), timeProvider);
+		return new ExpiryMaterializer(new TradeMaterializer(resolver), resolver);
+	}
+
+	/// <summary>Часы до доставки доски ETH 29DEC23 08:00 UTC: символ без спецификации обязан деградировать.</summary>
+	private static FixedTimeProvider UndeliveredEthBoardClock() => new(new DateTimeOffset(2023, 12, 1, 0, 0, 0, TimeSpan.Zero));
 
 	/// <summary>Момент материализации после deliveryTime: экспирация уже наступила.</summary>
 	private static DateTimeOffset AfterDelivery() => new(2023, 12, 29, 12, 0, 0, TimeSpan.Zero);

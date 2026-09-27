@@ -25,6 +25,9 @@ public class JournalMaterializerTests
 
 	private static readonly long OptionDeliveryMs = OptionDelivery.ToUnixTimeMilliseconds();
 
+	/// <summary>Время доставки недоставленной доски 1JAN99 08:00 UTC — системные часы читающей стороны раньше неё.</summary>
+	private static readonly long UndeliveredOptionDeliveryMs = new DateTimeOffset(2099, 1, 1, 8, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
 	[TestMethod]
 	[Description("Пересборка после изменения правила разбора даёт согласованный результат без сетевых запросов")]
 	public void TryIfRebuildAfterParseRuleChangeGivesConsistentResult()
@@ -97,16 +100,17 @@ public class JournalMaterializerTests
 	}
 
 	[TestMethod]
-	[Description("Проекция с символом без спецификации строится из разрешимых записей и несёт перечень, запуск не помечен ошибкой")]
+	[Description("Проекция с символом недоставленной доски без спецификации строится из разрешимых записей и несёт перечень, запуск не помечен ошибкой")]
 	public void TryIfProjectionBuildsWithUnresolvedSymbolsListed()
 	{
-		// Arrange: сырьё содержит исполнение и delivery-запись делистнутого опциона ETH
-		// без спецификации в справочнике и разрешимые записи колла BTC.
+		// Arrange: сырьё содержит исполнение и delivery-запись опциона ETH без
+		// спецификации в справочнике, чья доска 1JAN99 ещё не доставлена, и разрешимые
+		// записи колла BTC.
 		// Требование: материализация строится из записей разрешимых инструментов,
 		// неразрешённые символы перечислены в результате единым перечнем без повторов.
 		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
 		var materializer = new JournalMaterializer();
-		var unknownSymbol = "ETH-29DEC23-2000-C";
+		var unknownSymbol = "ETH-1JAN99-2000-C";
 		var rawInstruments = CreateRawInstruments();
 		var rawExecutions = CreateRawExecutions()
 			.Append(Raw(
@@ -117,9 +121,9 @@ public class JournalMaterializerTests
 			.Append(new RawDelivery
 			{
 				Symbol = unknownSymbol,
-				DeliveryTimeMs = OptionDeliveryMs,
+				DeliveryTimeMs = UndeliveredOptionDeliveryMs,
 				Category = "option",
-				PayloadJson = DeliveryPayload(unknownSymbol, OptionDeliveryMs, "2400", "2000", "0", "0.4"),
+				PayloadJson = DeliveryPayload(unknownSymbol, UndeliveredOptionDeliveryMs, "2400", "2000", "0", "0.4"),
 				FetchedAt = FetchedAt,
 			})
 			.ToArray();

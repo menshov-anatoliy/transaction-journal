@@ -309,12 +309,13 @@ public class JournalSyncServiceTests
 	{
 		// Arrange: первое окно исполнения linear отдаёт линейную сделку, опционное —
 		// сделку пута, чью спецификацию не знает и эндпоинт справочника, — символ
-		// остаётся без канонических данных. Требование: материализация деградирует
-		// по неразрешённым символам — проекция строится из разрешимых записей,
-		// символ перечислен, запуск не помечен ошибкой.
+		// остаётся без канонических данных, а его доска 15DEC99 ещё не доставлена.
+		// Требование: материализация деградирует по неразрешённым символам с недоставленными
+		// досками — проекция строится из разрешимых записей, символ перечислен, запуск
+		// не помечен ошибкой.
 		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
 		_gateway.EnqueueExecution(ExecutionPage(LinearExecution()));
-		_gateway.EnqueueExecution(ExecutionPage(OptionExecution("BTC-15DEC25-45000-P")));
+		_gateway.EnqueueExecution(ExecutionPage(OptionExecution("BTC-15DEC99-45000-P")));
 		_gateway.EnqueueDelivery(DeliveryPage());
 		_gateway.EnqueueDelivery(DeliveryPage());
 
@@ -329,7 +330,7 @@ public class JournalSyncServiceTests
 		Assert.That(result.Projection, Is.Not.Null);
 		Assert.That(result.Projection!.InboxTrades.Select(trade => trade.ExecId).ToList(),
 			Is.EqualTo(new[] { "exec-lin" }));
-		Assert.That(result.Projection.UnresolvedInstruments, Is.EqualTo(new[] { "BTC-15DEC25-45000-P" }));
+		Assert.That(result.Projection.UnresolvedInstruments, Is.EqualTo(new[] { "BTC-15DEC99-45000-P" }));
 
 		using var db = new JournalDbContext(CreateOptions());
 		Assert.That(db.RawExecutions.Count(), Is.EqualTo(2));

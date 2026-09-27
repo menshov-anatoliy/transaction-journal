@@ -437,16 +437,17 @@ public class TradeMaterializerTests
 	}
 
 	[TestMethod]
-	[Description("Символ опциона без спецификации откладывает запись и попадает в перечень неразрешённых")]
+	[Description("Символ опциона без спецификации с недоставленной доской откладывает запись и попадает в перечень неразрешённых")]
 	public void TryIfUnknownSymbolSkipsTradeAndReportsSymbol()
 	{
-		// Arrange: запись исполнения опциона ETH, чьей спецификации нет в справочнике,
-		// и записи разрешимых инструментов; справочник — канонический источник свойств,
-		// разбор строки символа с доверием ему запрещён.
+		// Arrange: запись исполнения опциона ETH, чьей спецификации нет в справочнике;
+		// часы стоят до доставки доски 29DEC23 — инструмент живой, его спецификация
+		// обязана попасть в справочник синком, разбор строки символа с доверием ему
+		// запрещён.
 		// Требование: символ без спецификации не прерывает материализацию — сделка
 		// откладывается, символ перечислен в результате, остальные сделки строятся.
 		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
-		var materializer = CreateMaterializer();
+		var materializer = CreateMaterializer(UndeliveredEthBoardClock());
 		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
 		var rawExecutions = new[]
 		{
@@ -465,12 +466,12 @@ public class TradeMaterializerTests
 	}
 
 	[TestMethod]
-	[Description("Повторные записи с тем же неизвестным символом не дублируют перечень")]
+	[Description("Повторные записи с тем же символом недоставленной доски не дублируют перечень")]
 	public void TryIfRepeatedUnknownSymbolsReportedOnce()
 	{
-		// Arrange: две записи одного делистнутого опциона — перечень символов
-		// не должен содержать повторов.
-		var materializer = CreateMaterializer();
+		// Arrange: две записи опциона без спецификации в справочнике при недоставленной
+		// доске — перечень символов не должен содержать повторов.
+		var materializer = CreateMaterializer(UndeliveredEthBoardClock());
 		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
 		var rawExecutions = new[]
 		{
@@ -486,6 +487,42 @@ public class TradeMaterializerTests
 		// Assert: символ перечислен один раз, сделок по нему нет.
 		Assert.That(result.UnresolvedSymbols, Is.EqualTo(new[] { "ETH-29DEC23-2000-C" }));
 		Assert.That(result.Trades, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Делистинговый символ с доставленной доской материализуется из частей символа без перечня неразрешённых")]
+	public void TryIfDelistedSymbolExecutionMaterializesFromSymbol()
+	{
+		// Arrange: запись исполнения опциона ETH, чьей спецификации нет в справочнике,
+		// а доска 29DEC23 08:00 UTC уже доставлена — биржа спецификацию делистингового
+		// инструмента больше не отдаёт (отказ «контракт недоступен»).
+		// Требование: истёкшая доска разрешается из символа — сделка материализуется
+		// со спецификацией, выведенной из символа, и символ не попадает в перечень
+		// неразрешённых.
+		// Traceability: openspec:sync/bybit-history#scenario-delisted-option-resolves-from-symbol
+		var materializer = CreateMaterializer();
+		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
+		var rawExecutions = new[]
+		{
+			Raw("exec-eth", "option", "ETH-29DEC23-2000-C", execTimeMs,
+				ExecutionPayload("exec-eth", "ETH-29DEC23-2000-C", "Buy", "200", "1", "0.02", "USDC", execTimeMs)),
+		};
+
+		// Act
+		var result = materializer.Materialize(rawExecutions);
+
+		// Assert: сделка построена, канонические атрибуты выведены из символа,
+		// перечень неразрешённых пуст.
+		Assert.That(result.UnresolvedSymbols, Is.Empty);
+		Assert.That(result.Trades.Count, Is.EqualTo(1));
+		var trade = result.Trades[0];
+		Assert.That(trade.ExecId, Is.EqualTo("exec-eth"));
+		Assert.That(trade.Symbol, Is.EqualTo("ETH-29DEC23-2000-C"));
+		Assert.That(trade.Option, Is.Not.Null);
+		Assert.That(trade.Option!.BaseCoin, Is.EqualTo("ETH"));
+		Assert.That(trade.Option.OptionsType, Is.EqualTo(OptionType.Call));
+		Assert.That(trade.Option.Strike, Is.EqualTo(2000d));
+		Assert.That(trade.Option.DeliveryTime, Is.EqualTo(new DateTimeOffset(2023, 12, 29, 8, 0, 0, TimeSpan.Zero)));
 	}
 
 	[TestMethod]
@@ -521,6 +558,12 @@ public class TradeMaterializerTests
 	#region Помощники
 
 	private static TradeMaterializer CreateMaterializer() => new(new InstrumentResolver(CreateCatalog()));
+
+	private static TradeMaterializer CreateMaterializer(TimeProvider timeProvider) =>
+		new(new InstrumentResolver(CreateCatalog(), timeProvider));
+
+	/// <summary>Часы до доставки доски ETH 29DEC23 08:00 UTC: символ без спецификации обязан деградировать.</summary>
+	private static FixedTimeProvider UndeliveredEthBoardClock() => new(new DateTimeOffset(2023, 12, 1, 0, 0, 0, TimeSpan.Zero));
 
 	/// <summary>Справочник инструментов: опцион BTC с delivery 29DEC23 08:00 UTC и линейный перп BTCUSDT.</summary>
 	private static InstrumentCatalog CreateCatalog()

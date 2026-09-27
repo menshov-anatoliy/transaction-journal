@@ -24,6 +24,9 @@ public class PositionReadModelTests
 	private const string CallSymbol = "BTC-29DEC23-45000-C";
 	private const string LinearSymbol = "BTCUSDT";
 
+	/// <summary>Делистинговый опцион ETH: спецификации в справочнике нет, доска 29DEC23 08:00 UTC доставлена.</summary>
+	private const string DelistedSymbol = "ETH-29DEC23-2000-C";
+
 	private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
 	/// <summary>Каноническое время delivery инструмента опциона из справочника: 29DEC23 08:00 UTC.</summary>
@@ -217,6 +220,86 @@ public class PositionReadModelTests
 		Assert.That(entry.Quantity, Is.EqualTo(-0.0001m));
 		Assert.That(entry.Price, Is.EqualTo(1000m));
 		Assert.That(entry.SourceKey, Is.EqualTo($"{CallSymbol}|{OptionDeliveryMs}"));
+		Assert.That(result.Warnings, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Делистинговый опцион с доставленной доской получает позицию конструкции и закрывающую запись delivery")]
+	public async Task TryIfDelistedOptionDeliveryClosesConstructionPosition()
+	{
+		// Arrange: покупка опциона ETH, чьей спецификации нет в справочнике, привязана
+		// к конструкции; доска 29DEC23 08:00 UTC доставлена, поэтому аккаунтовая
+		// delivery-запись с расчётной ценой 2400 и страйком 2000 даёт внутреннюю
+		// стоимость 400.
+		// Требование: записи делистингового инструмента материализуются при чтении —
+		// конструкция получает опционную позицию, закрываемую записью delivery по
+		// спецификации, выведенной из символа.
+		// Traceability: openspec:sync/bybit-history#scenario-delisted-option-resolves-from-symbol
+		// Traceability: openspec:sync/bybit-history#scenario-delivered-board-does-not-degrade
+		var construction = await _constructionService.CreateAsync("Колл ETH делистинговый", 500m);
+		await AddOptionTradeAsync("exec-eth-buy", "Buy", "0.0001", "100", DelistedSymbol);
+		await _bindingService.BindAsync(construction.Id, "exec-eth-buy");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawDeliveries.Add(Delivery(deliveryPrice: "2400", strike: "2000", fee: "0", deliveryRpl: "0.03", symbol: DelistedSymbol));
+			await db.SaveChangesAsync();
+		}
+
+		// Act: читаем позиции.
+		var readModel = new PositionReadModel(CreateOptions());
+		var result = await readModel.ListAsync();
+
+		// Assert: опционная позиция конструкции закрыта delivery-записью с внутренней
+		// стоимостью из символа; деградации нет — сделка не отложена, позиция не потеряна.
+		var position = result.Positions.Single();
+		Assert.That(position.ConstructionId, Is.EqualTo(construction.Id));
+		Assert.That(position.Symbol, Is.EqualTo(DelistedSymbol));
+		Assert.That(position.Residual, Is.EqualTo(0m));
+		Assert.That(position.IsOpen, Is.False);
+		var entry = result.ClosingEntries.Single();
+		Assert.That(entry.ConstructionId, Is.EqualTo(construction.Id));
+		Assert.That(entry.Symbol, Is.EqualTo(DelistedSymbol));
+		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.Delivery));
+		Assert.That(entry.ClosedAt, Is.EqualTo(OptionDelivery));
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0001m));
+		Assert.That(entry.Price, Is.EqualTo(400m));
+		Assert.That(entry.SourceKey, Is.EqualTo($"{DelistedSymbol}|{OptionDeliveryMs}"));
+		Assert.That(result.Warnings, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("OTM-экспирация делистингового опциона выводится при чтении и закрывает позицию конструкции")]
+	public async Task TryIfDelistedOptionOtmExpiryClosesConstructionPosition()
+	{
+		// Arrange: покупка опциона ETH, чьей спецификации нет в справочнике, привязана
+		// к конструкции; delivery-записи нет, а доска 29DEC23 08:00 UTC доставлена.
+		// Требование: закрывающая запись OTM выводится при чтении по времени доски,
+		// выведенному из символа, и обнуляет опционную позицию конструкции.
+		// Traceability: openspec:sync/bybit-history#scenario-delisted-option-resolves-from-symbol
+		// Traceability: openspec:sync/bybit-history#scenario-delivered-board-does-not-degrade
+		var construction = await _constructionService.CreateAsync("Пут ETH делистинговый", 400m);
+		await AddOptionTradeAsync("exec-eth-buy", "Buy", "0.0001", "100", DelistedSymbol);
+		await _bindingService.BindAsync(construction.Id, "exec-eth-buy");
+
+		// Act: читаем позиции.
+		var readModel = new PositionReadModel(CreateOptions());
+		var result = await readModel.ListAsync();
+
+		// Assert: опционная позиция конструкции закрыта выведенной OTM-записью по
+		// нулевой цене в момент доски символа; деградации нет.
+		var position = result.Positions.Single();
+		Assert.That(position.ConstructionId, Is.EqualTo(construction.Id));
+		Assert.That(position.Symbol, Is.EqualTo(DelistedSymbol));
+		Assert.That(position.Residual, Is.EqualTo(0m));
+		Assert.That(position.IsOpen, Is.False);
+		var entry = result.ClosingEntries.Single();
+		Assert.That(entry.ConstructionId, Is.EqualTo(construction.Id));
+		Assert.That(entry.Symbol, Is.EqualTo(DelistedSymbol));
+		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.OtmExpiry));
+		Assert.That(entry.ClosedAt, Is.EqualTo(OptionDelivery));
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0001m));
+		Assert.That(entry.Price, Is.EqualTo(0m));
+		Assert.That(entry.SourceKey, Is.EqualTo($"{DelistedSymbol}|{OptionDeliveryMs}"));
 		Assert.That(result.Warnings, Is.Empty);
 	}
 
@@ -501,14 +584,14 @@ public class PositionReadModelTests
 		await db.SaveChangesAsync();
 	}
 
-	/// <summary>Добавляет сырую запись исполнения опциона BTC-29DEC23-45000-C.</summary>
-	private async Task AddOptionTradeAsync(string execId, string side, string execQty, string execPrice)
+	/// <summary>Добавляет сырую запись исполнения опциона; по умолчанию колл BTC из справочника.</summary>
+	private async Task AddOptionTradeAsync(string execId, string side, string execQty, string execPrice, string symbol = CallSymbol)
 	{
 		var execTimeMs = ExecMs(2023, 12, 28, 10, 0);
 		using var db = new JournalDbContext(CreateOptions());
 		db.RawExecutions.Add(Raw(
-			execId, "option", CallSymbol, execTimeMs,
-			ExecutionPayload(execId, CallSymbol, side, execPrice, execQty, "0", "USDC", execTimeMs)));
+			execId, "option", symbol, execTimeMs,
+			ExecutionPayload(execId, symbol, side, execPrice, execQty, "0", "USDC", execTimeMs)));
 		await db.SaveChangesAsync();
 	}
 
@@ -539,14 +622,14 @@ public class PositionReadModelTests
 		return $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"Trade","execTime":"{{execTimeMs}}","feeCurrency":{{feeCurrencyJson}},"isMaker":{{isMakerJson}}}""";
 	}
 
-	/// <summary>Delivery-запись колла в форме ответа delivery-record: числа биржа шлёт строками.</summary>
-	private static RawDelivery Delivery(string deliveryPrice, string strike, string fee, string deliveryRpl)
+	/// <summary>Delivery-запись опциона в форме ответа delivery-record: числа биржа шлёт строками.</summary>
+	private static RawDelivery Delivery(string deliveryPrice, string strike, string fee, string deliveryRpl, string symbol = CallSymbol)
 	{
 		var payload =
-			$$"""{"symbol":"{{CallSymbol}}","side":"Buy","deliveryTime":"{{OptionDeliveryMs}}","entryPrice":"100","deliveryPrice":"{{deliveryPrice}}","strike":"{{strike}}","fee":"{{fee}}","position":"0.0001","deliveryRpl":"{{deliveryRpl}}"}""";
+			$$"""{"symbol":"{{symbol}}","side":"Buy","deliveryTime":"{{OptionDeliveryMs}}","entryPrice":"100","deliveryPrice":"{{deliveryPrice}}","strike":"{{strike}}","fee":"{{fee}}","position":"0.0001","deliveryRpl":"{{deliveryRpl}}"}""";
 		return new RawDelivery
 		{
-			Symbol = CallSymbol,
+			Symbol = symbol,
 			DeliveryTimeMs = OptionDeliveryMs,
 			Category = "option",
 			PayloadJson = payload,
