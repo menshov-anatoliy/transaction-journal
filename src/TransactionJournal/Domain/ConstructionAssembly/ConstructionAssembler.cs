@@ -242,7 +242,7 @@ public sealed class ConstructionAssembler
 		}
 		else
 		{
-			target = FindAveragingTarget(run, window)
+			target = FindAveragingTarget(run, baseCoin, window)
 				?? OpenConstruction(run, baseCoin, window);
 		}
 
@@ -250,17 +250,38 @@ public sealed class ConstructionAssembler
 		{
 			AttachTrade(run, target, opening);
 		}
+
+		// Проверка закрытия выполняется после присоединения открытий окна: погашение
+		// обнуляет ногу раньше, чем окно рефинансирует конструкцию новыми ногами,
+		// поэтому промежуточный ноль внутри окна конструкцию не закрывает —
+		// закрывается состояние после всех сделок окна.
+		// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-roll-inherits-surviving-owner
+		var windowEndTimeMs = window[^1].Execution.ExecTimeMs;
+		CloseConstructionIfEmpty(run, target, windowEndTimeMs);
+		foreach (var owner in owners)
+		{
+			CloseConstructionIfEmpty(run, owner, windowEndTimeMs);
+		}
 	}
 
 	/// <summary>
 	/// Подбирает живую конструкцию для усреднения: единственная живая конструкция
-	/// актива, день окна не совпадает с днём экспирации самой поздней доски её ног,
-	/// окно одноногое либо каждая его нога повторяет пару «страйк + доска» уже
-	/// имеющейся ноги; иначе окно открывает новую конструкцию.
+	/// того же актива, день окна не совпадает с днём экспирации самой поздней доски
+	/// её ног, окно одноногое (один символ, сколько бы исполнений он ни содержал)
+	/// либо каждая нога окна повторяет пару «страйк + доска» уже имеющейся ноги;
+	/// иначе окно открывает новую конструкцию. Стреддл-окно из колла и пута одного
+	/// нового страйка — двухногое: оно открывает новую конструкцию, а не усредняется.
 	/// </summary>
-	private static ConstructionState? FindAveragingTarget(AssemblyRun run, IReadOnlyList<WindowItem> window)
+	// Усреднение ищется только среди конструкций своего базового актива: чужая
+	// живая конструкция другого актива не может принимать окно — иначе окна
+	// разных активов сливаются в одну конструкцию.
+	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
+	private static ConstructionState? FindAveragingTarget(AssemblyRun run, string baseCoin, IReadOnlyList<WindowItem> window)
 	{
-		var alive = run.Constructions.Where(construction => construction.IsAlive).ToList();
+		var alive = run.Constructions
+			.Where(construction => construction.IsAlive
+				&& string.Equals(construction.BaseCoin, baseCoin, StringComparison.Ordinal))
+			.ToList();
 		if (alive.Count != 1)
 		{
 			return null;
@@ -282,11 +303,26 @@ public sealed class ConstructionAssembler
 		var existingPairs = target.Legs
 			.Select(leg => (leg.Parts.Strike, leg.Parts.ExpiryDate.Date))
 			.ToHashSet();
+
+		// Одноногоесть считается по числу разных символов ноги, а не по числу разных
+		// пар «страйк + доска»: окно из колла и пута одного страйка — двухногое даже
+		// при совпадении пары, и без совпадающих пар у конструкции оно открывает
+		// новую конструкцию, а не усредняется.
+		var isSingleLegWindow = window
+			.Select(item => item.Symbol)
+			.Distinct(StringComparer.Ordinal)
+			.Take(2)
+			.Count() == 1;
+		if (isSingleLegWindow)
+		{
+			return target;
+		}
+
 		var windowPairs = window
 			.Select(item => (item.Parts.Strike, item.Parts.ExpiryDate.Date))
 			.Distinct()
 			.ToList();
-		if (windowPairs.Count == 1 || windowPairs.All(pair => existingPairs.Contains(pair)))
+		if (windowPairs.All(pair => existingPairs.Contains(pair)))
 		{
 			return target;
 		}
@@ -318,6 +354,8 @@ public sealed class ConstructionAssembler
 	/// <summary>
 	/// Погашает закрывающее количество у владельца ноги. Погашение не переводит
 	/// остаток через ноль: избыточная часть сверх остатка владельца баланс не меняет.
+	/// Закрытие владельца здесь не проверяется — ноль внутри окна ещё не финален,
+	/// окно может рефинансировать конструкцию буферизованными открытиями.
 	/// </summary>
 	private static void RepayAtOwner(AssemblyRun run, ConstructionState owner, WindowItem item)
 	{
@@ -330,7 +368,6 @@ public sealed class ConstructionAssembler
 
 		leg.Quantity = updated;
 		run.Bindings[item.Execution.ExecId] = owner.Id;
-		CloseConstructionIfEmpty(run, owner, item.Execution.ExecTimeMs);
 	}
 
 	/// <summary>Присоединяет открывающую сделку к конструкции, создавая ногу при первом появлении символа.</summary>

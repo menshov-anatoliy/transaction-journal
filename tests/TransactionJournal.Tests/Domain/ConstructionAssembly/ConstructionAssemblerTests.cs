@@ -323,7 +323,7 @@ public class ConstructionAssemblerTests
 		var straddle = plan.Constructions[0];
 		var chain = plan.Constructions[1];
 		Assert.That(straddle.Name, Is.EqualTo("ETH стреддл 25SEP26 1600"));
-		Assert.That(straddle.ClosedAtMs, Is.EqualTo(Ms(2026, 7, 28, 10, 1)), "Стреддл закрыт в момент обнуления последней ноги");
+		Assert.That(straddle.ClosedAtMs, Is.EqualTo(Ms(2026, 7, 28, 10, 4)), "Стреддл закрыт по итогам окна, когда все его ноги погашены");
 		Assert.That(straddle.Legs.All(leg => leg.Quantity == 0m), Is.True, "Обе ноги стреддла погашены");
 
 		// Assert: новые ноги окна присоединились к пережившей цепочке, погашение 1900C уменьшило её остаток.
@@ -348,9 +348,97 @@ public class ConstructionAssemblerTests
 		Assert.That(plan.InboxCount, Is.EqualTo(0));
 	}
 
+	[TestMethod]
+	[Description("Погашение ноги до нуля внутри окна не закрывает конструкцию, которую окно рефинансирует")]
+	// Промежуточный ноль внутри окна — не финальное состояние: закрытие
+	// проверяется после присоединения всех открытий окна.
+	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-roll-inherits-surviving-owner
+	public void TryIfWindowRefinancingKeepsConstructionAlive()
+	{
+		// Arrange: цепочка с коллом 5JUN и ролл-окно: продажа 5JUN гасит её ногу,
+		// покупка 25DEC в том же окне рефинансирует конструкцию.
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall2100Jun, Ms(2026, 5, 16, 9, 0), 1m),
+			Option("e2", EthCall2100Dec, Ms(2026, 5, 24, 14, 0), 1m),
+			Option("e3", EthCall2100Jun, Ms(2026, 5, 24, 14, 5), -1m),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>());
+
+		// Assert: конструкция осталась одна и живая, нога 5JUN погашена, 25DEC открыт.
+		Assert.That(plan.Constructions, Has.Count.EqualTo(1));
+		var chain = plan.Constructions[0];
+		Assert.That(chain.ClosedAtMs, Is.Null, "Окно рефинансировало конструкцию — она не закрыта");
+		Assert.That(chain.Legs.Select(leg => (leg.Symbol, leg.Quantity)), Is.EqualTo(new[]
+		{
+			(EthCall2100Jun, 0m),
+			(EthCall2100Dec, 1m),
+		}));
+		Assert.That(plan.Bindings["e3"], Is.EqualTo(chain.Id));
+		Assert.That(plan.InboxCount, Is.EqualTo(0));
+	}
+
 	#endregion
 
 	#region Усреднение
+
+	[TestMethod]
+	[Description("Докупка усредняется в живую конструкцию своего актива, чужая живая конструкция ей не мешает")]
+	// Усреднение ищется среди живых конструкций того же базового актива: живая
+	// конструкция другого актива не блокирует усреднение и не принимает чужие окна.
+	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-single-leg-adds-to-alive-construction
+	public void TryIfAveragingIgnoresAliveConstructionsOfOtherAssets()
+	{
+		// Arrange: живые конструкции BTC и ETH, докупка ETH-ноги.
+		var executions = new List<AssemblyExecution>
+		{
+			Option("b1", "BTC-25DEC26-85000-C-USDT", Ms(2026, 2, 26, 20, 0), 1m),
+			Option("b2", "BTC-25DEC26-120000-C-USDT", Ms(2026, 2, 26, 20, 5), -1m),
+			Option("e1", EthCall2100Jun, Ms(2026, 5, 16, 9, 0), 1m),
+			Option("e2", EthCall2100Jun, Ms(2026, 5, 18, 9, 0), 1m),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>());
+
+		// Assert: конструкций две, докупка присоединилась к конструкции ETH.
+		Assert.That(plan.Constructions, Has.Count.EqualTo(2));
+		var eth = plan.Constructions.Single(construction => construction.BaseCoin == "ETH");
+		Assert.That(eth.Legs.Single().Quantity, Is.EqualTo(2m), "Докупка усреднилась в живую конструкцию ETH");
+		Assert.That(plan.Bindings["e2"], Is.EqualTo(eth.Id), "Докупка привязана к конструкции ETH, а не BTC");
+	}
+
+	[TestMethod]
+	[Description("Стреддл-окно на новом страйке усреднением не поглощается, хотя пара страйк+доска одна")]
+	// Одноногоесть считается по числу символов ноги: окно из колла и пута одного
+	// нового страйка — двухногое, и без совпадающих пар у живой конструкции оно
+	// открывает новую конструкцию.
+	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-new-strike-window-opens-new-construction
+	public void TryIfSameStrikeStraddleWindowOpensNewConstruction()
+	{
+		// Arrange: живая цепочка с коллом 2100 и стреддл-окно 1600 (колл + пут).
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall2100Jun, Ms(2026, 5, 24, 14, 0), 1m),
+			Option("e2", EthCall1600, Ms(2026, 6, 5, 17, 45), 1m),
+			Option("e3", EthPut1600, Ms(2026, 6, 5, 17, 50), 1m),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>());
+
+		// Assert: стреддл открылся отдельной конструкцией, цепочка не изменилась.
+		Assert.That(plan.Constructions, Has.Count.EqualTo(2));
+		var chain = plan.Constructions[0];
+		var straddle = plan.Constructions[1];
+		Assert.That(chain.Legs.Single().Quantity, Is.EqualTo(1m), "Цепочка не получила ног стреддл-окна");
+		Assert.That(straddle.Name, Is.EqualTo("ETH стреддл 25SEP26 1600"));
+		Assert.That(straddle.Legs, Has.Count.EqualTo(2));
+		Assert.That(plan.Bindings["e2"], Is.EqualTo(straddle.Id));
+		Assert.That(plan.Bindings["e3"], Is.EqualTo(straddle.Id));
+	}
 
 	[TestMethod]
 	[Description("Одиночная докупка 05.02 при единственной живой конструкции усредняется в неё")]

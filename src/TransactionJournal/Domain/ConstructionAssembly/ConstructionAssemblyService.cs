@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using TransactionJournal.Bybit;
 using TransactionJournal.Data;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
@@ -92,39 +94,121 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 	#region План сборки из снимка сырья
 
 	/// <summary>
-	/// Строит план сборки из снимка сырых записей: сделки выводятся материализатором
-	/// (только записи биржевого типа Trade, знаковое количество по стороне), deliveries —
-	/// из сырых delivery-записей и выведенных OTM-закрывающих. Повторный прогон над
-	/// тем же сырьём даёт тот же план.
+	/// Строит план сборки из снимка сырых записей, не трогая базу: торговые записи
+	/// выводятся из сырья напрямую (только биржевой тип Trade, знаковое количество
+	/// по стороне), deliveries — из сырых delivery-записей и выведенных OTM-закрывающих.
+	/// Справочник инструментов входом сборки не фильтруется: истёкшие опционы биржа
+	/// отдаёт отказом 110023 и их спецификаций в справочнике нет, но сделки по ним
+	/// обязаны попадать в сборку — атрибуты ноги разбираются из символа. Повторный
+	/// прогон над тем же сырьём даёт тот же план. Публичен для контрольных сверок:
+	/// диагностический тест сверяет план с контрольными показателями истории.
+	// Traceability: change:add-construction-auto-assembly/design#d1
 	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-rebuild-reproduces-result
 	/// </summary>
-	private AssemblyPlan BuildPlan(JournalRawSnapshot snapshot)
+	public AssemblyPlan BuildPlan(JournalRawSnapshot snapshot)
 	{
-		var catalog = new InstrumentCatalog(snapshot.Instruments);
-		var tradeMaterializer = new TradeMaterializer(new InstrumentResolver(catalog));
-		var trades = tradeMaterializer.Materialize(snapshot.Executions).Trades;
-
-		var executions = trades
-			.Select(trade => new AssemblyExecution
-			{
-				ExecId = trade.ExecId,
-				Category = trade.Category,
-				Symbol = trade.Symbol,
-				ExecTimeMs = trade.ExecutedAt.ToUnixTimeMilliseconds(),
-				SignedQuantity = trade.Quantity,
-			})
-			.ToList();
-		var deliveries = BuildDeliveries(snapshot, catalog, executions, _timeProvider.GetUtcNow());
+		var executions = BuildExecutions(snapshot.Executions);
+		var deliveries = BuildDeliveries(snapshot, new InstrumentCatalog(snapshot.Instruments), executions, _timeProvider.GetUtcNow());
 
 		return new ConstructionAssembler().Assemble(executions, deliveries);
+	}
+
+	/// <summary>Биржевой тип исполнения, из которого выводится сделка.</summary>
+	private const string TradeExecType = "Trade";
+
+	/// <summary>Сторона исполнения покупки — знак количества положительный.</summary>
+	private const string BuySide = "Buy";
+
+	/// <summary>Сторона исполнения продажи — знак количества отрицательный.</summary>
+	private const string SellSide = "Sell";
+
+	/// <summary>
+	/// Выводит вход сборки из сырых записей: сделкой становится только исполнение
+	/// биржевого типа Trade, знаковое количество берётся по стороне. Фандинг и
+	/// прочие не-Trade записи сделками не являются и в сборку не попадают —
+	/// так же, как и в материализаторе «Входящих». Повреждённый payload и
+	/// неизвестная сторона остаются жёсткими ошибками.
+	// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+	/// </summary>
+	private static List<AssemblyExecution> BuildExecutions(IReadOnlyList<RawExecution> rawExecutions)
+	{
+		var executions = new List<AssemblyExecution>(rawExecutions.Count);
+		foreach (var rawExecution in rawExecutions)
+		{
+			var execution = ParseExecutionPayload(rawExecution);
+
+			if (string.Equals(execution.ExecType, TradeExecType, StringComparison.OrdinalIgnoreCase) == false)
+			{
+				continue;
+			}
+
+			// Идентичность execId в строке хранилища и payload — условие идемпотентности:
+			// расхождение означает повреждение сырья, как и в материализаторе.
+			if (string.Equals(execution.ExecId, rawExecution.ExecId, StringComparison.Ordinal) == false)
+			{
+				throw new TradeMaterializationException(
+					rawExecution.ExecId,
+					$"Идентификатор исполнения полезной нагрузки ({execution.ExecId}) расходится со строкой хранилища ({rawExecution.ExecId}).");
+			}
+
+			var sideSign = execution.Side switch
+			{
+				BuySide => 1m,
+				SellSide => -1m,
+				_ => throw new TradeMaterializationException(
+					rawExecution.ExecId,
+					$"Сторона исполнения «{execution.Side}» не распознана: ожидается Buy или Sell."),
+			};
+
+			if (execution.ExecQty is null)
+			{
+				throw new TradeMaterializationException(
+					rawExecution.ExecId,
+					$"Запись исполнения {rawExecution.ExecId} не содержит исполненное количество (execQty).");
+			}
+
+			executions.Add(new AssemblyExecution
+			{
+				ExecId = rawExecution.ExecId,
+				Category = rawExecution.Category,
+				Symbol = execution.Symbol,
+				ExecTimeMs = execution.ExecTimeMs,
+				SignedQuantity = sideSign * execution.ExecQty.Value,
+			});
+		}
+
+		return executions;
+	}
+
+	/// <summary>Разбирает JSON сырой записи в типизированную запись исполнения биржи.</summary>
+	/// <exception cref="TradeMaterializationException">JSON некорректен или пуст.</exception>
+	private static BybitExecution ParseExecutionPayload(RawExecution rawExecution)
+	{
+		try
+		{
+			return JsonSerializer.Deserialize<BybitExecution>(rawExecution.PayloadJson, BybitJson.Options)
+				?? throw new TradeMaterializationException(
+					rawExecution.ExecId,
+					$"Полезная нагрузка записи исполнения {rawExecution.ExecId} оказалась пустой после разбора JSON.");
+		}
+		catch (JsonException exception)
+		{
+			throw new TradeMaterializationException(
+				rawExecution.ExecId,
+				$"Полезная нагрузка записи исполнения {rawExecution.ExecId} содержит некорректный JSON: {exception.Message}",
+				exception);
+		}
 	}
 
 	/// <summary>
 	/// Собирает закрывающие события экспирации: реальные delivery-записи биржи плюс
 	/// выведенные OTM-закрывающие — опционные символы, по которым были сделки, без
-	/// биржевой записи, чьё время доставки из справочника уже наступило. OTM-событие
-	/// выводится только по торговым символам: события по неторговым инструментам
-	/// ничего не гасят, а лишние разрывы окон нарушили бы кластеризацию.
+	/// биржевой записи, чьё время доставки уже наступило. Время доставки берётся из
+	/// справочника, а для истёкших инструментов, которых в справочнике нет (биржа
+	/// отвечает отказом 110023), — из символа: доска кодирует только дату, а биржа
+	/// доставляет опционы в 08:00 UTC этой даты. OTM-событие выводится только по
+	/// торговым символам: события по неторговым инструментам ничего не гасят, а
+	/// лишние разрывы окон нарушили бы кластеризацию.
 	// Traceability: adr:docs/adr/0002-option-expiry-closing-entries.md#option-expiry-closing-entries
 	/// </summary>
 	private static List<AssemblyDelivery> BuildDeliveries(
@@ -153,24 +237,42 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 			.OrderBy(symbol => symbol, StringComparer.Ordinal))
 		{
 			if (deliveredSymbols.Contains(symbol)
-				|| OptionSymbolParser.TryParse(symbol, out _) == false
-				|| catalog.TryGet(symbol, out var entry) == false
-				|| entry.DeliveryTime is null)
+				|| OptionSymbolParser.TryParse(symbol, out _) == false)
 			{
 				continue;
 			}
 
-			if (entry.DeliveryTime.Value <= asOf)
+			if (TryGetDeliveryTime(catalog, symbol) is not { } deliveryTime
+				|| deliveryTime > asOf)
 			{
-				deliveries.Add(new AssemblyDelivery
-				{
-					Symbol = symbol,
-					DeliveryTimeMs = entry.DeliveryTime.Value.ToUnixTimeMilliseconds(),
-				});
+				continue;
 			}
+
+			deliveries.Add(new AssemblyDelivery
+			{
+				Symbol = symbol,
+				DeliveryTimeMs = deliveryTime.ToUnixTimeMilliseconds(),
+			});
 		}
 
 		return deliveries;
+	}
+
+	/// <summary>
+	/// Определяет время доставки опционного символа: спецификация справочника точна,
+	/// а для отсутствующих в нём истёкших инструментов время выводится из доски
+	/// символа как 08:00 UTC даты экспирации.
+	/// </summary>
+	private static DateTimeOffset? TryGetDeliveryTime(InstrumentCatalog catalog, string symbol)
+	{
+		if (catalog.TryGet(symbol, out var entry) && entry.DeliveryTime is not null)
+		{
+			return entry.DeliveryTime;
+		}
+
+		return OptionSymbolParser.TryParse(symbol, out var parts)
+			? new DateTimeOffset(parts!.ExpiryDate, TimeSpan.Zero).AddHours(8)
+			: null;
 	}
 
 	#endregion

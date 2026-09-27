@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <Content Include="Bybit\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Domain\ConstructionAssembly\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -249,6 +249,36 @@ public class ConstructionAssemblyServiceTests
 	}
 
 	[TestMethod]
+	[Description("Фандинг и прочие не-Trade записи сырья не становятся сделками сборки")]
+	// Сделкой сборки становится только исполнение биржевого типа Trade: фандинг
+	// остаётся в сырье, но в план и привязки не попадает.
+	// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+	public async Task TryIfFundingExecutionDoesNotEnterAssemblyPlan()
+	{
+		// Arrange: стандартное сырьё плюс фандинг-запись linear-инструмента.
+		SeedRawStorage();
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawExecutions.Add(Raw("f1", "linear", "ETHUSDT", Ms(2026, 7, 13, 0, 0),
+				"""{"symbol":"ETHUSDT","orderId":"","orderLinkId":"","side":"","execFee":"-0.5","execId":"f1","execPrice":"0","execQty":"0.5","execType":"Funding","execTime":"7000000000000","feeCurrency":"USDT","isMaker":false}"""));
+			db.SaveChanges();
+		}
+
+		var service = CreateService();
+
+		// Act: выполняем пересбор.
+		var result = await service.RebuildAsync();
+
+		// Assert: счётчики плана не изменились, фандинг не привязан.
+		Assert.That(result.BoundCount, Is.EqualTo(5), "Фандинг не увеличил число привязок");
+		Assert.That(result.TradesInInbox, Is.EqualTo(1), "Во «Входящих» осталась только сделка вне периодов");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.TradeUserdata.Any(userdata => userdata.ExecId == "f1"), Is.False, "Фандинг не привязан к конструкции");
+		}
+	}
+
+	[TestMethod]
 	[Description("Пустое хранилище даёт нулевые счётчики без ошибок")]
 	public async Task TryIfEmptyStorageGivesZeroCounters()
 	{

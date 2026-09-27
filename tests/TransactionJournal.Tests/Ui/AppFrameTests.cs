@@ -12,6 +12,7 @@ using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Sync;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
 using InboxPage = TransactionJournal.Components.Pages.Inbox;
@@ -63,6 +64,11 @@ public class AppFrameTests
 		// «Настройки» выполняют переразбор через собственную команду: каркасным
 		// проверкам достаточно заглушки без запусков.
 		_context.Services.AddSingleton(new Mock<IJournalReparseService>().Object);
+
+		// «Настройки» выполняют сборку конструкций через собственную команду:
+		// каркасным проверкам достаточно заглушки без запусков.
+		// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#requirement-settings-assembly-action
+		_context.Services.AddSingleton(new Mock<IConstructionAssemblyService>().Object);
 
 		// Каркас подписывается на сигнал изменений журнала после мутаций экранов:
 		// каркасным проверкам достаточно молчащего сигнала без подписчиков.
