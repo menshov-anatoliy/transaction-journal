@@ -9,14 +9,21 @@ namespace TransactionJournal.Sync;
 /// времени, поэтому за целиком известной страницей лежат только более старые записи —
 /// их можно не запрашивать. Ранняя остановка — правило инкрементальной догрузки;
 /// backfill отключает её опцией, чтобы возобновление после обрыва не теряло хвост окна.
+/// Фандинг-записи отсекаются политикой загрузки при сборе страницы и не возвращаются
+/// в NewExecutions; прочие типы, включая неизвестные, загружаются как раньше.
 /// Traceability: change:add-bybit-sync/design#d4
 /// Traceability: openspec:sync/bybit-history#requirement-backfill-full-history
 /// Traceability: openspec:sync/bybit-history#scenario-window-overlap-no-duplicates
+/// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+/// Traceability: change:drop-funding-executions/design#d1
 /// </summary>
 public sealed class ExecutionWindowPass
 {
 	/// <summary>Максимальная длительность окна истории исполнения: 7 дней в мс.</summary>
 	public const long MaxWindowMs = 604_800_000L;
+
+	/// <summary>Биржевой тип исполнения фандинга, отсекаемый политикой загрузки окна.</summary>
+	private const string FundingExecType = "Funding";
 
 	private readonly IBybitHistoryGateway _gateway;
 	private readonly IExecutionKnownIdProbe _knownIdProbe;
@@ -86,20 +93,35 @@ public sealed class ExecutionWindowPass
 				// окно от окна только с известными записями и ищет самую раннюю запись для границы backfill.
 				allExecutions.AddRange(page.List);
 
-				// Известность записей спрашиваем у хранилища пачкой — по одной странице за раз.
-				var pageExecIds = page.List.Select(execution => execution.ExecId).ToArray();
-				var knownExecIds = await _knownIdProbe.FindKnownAsync(pageExecIds, cancellationToken).ConfigureAwait(false);
-				var freshOnPage = page.List
-					.Where(execution => knownExecIds.Contains(execution.ExecId) == false)
+				// Фандинг отсекается политикой загрузки при сборе страницы, до проверки
+				// известных execId: он не попадает в запрос известности, в NewExecutions
+				// и далее в писателя сырья. Прочие типы, включая неизвестные журналу,
+				// загружаются в сырье как раньше — сравнение типа без учёта регистра.
+				// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+				// Traceability: change:drop-funding-executions/design#d2
+				var loadableOnPage = page.List
+					.Where(execution => IsFundingExecType(execution.ExecType) == false)
 					.ToList();
-				newExecutions.AddRange(freshOnPage);
 
-				// Целиком известная страница при сортировке по убыванию означает, что глубже
-				// новых записей нет, — проход останавливается, не запрашивая следующие страницы.
-				if (options.EarlyStopOnKnownPage && freshOnPage.Count == 0)
+				// Известность записей спрашиваем у хранилища пачкой — по одной странице за раз.
+				if (loadableOnPage.Count > 0)
 				{
-					earlyStopped = true;
-					break;
+					var pageExecIds = loadableOnPage.Select(execution => execution.ExecId).ToArray();
+					var knownExecIds = await _knownIdProbe.FindKnownAsync(pageExecIds, cancellationToken).ConfigureAwait(false);
+					var freshOnPage = loadableOnPage
+						.Where(execution => knownExecIds.Contains(execution.ExecId) == false)
+						.ToList();
+					newExecutions.AddRange(freshOnPage);
+
+					// Целиком известная страница при сортировке по убыванию означает, что глубже
+					// новых записей нет, — проход останавливается, не запрашивая следующие страницы.
+					// Страница целиком из фандинга известной не считается: её записи отфильтрованы
+					// политикой загрузки, а не журналом, — за ней могут лежать новые сделки.
+					if (options.EarlyStopOnKnownPage && freshOnPage.Count == 0)
+					{
+						earlyStopped = true;
+						break;
+					}
 				}
 			}
 
@@ -122,6 +144,10 @@ public sealed class ExecutionWindowPass
 	}
 
 	#region Вспомогательные методы
+
+	/// <summary>Сравнивает тип исполнения с фандингом без учёта регистра.</summary>
+	private static bool IsFundingExecType(string execType) =>
+		string.Equals(execType, FundingExecType, StringComparison.OrdinalIgnoreCase);
 
 	private static void ValidateWindow(ExecutionWindow window)
 	{

@@ -11,6 +11,8 @@ namespace TransactionJournal.Tests.Sync;
 /// Проверки прохода 7-дневного окна истории исполнения на фиктивном шлюзе
 /// с многостраничными ответами: курсорная пагинация до исчерпания, ранняя
 /// остановка на целиком известной странице и выключение остановки для backfill.
+/// Политика загрузки: фандинг отсекается при сборе страницы, прочие типы
+/// загружаются, страница целиком из фандинга известной не считается.
 /// </summary>
 [TestClass]
 public class ExecutionWindowPassTests
@@ -141,6 +143,144 @@ public class ExecutionWindowPassTests
 		Assert.That(result.PagesFetched, Is.EqualTo(2));
 		Assert.That(result.EarlyStopped, Is.False);
 		Assert.That(result.Exhausted, Is.True);
+	}
+
+	[TestMethod]
+	[Description("Фандинг-записи отсекаются при сборе страницы и не попадают в NewExecutions")]
+	public async Task TryIfFundingExecutionsAreDroppedFromNewExecutions()
+	{
+		// Arrange: страница с Trade-, Funding- и незнакомым журналу типом исполнения;
+		// фандинг отсекается политикой загрузки, прочие типы загружаются как раньше.
+		// Требование: фандинг не загружается синхронизацией, остальные не-Trade типы хранятся в сырье.
+		// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+		// Traceability: change:drop-funding-executions/design#d2
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List =
+			[
+				Execution("trade-1", WindowEndMs - 1, "Trade"),
+				Execution("funding-1", WindowEndMs - 2, "Funding"),
+				Execution("settle-1", WindowEndMs - 3, "Settle"),
+			],
+		});
+
+		// Act
+		var result = await _pass.RunAsync(Window());
+
+		// Assert: в новых записях только Trade и прочий тип; фандинга нет.
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId),
+			Is.EqualTo(new[] { "trade-1", "settle-1" }));
+
+		// Assert: фандинг отсечён до проверки известных execId и не доходит до хранилища.
+		Assert.That(_knownIdProbe.AskedBatches, Has.Count.EqualTo(1));
+		Assert.That(_knownIdProbe.AskedBatches[0], Is.EqualTo(new[] { "trade-1", "settle-1" }));
+	}
+
+	[TestMethod]
+	[DataRow("Funding")]
+	[DataRow("funding")]
+	[DataRow("FUNDING")]
+	[Description("Фандинг отсекается без учёта регистра типа исполнения")]
+	public async Task TryIfFundingExecTypeIsFilteredCaseInsensitive(string execType)
+	{
+		// Arrange: правило фильтра повторяет конвенцию сравнения Trade в материализаторе —
+		// точное значение Funding без учёта регистра; пустой и прочие типы не трогаются.
+		// Traceability: change:drop-funding-executions/design#d2
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List =
+			[
+				Execution("funding-1", WindowEndMs - 1, execType),
+				Execution("other-1", WindowEndMs - 2, "Settle"),
+			],
+		});
+
+		// Act
+		var result = await _pass.RunAsync(Window());
+
+		// Assert: запись с любым регистром Funding отфильтрована, прочий тип загружен.
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "other-1" }));
+	}
+
+	[TestMethod]
+	[Description("Страница целиком из фандинга не считается известной и продолжает перебор")]
+	public async Task TryIfAllFundingPageDoesNotStopEarly()
+	{
+		// Arrange: первая страница целиком из фандинга, вторая — с новой Trade-записью.
+		// Фандинг отфильтрован политикой загрузки, а не журналом: за такой страницей могут
+		// лежать новые сделки, поэтому ранняя остановка не срабатывает и перебор продолжается.
+		// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+		// Traceability: change:drop-funding-executions/design#d1
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List =
+			[
+				Execution("funding-1", WindowEndMs - 1, "Funding"),
+				Execution("funding-2", WindowEndMs - 2, "Funding"),
+			],
+			NextPageCursor = "cursor-2",
+		});
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List = [Execution("trade-1", WindowStartMs + 1, "Trade")],
+		});
+
+		// Act
+		var result = await _pass.RunAsync(Window());
+
+		// Assert: проход запросил обе страницы, перенося курсор; известность фандинга не спрашивалась.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
+		Assert.That(_gateway.Queries[1].Cursor, Is.EqualTo("cursor-2"));
+		Assert.That(_knownIdProbe.AskedBatches, Has.Count.EqualTo(1));
+
+		// Assert: окно долистано до исчерпания без ранней остановки, Trade-запись загружена.
+		Assert.That(result.EarlyStopped, Is.False);
+		Assert.That(result.Exhausted, Is.True);
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "trade-1" }));
+	}
+
+	[TestMethod]
+	[Description("Фандинг на предыдущих страницах не мешает ранней остановке на известной странице")]
+	public async Task TryIfFundingOnEarlierPageDoesNotBlockEarlyStop()
+	{
+		// Arrange: первая страница смешанная — новая Trade-, известная Trade- и фандинг-записи,
+		// вторая целиком из известных Trade-записей. Фильтр фандинга не меняет правило:
+		// за целиком известной страницей новых загружаемых записей нет — остановка ранняя.
+		// Traceability: openspec:sync/bybit-history#scenario-window-overlap-no-duplicates
+		// Traceability: change:drop-funding-executions/design#d1
+		_knownIdProbe.Know("known-1", "known-2", "known-3");
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List =
+			[
+				Execution("fresh-1", WindowEndMs - 1, "Trade"),
+				Execution("known-1", WindowEndMs - 2, "Trade"),
+				Execution("funding-1", WindowEndMs - 3, "Funding"),
+			],
+			NextPageCursor = "cursor-2",
+		});
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List =
+			[
+				Execution("known-2", WindowStartMs + 2, "Trade"),
+				Execution("known-3", WindowStartMs + 1, "Trade"),
+			],
+			NextPageCursor = "cursor-3",
+		});
+
+		// Act
+		var result = await _pass.RunAsync(Window());
+
+		// Assert: за целиком известной страницей проход не запрашивает следующую.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(2));
+		Assert.That(_gateway.Queries[1].Cursor, Is.EqualTo("cursor-2"));
+
+		// Assert: в результате только новая Trade-запись смешанной страницы; остановка — ранняя.
+		Assert.That(result.NewExecutions.Select(execution => execution.ExecId), Is.EqualTo(new[] { "fresh-1" }));
+		Assert.That(result.PagesFetched, Is.EqualTo(2));
+		Assert.That(result.EarlyStopped, Is.True);
+		Assert.That(result.Exhausted, Is.False);
 	}
 
 	[TestMethod]
@@ -284,12 +424,13 @@ public class ExecutionWindowPassTests
 		EndMs = WindowEndMs,
 	};
 
-	private static BybitExecution Execution(string execId, long execTimeMs) => new()
+	private static BybitExecution Execution(string execId, long execTimeMs, string? execType = null) => new()
 	{
 		Symbol = "BTCUSDT",
 		ExecId = execId,
 		Side = "Buy",
 		ExecTimeMs = execTimeMs,
+		ExecType = execType ?? string.Empty,
 	};
 
 	#endregion
