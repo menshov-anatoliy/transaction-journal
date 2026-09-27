@@ -1,3 +1,4 @@
+using TransactionJournal.Data;
 using TransactionJournal.Materialization;
 
 namespace TransactionJournal.Domain.ConstructionAssembly;
@@ -11,12 +12,19 @@ namespace TransactionJournal.Domain.ConstructionAssembly;
 /// присоединяются к пережившей окно конструкции, иначе — к открытой раньше
 /// среди владельцев. Окно без закрывающих сделок усредняется в единственную
 /// живую конструкцию актива (вне дня экспирации, одноногое либо с повторением
-/// пар «страйк + доска»), иначе открывает новую конструкцию. Конструкция
-/// закрывается, когда нулевой становится каждая её нога. Сделки робота
-/// привязываются по базовому активу и периоду жизни конструкции. Прогон
-/// детерминирован: повторная сборка над тем же сырьём даёт тот же план.
+/// пар «страйк + доска»), а при нескольких живых — одноногое окно к
+/// единственному живому кандидату с ногой той же доски; иначе открывает новую
+/// конструкцию. Конструкция закрывается, когда нулевой становится каждая её
+/// нога, и снова открывается при появлении ненулевой; имя пересчитывается
+/// из живых ног, пока не зафиксировано вручную. Существующие конструкции
+/// могут передаваться как начальное состояние (seed) — контекст остатков
+/// инкрементной сборки. Сделки робота привязываются по базовому активу
+/// и периоду жизни конструкции. Прогон детерминирован: повторная сборка над
+/// тем же сырьём даёт тот же план.
 // Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
 /// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-robot-trade-binding
+/// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
+/// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-status-follows-option-cover
 /// Traceability: change:add-construction-auto-assembly/design#d2
 /// </summary>
 public sealed class ConstructionAssembler
@@ -39,18 +47,30 @@ public sealed class ConstructionAssembler
 	/// Строит план сборки из снимка исполнений и закрывающих событий экспирации.
 	/// Опционные исполнения группируются в конструкции, фьючерсные привязываются
 	/// по активу и периоду жизни; всё, что не привязалось, остаётся во «Входящих».
+	/// Существующие конструкции из seed'а участвуют как контекст остатков;
+	/// пустой seed даёт поведение полного пересбора.
 	/// </summary>
 	/// <param name="executions">Исполнения сделок (торговые записи, без фандинга).</param>
 	/// <param name="deliveries">Закрывающие события экспирации: delivery-записи биржи и выведенные OTM-закрывающие.</param>
+	/// <param name="seed">Существующие конструкции как начальное состояние; null или пусто — полный пересбор.</param>
 	/// <exception cref="ArgumentNullException">Снимок не задан.</exception>
 	public AssemblyPlan Assemble(
 		IReadOnlyCollection<AssemblyExecution> executions,
-		IReadOnlyCollection<AssemblyDelivery> deliveries)
+		IReadOnlyCollection<AssemblyDelivery> deliveries,
+		IReadOnlyCollection<AssemblySeedConstruction>? seed = null)
 	{
 		ArgumentNullException.ThrowIfNull(executions);
 		ArgumentNullException.ThrowIfNull(deliveries);
 
-		var run = new AssemblyRun();
+		// Порядок seed'а фиксируется правилом (OpenedAtMs, Id) — детерминирован
+		// независимо от порядка выдачи хранилища.
+		// Traceability: change:refine-construction-assembly/design#d2
+		var orderedSeed = (seed ?? [])
+			.OrderBy(construction => construction.OpenedAtMs)
+			.ThenBy(construction => construction.Id)
+			.ToList();
+		var run = new AssemblyRun(orderedSeed);
+
 
 		// Прогон детерминирован: записи упорядочиваются по (ExecTimeMs, ExecId) до любых
 		// правил, повторный execId схлопывается на первой встрече — состав входа не
@@ -108,6 +128,25 @@ public sealed class ConstructionAssembler
 			ProcessAsset(run, assetPair.Key, assetPair.Value, deliveries);
 		}
 
+		// Активы существующих конструкций без исполнений в этом прогоне всё равно
+		// получают полный delivery-таймлайн: экспирации, наступившие между прогонами,
+		// гасят ноги владельцев и закрывают конструкции.
+		// Traceability: change:refine-construction-assembly/design#d3
+		var seededAssets = orderedSeed
+			.SelectMany(construction => construction.Legs)
+			.Select(leg => OptionSymbolParser.TryParse(leg.Symbol, out var parts) ? parts!.BaseCoin : null)
+			.Where(coin => coin is not null)
+			.Select(coin => coin!)
+			.Distinct(StringComparer.Ordinal)
+			.OrderBy(coin => coin, StringComparer.Ordinal);
+		foreach (var asset in seededAssets)
+		{
+			if (executionsByAsset.ContainsKey(asset) == false)
+			{
+				ProcessAsset(run, asset, [], deliveries);
+			}
+		}
+
 		BindLinearExecutions(run, linearExecutions);
 
 		return new AssemblyPlan
@@ -118,6 +157,9 @@ public sealed class ConstructionAssembler
 				{
 					Id = construction.Id,
 					Name = construction.Name,
+					NameIsManual = construction.NameIsManual,
+					Status = construction.Status,
+					IsSeeded = construction.IsSeeded,
 					BaseCoin = construction.BaseCoin,
 					OpenedAtMs = construction.OpenedAtMs,
 					ClosedAtMs = construction.ClosedAtMs,
@@ -133,6 +175,7 @@ public sealed class ConstructionAssembler
 						.ToList(),
 				})
 				.ToList(),
+
 			Bindings = run.Bindings,
 			InboxCount = distinctExecutions.Count - run.Bindings.Count,
 		};
@@ -251,43 +294,86 @@ public sealed class ConstructionAssembler
 			AttachTrade(run, target, opening);
 		}
 
-		// Проверка закрытия выполняется после присоединения открытий окна: погашение
-		// обнуляет ногу раньше, чем окно рефинансирует конструкцию новыми ногами,
-		// поэтому промежуточный ноль внутри окна конструкцию не закрывает —
-		// закрывается состояние после всех сделок окна.
+		// Производные атрибуты пересчитываются после присоединения открытий окна:
+		// погашение обнуляет ногу раньше, чем окно рефинансирует конструкцию новыми
+		// ногами, поэтому промежуточный ноль внутри окна конструкцию не закрывает —
+		// финальное состояние вычисляется по итогу всех сделок окна.
 		// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-roll-inherits-surviving-owner
+		// Traceability: change:refine-construction-assembly/design#d5
 		var windowEndTimeMs = window[^1].Execution.ExecTimeMs;
-		CloseConstructionIfEmpty(run, target, windowEndTimeMs);
+		UpdateDerivedState(target, windowEndTimeMs);
 		foreach (var owner in owners)
 		{
-			CloseConstructionIfEmpty(run, owner, windowEndTimeMs);
+			UpdateDerivedState(owner, windowEndTimeMs);
 		}
 	}
 
 	/// <summary>
-	/// Подбирает живую конструкцию для усреднения: единственная живая конструкция
-	/// того же актива, день окна не совпадает с днём экспирации самой поздней доски
-	/// её ног, окно одноногое (один символ, сколько бы исполнений он ни содержал)
-	/// либо каждая нога окна повторяет пару «страйк + доска» уже имеющейся ноги;
-	/// иначе окно открывает новую конструкцию. Стреддл-окно из колла и пута одного
-	/// нового страйка — двухногое: оно открывает новую конструкцию, а не усредняется.
+	/// Подбирает живую конструкцию для усреднения. При единственной живой
+	/// конструкции актива: день окна не совпадает с днём экспирации самой поздней
+	/// доски её ног, окно одноногое (один символ, сколько бы исполнений он ни
+	/// содержал) либо каждая нога окна повторяет пару «страйк + доска» уже
+	/// имеющейся ноги. При нескольких живых — эвристика доски: одноногое окно
+	/// присоединяется к единственному живому кандидату с ногой той же доски,
+	/// что и нога окна, вне дня экспирации самой поздней доски его ног; ноль
+	/// или несколько кандидатов — новая конструкция. Стреддл-окно из колла
+	/// и пута одного нового страйка — двухногое: оно открывает новую
+	/// конструкцию, а не усредняется.
 	/// </summary>
 	// Усреднение ищется только среди конструкций своего базового актива: чужая
 	// живая конструкция другого актива не может принимать окно — иначе окна
 	// разных активов сливаются в одну конструкцию.
 	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-single-leg-averages-by-board-among-alive
 	private static ConstructionState? FindAveragingTarget(AssemblyRun run, string baseCoin, IReadOnlyList<WindowItem> window)
 	{
 		var alive = run.Constructions
 			.Where(construction => construction.IsAlive
 				&& string.Equals(construction.BaseCoin, baseCoin, StringComparison.Ordinal))
 			.ToList();
-		if (alive.Count != 1)
+		if (alive.Count == 0)
 		{
 			return null;
 		}
 
-		var target = alive[0];
+		// Одноногоесть считается по числу разных символов ноги, а не по числу разных
+		// пар «страйк + доска»: окно из колла и пута одного страйка — двухногое даже
+		// при совпадении пары, и без совпадающих пар у конструкции оно открывает
+		// новую конструкцию, а не усредняется.
+		var isSingleLegWindow = window
+			.Select(item => item.Symbol)
+			.Distinct(StringComparer.Ordinal)
+			.Take(2)
+			.Count() == 1;
+
+		ConstructionState target;
+		if (alive.Count == 1)
+		{
+			target = alive[0];
+		}
+		else
+		{
+			// Эвристика доски работает только для одноногоих окон: многоногое окно
+			// при нескольких живых конструкциях усреднением не поглощается — прежнее
+			// поведение. Кандидат обязан быть единственным: неоднозначность означает
+			// начало новой конструкции, а не рискованную докупку не туда.
+			// Traceability: change:refine-construction-assembly/design#d4
+			if (isSingleLegWindow == false)
+			{
+				return null;
+			}
+
+			var windowBoard = window[0].Parts.ExpiryDate.Date;
+			var candidates = alive
+				.Where(construction => construction.Legs.Any(leg => leg.Parts.ExpiryDate.Date == windowBoard))
+				.ToList();
+			if (candidates.Count != 1)
+			{
+				return null;
+			}
+
+			target = candidates[0];
+		}
 
 		// Усреднение запрещено в день экспирации самой поздней доски: такой день
 		// означает начало новой серии, а не докупку текущей конструкции.
@@ -300,23 +386,14 @@ public sealed class ConstructionAssembler
 			return null;
 		}
 
-		var existingPairs = target.Legs
-			.Select(leg => (leg.Parts.Strike, leg.Parts.ExpiryDate.Date))
-			.ToHashSet();
-
-		// Одноногоесть считается по числу разных символов ноги, а не по числу разных
-		// пар «страйк + доска»: окно из колла и пута одного страйка — двухногое даже
-		// при совпадении пары, и без совпадающих пар у конструкции оно открывает
-		// новую конструкцию, а не усредняется.
-		var isSingleLegWindow = window
-			.Select(item => item.Symbol)
-			.Distinct(StringComparer.Ordinal)
-			.Take(2)
-			.Count() == 1;
 		if (isSingleLegWindow)
 		{
 			return target;
 		}
+
+		var existingPairs = target.Legs
+			.Select(leg => (leg.Parts.Strike, leg.Parts.ExpiryDate.Date))
+			.ToHashSet();
 
 		var windowPairs = window
 			.Select(item => (item.Parts.Strike, item.Parts.ExpiryDate.Date))
@@ -409,7 +486,8 @@ public sealed class ConstructionAssembler
 
 	/// <summary>
 	/// Гасит закрывающее событие экспирации: остаток ноги обнуляется у владельца
-	/// немедленно, независимо от знака и размера остатка.
+	/// немедленно, независимо от знака и размера остатка. Производные атрибуты
+	/// владельца (имя, статус, период жизни) пересчитываются по новому составу ног.
 	/// </summary>
 	private static void ApplyDelivery(AssemblyRun run, AssemblyDelivery delivery)
 	{
@@ -420,20 +498,64 @@ public sealed class ConstructionAssembler
 		}
 
 		owner.LegsBySymbol[delivery.Symbol].Quantity = 0m;
-		CloseConstructionIfEmpty(run, owner, delivery.DeliveryTimeMs);
+		UpdateDerivedState(owner, delivery.DeliveryTimeMs);
 	}
 
 	/// <summary>
-	/// Закрывает конструкцию, когда нулевой становится каждая её нога, а не их сумма:
-	/// зачёт длинной и короткой ног конструкцию не закрывает.
+	/// Пересчитывает производные атрибуты конструкции по текущему составу ног:
+	/// период жизни закрывается, когда нулевой становится каждая нога, а не их
+	/// сумма (зачёт длинной и короткой ног конструкцию не закрывает), и снова
+	/// открывается при повторном появлении ненулевой ноги; статус следует за
+	/// опционным прикрытием — «открыта» при ненулевой ноге, «закрыта» при полном
+	/// обнулении; имя пересчитывается из живых ног, пока оно не зафиксировано
+	/// вручную, а при полном обнулении сохраняется последнее производное.
 	/// </summary>
-	private static void CloseConstructionIfEmpty(AssemblyRun run, ConstructionState construction, long eventTimeMs)
+	// Статус «архив» — строго ручной: сборка не меняет его и не переименовывает
+	// архивную конструкцию, но погашение остатков продолжает обрабатывать.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-status-follows-option-cover
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-derived-construction-naming
+	private static void UpdateDerivedState(ConstructionState construction, long eventTimeMs)
 	{
-		if (construction.IsAlive
-			&& construction.Legs.Count > 0
-			&& construction.Legs.All(leg => leg.Quantity == 0m))
+		var hasLiveLeg = construction.Legs.Any(leg => leg.Quantity != 0m);
+		if (hasLiveLeg)
+		{
+			// Повторное появление ненулевой ноги возвращает закрытую конструкцию
+			// в открытые: конец периода жизни отступает, период снова открыт.
+			// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-roll-reopens-status
+			construction.ClosedAtMs = null;
+		}
+		else if (construction.IsAlive
+			&& construction.Legs.Count > 0)
 		{
 			construction.ClosedAtMs = eventTimeMs;
+		}
+
+		if (construction.IsArchived)
+		{
+			return;
+		}
+
+		construction.Status = hasLiveLeg
+			? ConstructionStatus.Open
+			: construction.Legs.Count > 0
+				? ConstructionStatus.Closed
+				: construction.Status;
+
+		// Имя выводится только из ненулевых ног; выводить не из чего — сохраняется
+		// последнее производное имя. Ручное имя и имя архивной конструкции
+		// автогенерацией не перезаписываются.
+		if (construction.NameIsManual == false && hasLiveLeg)
+		{
+			construction.Name = ConstructionNameBuilder.BuildName(
+				construction.BaseCoin,
+				construction.Legs.Select(leg => new PlannedLeg
+				{
+					Symbol = leg.Symbol,
+					Strike = leg.Parts.Strike,
+					BoardExpiryDate = leg.Parts.ExpiryDate,
+					Type = leg.Parts.Type,
+					Quantity = leg.Quantity,
+				}).ToList());
 		}
 	}
 
@@ -501,14 +623,26 @@ public sealed class ConstructionAssembler
 		public decimal Quantity { get; set; }
 	}
 
-	/// <summary>Конструкция в состоянии прогона: имя, период жизни и ноги с остатками.</summary>
+	/// <summary>Конструкция в состоянии прогона: имя, период жизни, производные статус и признак ручного имени, ноги с остатками.</summary>
 	private sealed class ConstructionState
 	{
-		/// <summary>Порядковый номер конструкции в прогоне.</summary>
+		/// <summary>Порядковый номер конструкции в прогоне или ключ существующей конструкции из seed'а.</summary>
 		public required long Id { get; init; }
 
-		/// <summary>Детерминированное имя из открывающего окна.</summary>
-		public required string Name { get; init; }
+		/// <summary>Имя конструкции: производное от живых ног либо зафиксированное вручную.</summary>
+		public required string Name { get; set; }
+
+		/// <summary>Признак вручную зафиксированного имени: автогенерация имени отключена.</summary>
+		public bool NameIsManual { get; init; }
+
+		/// <summary>Статус, следующий за опционным прикрытием; пересчитывается при каждом изменении ног.</summary>
+		public ConstructionStatus Status { get; set; } = ConstructionStatus.Open;
+
+		/// <summary>Признак существующей конструкции из seed'а.</summary>
+		public bool IsSeeded { get; init; }
+
+		/// <summary>Статус «архив» задан вручную: сборка не меняет статус и имя такой конструкции.</summary>
+		public bool IsArchived => Status == ConstructionStatus.Archived;
 
 		/// <summary>Базовый актив конструкции.</summary>
 		public required string BaseCoin { get; init; }
@@ -536,13 +670,70 @@ public sealed class ConstructionAssembler
 	private sealed class AssemblyRun
 	{
 		/// <summary>Счётчик порядковых номеров конструкций.</summary>
-		private long _nextId = 1;
+		private long _nextId;
 
 		/// <summary>Конструкции прогона во всех активах.</summary>
 		public List<ConstructionState> Constructions { get; } = new();
 
 		/// <summary>Привязки execId → порядковый номер конструкции.</summary>
 		public Dictionary<string, long> Bindings { get; } = new(StringComparer.Ordinal);
+
+		/// <summary>
+		/// Инициализирует прогон существующими конструкциями из seed'а: ноги
+		/// загружаются с остатками, свойства разбираются из символов. Ноги
+		/// с неразбираемыми символами пропускаются — как и исполнения по
+		/// неразбираемым символам, они не участвуют в правилах сборки. Новые
+		/// конструкции нумеруются после максимального ключа seed'а: номера
+		/// не пересекаются с ключами БД и воспроизводимы между прогонами.
+		/// </summary>
+		// Traceability: change:refine-construction-assembly/design#d1
+		public AssemblyRun(IReadOnlyList<AssemblySeedConstruction> seed)
+		{
+			foreach (var seeded in seed)
+			{
+				var construction = new ConstructionState
+				{
+					Id = seeded.Id,
+					Name = seeded.Name,
+					NameIsManual = seeded.NameIsManual,
+					Status = seeded.Status,
+					IsSeeded = true,
+					BaseCoin = seeded.Legs
+						.Select(leg => OptionSymbolParser.TryParse(leg.Symbol, out var parts) ? parts!.BaseCoin : null)
+						.FirstOrDefault(coin => coin is not null) ?? string.Empty,
+					OpenedAtMs = seeded.OpenedAtMs,
+					ClosedAtMs = seeded.ClosedAtMs,
+				};
+				foreach (var leg in seeded.Legs)
+				{
+					if (construction.LegsBySymbol.ContainsKey(leg.Symbol)
+						|| OptionSymbolParser.TryParse(leg.Symbol, out var parts) == false)
+					{
+						continue;
+					}
+
+					var state = new LegState
+					{
+						Symbol = leg.Symbol,
+						Parts = parts!,
+						Quantity = leg.Quantity,
+					};
+					construction.LegsBySymbol.Add(leg.Symbol, state);
+					construction.Legs.Add(state);
+				}
+
+				Constructions.Add(construction);
+				if (seeded.Id >= _nextId)
+				{
+					_nextId = seeded.Id + 1;
+				}
+			}
+
+			if (_nextId == 0)
+			{
+				_nextId = 1;
+			}
+		}
 
 		/// <summary>Выделяет следующий порядковый номер конструкции.</summary>
 		public long TakeId() => _nextId++;

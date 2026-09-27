@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using TransactionJournal.Data;
 using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Materialization;
 using Assert = NUnit.Framework.Assert;
@@ -58,6 +59,27 @@ public class ConstructionAssemblerTests
 	{
 		Symbol = symbol,
 		DeliveryTimeMs = timeMs,
+	};
+
+	/// <summary>Существующая конструкция для seed'а инкрементной сборки: ключ БД, имя, статус и ноги с остатками.</summary>
+	private static AssemblySeedConstruction Seed(
+		long id,
+		string name,
+		long openedAtMs,
+		ConstructionStatus status = ConstructionStatus.Open,
+		bool nameIsManual = false,
+		long? closedAtMs = null,
+		params (string Symbol, decimal Quantity)[] legs) => new()
+	{
+		Id = id,
+		Name = name,
+		NameIsManual = nameIsManual,
+		Status = status,
+		OpenedAtMs = openedAtMs,
+		ClosedAtMs = closedAtMs,
+		Legs = legs
+			.Select(leg => new AssemblySeedLeg { Symbol = leg.Symbol, Quantity = leg.Quantity })
+			.ToList(),
 	};
 
 	/// <summary>Сравнивает планы поэлементно: состав, атрибуты, ноги, привязки и счётчик «Входящих».</summary>
@@ -663,6 +685,266 @@ public class ConstructionAssemblerTests
 		Assert.That(plan.Bindings.ContainsKey("r2"), Is.False, "Сделка по другому активу не привязывается");
 		Assert.That(plan.Bindings.ContainsKey("r3"), Is.False, "Сделка после закрытия конструкции не привязывается");
 		Assert.That(plan.InboxCount, Is.EqualTo(3));
+	}
+
+	#endregion
+
+	#region Seed-состояние и производные атрибуты
+
+	[TestMethod]
+	[Description("Seed-конструкция участвует в классификации: закрывающая сделка гасит её остаток, новые конструкции нумеруются после ключей БД")]
+	// Остатки ног существующих конструкций — контекст инкрементной сборки:
+	// закрывающие сделки классифицируются по ним и погашаются у владельцев.
+	// Traceability: change:refine-construction-assembly/design#d1
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-incremental-inbox-assembly
+	public void TryIfSeedLegsParticipateInClosingClassification()
+	{
+		// Arrange: seed-конструкция с остатком колла 1600 и инкремент: продажа
+		// этого колла гасит её остаток, покупка колла 5JUN открывает новую.
+		var seed = new[]
+		{
+			Seed(42, "ETH стреддл 25SEP26 1600", Ms(2026, 7, 10, 9, 0), legs: new[] { (EthCall1600, 1m), (EthPut1600, 0m) }),
+		};
+		var executions = new List<AssemblyExecution>
+		{
+			Option("s1", EthCall1600, Ms(2026, 8, 3, 10, 0), -1m),
+			Option("e1", EthCall2100Jun, Ms(2026, 8, 4, 10, 0), 1m),
+		};
+
+		// Act: собираем план с seed'ом.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>(), seed);
+
+		// Assert: продажа привязана к существующей конструкции по её ключу БД,
+		// конструкция закрыта обнулением последней живой ноги.
+		Assert.That(plan.Constructions, Has.Count.EqualTo(2));
+		var seeded = plan.Constructions.Single(construction => construction.IsSeeded);
+		Assert.That(seeded.Id, Is.EqualTo(42), "Существующая конструкция сохраняет ключ БД");
+		Assert.That(seeded.Status, Is.EqualTo(ConstructionStatus.Closed), "Обнуление всех ног закрывает существующую конструкцию");
+		Assert.That(seeded.Legs.Single(leg => leg.Symbol == EthCall1600).Quantity, Is.EqualTo(0m));
+		Assert.That(plan.Bindings["s1"], Is.EqualTo(42L), "Закрывающая сделка привязана к владельцу из seed'а");
+
+		// Assert: новая конструкция нумеруется после максимального ключа seed'а.
+		var opened = plan.Constructions.Single(construction => construction.IsSeeded == false);
+		Assert.That(opened.Id, Is.EqualTo(43), "Новые конструкции не пересекаются с ключами БД");
+		Assert.That(plan.Bindings["e1"], Is.EqualTo(43L));
+		Assert.That(plan.InboxCount, Is.EqualTo(0));
+	}
+
+	[TestMethod]
+	[Description("Одноногое окно при нескольких живых конструкциях усредняется по единственной совпадающей доске")]
+	// Эвристика доски: ровно одна живая конструкция имеет ногу той же доски,
+	// что и нога окна, вне дня её экспирации — окно усредняется в неё.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-single-leg-averages-by-board-among-alive
+	public void TryIfSingleLegAveragesByBoardAmongAlive()
+	{
+		// Arrange: живые конструкции двух досок — стреддл 25SEP26 и стренгл 25DEC26,
+		// затем докупка колла 1600 доски 25SEP26.
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
+			Option("e2", EthPut1600, Ms(2026, 7, 10, 9, 10), 1m),
+			Option("e3", EthCall2100Dec, Ms(2026, 7, 20, 9, 0), 1m),
+			Option("e4", EthPut1800Dec, Ms(2026, 7, 20, 9, 10), 1m),
+			Option("e5", EthCall1600, Ms(2026, 7, 25, 10, 0), 1m),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>());
+
+		// Assert: докупка присоединилась к конструкции той же доски, вторая живая не тронута.
+		Assert.That(plan.Constructions, Has.Count.EqualTo(2));
+		var sep = plan.Constructions[0];
+		var dec = plan.Constructions[1];
+		Assert.That(sep.Legs.Select(leg => (leg.Symbol, leg.Quantity)), Is.EqualTo(new[]
+		{
+			(EthCall1600, 2m),
+			(EthPut1600, 1m),
+		}));
+		Assert.That(dec.Legs, Has.Count.EqualTo(2), "Живая конструкция другой доски не получила ног окна");
+		Assert.That(plan.Bindings["e5"], Is.EqualTo(sep.Id));
+		Assert.That(plan.InboxCount, Is.EqualTo(0));
+	}
+
+	[TestMethod]
+	[Description("Одноногое окно при неоднозначной доске — ноль или несколько кандидатов — открывает новую конструкцию")]
+	// Неоднозначность цели усреднения снимается в пользу новой конструкции:
+	// живые конструкции остаются нетронутыми.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-ambiguous-board-opens-new-construction
+	public void TryIfAmbiguousBoardOpensNewConstruction()
+	{
+		// Arrange: две живые конструкции доски 25SEP26 (стреддлы 1600 и 1900),
+		// затем докупка колла 1600 — совпадающую доску имеют обе.
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
+			Option("e2", EthPut1600, Ms(2026, 7, 10, 9, 10), 1m),
+			Option("e3", EthCall1900, Ms(2026, 7, 15, 9, 0), 1m),
+			Option("e4", EthPut1900, Ms(2026, 7, 15, 9, 10), 1m),
+			Option("e5", EthCall1600, Ms(2026, 7, 20, 10, 0), 1m),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>());
+
+		// Assert: окно открыло третью конструкцию, живые не получили ног.
+		Assert.That(plan.Constructions, Has.Count.EqualTo(3));
+		Assert.That(plan.Constructions[0].Legs.Single(leg => leg.Symbol == EthCall1600).Quantity, Is.EqualTo(1m));
+		Assert.That(plan.Constructions[1].Legs, Has.Count.EqualTo(2));
+		var opened = plan.Constructions[2];
+		Assert.That(opened.Legs.Select(leg => (leg.Symbol, leg.Quantity)), Is.EqualTo(new[] { (EthCall1600, 1m) }));
+		Assert.That(plan.Bindings["e5"], Is.EqualTo(opened.Id));
+		Assert.That(plan.InboxCount, Is.EqualTo(0));
+	}
+
+	[TestMethod]
+	[Description("Достроенный стреддл получает имя стреддла: имя пересчитывается после присоединения окна")]
+	// Имя пересчитывается из текущего состава живых ног после каждого окна:
+	// направленная покупка колла с присоединённым путом того же страйка зовётся стреддлом.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-assembled-straddle-gets-straddle-name
+	public void TryIfAssembledStraddleGetsStraddleName()
+	{
+		// Arrange: живая конструкция из одной ноги — колл 1600; окно докупает пут 1600.
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
+			Option("e2", EthPut1600, Ms(2026, 7, 14, 10, 0), 1m),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>());
+
+		// Assert: имя сменилось с «направленная CALL» на «стреддл».
+		var construction = plan.Constructions.Single();
+		Assert.That(construction.Name, Is.EqualTo("ETH стреддл 25SEP26 1600"));
+		Assert.That(construction.Legs, Has.Count.EqualTo(2));
+		Assert.That(plan.Bindings["e2"], Is.EqualTo(construction.Id));
+	}
+
+	[TestMethod]
+	[Description("Ручное переименование фиксирует имя: состав ног меняется, имя не перезаписывается")]
+	// Признак ручного имени отключает автогенерацию: ноги пересчитываются,
+	// имя существующей конструкции остаётся ручным.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-manual-rename-locks-autogenerated-name
+	public void TryIfManualRenameLocksAutogeneratedName()
+	{
+		// Arrange: seed-конструкция с вручную зафиксированным именем и живым коллом,
+		// окно докупает пут того же страйка.
+		var seed = new[]
+		{
+			Seed(5, "Разгон ETH к 2000", Ms(2026, 7, 10, 9, 0), nameIsManual: true, legs: new[] { (EthCall1600, 1m) }),
+		};
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthPut1600, Ms(2026, 7, 14, 10, 0), 1m),
+		};
+
+		// Act: собираем план с seed'ом.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>(), seed);
+
+		// Assert: ноги конструкции пополнились, имя осталось ручным.
+		var construction = plan.Constructions.Single();
+		Assert.That(construction.Name, Is.EqualTo("Разгон ETH к 2000"), "Ручное имя не перезаписывается автогенерацией");
+		Assert.That(construction.NameIsManual, Is.True);
+		Assert.That(construction.Legs, Has.Count.EqualTo(2), "Состав ног при зафиксированном имени всё равно обновляется");
+		Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Open));
+	}
+
+	[TestMethod]
+	[Description("Исчезновение прикрытия закрывает конструкцию, фьючерсные сделки остаются привязанными")]
+	// Статус следует за прикрытием: обнуление всех опционных ног экспирацией
+	// переводит конструкцию в «закрыта», привязки сделок робота сохраняются.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-cover-loss-closes-status
+	public void TryIfCoverLossClosesStatus()
+	{
+		// Arrange: стреддл, фьючерсная сделка робота внутри периода и экспирация,
+		// обнуляющая обе опционные ноги.
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
+			Option("e2", EthPut1600, Ms(2026, 7, 10, 9, 10), 1m),
+			Linear("r1", "ETHUSDT", Ms(2026, 7, 15)),
+		};
+		var deliveries = new[]
+		{
+			Delivery(EthCall1600, Ms(2026, 9, 25, 8, 0)),
+			Delivery(EthPut1600, Ms(2026, 9, 25, 8, 5)),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, deliveries);
+
+		// Assert: конструкция закрыта в плане, фьючерсная сделка остаётся привязанной.
+		var construction = plan.Constructions.Single();
+		Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Closed));
+		Assert.That(construction.ClosedAtMs, Is.EqualTo(Ms(2026, 9, 25, 8, 5)));
+		Assert.That(construction.Legs.All(leg => leg.Quantity == 0m), Is.True);
+		Assert.That(plan.Bindings["r1"], Is.EqualTo(construction.Id), "Фьючерсные сделки сохраняют привязку при закрытии");
+	}
+
+	[TestMethod]
+	[Description("Ролл возвращает закрытую конструкцию в «открыта»: конец периода отступает")]
+	// Повторное появление ненулевой ноги возвращает статус «открыта»
+	// и снова открывает период жизни конструкции.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-roll-reopens-status
+	public void TryIfRollReopensStatus()
+	{
+		// Arrange: закрытая конструкция с восстановленным вручную прикрытием
+		// (колл 1600 в остатке) и ролл-окно: частичное погашение колла и
+		// покупка колла дальней доски рефинансируют конструкцию.
+		var seed = new[]
+		{
+			Seed(8, "ETH колл-спред 25SEP26 1600/25DEC26 2100", Ms(2026, 6, 1, 9, 0),
+				status: ConstructionStatus.Closed, closedAtMs: Ms(2026, 7, 1, 12, 0),
+				legs: new[] { (EthCall1600, 2m) }),
+		};
+		var executions = new List<AssemblyExecution>
+		{
+			Option("s1", EthCall1600, Ms(2026, 7, 20, 10, 0), -1m),
+			Option("s2", EthCall2100Dec, Ms(2026, 7, 20, 10, 5), 1m),
+		};
+
+		// Act: собираем план с seed'ом.
+		var plan = Assembler.Assemble(executions, Array.Empty<AssemblyDelivery>(), seed);
+
+		// Assert: конструкция снова открыта, период жизни снова открыт.
+		var construction = plan.Constructions.Single();
+		Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Open), "Ненулевая нога возвращает статус «открыта»");
+		Assert.That(construction.ClosedAtMs, Is.Null, "Конец периода жизни отступает при повторном открытии");
+		Assert.That(construction.Legs.Select(leg => (leg.Symbol, leg.Quantity)), Is.EqualTo(new[]
+		{
+			(EthCall1600, 1m),
+			(EthCall2100Dec, 1m),
+		}));
+		Assert.That(plan.Bindings["s1"], Is.EqualTo(8L));
+		Assert.That(plan.Bindings["s2"], Is.EqualTo(8L));
+		Assert.That(plan.InboxCount, Is.EqualTo(0));
+	}
+
+	[TestMethod]
+	[Description("Архив не трогается сборкой: статус и имя сохраняются, остатки погашаются")]
+	// Статус «архив» — строго ручной: сборка не меняет его и не переименовывает
+	// архивную конструкцию, но продолжает обрабатывать её остатки.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-archive-untouched-by-assembly
+	public void TryIfArchiveUntouchedByAssembly()
+	{
+		// Arrange: архивная конструкция с автогенерируемым (не ручным) именем
+		// и живым коллом; экспирация обнуляет ногу.
+		var seed = new[]
+		{
+			Seed(3, "ETH направленная CALL 25SEP26 1600", Ms(2026, 6, 1, 9, 0),
+				status: ConstructionStatus.Archived, legs: new[] { (EthCall1600, 1m) }),
+		};
+		var executions = new List<AssemblyExecution>();
+		var deliveries = new[] { Delivery(EthCall1600, Ms(2026, 9, 25, 8, 0)) };
+
+		// Act: собираем план с seed'ом.
+		var plan = Assembler.Assemble(executions, deliveries, seed);
+
+		// Assert: статус и имя не изменились, остаток ноги погашен.
+		var construction = plan.Constructions.Single();
+		Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Archived), "Архивный статус сборкой не меняется");
+		Assert.That(construction.Name, Is.EqualTo("ETH направленная CALL 25SEP26 1600"), "Имя архивной конструкции не пересчитывается");
+		Assert.That(construction.Legs.Single().Quantity, Is.EqualTo(0m), "Погашение остатков архивной конструкции продолжается");
 	}
 
 	#endregion
