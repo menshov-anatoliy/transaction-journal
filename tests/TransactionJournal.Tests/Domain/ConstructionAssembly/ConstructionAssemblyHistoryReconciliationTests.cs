@@ -30,10 +30,10 @@ public class ConstructionAssemblyHistoryReconciliationTests
 	private const int ExpectedInbox = 1;
 
 	/// <summary>Имя конструкции цепочки 29MAY, в которую роллом переходят ноги 1900 C/P.</summary>
-	private const string Chain29MayName = "ETH CALL 29MAY26 2400";
+	private const string Chain29MayName = "ETH направленная CALL 29MAY26 2400";
 
-	/// <summary>Имя отдельного стреддла 1600, не слившегося с цепочкой.</summary>
-	private const string Straddle1600Name = "ETH стреддл 25SEP26 1600";
+	/// <summary>Имя отдельного стреддла 1600, не слившегося с цепочкой; имя производное — окно открытия имел акцент вверх 2:1.</summary>
+	private const string Straddle1600Name = "ETH стреддл с акцентом вверх 2:1 25SEP26 1600";
 
 	private static readonly DateTimeOffset FixedNow = new(2026, 9, 27, 0, 0, 0, TimeSpan.Zero);
 

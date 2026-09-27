@@ -330,7 +330,7 @@ public sealed class ConstructionAssembler
 		return null;
 	}
 
-	/// <summary>Открывает новую конструкцию из окна: имя строится из состава его ног.</summary>
+	/// <summary>Открывает новую конструкцию из окна: имя строится из состава его ног с количествами.</summary>
 	private static ConstructionState OpenConstruction(
 		AssemblyRun run,
 		string baseCoin,
@@ -339,13 +339,31 @@ public sealed class ConstructionAssembler
 		var construction = new ConstructionState
 		{
 			Id = run.TakeId(),
-			Name = ConstructionNameBuilder.BuildName(baseCoin, window.Select(item => item.Parts).ToList()),
+			Name = ConstructionNameBuilder.BuildName(baseCoin, WindowLegs(window)),
 			BaseCoin = baseCoin,
 			OpenedAtMs = window[0].Execution.ExecTimeMs,
 		};
 		run.Constructions.Add(construction);
 		return construction;
 	}
+
+	/// <summary>Ноги открывающего окна с количествами: повторные исполнения одного символа схлопываются суммой.</summary>
+	private static IReadOnlyList<PlannedLeg> WindowLegs(IReadOnlyList<WindowItem> window) =>
+		window
+			.GroupBy(item => item.Symbol, StringComparer.Ordinal)
+			.Select(group =>
+			{
+				var head = group.First();
+				return new PlannedLeg
+				{
+					Symbol = head.Symbol,
+					Strike = head.Parts.Strike,
+					BoardExpiryDate = head.Parts.ExpiryDate,
+					Type = head.Parts.Type,
+					Quantity = group.Sum(item => item.Execution.SignedQuantity),
+				};
+			})
+			.ToList();
 
 	#endregion
 

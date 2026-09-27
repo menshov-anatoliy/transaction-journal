@@ -152,7 +152,7 @@ public class ConstructionAssemblerTests
 		Assert.That(leg.Strike, Is.EqualTo(2100m));
 		Assert.That(leg.BoardExpiryDate, Is.EqualTo(new DateTime(2026, 9, 25)), "Доска — дата экспирации из символа");
 		Assert.That(leg.Type, Is.EqualTo(type));
-		Assert.That(construction.Name, Is.EqualTo(type == OptionType.Call ? "ETH CALL 25SEP26 2100" : "ETH PUT 25SEP26 2100"));
+		Assert.That(construction.Name, Is.EqualTo(type == OptionType.Call ? "ETH направленная CALL 25SEP26 2100" : "ETH направленная PUT 25SEP26 2100"));
 	}
 
 	[TestMethod]
@@ -487,7 +487,7 @@ public class ConstructionAssemblerTests
 		Assert.That(plan.Constructions, Has.Count.EqualTo(2));
 		var chain = plan.Constructions[0];
 		var straddle = plan.Constructions[1];
-		Assert.That(chain.Name, Is.EqualTo("ETH CALL 5JUN26 2100"));
+		Assert.That(chain.Name, Is.EqualTo("ETH направленная CALL 5JUN26 2100"));
 		Assert.That(chain.Legs.Single().Quantity, Is.EqualTo(2m), "Цепочка не получила ног окна 05.06");
 		Assert.That(chain.ClosedAtMs, Is.Null);
 		Assert.That(straddle.Name, Is.EqualTo("ETH стреддл 5JUN26 2100"));
