@@ -10,6 +10,7 @@ using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
 using SettingsPage = TransactionJournal.Components.Pages.Settings;
@@ -25,7 +26,8 @@ namespace TransactionJournal.Tests.Ui;
 /// вместо маски; кнопка «Синхронизировать сейчас» пополняет журнал синхронизаций
 /// строкой со временем, режимом, результатом и статусом, предупреждения сверки видны
 /// и работу не блокируют; «Переразобрать сырые записи заново» запускается только
-/// после явного подтверждения.
+/// после явного подтверждения; «Собрать конструкции» требует подтверждения с
+/// перечнем безвозвратных потерь и показывает счётчики итога пересбора.
 /// Traceability: openspec:ui/screens#requirement-settings-screen
 /// </summary>
 [TestClass]
@@ -41,6 +43,7 @@ public class SettingsScreenTests
 	private string _databasePath = null!;
 	private DbContextOptions<JournalDbContext> _options = null!;
 	private CountingReparseService _reparse = null!;
+	private CountingAssemblyService _assembly = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -74,6 +77,11 @@ public class SettingsScreenTests
 		// что без подтверждения она не вызывалась вовсе.
 		_reparse = new CountingReparseService();
 		_context.Services.AddSingleton<IJournalReparseService>(_reparse);
+
+		// Команда сборки конструкций подменяется считающей заглушкой: проверки
+		// следят, что без подтверждения сборка не вызывалась вовсе.
+		_assembly = new CountingAssemblyService();
+		_context.Services.AddSingleton<IConstructionAssemblyService>(_assembly);
 
 		// Сигнал изменений журнала: экран оповещает каркас после переразбора;
 		// без подписчиков в изолированном рендере он безопасно бездействует.
@@ -310,6 +318,69 @@ public class SettingsScreenTests
 		});
 	}
 
+	[TestMethod]
+	[Description("Сборка конструкций требует явного подтверждения: без него команда не запускается, отмена закрывает вопрос")]
+	// Сценарий: подтверждение показывает перечень безвозвратных потерь, отмена
+	// ничего не запускает — данные остаются нетронутыми.
+	// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#scenario-assembly-requires-confirmation
+	public void TryIfAssemblyRequiresExplicitConfirmation()
+	{
+		// Act: пользователь открывает «Настройки» и нажимает команду сборки.
+		var cut = _context.RenderComponent<SettingsPage>();
+		FindButton(cut, "Собрать конструкции").Click();
+
+		// Assert: появился явный вопрос подтверждения с перечнем безвозвратных
+		// потерь и выходом «Отмена»; сама команда не запускалась — сервис не вызывался.
+		Assert.That(cut.Markup, Does.Contain("Безвозвратно удаляются"));
+		Assert.That(cut.Markup, Does.Contain("все конструкции, привязки сделок"));
+		Assert.That(cut.Markup, Does.Contain("внешние корректировки PnL и ручные пометки закрытия"));
+		Assert.That(FindButton(cut, "Собрать").TextContent, Is.EqualTo("Собрать"));
+		Assert.That(FindButton(cut, "Отмена").TextContent, Is.EqualTo("Отмена"));
+		Assert.That(_assembly.CallCount, Is.EqualTo(0));
+
+		// Act: пользователь отменяет опасное действие.
+		FindButton(cut, "Отмена").Click();
+
+		// Assert: вопрос закрыт, сборка так и не запускалась — без подтверждения
+		// команда не начинает работу.
+		Assert.That(cut.Markup, Does.Not.Contain("Безвозвратно удаляются"));
+		Assert.That(_assembly.CallCount, Is.EqualTo(0));
+	}
+
+	[TestMethod]
+	[Description("Подтверждённая сборка запускается один раз и показывает счётчики итога пересбора")]
+	// Сценарий: после завершения пересбора пользователь видит счётчики созданных
+	// конструкций, привязанных сделок и сделок во «Входящих».
+	// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#scenario-assembly-shows-result
+	public void TryIfConfirmedAssemblyRunsOnceAndShowsCounters()
+	{
+		// Arrange: команда вернёт итог контрольной истории: десять конструкций,
+		// 1761 привязанная сделка и две сделки во «Входящих».
+		_assembly.Result = new ConstructionRebuildResult
+		{
+			ConstructionsCount = 10,
+			BoundCount = 1761,
+			TradesInInbox = 2,
+		};
+		var cut = _context.RenderComponent<SettingsPage>();
+		FindButton(cut, "Собрать конструкции").Click();
+
+		// Act: пользователь явно подтверждает опасное действие.
+		FindButton(cut, "Собрать").Click();
+
+		// Assert: команда выполнена ровно один раз, счётчики итога показаны под
+		// командой, вопрос подтверждения закрыт.
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(_assembly.CallCount, Is.EqualTo(1));
+			Assert.That(cut.Markup, Does.Contain("Сборка завершена"));
+			Assert.That(cut.Markup, Does.Contain("конструкций 10"));
+			Assert.That(cut.Markup, Does.Contain("привязано сделок 1761"));
+			Assert.That(cut.Markup, Does.Contain("во «Входящих» 2"));
+			Assert.That(cut.Markup, Does.Not.Contain("Безвозвратно удаляются"));
+		});
+	}
+
 	/// <summary>Находит кнопку по её тексту: на «Настройках» несколько команд в разных блоках.</summary>
 	private static IElement FindButton(IRenderedFragment cut, string text) =>
 		cut.FindAll("button").Single(button => button.TextContent.Trim() == text);
@@ -376,6 +447,27 @@ public class SettingsScreenTests
 				InboxTrades = [],
 				ExpiryClosingEntries = [],
 				ReconciliationWarnings = [],
+			});
+		}
+	}
+
+	/// <summary>Заглушка команды сборки конструкций: считает вызовы и возвращает подготовленный итог.</summary>
+	private sealed class CountingAssemblyService : IConstructionAssemblyService
+	{
+		/// <summary>Число запусков команды: проверки следят, что без подтверждения запуска нет.</summary>
+		public int CallCount { get; private set; }
+
+		/// <summary>Итог, возвращаемый при запуске; не задан — нулевые счётчики.</summary>
+		public ConstructionRebuildResult? Result { get; set; }
+
+		public Task<ConstructionRebuildResult> RebuildAsync(CancellationToken cancellationToken = default)
+		{
+			CallCount++;
+			return Task.FromResult(Result ?? new ConstructionRebuildResult
+			{
+				ConstructionsCount = 0,
+				BoundCount = 0,
+				TradesInInbox = 0,
 			});
 		}
 	}

@@ -6,12 +6,14 @@
 @using TransactionJournal.Bybit
 @using TransactionJournal.Components.Layout
 @using TransactionJournal.Data
+@using TransactionJournal.Domain.ConstructionAssembly
 @using TransactionJournal.Materialization
 @using TransactionJournal.Sync
 @inject SettingsReadModel Connection
 @inject IJournalSyncService SyncService
 @inject ISyncJournalReadModel SyncJournal
 @inject IJournalReparseService Reparse
+@inject IConstructionAssemblyService Assembly
 @inject JournalChangeSignal Changes
 
 <PageTitle>Настройки — Журнал Bybit</PageTitle>
@@ -186,6 +188,55 @@ else if (_reparseResult is not null)
 	</p>
 }
 
+@* Сборка конструкций — опасное массовое действие: пересбор стирает конструкции
+   вместе с привязками, капиталом и ручными данными. Команда запускается только
+   после явного подтверждения с перечнем безвозвратных потерь; первое нажатие
+   кнопки лишь показывает вопрос, без подтверждения сборка не начинается. *@
+@* Требование: сборка конструкций на «Настройках» требует подтверждения. *@
+@* Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#scenario-assembly-requires-confirmation *@
+@if (_assemblyConfirming == false)
+{
+	<div class="toolbar">
+		<button type="button" class="btn danger" disabled="@_assemblyRunning" @onclick="BeginAssembly">Собрать конструкции</button>
+	</div>
+}
+else
+{
+	@* Подтверждение перечисляет безвозвратные потери целиком и советует резервную
+	   копию базы; «Отмена» закрывает вопрос, ничего не запуская. *@
+	<div class="action-form">
+		<span class="action-warning">
+			Собрать конструкции заново? Безвозвратно удаляются: все конструкции, привязки сделок,
+			выделенный капитал, риск и профит, комментарии конструкций, позиций и сделок,
+			внешние корректировки PnL и ручные пометки закрытия. Рекомендуется сделать резервную копию базы.
+		</span>
+		<button type="button" class="btn danger" disabled="@_assemblyRunning" @onclick="RunAssemblyAsync">Собрать</button>
+		<button type="button" class="btn" disabled="@_assemblyRunning" @onclick="CancelAssembly">Отмена</button>
+	</div>
+}
+
+@if (_assemblyRunning)
+{
+	<p class="note" role="status">Сборка конструкций выполняется…</p>
+}
+else if (_assemblyError is not null)
+{
+	@* Ошибка пересбора не портит сырьё: причина доходит до пользователя текстом,
+	   повторная попытка доступна кнопкой после её закрытия. *@
+	<p class="note note-error" role="alert"><b>Сборка конструкций не выполнена:</b> @_assemblyError</p>
+}
+else if (_assemblyResult is not null)
+{
+	@* Итог пересбора: счётчики плана сборки — созданные конструкции, привязанные
+	   сделки и оставшиеся во «Входящих»; сами списки и бейдж «Входящих» каркас
+	   перечитывает по сигналу без дополнительных действий пользователя. *@
+	@* Требование: после завершения сборки пользователь видит счётчики итога. *@
+	@* Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#scenario-assembly-shows-result *@
+	<p class="note note-ok" role="status">
+		Сборка завершена: конструкций @_assemblyResult.ConstructionsCount · привязано сделок @_assemblyResult.BoundCount · во «Входящих» @_assemblyResult.TradesInInbox
+	</p>
+}
+
 @code {
 	private ConnectionInfo? _connection;
 	private IReadOnlyList<SyncRunRow> _journal = [];
@@ -197,6 +248,10 @@ else if (_reparseResult is not null)
 	private bool _reparseRunning;
 	private JournalMaterializationResult? _reparseResult;
 	private string? _reparseError;
+	private bool _assemblyConfirming;
+	private bool _assemblyRunning;
+	private ConstructionRebuildResult? _assemblyResult;
+	private string? _assemblyError;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -298,6 +353,58 @@ else if (_reparseResult is not null)
 
 		// Пересборка меняет производные представления: каркас перечитывает итог
 		// панели и бейдж «Входящих» без навигации.
+		await Changes.RaiseAsync();
+	}
+
+	/// <summary>
+	/// Открывает подтверждение сборки конструкций: пересбор запускается только
+	/// явным подтверждением — первое нажатие кнопки лишь показывает вопрос
+	/// с перечнем безвозвратных потерь.
+	/// </summary>
+	// Требование: сборка требует подтверждения опасного действия.
+	// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#scenario-assembly-requires-confirmation
+	private void BeginAssembly()
+	{
+		_assemblyConfirming = true;
+		_assemblyResult = null;
+		_assemblyError = null;
+	}
+
+	/// <summary>Закрывает подтверждение без запуска: сборка не начинается.</summary>
+	private void CancelAssembly() => _assemblyConfirming = false;
+
+	/// <summary>
+	/// Выполняет сборку после подтверждения: сервис пересбирает конструкции и
+	/// привязки из локального сырья одной транзакцией; итог со счётчиками
+	/// показывается под командой, каркас оповещается о пересборке производных
+	/// представлений — список конструкций и бейдж «Входящих» обновляются сами.
+	/// </summary>
+	// Требование: итог сборки виден пользователю, результат отражается в бейдже «Входящих».
+	// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#scenario-assembly-shows-result
+	private async Task RunAssemblyAsync()
+	{
+		_assemblyRunning = true;
+
+		try
+		{
+			_assemblyResult = await Assembly.RebuildAsync();
+			_assemblyError = null;
+		}
+		catch (Exception ex)
+		{
+			// Ошибка пересбора доходит причиной: сырьё сохранилось, повторная
+			// попытка доступна кнопкой.
+			_assemblyError = ex.Message;
+			_assemblyResult = null;
+		}
+		finally
+		{
+			_assemblyRunning = false;
+			_assemblyConfirming = false;
+		}
+
+		// Сборка меняет конструкции и привязки: каркас перечитывает список
+		// конструкций и бейдж «Входящих» без навигации.
 		await Changes.RaiseAsync();
 	}
 
