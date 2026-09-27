@@ -174,6 +174,41 @@ public class ExecutionHistorySyncTests
 	}
 
 	[TestMethod]
+	[Description("Окно с фандингом не создаёт сырых записей и не увеличивает счётчик запуска")]
+	public async Task TryIfWindowWithFundingPersistsNoRawRowsAndCountsZero()
+	{
+		// Arrange: окно backfill целиком из фандинг-записей с заполненными количеством
+		// и ценой по марк-цене — как в живом ответе биржи линейной торговли.
+		// Требование: фандинг отфильтровывается до сырьевой записи — не доходит до писателя,
+		// не создаёт строк в RawExecutions и не учитывается счётчиком загрузки запуска.
+		// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+		// Traceability: change:drop-funding-executions/design#d1
+		_gateway.Enqueue(Page(
+			Funding("funding-1", NowMs - DayMs),
+			Funding("funding-2", NowMs - 2 * DayMs)));
+
+		// Act
+		var result = await _orchestrator.RunAsync(
+			categories: new[] { "linear" },
+			options: new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs });
+
+		// Assert: окно с фандингом реально запрашивалось и дошло до пола глубины.
+		Assert.That(_gateway.Queries, Has.Count.EqualTo(1));
+		Assert.That(result.Categories["linear"].HistoryExhausted, Is.True);
+
+		// Assert: сырьевая таблица пуста — ни одна фандинг-запись до писателя не дошла.
+		Assert.That(LoadRawExecutions(), Is.Empty);
+
+		// Assert: счётчик запуска нулевой при двух фандинг-записях в ответе биржи.
+		Assert.That(result.Run.Status, Is.EqualTo(SyncRunStatus.Succeeded));
+		Assert.That(result.Run.NewExecutions, Is.Zero);
+		Assert.That(result.Categories["linear"].NewExecutionsPersisted, Is.Zero);
+
+		// Assert: водяной знак зафиксирован как при обычном успешном проходе.
+		Assert.That(LoadState("linear")!.ExecWatermarkMs, Is.EqualTo(NowMs));
+	}
+
+	[TestMethod]
 	[Description("Категории одного запуска делят общую строку SyncRun и сумму счётчиков")]
 	public async Task TryIfBothCategoriesShareSingleRunWithCommonCounters()
 	{
@@ -284,6 +319,22 @@ public class ExecutionHistorySyncTests
 		ExecId = execId,
 		Side = "Buy",
 		ExecTimeMs = execTimeMs,
+	};
+
+	// Фандинг-запись живого ответа биржи: тип Funding, сторона без направления,
+	// количество и цена по марк-цене заполнены.
+	private static BybitExecution Funding(string execId, long execTimeMs) => new()
+	{
+		Symbol = "BTCUSDT",
+		ExecId = execId,
+		Side = "None",
+		ExecTimeMs = execTimeMs,
+		ExecType = "Funding",
+		ExecQty = 0.001m,
+		ExecPrice = 42_000m,
+		MarkPrice = 42_050m,
+		ExecFee = 1.5m,
+		FeeCurrency = "USDT",
 	};
 
 	private static BybitPagedResponse<BybitExecution> Page(params BybitExecution[] executions) => new()

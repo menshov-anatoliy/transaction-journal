@@ -383,6 +383,62 @@ public class ExecutionCategorySyncTests
 	}
 
 	[TestMethod]
+	[Description("Повторный проход окна снова отфильтровывает фандинг без дублей и ошибок")]
+	public async Task TryIfRepeatedWindowPassFiltersFundingAgainWithoutDuplicates()
+	{
+		// Arrange: первый запуск с писателем, связанным с проверкой известных execId:
+		// окно приносит сделку и фандинг с количеством и ценой по марк-цене.
+		// Требование: повторные проходы того же окна снова отфильтровывают фандинг —
+		// без ошибок, дублей и предупреждений, водяной знак категории фиксируется как раньше.
+		// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
+		// Traceability: change:drop-funding-executions/design#d1
+		var writer = new IdempotentRawWriter(_knownIdProbe);
+		var engine = new ExecutionCategorySync(
+			new ExecutionWindowPass(_gateway, _knownIdProbe), _gateway, _stateStore, _optionBaseCoins, new ManualTimeProvider(), writer);
+		var options = new ExecutionCategorySyncOptions { MaxBackfillDepthMs = WeekMs };
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List =
+			[
+				Execution("exec-trade-1", NowMs - DayMs),
+				Funding("funding-1", NowMs - 2 * 3600_000L),
+			],
+		});
+
+		// Act (первый запуск): backfill — в сырье только сделка, фандинг отсечён.
+		var first = await engine.RunAsync("linear", options);
+
+		// Assert: писатель получил только сделку; водяной знак зафиксирован моментом запуска.
+		Assert.That(first.Mode, Is.EqualTo(SyncRunMode.Backfill));
+		Assert.That(writer.InsertedExecIds, Is.EqualTo(new[] { "exec-trade-1" }));
+		Assert.That(_stateStore.Find("linear")!.ExecWatermarkMs, Is.EqualTo(NowMs));
+
+		// Arrange (второй запуск): биржа снова отдаёт то же окно с той же сделкой и фандингом;
+		// инкремент от водяного знака перечитывает хвост с суточным перекрытием.
+		_gateway.Enqueue(new BybitPagedResponse<BybitExecution>
+		{
+			List =
+			[
+				Execution("exec-trade-1", NowMs - DayMs),
+				Funding("funding-1", NowMs - 2 * 3600_000L),
+			],
+		});
+
+		// Act
+		var second = await engine.RunAsync("linear");
+
+		// Assert: сделка распознана известной, фандинг снова отфильтрован — новых вставок
+		// нет, проход завершился без ошибок и предупреждений.
+		Assert.That(second.Mode, Is.EqualTo(SyncRunMode.Incremental));
+		Assert.That(second.NewExecutions, Is.Empty);
+		Assert.That(second.EarlyStopped, Is.True);
+		Assert.That(writer.InsertedExecIds, Is.EqualTo(new[] { "exec-trade-1" }));
+
+		// Assert: водяной знак категории зафиксирован как раньше — по успешному проходу.
+		Assert.That(_stateStore.Find("linear")!.ExecWatermarkMs, Is.EqualTo(NowMs));
+	}
+
+	[TestMethod]
 	[Description("Инкремент листает окна назад не глубже водяного знака минус перекрытие")]
 	public async Task TryIfIncrementalWalksWindowsOnlyDownToWatermarkMinusOverlap()
 	{
@@ -1070,6 +1126,22 @@ public class ExecutionCategorySyncTests
 		ExecId = execId,
 		Side = "Buy",
 		ExecTimeMs = execTimeMs,
+	};
+
+	// Фандинг-запись живого ответа биржи: тип Funding, сторона без направления,
+	// количество и цена по марк-цене заполнены.
+	private static BybitExecution Funding(string execId, long execTimeMs) => new()
+	{
+		Symbol = "BTCUSDT",
+		ExecId = execId,
+		Side = "None",
+		ExecTimeMs = execTimeMs,
+		ExecType = "Funding",
+		ExecQty = 0.001m,
+		ExecPrice = 42_000m,
+		MarkPrice = 42_050m,
+		ExecFee = 1.5m,
+		FeeCurrency = "USDT",
 	};
 
 	#endregion
