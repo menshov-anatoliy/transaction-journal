@@ -25,7 +25,7 @@
 
 ## 5. UI
 
-- [ ] 5.1 Экран «Настройки»: команда «Собрать из „Входящих"» без подтверждения с итогами (создано/привязано/осталось), «Собрать конструкции» сохраняет подтверждение; проверить тестами `SettingsScreenTests` (`scenario-inbox-assembly-without-confirmation`, `scenario-assembly-shows-result`)
+- [x] 5.1 Экран «Настройки»: команда «Собрать из „Входящих"» без подтверждения с итогами (создано/привязано/осталось), «Собрать конструкции» сохраняет подтверждение; проверить тестами `SettingsScreenTests` (`scenario-inbox-assembly-without-confirmation`, `scenario-assembly-shows-result`)
 
 ## 6. Контрольная сверка и приёмка
 

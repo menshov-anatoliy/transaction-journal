@@ -27,7 +27,8 @@ namespace TransactionJournal.Tests.Ui;
 /// строкой со временем, режимом, результатом и статусом, предупреждения сверки видны
 /// и работу не блокируют; «Переразобрать сырые записи заново» запускается только
 /// после явного подтверждения; «Собрать конструкции» требует подтверждения с
-/// перечнем безвозвратных потерь и показывает счётчики итога пересбора.
+/// перечнем безвозвратных потерь; «Собрать из „Входящих”» запускается сразу
+/// без подтверждения; обе команды сборки показывают счётчики итога пересбора.
 /// Traceability: openspec:ui/screens#requirement-settings-screen
 /// </summary>
 [TestClass]
@@ -322,7 +323,7 @@ public class SettingsScreenTests
 	[Description("Сборка конструкций требует явного подтверждения: без него команда не запускается, отмена закрывает вопрос")]
 	// Сценарий: подтверждение показывает перечень безвозвратных потерь, отмена
 	// ничего не запускает — данные остаются нетронутыми.
-	// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#scenario-assembly-requires-confirmation
+	// Traceability: change:refine-construction-assembly/specs/ui/screens/spec#scenario-assembly-requires-confirmation
 	public void TryIfAssemblyRequiresExplicitConfirmation()
 	{
 		// Act: пользователь открывает «Настройки» и нажимает команду сборки.
@@ -348,10 +349,32 @@ public class SettingsScreenTests
 	}
 
 	[TestMethod]
+	[Description("Сборка из «Входящих» запускается сразу, без диалога подтверждения; пересбор при этом не стартует")]
+	// Сценарий: инкрементная сборка безопасна — обрабатывает только
+	// нераспределённые записи и не требует подтверждения опасного действия.
+	// Traceability: change:refine-construction-assembly/specs/ui/screens/spec#scenario-inbox-assembly-without-confirmation
+	public void TryIfInboxAssemblyStartsWithoutConfirmation()
+	{
+		// Act: пользователь открывает «Настройки» и сразу нажимает команду
+		// сборки из «Входящих» — никакого промежуточного вопроса нет.
+		var cut = _context.RenderComponent<SettingsPage>();
+		FindButton(cut, "Собрать из „Входящих”").Click();
+
+		// Assert: инкрементная сборка выполнена ровно один раз без какого-либо
+		// подтверждения; полный пересбор не запускался вовсе.
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(_assembly.InboxCallCount, Is.EqualTo(1));
+			Assert.That(_assembly.CallCount, Is.EqualTo(0));
+			Assert.That(cut.Markup, Does.Not.Contain("Безвозвратно удаляются"));
+		});
+	}
+
+	[TestMethod]
 	[Description("Подтверждённая сборка запускается один раз и показывает счётчики итога пересбора")]
 	// Сценарий: после завершения пересбора пользователь видит счётчики созданных
 	// конструкций, привязанных сделок и сделок во «Входящих».
-	// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#scenario-assembly-shows-result
+	// Traceability: change:refine-construction-assembly/specs/ui/screens/spec#scenario-assembly-shows-result
 	public void TryIfConfirmedAssemblyRunsOnceAndShowsCounters()
 	{
 		// Arrange: команда вернёт итог контрольной истории: десять конструкций,
@@ -378,6 +401,37 @@ public class SettingsScreenTests
 			Assert.That(cut.Markup, Does.Contain("привязано сделок 1761"));
 			Assert.That(cut.Markup, Does.Contain("во «Входящих» 2"));
 			Assert.That(cut.Markup, Does.Not.Contain("Безвозвратно удаляются"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Сборка из «Входящих» показывает счётчики итога: создано, привязано, осталось")]
+	// Сценарий: после завершения любой из команд сборки — и инкрементной, и
+	// полного пересбора — пользователь видит одни и те же счётчики итога.
+	// Traceability: change:refine-construction-assembly/specs/ui/screens/spec#scenario-assembly-shows-result
+	public void TryIfInboxAssemblyShowsCounters()
+	{
+		// Arrange: сборка из «Входящих» вернёт счётчики инкремента: одна новая
+		// конструкция, три привязанные сделки, одна осталась во «Входящих».
+		_assembly.Result = new ConstructionRebuildResult
+		{
+			ConstructionsCount = 1,
+			BoundCount = 3,
+			TradesInInbox = 1,
+		};
+		var cut = _context.RenderComponent<SettingsPage>();
+
+		// Act: пользователь запускает сборку из «Входящих» без подтверждения.
+		FindButton(cut, "Собрать из „Входящих”").Click();
+
+		// Assert: счётчики итога показаны под командой.
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(_assembly.InboxCallCount, Is.EqualTo(1));
+			Assert.That(cut.Markup, Does.Contain("Сборка завершена"));
+			Assert.That(cut.Markup, Does.Contain("конструкций 1"));
+			Assert.That(cut.Markup, Does.Contain("привязано сделок 3"));
+			Assert.That(cut.Markup, Does.Contain("во «Входящих» 1"));
 		});
 	}
 
