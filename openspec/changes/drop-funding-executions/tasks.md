@@ -12,8 +12,8 @@
 
 ## 3. Согласование тестов и фикстур
 
-- [ ] 3.1 Просмотреть `JournalSyncStoreTests`, `JournalSyncServiceTests`, `ReadOnlyAccessAcceptanceTests` и фикстуры живых прогонов на фандинг-записи, ожидаемые в сырьевых вставках, и привести ожидания к новому поведению. Проверка: полный прогон `dotnet test` зелёный.
-- [ ] 3.2 Убедиться, что тесты материализации (`TradeMaterializerTests`, `JournalMaterializerTests`) и сверки не зависят от новых funding-записей синхронизации (их сценарии — legacy-сырьё и payload-разбор, они не меняются). Проверка: прогон фильтра `dotnet test --filter FullyQualifiedName~Materialization` и `~Reconciliation`.
+- [x] 3.1 Просмотреть `JournalSyncStoreTests`, `JournalSyncServiceTests`, `ReadOnlyAccessAcceptanceTests` и фикстуры живых прогонов на фандинг-записи, ожидаемые в сырьевых вставках, и привести ожидания к новому поведению. Проверка: полный прогон `dotnet test` зелёный.
+- [x] 3.2 Убедиться, что тесты материализации (`TradeMaterializerTests`, `JournalMaterializerTests`) и сверки не зависят от новых funding-записей синхронизации (их сценарии — legacy-сырьё и payload-разбор, они не меняются). Проверка: прогон фильтра `dotnet test --filter FullyQualifiedName~Materialization` и `~Reconciliation`.
 
 ## 4. Верификация изменения
 
