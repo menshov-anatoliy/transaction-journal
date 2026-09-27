@@ -7,6 +7,7 @@ using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
 
@@ -109,6 +110,15 @@ builder.Services.AddTransient<IJournalSyncService, JournalSyncService>();
 // от интерфейса, тесты экрана подменяют её заглушкой.
 // Traceability: openspec:ui/screens#scenario-settings-reparse-confirmation
 builder.Services.AddSingleton<IJournalReparseService, JournalReparseService>();
+
+// Команда «Собрать конструкции» на «Настройках»: полный пересбор конструкций
+// и привязок из локального сырья одной транзакцией; экран зависит от интерфейса,
+// тесты экрана подменяют её заглушкой.
+// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-full-rebuild-semantics
+builder.Services.AddSingleton(sp => new ConstructionAssemblyService(
+	sp.GetRequiredService<IJournalRawSnapshotStore>(),
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton<IConstructionAssemblyService>(sp => sp.GetRequiredService<ConstructionAssemblyService>());
 
 // Слой доменных операций: use-case сервисы над контекстом журнала; каждый вызов
 // создаёт короткоживущий контекст, поэтому длительные сессии Blazor Server

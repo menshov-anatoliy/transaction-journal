@@ -12,8 +12,8 @@
 
 ## 2. Use-case пересбора (хранилище)
 
-- [ ] 2.1 Реализовать сервис пересбора: снимок сырья → план сборки → одна транзакция: вычистить `Constructions`, `TradeUserdata`, `PnLAdjustments`, `PositionComments`, `ManualCloseMarks`, создать конструкции и привязки заново; вернуть счётчики (конструкций, привязано, во «Входящих»). Проверка: интеграционный тест на in-memory SQLite — сырьё не изменено, счётчики соответствуют плану, повторный прогон даёт идентичное состояние (`scenario-rebuild-reproduces-result`, `scenario-rebuild-wipes-manual-data`, `scenario-rebuild-preserves-raw-storage`).
-- [ ] 2.2 Пометить сервис в DI (`Program.cs`) рядом с `JournalReparseService`. Проверка: приложение стартует, сервис резолвится.
+- [x] 2.1 Реализовать сервис пересбора: снимок сырья → план сборки → одна транзакция: вычистить `Constructions`, `TradeUserdata`, `PnLAdjustments`, `PositionComments`, `ManualCloseMarks`, создать конструкции и привязки заново; вернуть счётчики (конструкций, привязано, во «Входящих»). Проверка: интеграционный тест на in-memory SQLite — сырьё не изменено, счётчики соответствуют плану, повторный прогон даёт идентичное состояние (`scenario-rebuild-reproduces-result`, `scenario-rebuild-wipes-manual-data`, `scenario-rebuild-preserves-raw-storage`).
+- [x] 2.2 Пометить сервис в DI (`Program.cs`) рядом с `JournalReparseService`. Проверка: приложение стартует, сервис резолвится.
 
 ## 3. UI «Настроек»
 
