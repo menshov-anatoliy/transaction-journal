@@ -45,13 +45,13 @@ public class ConstructionAssemblerTests
 	};
 
 	/// <summary>Фьючерсное исполнение — сделка интрадей-робота.</summary>
-	private static AssemblyExecution Linear(string execId, string symbol, long timeMs) => new()
+	private static AssemblyExecution Linear(string execId, string symbol, long timeMs, decimal quantity = 1m) => new()
 	{
 		ExecId = execId,
 		Category = "linear",
 		Symbol = symbol,
 		ExecTimeMs = timeMs,
-		SignedQuantity = 1m,
+		SignedQuantity = quantity,
 	};
 
 	/// <summary>Закрывающее событие экспирации — delivery-запись либо выведенная OTM-закрывающая.</summary>
@@ -146,6 +146,45 @@ public class ConstructionAssemblerTests
 		// Assert: планы совпадают поэлементно — упорядочение прогона детерминировано.
 		AssertPlansEqual(forwardPlan, reversedPlan);
 		Assert.That(forwardPlan.Constructions[0].OpenedAtMs, Is.EqualTo(Ms(2026, 7, 10, 9, 0)), "Окно открывается первой по времени записью");
+	}
+
+	[TestMethod]
+	[Description("Повторная сборка над тем же сырьём даёт идентичный план: полный пересбор и прогон с seed'ом")]
+	// Детерминизм прогона: состав конструкций, атрибуты, привязки и «Входящие»
+	// воспроизводятся при повторном прогоне над теми же записями, включая
+	// затухающую конструкцию и привязку фьючерсов.
+	// Traceability: openspec:domain/construction-assembly#scenario-rebuild-reproduces-result
+	public void TryIfRepeatedRebuildReproducesPlan()
+	{
+		// Arrange: стреддл с усреднением, экспирация одной ноги, затухающая
+		// конструкция с фьючерсами и seed-контекст инкрементной сборки.
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
+			Option("e2", EthPut1600, Ms(2026, 7, 10, 9, 10), 1m),
+			Option("e3", EthCall1600, Ms(2026, 7, 20, 10, 0), 1m),
+			Linear("r1", "ETHUSDT", Ms(2026, 7, 25)),
+			Linear("r2", "ETHUSDT", Ms(2026, 9, 28)),
+		};
+		var deliveries = new[]
+		{
+			Delivery(EthPut1600, Ms(2026, 9, 25, 8, 5)),
+		};
+		var seed = new[]
+		{
+			Seed(7, "ETH стреддл 25SEP26 1600", Ms(2026, 7, 10, 9, 0), legs: new[] { (EthCall1600, 2m), (EthPut1600, 1m) }),
+		};
+
+		// Act: собираем план дважды над тем же сырьём — полный пересбор и прогон с seed'ом.
+		var firstFullRebuild = Assembler.Assemble(executions, deliveries);
+		var secondFullRebuild = Assembler.Assemble(executions, deliveries);
+		var firstSeeded = Assembler.Assemble(executions, deliveries, seed);
+		var secondSeeded = Assembler.Assemble(executions, deliveries, seed);
+
+		// Assert: повторные прогоны воспроизводят планы поэлементно.
+		AssertPlansEqual(firstFullRebuild, secondFullRebuild);
+		AssertPlansEqual(firstSeeded, secondSeeded);
+		Assert.That(firstFullRebuild.Constructions.Single().Status, Is.EqualTo(ConstructionStatus.Open), "Затухающая конструкция воспроизводится открытой");
 	}
 
 	#endregion
@@ -659,7 +698,8 @@ public class ConstructionAssemblerTests
 	[TestMethod]
 	[Description("Сделки вне периодов жизни конструкций остаются во «Входящих»")]
 	// Сделки вне всех периодов — до открытия, после закрытия или по другому активу —
-	// остаются непривязанными во «Входящих».
+	// остаются непривязанными во «Входящих»; закрытие при нулевом фьючерсном
+	// остатке не меняется.
 	// Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#scenario-robot-trade-outside-periods-stays-in-inbox
 	public void TryIfRobotTradeOutsidePeriodsStaysInInbox()
 	{
@@ -669,7 +709,6 @@ public class ConstructionAssemblerTests
 			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
 			Option("e2", EthPut1600, Ms(2026, 7, 10, 9, 10), 1m),
 			Linear("r0", "ETHUSDT", Ms(2026, 7, 5)),
-			Linear("r1", "ETHUSDT", Ms(2026, 7, 15)),
 			Linear("r2", "BTCUSDT", Ms(2026, 7, 15)),
 			Linear("r3", "ETHUSDT", Ms(2026, 9, 28)),
 		};
@@ -682,12 +721,85 @@ public class ConstructionAssemblerTests
 		// Act: собираем план.
 		var plan = Assembler.Assemble(executions, deliveries);
 
-		// Assert: внутри периода сделка привязана, остальные — во «Входящих».
-		Assert.That(plan.Bindings["r1"], Is.EqualTo(plan.Constructions[0].Id));
+		// Assert: сделки робота вне периода — во «Входящих», конструкция закрыта экспирацией.
 		Assert.That(plan.Bindings.ContainsKey("r0"), Is.False, "Сделка до открытия конструкции не привязывается");
 		Assert.That(plan.Bindings.ContainsKey("r2"), Is.False, "Сделка по другому активу не привязывается");
 		Assert.That(plan.Bindings.ContainsKey("r3"), Is.False, "Сделка после закрытия конструкции не привязывается");
+		Assert.That(plan.Constructions.Single().Status, Is.EqualTo(ConstructionStatus.Closed));
 		Assert.That(plan.InboxCount, Is.EqualTo(3));
+	}
+
+	[TestMethod]
+	[Description("Затухающая конструкция (прикрытие обнулено, фьючерс не нулевой) принимает сделки робота")]
+	// Период жизни затухающей конструкции продолжается после гибели прикрытия:
+	// фьючерсная сделка привязывается к ней, если она открыта раньше прочих.
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-fading-construction-absorbs-robot-trades
+	public void TryIfFadingConstructionAbsorbsRobotTrades()
+	{
+		// Arrange: стреддл, фьючерс +1 внутри периода, экспирация обнуляет ноги,
+		// затем сделка робота после гибели прикрытия при живом фьючерсе.
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
+			Option("e2", EthPut1600, Ms(2026, 7, 10, 9, 10), 1m),
+			Linear("r1", "ETHUSDT", Ms(2026, 7, 15)),
+			Linear("r2", "ETHUSDT", Ms(2026, 9, 28)),
+		};
+		var deliveries = new[]
+		{
+			Delivery(EthCall1600, Ms(2026, 9, 25, 8, 0)),
+			Delivery(EthPut1600, Ms(2026, 9, 25, 8, 5)),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, deliveries);
+
+		// Assert: затухающая конструкция открыта и приняла обе сделки.
+		var construction = plan.Constructions.Single();
+		Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Open), "Ненулевой фьючерс держит конструкцию открытой");
+		Assert.That(construction.ClosedAtMs, Is.Null, "Период жизни продолжается до обнуления фьючерса");
+		Assert.That(plan.Bindings["r1"], Is.EqualTo(construction.Id));
+		Assert.That(plan.Bindings["r2"], Is.EqualTo(construction.Id), "Сделка после гибели прикрытия привязывается к затухающей конструкции");
+		Assert.That(plan.InboxCount, Is.EqualTo(0));
+	}
+
+	[TestMethod]
+	[Description("Сделка, обнулившая фьючерсный остаток затухающей конструкции, закрывает её период")]
+	// Момент закрытия — событие, обнулившее последнюю позицию: после гибели
+	// прикрытия это сделка, сведшая фьючерсный остаток к нулю.
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-last-position-flat-closes-construction
+	public void TryIfLastPositionFlatClosesConstruction()
+	{
+		// Arrange: стреддл, фьючерсы +1 и +1, экспирация обнуляет ноги, затем
+		// сделка −2 сводит фьючерсный остаток к нулю и закрывает конструкцию;
+		// сделка после закрытия остаётся во «Входящих».
+		var executions = new List<AssemblyExecution>
+		{
+			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
+			Option("e2", EthPut1600, Ms(2026, 7, 10, 9, 10), 1m),
+			Linear("r1", "ETHUSDT", Ms(2026, 7, 15)),
+			Linear("r2", "ETHUSDT", Ms(2026, 9, 28)),
+			Linear("r3", "ETHUSDT", Ms(2026, 10, 1, 12, 0), -2m),
+			Linear("r4", "ETHUSDT", Ms(2026, 10, 5)),
+		};
+		var deliveries = new[]
+		{
+			Delivery(EthCall1600, Ms(2026, 9, 25, 8, 0)),
+			Delivery(EthPut1600, Ms(2026, 9, 25, 8, 5)),
+		};
+
+		// Act: собираем план.
+		var plan = Assembler.Assemble(executions, deliveries);
+
+		// Assert: конструкция закрыта обнуляющей сделкой, поздняя сделка не привязана.
+		var construction = plan.Constructions.Single();
+		Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Closed));
+		Assert.That(construction.ClosedAtMs, Is.EqualTo(Ms(2026, 10, 1, 12, 0)), "Момент закрытия — обнуляющая фьючерс сделка");
+		Assert.That(plan.Bindings["r1"], Is.EqualTo(construction.Id));
+		Assert.That(plan.Bindings["r2"], Is.EqualTo(construction.Id));
+		Assert.That(plan.Bindings["r3"], Is.EqualTo(construction.Id));
+		Assert.That(plan.Bindings.ContainsKey("r4"), Is.False, "Сделка после закрытия периода не привязывается");
+		Assert.That(plan.InboxCount, Is.EqualTo(1));
 	}
 
 	#endregion
@@ -853,14 +965,14 @@ public class ConstructionAssemblerTests
 	}
 
 	[TestMethod]
-	[Description("Исчезновение прикрытия закрывает конструкцию, фьючерсные сделки остаются привязанными")]
-	// Статус следует за прикрытием: обнуление всех опционных ног экспирацией
-	// переводит конструкцию в «закрыта», привязки сделок робота сохраняются.
-	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-cover-loss-closes-status
-	public void TryIfCoverLossClosesStatus()
+	[Description("Исчезновение прикрытия при открытом фьючерсе оставляет конструкцию открытой, привязки сохраняются")]
+	// Статус следует за всеми позициями: обнуление всех опционных ног экспирацией
+	// при ненулевом фьючерсном остатке не закрывает конструкцию — риск жив.
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-cover-loss-with-open-futures-keeps-open
+	public void TryIfCoverLossWithOpenFuturesKeepsOpen()
 	{
 		// Arrange: стреддл, фьючерсная сделка робота внутри периода и экспирация,
-		// обнуляющая обе опционные ноги.
+		// обнуляющая обе опционные ноги при ненулевом фьючерсном остатке.
 		var executions = new List<AssemblyExecution>
 		{
 			Option("e1", EthCall1600, Ms(2026, 7, 10, 9, 0), 1m),
@@ -876,12 +988,12 @@ public class ConstructionAssemblerTests
 		// Act: собираем план.
 		var plan = Assembler.Assemble(executions, deliveries);
 
-		// Assert: конструкция закрыта в плане, фьючерсная сделка остаётся привязанной.
+		// Assert: конструкция остаётся открытой, фьючерсная сделка привязана.
 		var construction = plan.Constructions.Single();
-		Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Closed));
-		Assert.That(construction.ClosedAtMs, Is.EqualTo(Ms(2026, 9, 25, 8, 5)));
+		Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Open), "Открытый фьючерс держит конструкцию открытой");
+		Assert.That(construction.ClosedAtMs, Is.Null, "Период жизни продолжается до обнуления фьючерса");
 		Assert.That(construction.Legs.All(leg => leg.Quantity == 0m), Is.True);
-		Assert.That(plan.Bindings["r1"], Is.EqualTo(construction.Id), "Фьючерсные сделки сохраняют привязку при закрытии");
+		Assert.That(plan.Bindings["r1"], Is.EqualTo(construction.Id), "Фьючерсные сделки сохраняют привязку");
 	}
 
 	[TestMethod]

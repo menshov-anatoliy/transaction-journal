@@ -86,8 +86,11 @@ public class ConstructionAssemblyServiceTests
 				Assert.That(databaseId, Is.EqualTo(constructions[(int)(pair.Value - 1)].Id), $"Привязка {pair.Key} указывает на конструкцию плана");
 			}
 
-			// Сделка робота вне периодов осталась во «Входящих» — строки привязки нет.
-			Assert.That(bindings.ContainsKey("e6"), Is.False, "Непривязанная сделка остаётся во «Входящих»");
+			// Сделка робота e6 привязана: опционные ноги обнулены, но фьючерсный
+			// остаток был жив — затухающая конструкция приняла сделку и закрылась
+			// её счётом в момент обнуления последней позиции.
+			// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-fading-construction-absorbs-robot-trades
+			Assert.That(bindings.ContainsKey("e6"), Is.True, "Затухающая конструкция приняла сделку робота");
 		}
 	}
 
@@ -184,7 +187,11 @@ public class ConstructionAssemblyServiceTests
 			var constructions = db.Constructions.ToList();
 			Assert.That(constructions.Select(construction => construction.Name), Is.EqualTo(new[] { "ETH направленная PUT 25SEP26 1600" }), "Осталась только собранная конструкция с именем по живым ногам");
 			var construction = constructions.Single();
-			Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Closed), "Статус следует за прикрытием: все ноги обнулены сделками");
+			Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Closed), "Статус следует за всеми позициями: фьючерсный остаток обнулён сделкой e6");
+			// Статус Closed теперь означает обнуление последней позиции — фьючерсного
+			// остатка, переживший гибель опционного прикрытия: затухание закрылось
+			// сделкой e6 в момент вывода остатка в ноль.
+			// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-last-position-flat-closes-construction
 			Assert.That(construction.AllocatedCapitalUsdt, Is.Null, "Выделенный капитал ручной конструкции стёрт");
 			Assert.That(construction.RiskValue, Is.Null, "Риск ручной конструкции стёрт");
 			Assert.That(construction.ProfitValue, Is.Null, "Профит ручной конструкции стёрт");
@@ -195,7 +202,7 @@ public class ConstructionAssemblyServiceTests
 			Assert.That(db.ManualCloseMarks, Is.Empty, "Ручные пометки закрытия стёрты");
 
 			var userdata = db.TradeUserdata.ToList();
-			Assert.That(userdata.Select(row => row.ExecId), Is.EquivalentTo(new[] { "e1", "e2", "e3", "e4", "e5" }), "Остались только привязки плана");
+			Assert.That(userdata.Select(row => row.ExecId), Is.EquivalentTo(new[] { "e1", "e2", "e3", "e4", "e5", "e6" }), "Остались только привязки плана");
 			Assert.That(userdata.All(row => row.Comment is null), Is.True, "Комментарии сделок стёрты");
 			Assert.That(userdata.All(row => row.ConstructionId == construction.Id), Is.True, "Все привязки указывают на собранную конструкцию");
 		}
@@ -270,9 +277,10 @@ public class ConstructionAssemblyServiceTests
 		// Act: выполняем пересбор.
 		var result = await service.RebuildAsync();
 
-		// Assert: счётчики плана не изменились, фандинг не привязан.
-		Assert.That(result.BoundCount, Is.EqualTo(5), "Фандинг не увеличил число привязок");
-		Assert.That(result.TradesInInbox, Is.EqualTo(1), "Во «Входящих» осталась только сделка вне периодов");
+		// Assert: счётчики плана не изменились, фандинг не привязан; сделка e6
+		// привязана пересбором к затухавшей конструкции, поэтому «Входящие» пусты.
+		Assert.That(result.BoundCount, Is.EqualTo(6), "Фандинг не увеличил число привязок");
+		Assert.That(result.TradesInInbox, Is.EqualTo(0), "«Входящие» пусты: сделка e6 привязана к затухавшей конструкции");
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			Assert.That(db.TradeUserdata.Any(userdata => userdata.ExecId == "f1"), Is.False, "Фандинг не привязан к конструкции");
@@ -304,9 +312,9 @@ public class ConstructionAssemblyServiceTests
 	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-incremental-inbox-assembly
 	public async Task TryIfInboxAssemblyProcessesOnlyUnboundTrades()
 	{
-		// Arrange: пересбор собрал стреддл из e1..e5 и закрыл его, e6 остался
-		// во «Входящих»; затем синхронизация принесла новые записи — докупку
-		// колла и сделку робота в периоде новой ноги.
+		// Arrange: пересбор собрал стреддл из e1..e5, затухание после гибели ног
+		// закрыла сделка e6, обнулив фьючерсный остаток; затем синхронизация
+		// принесла новые записи — докупку колла и сделку робота.
 		SeedRawStorage();
 		var service = CreateService();
 		await service.RebuildAsync();
@@ -323,10 +331,10 @@ public class ConstructionAssemblyServiceTests
 		var result = await service.AssembleInboxAsync();
 
 		// Assert: создана одна новая конструкция, привязаны только новые записи,
-		// закрытый стреддл и прежние привязки не изменены.
+		// закрытая конструкция и прежние привязки не изменены, «Входящие» пусты.
 		Assert.That(result.ConstructionsCount, Is.EqualTo(1), "Из «Входящих» создана одна конструкция");
 		Assert.That(result.BoundCount, Is.EqualTo(2), "Привязаны только новые записи");
-		Assert.That(result.TradesInInbox, Is.EqualTo(1), "Во «Входящих» осталась сделка вне периодов");
+		Assert.That(result.TradesInInbox, Is.EqualTo(0), "«Входящие» пусты: e6 привязан пересбором");
 
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
@@ -341,7 +349,10 @@ public class ConstructionAssemblyServiceTests
 			Assert.That(constructionIdByExecId["e7"], Is.EqualTo(constructions[1].Id), "Новая опционная сделка привязана к новой конструкции");
 			Assert.That(constructionIdByExecId["e8"], Is.EqualTo(constructions[1].Id), "Сделка робота в периоде новой ноги привязана к ней");
 			Assert.That(constructionIdByExecId["e1"], Is.EqualTo(constructions[0].Id), "Прежняя привязка не изменена");
-			Assert.That(constructionIdByExecId, Does.Not.ContainKey("e6"), "Сделка вне периодов осталась во «Входящих» без привязки");
+			// Затухавшая конструкция закрыта сделкой e6, поэтому докупка колла e7
+			// открыла новую конструкцию, а не усреднила затухание.
+			// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-last-position-flat-closes-construction
+			Assert.That(constructionIdByExecId["e6"], Is.EqualTo(constructions[0].Id), "Сделка e6 привязана к затухавшей конструкции");
 		}
 
 		// Повторный прогон без новых записей ничего не меняет: инкремент идемпотентен.
@@ -349,7 +360,7 @@ public class ConstructionAssemblyServiceTests
 		var rerun = await service.AssembleInboxAsync();
 		Assert.That(rerun.ConstructionsCount, Is.EqualTo(0), "Повторный прогон не создаёт конструкций");
 		Assert.That(rerun.BoundCount, Is.EqualTo(0), "Повторный прогон не создаёт привязок");
-		Assert.That(rerun.TradesInInbox, Is.EqualTo(1), "Повторный прогон оставляет «Входящие» теми же");
+		Assert.That(rerun.TradesInInbox, Is.EqualTo(0), "Повторный прогон оставляет «Входящие» пустыми");
 		var after = CaptureState();
 		Assert.That(after.Constructions, Is.EqualTo(before.Constructions), "Повторный прогон не меняет конструкции");
 		Assert.That(after.Userdata, Is.EqualTo(before.Userdata), "Повторный прогон не меняет привязки");
@@ -416,16 +427,19 @@ public class ConstructionAssemblyServiceTests
 		var result = await service.AssembleInboxAsync();
 
 		// Assert: ручные данные нетронуты, привязка колла сохранена вместе с
-		// комментарием, пут привязан к той же конструкции.
+		// комментарием, пут и сделки робота привязаны к той же конструкции.
 		Assert.That(result.ConstructionsCount, Is.EqualTo(0), "Новые конструкции не созданы");
-		Assert.That(result.BoundCount, Is.EqualTo(4), "Привязаны записи «Входящих» из периодов конструкции");
-		Assert.That(result.TradesInInbox, Is.EqualTo(1), "Во «Входящих» осталась сделка вне периодов");
+		Assert.That(result.BoundCount, Is.EqualTo(5), "Привязаны записи «Входящих» из периодов конструкции, включая сделку робота в затухании");
+		Assert.That(result.TradesInInbox, Is.EqualTo(0), "«Входящие» пусты: e6 привязан в периоде затухания");
 
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			var manual = db.Constructions.Single(construction => construction.Id == manualId);
 			Assert.That(manual.Name, Is.EqualTo("ETH направленная PUT 25SEP26 1600"), "Имя выводится из живых ног и после полного обнуления хранит последнее производное");
-			Assert.That(manual.Status, Is.EqualTo(ConstructionStatus.Closed), "Статус следует за прикрытием: ноги обнулены сделками");
+			Assert.That(manual.Status, Is.EqualTo(ConstructionStatus.Closed), "Статус следует за всеми позициями: затухание закрыто сделкой, обнулившей фьючерс");
+			// Затухание (ноги обнулены, фьючерсный остаток жив) остаётся открытым до
+			// сделки e6, выводящей остаток в ноль: закрытие происходит в момент e6.
+			// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-last-position-flat-closes-construction
 			Assert.That(manual.AllocatedCapitalUsdt, Is.EqualTo(100m), "Выделенный капитал не изменён");
 			Assert.That(manual.RiskValue, Is.EqualTo(10m), "Значение риска не изменено");
 			Assert.That(manual.RiskUnit, Is.EqualTo(TargetUnit.Usdt), "Единица риска не изменена");
@@ -442,7 +456,7 @@ public class ConstructionAssemblyServiceTests
 			Assert.That(bindingByExecId["e1"].ConstructionId, Is.EqualTo(manualId), "Привязка колла сохранена");
 			Assert.That(bindingByExecId["e1"].Comment, Is.EqualTo("комментарий сделки"), "Комментарий сделки не изменён");
 			Assert.That(bindingByExecId["e2"].ConstructionId, Is.EqualTo(manualId), "Пут присоединён к той же конструкции");
-			Assert.That(bindingByExecId, Does.Not.ContainKey("e6"), "Сделка вне периодов осталась во «Входящих» без привязки");
+			Assert.That(bindingByExecId["e6"].ConstructionId, Is.EqualTo(manualId), "Сделка e6 привязана в периоде затухания");
 		}
 	}
 

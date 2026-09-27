@@ -22,12 +22,19 @@ namespace TransactionJournal.Tests.Domain.ConstructionAssembly;
 [TestClass]
 public class ConstructionAssemblyHistoryReconciliationTests
 {
-	/// <summary>Эталонные контрольные числа истории: 10 конструкций, 974 привязанные сделки, 1 во «Входящих».</summary>
+	/// <summary>
+	/// Эталонные контрольные числа истории: 10 конструкций, 975 привязанных
+	/// сделок, 0 во «Входящих». По новому правилу закрытия одна линейная сделка
+	/// (1026de2d…), остававшаяся во «Входящих», привязывается к затухающей
+	/// конструкции 24APR26-2200 — её опционное прикрытие погибло при живом
+	/// фьючерсном остатке, и сделка робота пришлась на период затухания.
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-fading-construction-absorbs-robot-trades
+	/// </summary>
 	private const int ExpectedConstructions = 10;
 
-	private const int ExpectedBound = 974;
+	private const int ExpectedBound = 975;
 
-	private const int ExpectedInbox = 1;
+	private const int ExpectedInbox = 0;
 
 	/// <summary>
 	/// Имя конструкции цепочки 29MAY, в которую роллом переходят ноги 1900 C/P:

@@ -14,17 +14,20 @@ namespace TransactionJournal.Domain.ConstructionAssembly;
 /// живую конструкцию актива (вне дня экспирации, одноногое либо с повторением
 /// пар «страйк + доска»), а при нескольких живых — одноногое окно к
 /// единственному живому кандидату с ногой той же доски; иначе открывает новую
-/// конструкцию. Конструкция закрывается, когда нулевой становится каждая её
-/// нога, и снова открывается при появлении ненулевой; имя пересчитывается
-/// из живых ног, пока не зафиксировано вручную. Существующие конструкции
-/// могут передаваться как начальное состояние (seed) — контекст остатков
-/// инкрементной сборки. Сделки робота привязываются по базовому активу
-/// и периоду жизни конструкции. Прогон детерминирован: повторная сборка над
-/// тем же сырьём даёт тот же план.
+/// конструкцию. Конструкция закрывается, когда нулевыми становятся все её
+/// позиции — опционные ноги и фьючерсный остаток, — и снова открывается при
+/// появлении ненулевой позиции; затухающая конструкция (прикрытие обнулено,
+/// фьючерс не нулевой) остаётся открытой и продолжает принимать сделки
+/// робота; имя пересчитывается из живых ног, пока не зафиксировано вручную.
+/// Существующие конструкции могут передаваться как начальное состояние
+/// (seed) — контекст остатков инкрементной сборки. Сделки робота
+/// привязываются по базовому активу и периоду жизни конструкции
+/// хронологическим однопроходным проходом. Прогон детерминирован: повторная
+/// сборка над тем же сырьём даёт тот же план.
 // Traceability: openspec:domain/construction-assembly#requirement-deterministic-option-assembly
 /// Traceability: openspec:domain/construction-assembly#requirement-robot-trade-binding
 /// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-deterministic-option-assembly
-/// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-status-follows-option-cover
+/// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#requirement-status-follows-all-positions
 /// Traceability: change:add-construction-auto-assembly/design#d2
 /// </summary>
 public sealed class ConstructionAssembler
@@ -145,6 +148,13 @@ public sealed class ConstructionAssembler
 			{
 				ProcessAsset(run, asset, [], deliveries);
 			}
+		}
+
+		// Опционный таймлайн завершён: момент гибели прикрытия фиксируется как
+		// неизменяемая база пересчёта закрытия при привязке фьючерсных исполнений.
+		foreach (var construction in run.Constructions)
+		{
+			construction.OptionClosedAtMs = construction.ClosedAtMs;
 		}
 
 		BindLinearExecutions(run, linearExecutions);
@@ -502,25 +512,27 @@ public sealed class ConstructionAssembler
 	}
 
 	/// <summary>
-	/// Пересчитывает производные атрибуты конструкции по текущему составу ног:
-	/// период жизни закрывается, когда нулевой становится каждая нога, а не их
-	/// сумма (зачёт длинной и короткой ног конструкцию не закрывает), и снова
-	/// открывается при повторном появлении ненулевой ноги; статус следует за
-	/// опционным прикрытием — «открыта» при ненулевой ноге, «закрыта» при полном
+	/// Пересчитывает производные атрибуты конструкции по текущему составу позиций:
+	/// период жизни закрывается, когда обнулены все позиции — каждая нога и
+	/// фьючерсный остаток (зачёт длинной и короткой ног конструкцию не закрывает),
+	/// и снова открывается при появлении ненулевой позиции; статус следует за
+	/// всеми позициями — «открыта» при ненулевой позиции, «закрыта» при полном
 	/// обнулении; имя пересчитывается из живых ног, пока оно не зафиксировано
 	/// вручную, а при полном обнулении сохраняется последнее производное.
 	/// </summary>
 	// Статус «архив» — строго ручной: сборка не меняет его и не переименовывает
 	// архивную конструкцию, но погашение остатков продолжает обрабатывать.
-	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-status-follows-option-cover
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#requirement-status-follows-all-positions
 	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-derived-construction-naming
 	private static void UpdateDerivedState(ConstructionState construction, long eventTimeMs)
 	{
 		var hasLiveLeg = construction.Legs.Any(leg => leg.Quantity != 0m);
-		if (hasLiveLeg)
+		var hasLivePosition = HasLivePosition(construction);
+		if (hasLivePosition)
 		{
-			// Повторное появление ненулевой ноги возвращает закрытую конструкцию
-			// в открытые: конец периода жизни отступает, период снова открыт.
+			// Повторное появление ненулевой позиции (ноги или фьючерса) возвращает
+			// закрытую конструкцию в открытые: конец периода жизни отступает,
+			// период снова открыт.
 			// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-roll-reopens-status
 			construction.ClosedAtMs = null;
 		}
@@ -535,7 +547,7 @@ public sealed class ConstructionAssembler
 			return;
 		}
 
-		construction.Status = hasLiveLeg
+		construction.Status = hasLivePosition
 			? ConstructionStatus.Open
 			: construction.Legs.Count > 0
 				? ConstructionStatus.Closed
@@ -565,32 +577,149 @@ public sealed class ConstructionAssembler
 
 	/// <summary>
 	/// Привязывает фьючерсные исполнения к конструкциям того же базового актива
-	/// по периоду жизни [открытие .. закрытие]; перекрытие периодов разрешается
-	/// конструкцией, открытой раньше; вне всех периодов сделка остаётся во «Входящих».
+	/// хронологическим однопроходным алгоритмом: активы и сделки упорядочены по
+	/// времени, сделка привязывается к первой (по открытию, ключу) конструкции,
+	/// открытой на момент сделки, и пополняет её фьючерсный остаток. Конструкция
+	/// закрывается событием, обнулившим последнюю позицию: гибелью прикрытия при
+	/// нулевом фьючерсе или сделкой, обнулившей фьючерсный остаток после гибели
+	/// прикрытия. Затухающая конструкция (прикрытие обнулено, фьючерс не нулевой)
+	/// остаётся открытой и продолжает принимать сделки; перекрытие периодов
+	/// разрешается конструкцией, открытой раньше; вне всех периодов сделка
+	/// остаётся во «Входящих».
 	/// </summary>
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#requirement-robot-trade-binding
 	private static void BindLinearExecutions(AssemblyRun run, IEnumerable<AssemblyExecution> executions)
 	{
+		var executionsByAsset = new SortedDictionary<string, List<AssemblyExecution>>(StringComparer.Ordinal);
 		foreach (var execution in executions)
 		{
-			if (LinearSymbolParser.TryParseBaseCoin(execution.Symbol, out var baseCoin) == false)
+			if (LinearSymbolParser.TryParseBaseCoin(execution.Symbol, out var baseCoin) == false
+				|| baseCoin is null)
 			{
 				continue;
 			}
 
-			// Границы периода жизни включительны: сделка в момент открытия и в момент
-			// закрытия конструкции всё ещё покрывается её периодом.
-			var covering = run.Constructions
-				.Where(construction => string.Equals(construction.BaseCoin, baseCoin, StringComparison.Ordinal)
-					&& construction.OpenedAtMs <= execution.ExecTimeMs
-					&& (construction.ClosedAtMs is null || execution.ExecTimeMs <= construction.ClosedAtMs))
-				.OrderBy(construction => construction.OpenedAtMs)
-				.ThenBy(construction => construction.Id)
-				.FirstOrDefault();
-			if (covering is not null)
+			if (executionsByAsset.TryGetValue(baseCoin, out var assetExecutions) == false)
 			{
-				run.Bindings[execution.ExecId] = covering.Id;
+				assetExecutions = new List<AssemblyExecution>();
+				executionsByAsset.Add(baseCoin, assetExecutions);
+			}
+
+			assetExecutions.Add(execution);
+		}
+
+		foreach (var assetPair in executionsByAsset)
+		{
+			BindAssetExecutions(assetPair.Value, run, assetPair.Key);
+		}
+	}
+
+	/// <summary>Проводит хронологическую привязку фьючерсных исполнений одного актива.</summary>
+	private static void BindAssetExecutions(List<AssemblyExecution> executions, AssemblyRun run, string baseCoin)
+	{
+		var constructions = run.Constructions
+			.Where(construction => string.Equals(construction.BaseCoin, baseCoin, StringComparison.Ordinal))
+			.OrderBy(construction => construction.OpenedAtMs)
+			.ThenBy(construction => construction.Id)
+			.ToList();
+
+		foreach (var construction in constructions)
+		{
+			// Затухающая конструкция с ненулевым фьючерсным остатком переживает
+			// записанное закрытие: период жизни продолжается до обнуления остатка.
+			// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-cover-loss-with-open-futures-keeps-open
+			if (construction.ClosedAtMs is not null && construction.FuturesQuantity != 0m)
+			{
+				construction.ClosedAtMs = null;
+				RefreshStatusAfterFuturesChange(construction);
 			}
 		}
+
+		// Однопроходность требует хронологии: накопительный фьючерсный остаток
+		// вычисляется на лету, поэтому порядок сделок зафиксирован правилом
+		// (ExecTimeMs, ExecId) независимо от порядка выдачи снимка.
+		foreach (var execution in executions
+			.OrderBy(execution => execution.ExecTimeMs)
+			.ThenBy(execution => execution.ExecId, StringComparer.Ordinal))
+		{
+			var covering = FindCoveringConstruction(constructions, execution.ExecTimeMs);
+			if (covering is null)
+			{
+				continue;
+			}
+
+			covering.FuturesQuantity += execution.SignedQuantity;
+			run.Bindings[execution.ExecId] = covering.Id;
+			RefreshDerivedStateAfterFuturesChange(covering, execution.ExecTimeMs);
+		}
+	}
+
+	/// <summary>
+	/// Находит первую (по открытию, ключу) конструкцию, покрывающую момент сделки:
+	/// конструкция открыта не позже сделки и ещё не закрыта. Конструкции
+	/// упорядочены по открытию, поэтому остановка на первой с более поздним
+	/// открытием корректна. Границы периода включительны: сделка в момент
+	/// закрытия всё ещё покрывается периодом конструкции.
+	/// </summary>
+	private static ConstructionState? FindCoveringConstruction(IReadOnlyList<ConstructionState> constructions, long timeMs)
+	{
+		foreach (var construction in constructions)
+		{
+			if (construction.OpenedAtMs > timeMs)
+			{
+				return null;
+			}
+
+			if (construction.ClosedAtMs is null || timeMs <= construction.ClosedAtMs.Value)
+			{
+				return construction;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	/// Пересчитывает период жизни и статус после изменения фьючерсного остатка.
+	/// Сделка до гибели прикрытия не может закрыть конструкцию (ноги живы): при
+	/// нулевом остатке в силе остаётся закрытие прикрытия, при ненулевом
+	/// конструкция его переживёт. Сделка в момент гибели прикрытия или позже
+	/// закрывает конструкцию, только если вместе с ногами обнулён и фьючерс, —
+	/// моментом закрытия становится это событие.
+	/// </summary>
+	// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#scenario-last-position-flat-closes-construction
+	private static void RefreshDerivedStateAfterFuturesChange(ConstructionState construction, long eventTimeMs)
+	{
+		var optionClosedAtMs = construction.OptionClosedAtMs;
+		if (optionClosedAtMs is not null && eventTimeMs < optionClosedAtMs.Value)
+		{
+			construction.ClosedAtMs = construction.FuturesQuantity != 0m
+				? null
+				: optionClosedAtMs;
+		}
+		else
+		{
+			var isFlat = construction.Legs.All(leg => leg.Quantity == 0m)
+				&& construction.FuturesQuantity == 0m;
+			construction.ClosedAtMs = isFlat ? eventTimeMs : null;
+		}
+
+		RefreshStatusAfterFuturesChange(construction);
+	}
+
+	/// <summary>Пересчитывает статус по всем позициям; «архив» остаётся ручным.</summary>
+	private static void RefreshStatusAfterFuturesChange(ConstructionState construction)
+	{
+		if (construction.IsArchived)
+		{
+			return;
+		}
+
+		construction.Status = HasLivePosition(construction)
+			? ConstructionStatus.Open
+			: construction.Legs.Count > 0
+				? ConstructionStatus.Closed
+				: construction.Status;
 	}
 
 	#endregion
@@ -604,6 +733,10 @@ public sealed class ConstructionAssembler
 			.OrderBy(construction => construction.OpenedAtMs)
 			.ThenBy(construction => construction.Id)
 			.FirstOrDefault();
+
+	/// <summary>Есть ли у конструкции ненулевая позиция: живая нога или фьючерсный остаток.</summary>
+	private static bool HasLivePosition(ConstructionState construction) =>
+		construction.Legs.Any(leg => leg.Quantity != 0m) || construction.FuturesQuantity != 0m;
 
 	/// <summary>Суммарный знаковый остаток аккаунта по символу — база классификации закрывающих сделок.</summary>
 	private static decimal HeldOf(AssemblyRun run, string symbol) =>
@@ -635,7 +768,7 @@ public sealed class ConstructionAssembler
 		/// <summary>Признак вручную зафиксированного имени: автогенерация имени отключена.</summary>
 		public bool NameIsManual { get; init; }
 
-		/// <summary>Статус, следующий за опционным прикрытием; пересчитывается при каждом изменении ног.</summary>
+		/// <summary>Статус, следующий за всеми позициями конструкции; пересчитывается при каждом изменении позиций.</summary>
 		public ConstructionStatus Status { get; set; } = ConstructionStatus.Open;
 
 		/// <summary>Признак существующей конструкции из seed'а.</summary>
@@ -649,6 +782,21 @@ public sealed class ConstructionAssembler
 
 		/// <summary>Время первого исполнения открывающего окна.</summary>
 		public required long OpenedAtMs { get; init; }
+
+		/// <summary>
+		/// Знаковый фьючерсный остаток конструкции (по одному на актив —
+		/// конструкция одноактивна): стартует из seed'а инкрементной сборки
+		/// и пополняется привязанными фьючерсными исполнениями. Участвует
+		/// в статусе и периоде жизни наравне с опционными ногами.
+		/// </summary>
+		// Traceability: change:close-construction-on-all-positions/specs/domain/construction-assembly/spec#requirement-status-follows-all-positions
+		public decimal FuturesQuantity { get; set; }
+
+		/// <summary>
+		/// Момент гибели опционного прикрытия по опционному таймлайну: неизменяемая
+		/// база пересчёта закрытия конструкции при привязке фьючерсных исполнений.
+		/// </summary>
+		public long? OptionClosedAtMs { get; set; }
 
 		/// <summary>Время закрытия; null — конструкция жива.</summary>
 		public long? ClosedAtMs { get; set; }
