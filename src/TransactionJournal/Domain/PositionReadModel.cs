@@ -30,14 +30,21 @@ public sealed class PositionReadModel
 
 	private readonly IInstrumentMarkSource? _markSource;
 
+	private readonly TimeProvider _timeProvider;
+
 	/// <summary>Создаёт read-модель над опциями контекста журнала; база развёрнута миграциями.</summary>
 	/// <param name="options">Опции EF-контекста журнала.</param>
 	/// <param name="markSource">Источник последних марок для ручных пометок без цены; null — цена остаётся неизвестной.</param>
+	/// <param name="timeProvider">Поставщик момента «сейчас» для вывода OTM-закрывающих; по умолчанию системные часы.</param>
 	/// <exception cref="ArgumentNullException">Опции не заданы.</exception>
-	public PositionReadModel(DbContextOptions<JournalDbContext> options, IInstrumentMarkSource? markSource = null)
+	public PositionReadModel(
+		DbContextOptions<JournalDbContext> options,
+		IInstrumentMarkSource? markSource = null,
+		TimeProvider? timeProvider = null)
 	{
 		_options = options ?? throw new ArgumentNullException(nameof(options));
 		_markSource = markSource;
+		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
 	/// <summary>
@@ -140,7 +147,7 @@ public sealed class PositionReadModel
 			pair => pair.Key,
 			pair => (string?)pair.Value.ToString(CultureInfo.InvariantCulture));
 		var expiry = new ExpiryMaterializer(tradeMaterializer, resolver)
-			.Materialize(rawExecutions, rawDeliveries, assignments, DateTimeOffset.UtcNow);
+			.Materialize(rawExecutions, rawDeliveries, assignments, _timeProvider.GetUtcNow());
 
 		var timelines = new Dictionary<(long ConstructionId, string Symbol), List<TimelineEvent>>();
 		foreach (var trade in trades)

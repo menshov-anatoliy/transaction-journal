@@ -19,9 +19,9 @@
 
 ## 4. Use-case сборки
 
-- [ ] 4.1 `IConstructionAssemblyService.AssembleInboxAsync`: вход — исполнения вне `TradeUserdata` (критерий «Входящих») плюс полный таймлайн delivery-событий (сырые + выведенные OTM по текущему времени); seed читается из БД агрегатом остатков (сделки + закрывающие записи) — d2, d3; проверить unit-тестом сервиса на изолированной базе
-- [ ] 4.2 Применение плана одной транзакцией: вставка новых конструкций и привязок, точечные `UPDATE` имени/статуса затронутых существующих конструкций; ручные данные не изменяются; проверить тестами `scenario-rerun-processes-only-inbox`, `scenario-manual-data-survives-incremental-assembly`, `scenario-split-roll-opens-new-construction` в `ConstructionAssemblyServiceTests`
-- [ ] 4.3 Перевести `RebuildAsync` на общий план с неймингом v2 и статусами (`Status = Closed` для закрытых в плане); обновить ожидания `ConstructionAssemblyServiceTests` по пересбору
+- [x] 4.1 `IConstructionAssemblyService.AssembleInboxAsync`: вход — исполнения вне `TradeUserdata` (критерий «Входящих») плюс полный таймлайн delivery-событий (сырые + выведенные OTM по текущему времени); seed читается из БД агрегатом остатков (сделки + закрывающие записи) — d2, d3; проверить unit-тестом сервиса на изолированной базе
+- [x] 4.2 Применение плана одной транзакцией: вставка новых конструкций и привязок, точечные `UPDATE` имени/статуса затронутых существующих конструкций; ручные данные не изменяются; проверить тестами `scenario-rerun-processes-only-inbox`, `scenario-manual-data-survives-incremental-assembly`, `scenario-split-roll-opens-new-construction` в `ConstructionAssemblyServiceTests`
+- [x] 4.3 Перевести `RebuildAsync` на общий план с неймингом v2 и статусами (`Status = Closed` для закрытых в плане); обновить ожидания `ConstructionAssemblyServiceTests` по пересбору
 
 ## 5. UI
 

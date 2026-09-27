@@ -9,8 +9,9 @@ namespace TransactionJournal.Domain.ConstructionAssembly;
 
 /// <summary>
 /// Контракт use-case «Собрать конструкции» для тонких слоёв UI: полный пересбор
-/// конструкций и привязок сделок из локального сырья одним действием. Экран
-/// зависит от интерфейса, тесты подменяют его заглушкой.
+/// конструкций и привязок сделок из локального сырья одним действием, а также
+/// инкрементная сборка из «Входящих». Экран зависит от интерфейса, тесты
+/// подменяют его заглушкой.
 /// </summary>
 public interface IConstructionAssemblyService
 {
@@ -20,11 +21,20 @@ public interface IConstructionAssemblyService
 	/// </summary>
 	/// <param name="cancellationToken">Токен отмены пересбора.</param>
 	Task<ConstructionRebuildResult> RebuildAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Собирает конструкции только из «Входящих» — записей, не привязанных ни к
+	/// одной конструкции, — читая существующие конструкции как контекст остатков,
+	/// и возвращает счётчики итога: создано, привязано, осталось.
+	/// </summary>
+	/// <param name="cancellationToken">Токен отмены сборки.</param>
+	Task<ConstructionRebuildResult> AssembleInboxAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// Счётчики итога пересбора конструкций: конструкций создано, сделок привязано,
-/// сделок осталось во «Входящих» — чисел для показа пользователю после команды.
+/// Счётчики итога команды сборки — и пересбора, и сборки из «Входящих»:
+/// конструкций создано, сделок привязано, сделок осталось во «Входящих» —
+/// чисел для показа пользователю после команды.
 // Traceability: change:add-construction-auto-assembly/design#d5
 /// </summary>
 public sealed record ConstructionRebuildResult
@@ -90,6 +100,178 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 			TradesInInbox = plan.InboxCount,
 		};
 	}
+
+	/// <inheritdoc cref="IConstructionAssemblyService.AssembleInboxAsync" />
+	public async Task<ConstructionRebuildResult> AssembleInboxAsync(CancellationToken cancellationToken = default)
+	{
+		// Инкремент работает над тем же локальным сырьём: исполнения фильтруются
+		// критерием «Входящих», delivery-таймлайн остаётся полным — экспирации,
+		// наступившие между прогонами, обязаны погасить ноги владельцев.
+		var snapshot = await _rawSnapshotStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+		var executions = BuildExecutions(snapshot.Executions);
+		var deliveries = BuildDeliveries(
+			snapshot,
+			new InstrumentCatalog(snapshot.Instruments),
+			executions,
+			_timeProvider.GetUtcNow());
+
+		using var db = new JournalDbContext(_options);
+		var userdataRows = await db.TradeUserdata.ToListAsync(cancellationToken).ConfigureAwait(false);
+		var constructions = await db.Constructions
+			.OrderBy(construction => construction.Id)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+
+		// «Входящие» — исполнения без действующей привязки: тот же критерий, что у
+		// читающей модели «Входящих». Ролл с привязанной закрывающей ногой приходит
+		// в прогон одной открывающей записью и открывает новую конструкцию —
+		// принятое расхождение инкремента с полным пересбором.
+		// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-split-roll-opens-new-construction
+		// Traceability: change:refine-construction-assembly/design#d3
+		var boundExecIds = userdataRows
+			.Where(row => row.ConstructionId != null)
+			.Select(row => row.ExecId)
+			.ToHashSet(StringComparer.Ordinal);
+		var inboxExecutions = executions
+			.Where(execution => boundExecIds.Contains(execution.ExecId) == false)
+			.ToList();
+
+		// Существующие конструкции читаются как контекст остатков: их остатки ног
+		// участвуют в классификации закрывающих сделок и выборе целей усреднения.
+		// Traceability: change:refine-construction-assembly/design#d1
+		var seed = await BuildSeedAsync(constructions, userdataRows, executions, cancellationToken).ConfigureAwait(false);
+
+		var plan = new ConstructionAssembler().Assemble(inboxExecutions, deliveries, seed);
+
+		await ApplyInboxPlanAsync(plan, cancellationToken).ConfigureAwait(false);
+
+		return new ConstructionRebuildResult
+		{
+			ConstructionsCount = plan.Constructions.Count(construction => construction.IsSeeded == false),
+			BoundCount = plan.Bindings.Count,
+			TradesInInbox = plan.InboxCount,
+		};
+	}
+
+	#region Seed существующих конструкций
+
+	/// <summary>
+	/// Читает существующие конструкции как начальное состояние сборки: ключ базы,
+	/// имя с признаком ручной фиксации, статус и ноги с текущими остатками.
+	/// Символы ног выводятся из опционных сделок, привязанных к конструкции, —
+	/// нога известна и с обнулённым остатком; количества остатков вычисляются
+	/// читающим слоем позиций — агрегатом привязанных сделок и закрывающих
+	/// записей (delivery/OTM из сырья, ручные пометки), — без дублирования
+	/// формулы. Конструкции без привязанных сделок в seed не
+	/// попадают: их период жизни не выводится из данных, контекста остатков
+	/// они не дают. Период жизни — агрегат времён привязанных исполнений;
+	/// конструкция с полностью обнуленными ногами передаётся закрытой в момент
+	/// последнего события своей истории.
+	// Traceability: change:refine-construction-assembly/design#d2
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-incremental-inbox-assembly
+	/// </summary>
+	private async Task<IReadOnlyList<AssemblySeedConstruction>> BuildSeedAsync(
+		IReadOnlyList<Construction> constructions,
+		IReadOnlyList<TradeUserdata> userdataRows,
+		IReadOnlyList<AssemblyExecution> executions,
+		CancellationToken cancellationToken)
+	{
+		var positions = await new PositionReadModel(_options, timeProvider: _timeProvider)
+			.ListAsync(cancellationToken)
+			.ConfigureAwait(false);
+
+		var boundExecIdsByConstruction = userdataRows
+			.Where(row => row.ConstructionId != null)
+			.GroupBy(row => row.ConstructionId!.Value)
+			.ToDictionary(
+				group => group.Key,
+				group => group.Select(row => row.ExecId).ToHashSet(StringComparer.Ordinal));
+		var executionByExecId = executions
+			.GroupBy(execution => execution.ExecId, StringComparer.Ordinal)
+			.ToDictionary(
+				group => group.Key,
+				group => group.OrderBy(execution => execution.ExecTimeMs).First(),
+				StringComparer.Ordinal);
+		var positionsByConstruction = positions.Positions
+			.GroupBy(position => position.ConstructionId)
+			.ToDictionary(group => group.Key, group => group.ToList());
+		var lastClosingByConstruction = positions.ClosingEntries
+			.GroupBy(entry => entry.ConstructionId)
+			.ToDictionary(group => group.Key, group => group.Max(entry => entry.ClosedAt.ToUnixTimeMilliseconds()));
+
+		var seed = new List<AssemblySeedConstruction>(constructions.Count);
+		foreach (var construction in constructions)
+		{
+			if (boundExecIdsByConstruction.TryGetValue(construction.Id, out var execIds) == false)
+			{
+				continue;
+			}
+
+			var boundExecutions = execIds
+				.Where(executionByExecId.ContainsKey)
+				.Select(execId => executionByExecId[execId])
+				.OrderBy(execution => execution.ExecTimeMs)
+				.ToList();
+			if (boundExecutions.Count == 0)
+			{
+				continue;
+			}
+
+			// Ноги выводятся из опционных символов привязанных исполнений: нога
+			// существует и с обнулённым остатком — именно нулевая нога отличает
+			// закрытую конструкцию от конструкции без известных ног (читающий
+			// слой нулевые позиции не отдаёт). Количества берутся из читающего
+			// слоя позиций, отсутствие строки означает нулевой остаток.
+			var residualsBySymbol = positionsByConstruction.TryGetValue(construction.Id, out var constructionPositions)
+				? constructionPositions
+					.GroupBy(position => position.Symbol, StringComparer.Ordinal)
+					.ToDictionary(group => group.Key, group => group.First().Residual, StringComparer.Ordinal)
+				: [];
+			var legs = boundExecutions
+				.Select(execution => execution.Symbol)
+				.Where(symbol => OptionSymbolParser.TryParse(symbol, out _))
+				.Distinct(StringComparer.Ordinal)
+				.OrderBy(symbol => symbol, StringComparer.Ordinal)
+				.Select(symbol => new AssemblySeedLeg
+				{
+					Symbol = symbol,
+					Quantity = residualsBySymbol.GetValueOrDefault(symbol),
+				})
+				.ToList();
+
+			// Полное обнуление ног делает конструкцию мёртвой для инкремента: усреднение
+			// ищет только живые конструкции, ролл может реанимировать закрытую по ноге
+			// с ненулевым остатком. Момент закрытия — последнее событие истории.
+			// Статус выводится из ног, а не берётся из базы: статус следует за
+			// опционным прикрытием, а читающий слой уже применил закрывающие записи
+			// (включая экспирации между прогонами), поэтому обнулённые ноги обязаны
+			// прийти в план закрытыми даже без событий в этом прогоне. Архивный
+			// статус сборкой не меняется; конструкция без известных ног сохраняет
+			// статус базы — её прикрытие не выводится из данных.
+			var isFullyClosed = legs.Count > 0 && legs.All(leg => leg.Quantity == 0m);
+			var derivedStatus = construction.Status == ConstructionStatus.Archived
+				? ConstructionStatus.Archived
+				: legs.Count > 0
+					? (isFullyClosed ? ConstructionStatus.Closed : ConstructionStatus.Open)
+					: construction.Status;
+			seed.Add(new AssemblySeedConstruction
+			{
+				Id = construction.Id,
+				Name = construction.Name,
+				NameIsManual = construction.NameIsManual,
+				Status = derivedStatus,
+				OpenedAtMs = boundExecutions[0].ExecTimeMs,
+				ClosedAtMs = isFullyClosed
+					? Math.Max(boundExecutions[^1].ExecTimeMs, lastClosingByConstruction.GetValueOrDefault(construction.Id))
+					: null,
+				Legs = legs,
+			});
+		}
+
+		return seed;
+	}
+
+	#endregion
 
 	#region План сборки из снимка сырья
 
@@ -303,11 +485,14 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 
 		// Конструкции вставляются в порядке плана: порядковый номер плана задаёт
 		// и порядок строк базы, поэтому повторный прогон воспроизводит состояние.
+		// Имя и статус берутся из плана: имя пересчитано по живым ногам, статус
+		// следует за опционным прикрытием — те же правила, что у инкремента.
+		// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-full-rebuild-semantics
 		var created = plan.Constructions
 			.Select(planned => new Construction
 			{
 				Name = planned.Name,
-				Status = ConstructionStatus.Open,
+				Status = planned.Status,
 			})
 			.ToList();
 		db.Constructions.AddRange(created);
@@ -327,6 +512,114 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 				ExecId = binding.Key,
 				ConstructionId = databaseIdByPlanId[binding.Value],
 			}));
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+		await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Применяет план инкремента к базе одной транзакцией: вставляет новые
+	/// конструкции в порядке плана, ставит привязки «Входящих» — строку без
+	/// привязки получает ключ конструкции, комментарий сделки остаётся нетронутым, —
+	/// и точечно обновляет производные атрибуты затронутых существующих конструкций:
+	/// статус и имя (пока оно не зафиксировано вручную). Ручные данные — капитал,
+	/// риск и профит, комментарии, корректировки PnL, пометки закрытия — планом
+	/// не содержатся и не изменяются.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-incremental-inbox-assembly
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-rerun-processes-only-inbox
+	// Traceability: change:refine-construction-assembly/design#d8
+	/// </summary>
+	private async Task ApplyInboxPlanAsync(AssemblyPlan plan, CancellationToken cancellationToken)
+	{
+		using var db = new JournalDbContext(_options);
+		await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+		// Новые конструкции вставляются в порядке плана — порядок строк базы
+		// воспроизводим между прогонами, как и у пересбора.
+		var newPlanned = plan.Constructions
+			.Where(construction => construction.IsSeeded == false)
+			.ToList();
+		var created = newPlanned
+			.Select(planned => new Construction
+			{
+				Name = planned.Name,
+				Status = planned.Status,
+			})
+			.ToList();
+		db.Constructions.AddRange(created);
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+		// Существующие конструкции ключуются собственным Id базы, новые —
+		// фактически сгенерированными ключами вставки.
+		var databaseIdByPlanId = new Dictionary<long, long>(plan.Constructions.Count);
+		foreach (var planned in plan.Constructions)
+		{
+			if (planned.IsSeeded)
+			{
+				databaseIdByPlanId[planned.Id] = planned.Id;
+			}
+		}
+		for (var index = 0; index < created.Count; index++)
+		{
+			databaseIdByPlanId[newPlanned[index].Id] = created[index].Id;
+		}
+
+		// Привязка ставится только непривязанной записи: строка с комментарием без
+		// привязки получает ключ конструкции, комментарий пользователя сохраняется.
+		var userdataByExecId = (await db.TradeUserdata.ToListAsync(cancellationToken).ConfigureAwait(false))
+			.ToDictionary(row => row.ExecId, StringComparer.Ordinal);
+		foreach (var execId in plan.Bindings.Keys.OrderBy(key => key, StringComparer.Ordinal))
+		{
+			var databaseId = databaseIdByPlanId[plan.Bindings[execId]];
+			if (userdataByExecId.TryGetValue(execId, out var row))
+			{
+				if (row.ConstructionId != databaseId)
+				{
+					row.ConstructionId = databaseId;
+				}
+			}
+			else
+			{
+				db.TradeUserdata.Add(new TradeUserdata
+				{
+					ExecId = execId,
+					ConstructionId = databaseId,
+				});
+			}
+		}
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+		// Производные атрибуты существующих конструкций пишутся точечно:
+		// только фактически изменившиеся имя (у незафиксированного вручную)
+		// и статус; архивный статус и ручное имя приходят из плана неизменными.
+		// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-status-follows-option-cover
+		// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-derived-construction-naming
+		var seededIds = plan.Constructions
+			.Where(construction => construction.IsSeeded)
+			.Select(construction => construction.Id)
+			.ToList();
+		var existingById = await db.Constructions
+			.Where(construction => seededIds.Contains(construction.Id))
+			.ToDictionaryAsync(construction => construction.Id, cancellationToken)
+			.ConfigureAwait(false);
+		foreach (var planned in plan.Constructions)
+		{
+			if (planned.IsSeeded == false
+				|| existingById.TryGetValue(planned.Id, out var row) == false)
+			{
+				continue;
+			}
+
+			if (row.Status != planned.Status)
+			{
+				row.Status = planned.Status;
+			}
+
+			if (planned.NameIsManual == false && row.Name != planned.Name)
+			{
+				row.Name = planned.Name;
+			}
+		}
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
 		await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);

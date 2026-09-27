@@ -470,6 +470,20 @@ public class SettingsScreenTests
 				TradesInInbox = 0,
 			});
 		}
+
+		/// <summary>Число запусков сборки из «Входящих»; подробно проверяется задачей UI-команды.</summary>
+		public int InboxCallCount { get; private set; }
+
+		public Task<ConstructionRebuildResult> AssembleInboxAsync(CancellationToken cancellationToken = default)
+		{
+			InboxCallCount++;
+			return Task.FromResult(Result ?? new ConstructionRebuildResult
+			{
+				ConstructionsCount = 0,
+				BoundCount = 0,
+				TradesInInbox = 0,
+			});
+		}
 	}
 
 	/// <summary>Подменяет поставщика парой известных проверке значений ключа и секрета.</summary>

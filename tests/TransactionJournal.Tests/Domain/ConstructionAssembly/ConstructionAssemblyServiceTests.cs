@@ -20,6 +20,7 @@ public class ConstructionAssemblyServiceTests
 {
 	private const string EthCall1600 = "ETH-25SEP26-1600-C-USDT";
 	private const string EthPut1600 = "ETH-25SEP26-1600-P-USDT";
+	private const string EthCall2100Dec = "ETH-25DEC26-2100-C-USDT";
 
 	private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -181,9 +182,9 @@ public class ConstructionAssemblyServiceTests
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			var constructions = db.Constructions.ToList();
-			Assert.That(constructions.Select(construction => construction.Name), Is.EqualTo(new[] { "ETH стреддл 25SEP26 1600" }), "Осталась только собранная конструкция");
+			Assert.That(constructions.Select(construction => construction.Name), Is.EqualTo(new[] { "ETH направленная PUT 25SEP26 1600" }), "Осталась только собранная конструкция с именем по живым ногам");
 			var construction = constructions.Single();
-			Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Open), "Собранная конструкция открывается со статусом «открыта»");
+			Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Closed), "Статус следует за прикрытием: все ноги обнулены сделками");
 			Assert.That(construction.AllocatedCapitalUsdt, Is.Null, "Выделенный капитал ручной конструкции стёрт");
 			Assert.That(construction.RiskValue, Is.Null, "Риск ручной конструкции стёрт");
 			Assert.That(construction.ProfitValue, Is.Null, "Профит ручной конструкции стёрт");
@@ -295,6 +296,258 @@ public class ConstructionAssemblyServiceTests
 	}
 
 	[TestMethod]
+	[Description("Сборка из «Входящих» обрабатывает только непривязанные записи и переживает повторный запуск")]
+	// Повторный запуск после синхронизации обрабатывает только новые «Входящие»:
+	// прежние привязки и закрытая конструкция не изменяются, создаются только
+	// новые конструкции и привязки.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-rerun-processes-only-inbox
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#requirement-incremental-inbox-assembly
+	public async Task TryIfInboxAssemblyProcessesOnlyUnboundTrades()
+	{
+		// Arrange: пересбор собрал стреддл из e1..e5 и закрыл его, e6 остался
+		// во «Входящих»; затем синхронизация принесла новые записи — докупку
+		// колла и сделку робота в периоде новой ноги.
+		SeedRawStorage();
+		var service = CreateService();
+		await service.RebuildAsync();
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawExecutions.Add(Raw("e7", "option", EthCall1600, Ms(2026, 8, 15, 10, 0),
+				ExecutionPayload("e7", EthCall1600, "Buy", "2400", "1", "0.01", "USDC", Ms(2026, 8, 15, 10, 0))));
+			db.RawExecutions.Add(Raw("e8", "linear", "ETHUSDT", Ms(2026, 8, 16, 10, 0),
+				ExecutionPayload("e8", "ETHUSDT", "Sell", "3100", "0.5", "-0.01", "USDT", Ms(2026, 8, 16, 10, 0))));
+			db.SaveChanges();
+		}
+
+		// Act: собираем из «Входящих».
+		var result = await service.AssembleInboxAsync();
+
+		// Assert: создана одна новая конструкция, привязаны только новые записи,
+		// закрытый стреддл и прежние привязки не изменены.
+		Assert.That(result.ConstructionsCount, Is.EqualTo(1), "Из «Входящих» создана одна конструкция");
+		Assert.That(result.BoundCount, Is.EqualTo(2), "Привязаны только новые записи");
+		Assert.That(result.TradesInInbox, Is.EqualTo(1), "Во «Входящих» осталась сделка вне периодов");
+
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var constructions = db.Constructions.OrderBy(construction => construction.Id).ToList();
+			Assert.That(constructions, Has.Count.EqualTo(2), "Существующая конструкция сохранена, новая добавлена");
+			Assert.That(constructions[0].Name, Is.EqualTo("ETH направленная PUT 25SEP26 1600"), "Имя существующей конструкции не пересчитано без изменений ног");
+			Assert.That(constructions[0].Status, Is.EqualTo(ConstructionStatus.Closed), "Статус существующей конструкции не изменён");
+			Assert.That(constructions[1].Name, Is.EqualTo("ETH направленная CALL 25SEP26 1600"), "Новая конструкция названа по живой ноге");
+			Assert.That(constructions[1].Status, Is.EqualTo(ConstructionStatus.Open), "Новая конструкция открыта");
+
+			var constructionIdByExecId = db.TradeUserdata.ToDictionary(userdata => userdata.ExecId, userdata => userdata.ConstructionId);
+			Assert.That(constructionIdByExecId["e7"], Is.EqualTo(constructions[1].Id), "Новая опционная сделка привязана к новой конструкции");
+			Assert.That(constructionIdByExecId["e8"], Is.EqualTo(constructions[1].Id), "Сделка робота в периоде новой ноги привязана к ней");
+			Assert.That(constructionIdByExecId["e1"], Is.EqualTo(constructions[0].Id), "Прежняя привязка не изменена");
+			Assert.That(constructionIdByExecId, Does.Not.ContainKey("e6"), "Сделка вне периодов осталась во «Входящих» без привязки");
+		}
+
+		// Повторный прогон без новых записей ничего не меняет: инкремент идемпотентен.
+		var before = CaptureState();
+		var rerun = await service.AssembleInboxAsync();
+		Assert.That(rerun.ConstructionsCount, Is.EqualTo(0), "Повторный прогон не создаёт конструкций");
+		Assert.That(rerun.BoundCount, Is.EqualTo(0), "Повторный прогон не создаёт привязок");
+		Assert.That(rerun.TradesInInbox, Is.EqualTo(1), "Повторный прогон оставляет «Входящие» теми же");
+		var after = CaptureState();
+		Assert.That(after.Constructions, Is.EqualTo(before.Constructions), "Повторный прогон не меняет конструкции");
+		Assert.That(after.Userdata, Is.EqualTo(before.Userdata), "Повторный прогон не меняет привязки");
+	}
+
+	[TestMethod]
+	[Description("Сборка из «Входящих» не изменяет ручные данные существующей конструкции")]
+	// Капитал, риск и профит, комментарии, корректировка PnL и пометка закрытия
+	// переживают инкрементную сборку; обновляются только производные имя и статус.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-manual-data-survives-incremental-assembly
+	public async Task TryIfManualDataSurvivesInboxAssembly()
+	{
+		// Arrange: ручная конструкция с привязанной покупкой колла и полным
+		// набором ручных данных; покупка пута того же страйка пришла во «Входящих».
+		SeedRawStorage();
+		long manualId;
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var manual = new Construction
+			{
+				Name = "Ручная разгонка",
+				AllocatedCapitalUsdt = 100m,
+				RiskValue = 10m,
+				RiskUnit = TargetUnit.Usdt,
+				ProfitValue = 30m,
+				ProfitUnit = TargetUnit.Percent,
+				Comment = "ручной комментарий конструкции",
+			};
+			db.Constructions.Add(manual);
+			db.PnLAdjustments.Add(new PnLAdjustment
+			{
+				Construction = manual,
+				Date = Now,
+				Source = PnLAdjustmentSource.Manual,
+				AmountUsdt = -5m,
+				Comment = "ручная корректировка",
+			});
+			db.PositionComments.Add(new PositionComment
+			{
+				Construction = manual,
+				Symbol = "ETHUSDT",
+				Text = "комментарий позиции",
+			});
+			db.ManualCloseMarks.Add(new ManualCloseMark
+			{
+				Construction = manual,
+				Symbol = "ETHUSDT",
+				Price = 3000m,
+				MarkedAt = Now,
+			});
+			db.TradeUserdata.Add(new TradeUserdata
+			{
+				ExecId = "e1",
+				Construction = manual,
+				Comment = "комментарий сделки",
+			});
+			db.SaveChanges();
+			manualId = manual.Id;
+		}
+
+		var service = CreateService();
+
+		// Act: собираем из «Входящих» — пут присоединяется к живой конструкции.
+		var result = await service.AssembleInboxAsync();
+
+		// Assert: ручные данные нетронуты, привязка колла сохранена вместе с
+		// комментарием, пут привязан к той же конструкции.
+		Assert.That(result.ConstructionsCount, Is.EqualTo(0), "Новые конструкции не созданы");
+		Assert.That(result.BoundCount, Is.EqualTo(4), "Привязаны записи «Входящих» из периодов конструкции");
+		Assert.That(result.TradesInInbox, Is.EqualTo(1), "Во «Входящих» осталась сделка вне периодов");
+
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var manual = db.Constructions.Single(construction => construction.Id == manualId);
+			Assert.That(manual.Name, Is.EqualTo("ETH направленная PUT 25SEP26 1600"), "Имя выводится из живых ног и после полного обнуления хранит последнее производное");
+			Assert.That(manual.Status, Is.EqualTo(ConstructionStatus.Closed), "Статус следует за прикрытием: ноги обнулены сделками");
+			Assert.That(manual.AllocatedCapitalUsdt, Is.EqualTo(100m), "Выделенный капитал не изменён");
+			Assert.That(manual.RiskValue, Is.EqualTo(10m), "Значение риска не изменено");
+			Assert.That(manual.RiskUnit, Is.EqualTo(TargetUnit.Usdt), "Единица риска не изменена");
+			Assert.That(manual.ProfitValue, Is.EqualTo(30m), "Значение профита не изменено");
+			Assert.That(manual.ProfitUnit, Is.EqualTo(TargetUnit.Percent), "Единица профита не изменена");
+			Assert.That(manual.Comment, Is.EqualTo("ручной комментарий конструкции"), "Комментарий конструкции не изменён");
+			Assert.That(manual.NameIsManual, Is.False, "Имя не было отредактировано вручную и пересчитано ассемблером");
+
+			Assert.That(db.PnLAdjustments.Single().AmountUsdt, Is.EqualTo(-5m), "Корректировка PnL не изменена");
+			Assert.That(db.PositionComments.Single().Text, Is.EqualTo("комментарий позиции"), "Комментарий позиции не изменён");
+			Assert.That(db.ManualCloseMarks.Single().Price, Is.EqualTo(3000m), "Ручная пометка закрытия не изменена");
+
+			var bindingByExecId = db.TradeUserdata.ToDictionary(userdata => userdata.ExecId);
+			Assert.That(bindingByExecId["e1"].ConstructionId, Is.EqualTo(manualId), "Привязка колла сохранена");
+			Assert.That(bindingByExecId["e1"].Comment, Is.EqualTo("комментарий сделки"), "Комментарий сделки не изменён");
+			Assert.That(bindingByExecId["e2"].ConstructionId, Is.EqualTo(manualId), "Пут присоединён к той же конструкции");
+			Assert.That(bindingByExecId, Does.Not.ContainKey("e6"), "Сделка вне периодов осталась во «Входящих» без привязки");
+		}
+	}
+
+	[TestMethod]
+	[Description("Ролл, разрезанный привязкой закрывающей ноги, открывает новую конструкцию")]
+	// Закрывающая нога ролла привязана ранее и обнулила ногу владельца, поэтому
+	// открывающая нога «Входящих» открывает новую конструкцию — принятое
+	// расхождение инкремента с полным пересбором.
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-split-roll-opens-new-construction
+	public async Task TryIfSplitRollOpensNewConstruction()
+	{
+		// Arrange: первая сборка обрабатывает и открытие колла, и его закрытие.
+		var service = CreateService();
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawInstruments.Add(OptionInstrument(EthCall1600, "Call"));
+			db.RawExecutions.Add(Raw("r1", "option", EthCall1600, Ms(2026, 7, 1, 10, 0),
+				ExecutionPayload("r1", EthCall1600, "Buy", "1500", "1", "0.01", "USDC", Ms(2026, 7, 1, 10, 0))));
+			db.RawExecutions.Add(Raw("r2", "option", EthCall1600, Ms(2026, 7, 20, 10, 0),
+				ExecutionPayload("r2", EthCall1600, "Sell", "2000", "1", "0.01", "USDC", Ms(2026, 7, 20, 10, 0))));
+			db.SaveChanges();
+		}
+
+		var first = await service.AssembleInboxAsync();
+		Assert.That(first.ConstructionsCount, Is.EqualTo(1), "Первая сборка создаёт конструкцию");
+		Assert.That(first.BoundCount, Is.EqualTo(2), "Первая сборка привязывает обе ноги");
+		Assert.That(first.TradesInInbox, Is.EqualTo(0), "Первая сборка опустошает «Входящие»");
+
+		// Докупка колла дальней доски — открывающая нога ролла — приходит во «Входящих» позже.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawExecutions.Add(Raw("r3", "option", EthCall2100Dec, Ms(2026, 7, 20, 10, 5),
+				ExecutionPayload("r3", EthCall2100Dec, "Buy", "300", "1", "0.01", "USDC", Ms(2026, 7, 20, 10, 5))));
+			db.SaveChanges();
+		}
+
+		// Act: вторая сборка видит только открывающую ногу.
+		var second = await service.AssembleInboxAsync();
+
+		// Assert: открывающая нога открыла новую конструкцию, прежние привязки целы.
+		Assert.That(second.ConstructionsCount, Is.EqualTo(1), "Открывающая нога ролла открывает новую конструкцию");
+		Assert.That(second.BoundCount, Is.EqualTo(1), "Привязана только новая нога");
+		Assert.That(second.TradesInInbox, Is.EqualTo(0), "«Входящие» опустошены");
+
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var constructions = db.Constructions.OrderBy(construction => construction.Id).ToList();
+			Assert.That(constructions, Has.Count.EqualTo(2), "Существующая конструкция сохранена, новая добавлена");
+			Assert.That(constructions[0].Name, Is.EqualTo("ETH направленная CALL 25SEP26 1600"), "Имя закрытой конструкции сохранено");
+			Assert.That(constructions[0].Status, Is.EqualTo(ConstructionStatus.Closed), "Конструкция закрыта обнулением ноги");
+			Assert.That(constructions[1].Name, Is.EqualTo("ETH направленная CALL 25DEC26 2100"), "Новая конструкция названа по новой ноге");
+			Assert.That(constructions[1].Status, Is.EqualTo(ConstructionStatus.Open), "Новая конструкция открыта");
+
+			var constructionIdByExecId = db.TradeUserdata.ToDictionary(userdata => userdata.ExecId, userdata => userdata.ConstructionId);
+			Assert.That(constructionIdByExecId["r1"], Is.EqualTo(constructions[0].Id), "Привязка открытия остаётся прежней");
+			Assert.That(constructionIdByExecId["r2"], Is.EqualTo(constructions[0].Id), "Привязка закрытия остаётся прежней");
+			Assert.That(constructionIdByExecId["r3"], Is.EqualTo(constructions[1].Id), "Открывающая нога привязана к новой конструкции");
+		}
+	}
+
+	[TestMethod]
+	[Description("Сборка из «Входящих» применяет полный delivery-таймлайн: экспирация между прогонами закрывает конструкцию")]
+	// Delivery-события, включая выведенные из символов OTM-погашения, применяются
+	// ко всему состоянию: наступившая между прогонами экспирация гасит ногу и
+	// закрывает конструкцию без записей во «Входящих».
+	// Traceability: change:refine-construction-assembly/design#d3
+	// Traceability: change:refine-construction-assembly/specs/domain/construction-assembly/spec#scenario-delivery-closes-construction
+	public async Task TryIfInboxAssemblyAppliesDeliveryTimeline()
+	{
+		// Arrange: стреддл с живыми ногами; «сейчас» — до экспирации доски.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawInstruments.Add(OptionInstrument(EthCall1600, "Call"));
+			db.RawInstruments.Add(OptionInstrument(EthPut1600, "Put"));
+			db.RawExecutions.Add(Raw("d1", "option", EthCall1600, Ms(2026, 7, 10, 9, 0),
+				ExecutionPayload("d1", EthCall1600, "Buy", "100", "1", "0.01", "USDC", Ms(2026, 7, 10, 9, 0))));
+			db.RawExecutions.Add(Raw("d2", "option", EthPut1600, Ms(2026, 7, 10, 9, 10),
+				ExecutionPayload("d2", EthPut1600, "Buy", "80", "1", "0.01", "USDC", Ms(2026, 7, 10, 9, 10))));
+			db.SaveChanges();
+		}
+
+		var time = new MutableTimeProvider(Now);
+		var service = CreateService(time);
+		await service.AssembleInboxAsync();
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.Constructions.Single().Status, Is.EqualTo(ConstructionStatus.Open), "До экспирации конструкция открыта");
+		}
+
+		// Act: экспирация доски наступает между прогонами, новых записей нет.
+		time.SetUtcNow(new DateTimeOffset(2026, 9, 26, 12, 0, 0, TimeSpan.Zero));
+		var result = await service.AssembleInboxAsync();
+
+		// Assert: ноги погашены, конструкция закрыта без новых привязок.
+		Assert.That(result.ConstructionsCount, Is.EqualTo(0), "Новые конструкции не созданы");
+		Assert.That(result.BoundCount, Is.EqualTo(0), "Новые привязки не созданы");
+		Assert.That(result.TradesInInbox, Is.EqualTo(0), "«Входящие» пусты");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.Constructions.Single().Status, Is.EqualTo(ConstructionStatus.Closed), "Экспирация между прогонами закрыла конструкцию");
+			Assert.That(db.TradeUserdata.Select(userdata => userdata.ExecId), Is.EquivalentTo(new[] { "d1", "d2" }), "Привязки сохранены");
+		}
+	}
+
+	[TestMethod]
 	[Description("Null-хранилище сырых записей отклоняется конструктором")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnNullRawSnapshotStore()
@@ -315,10 +568,10 @@ public class ConstructionAssemblyServiceTests
 	#region Помощники
 
 	/// <summary>Команда пересбора над настоящим адаптером сырого хранилища, как в работе.</summary>
-	private ConstructionAssemblyService CreateService() => new(
+	private ConstructionAssemblyService CreateService(TimeProvider? timeProvider = null) => new(
 		new JournalSyncStore(CreateOptions()),
 		CreateOptions(),
-		new FixedTimeProvider(Now));
+		timeProvider ?? new FixedTimeProvider(Now));
 
 	/// <summary>Создаёт опции контекста журнала над временной SQLite-базой проверки.</summary>
 	private DbContextOptions<JournalDbContext> CreateOptions() =>
@@ -592,6 +845,14 @@ public class ConstructionAssemblyServiceTests
 	/// <summary>Поставщик фиксированного времени для детерминированных проверок.</summary>
 	private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
 	{
+		public override DateTimeOffset GetUtcNow() => utcNow;
+	}
+
+	/// <summary>Поставщик управляемого времени: проверки двигают «сейчас» между прогонами.</summary>
+	private sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider
+	{
+		public void SetUtcNow(DateTimeOffset value) => utcNow = value;
+
 		public override DateTimeOffset GetUtcNow() => utcNow;
 	}
 
