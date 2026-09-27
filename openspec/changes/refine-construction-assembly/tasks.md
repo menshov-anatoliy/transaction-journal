@@ -2,8 +2,8 @@
 
 ## 1. Модель данных
 
-- [ ] 1.1 Добавить `Construction.NameIsManual` (bool, default false) и EF-миграцию SQLite; проверить, что `JournalDbContextMigrationTests` и `DomainStorageTests` проходят
-- [ ] 1.2 Сервис переименования конструкций выставляет `NameIsManual = true` при ручном переименовании; проверить тестом `ConstructionServiceTests`: после переименования повторный прогон сборки не перезаписывает имя
+- [x] 1.1 Добавить `Construction.NameIsManual` (bool, default false) и EF-миграцию SQLite; проверить, что `JournalDbContextMigrationTests` и `DomainStorageTests` проходят
+- [x] 1.2 Сервис переименования конструкций выставляет `NameIsManual = true` при ручном переименовании; проверить тестом `ConstructionServiceTests`: после переименования повторный прогон сборки не перезаписывает имя
 
 ## 2. Нейминг v2
 

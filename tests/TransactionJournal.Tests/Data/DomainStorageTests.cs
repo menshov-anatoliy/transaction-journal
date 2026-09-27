@@ -76,6 +76,10 @@ public class DomainStorageTests
 			db.Database.Migrate();
 
 			var construction = CreateConstruction("Стреддл BTC");
+
+			// Признак вручную зафиксированного имени хранится строкой конструкции
+			// наравне с остальными атрибутами и переживает запись и чтение.
+			construction.NameIsManual = true;
 			db.Constructions.Add(construction);
 			db.SaveChanges();
 
@@ -100,6 +104,7 @@ public class DomainStorageTests
 			Assert.That(construction.Name, Is.EqualTo("Стреддл BTC"));
 			Assert.That(construction.Status, Is.EqualTo(ConstructionStatus.Open));
 			Assert.That(construction.AllocatedCapitalUsdt, Is.EqualTo(1000m));
+			Assert.That(construction.NameIsManual, Is.True);
 			Assert.That(adjustment.ConstructionId, Is.EqualTo(construction.Id));
 			Assert.That(adjustment.Date, Is.EqualTo(new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.FromHours(3))));
 			Assert.That(adjustment.Source, Is.EqualTo(PnLAdjustmentSource.Robot));
