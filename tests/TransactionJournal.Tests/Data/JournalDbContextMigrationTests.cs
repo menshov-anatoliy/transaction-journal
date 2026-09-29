@@ -68,6 +68,12 @@ public class JournalDbContextMigrationTests
 			// развернулся вместе с остальной схемой журнала.
 			// Traceability: openspec:analytics/performance#requirement-mark-provider
 			Assert.That(tables, Does.Contain("InstrumentMarks"));
+
+			// Таблица настроек приложения уровня рантайма разворачивается штатным
+			// Migrate() на чистой базе — переключатель бэкапа синхронизации получает
+			// своё хранилище при старте без ручных шагов установки.
+			// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+			Assert.That(tables, Does.Contain("AppSettings"));
 		}
 	}
 

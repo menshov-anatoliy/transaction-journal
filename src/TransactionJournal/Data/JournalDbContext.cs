@@ -43,6 +43,9 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 	/// <summary>Кэш последних известных марок инструментов — провайдер марок аналитики.</summary>
 	public DbSet<InstrumentMark> InstrumentMarks => Set<InstrumentMark>();
 
+	/// <summary>Настройки приложения уровня рантайма: пользовательские переключатели.</summary>
+	public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+
 	/// <inheritdoc />
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
@@ -169,6 +172,16 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 		modelBuilder.Entity<InstrumentMark>()
 			.HasIndex(mark => mark.Symbol)
 			.IsUnique();
+
+		#endregion
+
+		#region Настройки приложения уровня рантайма
+
+		// Ключ настройки — первичный ключ: одна строка на переключатель, повторная
+		// запись обновляет значение существующей строки, а не плодит дубли.
+		// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+		modelBuilder.Entity<AppSetting>()
+			.HasKey(setting => setting.Key);
 
 		#endregion
 	}

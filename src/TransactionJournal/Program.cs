@@ -111,6 +111,15 @@ builder.Services.AddSingleton(sp => new JournalBackupService(
 	sp.GetRequiredService<JournalBackupOptions>()));
 builder.Services.AddSingleton<IJournalBackupService>(sp => sp.GetRequiredService<JournalBackupService>());
 
+// Хранилище политики опционального копирования: переключатель «копия перед синхронизацией»
+// живёт в таблице AppSetting базы журнала и переживает перезапуск; отсутствие строки
+// читается как «включён». Стор — singleton над собственными опциями контекста: каждый
+// вызов создаёт короткоживущий контекст.
+// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+builder.Services.AddSingleton(sp => new BackupPolicyStore(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton<IBackupPolicyStore>(sp => sp.GetRequiredService<BackupPolicyStore>());
+
 // Адаптер сырого хранилища живёт singleton-ом над собственными опциями контекста:
 // каждый вызов создаёт короткоживущий контекст, поэтому длительная сессия Blazor Server
 // не держит соединений между пачками записей.
@@ -125,7 +134,16 @@ builder.Services.AddSingleton<IInstrumentReferenceStore>(sp => sp.GetRequiredSer
 builder.Services.AddSingleton<IJournalRawSnapshotStore>(sp => sp.GetRequiredService<JournalSyncStore>());
 builder.Services.AddSingleton<ISyncRunJournal>(sp => sp.GetRequiredService<JournalSyncStore>());
 builder.Services.AddSingleton<JournalMaterializer>();
-builder.Services.AddTransient<IJournalSyncService, JournalSyncService>();
+// Команда «Синхронизировать» идёт через защитный декоратор: при включённой политике
+// копия базы с причиной «sync» создаётся до запуска, неудача копии блокирует запуск
+// до записи строки SyncRun, выключенная политика пускает внутренний сервис напрямую.
+// Экраны зависят от интерфейса IJournalSyncService и тестируются заглушками без изменений.
+// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+builder.Services.AddTransient<JournalSyncService>();
+builder.Services.AddTransient<IJournalSyncService>(sp => new BackupGuardedSyncService(
+	sp.GetRequiredService<IJournalBackupService>(),
+	sp.GetRequiredService<IBackupPolicyStore>(),
+	sp.GetRequiredService<JournalSyncService>()));
 
 // Команда «Переразобрать сырые записи заново» на «Настройках»: полная пересборка
 // доменных представлений из локального сырья без сетевых запросов; экран зависит
