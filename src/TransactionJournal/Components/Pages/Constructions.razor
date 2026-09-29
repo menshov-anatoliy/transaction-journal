@@ -58,6 +58,24 @@ else
 	@* Traceability: openspec:ui/screens#requirement-construction-list-screen *@
 	<div class="kstrip">
 		<div>итог по журналу<b class="@SignClass(_data.TotalPnL)">@TotalLabel</b></div>
+		@* Разбивка итога рядом с итогом: реализованный PnL журнала виден всегда,
+		   нереализованный соседствует с ним и при сбое марок занимает ячейку
+		   признаком сбоя — по образцу отметки времени марок. *@
+		@* Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown *@
+		<div>реализованный<b class="@SignClass(_data.RealizedPnL)">@FormatPnL(_data.RealizedPnL)</b></div>
+		<div>нереализованный
+			@if (_data.UnrealizedPnL is { } unrealized)
+			{
+				<b class="@SignClass(unrealized)">@FormatPnL(unrealized)</b>
+			}
+			else
+			{
+				@* Сбой марок гасит только нереализованную часть сводки: признак
+				   сбоя занимает её место, итог и реализованный остаются видимыми. *@
+				@* Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated *@
+				<b class="markfail" title="Провайдер марок недоступен — нереализованный PnL журнала не оценён">сбой марок</b>
+			}
+		</div>
 		<div>марки на
 			@if (_data.HasMarkFailure)
 			{

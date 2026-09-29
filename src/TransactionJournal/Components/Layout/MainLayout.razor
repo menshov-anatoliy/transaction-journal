@@ -253,7 +253,15 @@
 		}
 	}
 
-	/// <summary>Итог по журналу в панели: вычисляется по текущим данным, сбой марок помечает итог неполным.</summary>
+	/// <summary>
+	/// Итог по журналу в панели с разбивкой на реализованный и нереализованный
+	/// P&L: вычисляется по текущим данным; сбой марок помечает итог неполным
+	/// и гасит только нереализованную часть, реализованная остаётся видимой.
+	/// </summary>
+	// Оба места вывода итога пользуются одним форматтером величин PnL, чтобы
+	// знаковый формат не разъезжался между панелью и сводкой экрана.
+	// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
+	// Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
 	private string TotalLabel
 	{
 		get
@@ -269,18 +277,22 @@
 			}
 
 			// Сбой марок обнуляет итог хотя бы одной конструкции — итог неполный,
-			// частичная сумма не подменяет его.
+			// частичная сумма не подменяет его; нереализованная часть помечается
+			// прочерком, реализованная остаётся видимой.
 			// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
 			// Traceability: change:add-ui-screens/design#d4
 			if (_journal.TotalPnL is null)
 			{
-				return "итог по журналу: неполный (сбой марок)";
+				return $"итог по журналу: неполный (сбой марок), реализов. {FormatPnL(_journal.RealizedPnL)}, нереализов. —";
 			}
 
-			var total = _journal.TotalPnL.Value.ToString("+0.##;-0.##;0", CultureInfo.InvariantCulture);
-			return $"итог по журналу: {total} USDT";
+			return $"итог по журналу: {FormatPnL(_journal.TotalPnL.Value)} USDT (реализов. {FormatPnL(_journal.RealizedPnL)} / нереализов. {FormatPnL(_journal.UnrealizedPnL.GetValueOrDefault())})";
 		}
 	}
+
+	/// <summary>Формат знаковой суммы USDT: «+214.32» / «-58.2» / «0» — тот же, что в сводке списка.</summary>
+	private static string FormatPnL(decimal value) =>
+		value.ToString("+0.##;-0.##;0", CultureInfo.InvariantCulture);
 
 	public void Dispose()
 	{

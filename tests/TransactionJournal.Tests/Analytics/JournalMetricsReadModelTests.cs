@@ -96,6 +96,67 @@ public class JournalMetricsReadModelTests
 		Assert.That(scalperMetrics.TotalPnL, Is.EqualTo(118m));
 		Assert.That(metrics.TotalPnL, Is.EqualTo(118m));
 		Assert.That(metrics.HasMarkFailure, Is.False);
+
+		// Разбивка не содержит корректировку +20: корректировки входят только
+		// в итог журнала, реализованный и нереализованный агрегаты складываются
+		// из частей конструкций без них.
+		// Traceability: openspec:analytics/performance#scenario-journal-breakdown-excludes-adjustments
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(98m));
+		Assert.That(metrics.UnrealizedPnL, Is.EqualTo(0m));
+	}
+
+	[TestMethod]
+	[Description("Разбивка журнала суммирует реализованные и нереализованные части всех конструкций")]
+	public async Task TryIfJournalBreakdownSumsConstructions()
+	{
+		// Arrange: закрытая позиция даёт реализованный PnL 98 (100 − 2 комиссии),
+		// открытый остаток с маркой 42500 даёт реализованный −1 и нереализованный +50.
+		var scalper = await CreateConstructionAsync("Скальп BTC", 1000m);
+		var swing = await CreateConstructionAsync("Длинный BTC", 1000m);
+		await AddLinearTradeAsync("exec-buy-1", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await AddLinearTradeAsync("exec-sell-1", "Sell", "0.1", "43000", "1", ExecMs(2023, 12, 28, 11, 0));
+		await BindAsync(scalper, "exec-buy-1", "exec-sell-1");
+		await AddLinearTradeAsync("exec-buy-2", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 12, 0));
+		await BindAsync(swing, "exec-buy-2");
+		_markSource.FreshMarks[LinearSymbol] = (42500m, FetchedAt);
+
+		// Act
+		var metrics = await _readModel.ReadAsync();
+
+		// Assert: реализованный 98 + (−1) = 97, нереализованный 0 + 50 = 50,
+		// итог 98 + 49 = 147 — разбивка и итог складываются из частей конструкций.
+		// Требование: разбивка журнала суммирует конструкции.
+		// Traceability: openspec:analytics/performance#scenario-journal-breakdown-sums-constructions
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(97m));
+		Assert.That(metrics.UnrealizedPnL, Is.EqualTo(50m));
+		Assert.That(metrics.TotalPnL, Is.EqualTo(147m));
+	}
+
+	[TestMethod]
+	[Description("Архивные конструкции входят в агрегаты журнала наравне с активными")]
+	public async Task TryIfJournalAggregatesIncludeArchivedConstruction()
+	{
+		// Arrange: скальп переведён в архив после закрытия позиции (реализованный 98),
+		// активная конструкция держит открытый остаток с маркой (−1 и +50).
+		var archived = await CreateConstructionAsync("Архив скальпа", 1000m, ConstructionStatus.Archived);
+		var active = await CreateConstructionAsync("Длинный BTC", 1000m);
+		await AddLinearTradeAsync("exec-buy-a", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await AddLinearTradeAsync("exec-sell-a", "Sell", "0.1", "43000", "1", ExecMs(2023, 12, 28, 11, 0));
+		await BindAsync(archived, "exec-buy-a", "exec-sell-a");
+		await AddLinearTradeAsync("exec-buy-o", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 12, 0));
+		await BindAsync(active, "exec-buy-o");
+		_markSource.FreshMarks[LinearSymbol] = (42500m, FetchedAt);
+
+		// Act
+		var metrics = await _readModel.ReadAsync();
+
+		// Assert: результат архивной конструкции входит во все три агрегата:
+		// без него реализованный был бы −1, а не 98 + (−1) = 97.
+		// Требование: архивные конструкции входят в агрегаты журнала.
+		// Traceability: openspec:analytics/performance#scenario-journal-aggregates-include-archived
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(97m));
+		Assert.That(metrics.UnrealizedPnL, Is.EqualTo(50m));
+		Assert.That(metrics.TotalPnL, Is.EqualTo(147m));
 	}
 
 	[TestMethod]
@@ -154,6 +215,35 @@ public class JournalMetricsReadModelTests
 		Assert.That(metrics.Constructions.Single().RealizedPnL, Is.EqualTo(-1m));
 	}
 
+	[TestMethod]
+	[Description("Сбой марок одной конструкции гасит нереализованный агрегат журнала, реализованный остаётся суммой")]
+	public async Task TryIfAnyConstructionMarkFailureNullsJournalUnrealizedOnly()
+	{
+		// Arrange: у конструкции с BTC свежая марка есть, у конструкции с ETH — нет:
+		// сбой одной конструкции должен погасить нереализованный агрегат журнала.
+		var btc = await CreateConstructionAsync("Длинный BTC", 1000m);
+		var eth = await CreateConstructionAsync("Длинный ETH", 1000m);
+		await SeedLinearInstrumentAsync("ETHUSDT");
+		await AddLinearTradeAsync("exec-btc", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await BindAsync(btc, "exec-btc");
+		await AddLinearTradeAsync("exec-eth", "Buy", "0.1", "3000", "1", ExecMs(2023, 12, 28, 10, 0), "ETHUSDT");
+		await BindAsync(eth, "exec-eth");
+		_markSource.FreshMarks[LinearSymbol] = (42500m, FetchedAt);
+
+		// Act
+		var metrics = await _readModel.ReadAsync();
+
+		// Assert: нереализованный агрегат и итог отсутствуют — частичная сумма
+		// по отмеченной конструкции не подменяет их; реализованный остаётся
+		// суммой по всем конструкциям: (−1) + (−1) = −2.
+		// Требование: сбой марок хотя бы одной конструкции гасит нереализованную часть.
+		// Traceability: openspec:analytics/performance#scenario-journal-unrealized-null-on-any-mark-failure
+		Assert.That(metrics.HasMarkFailure, Is.True);
+		Assert.That(metrics.UnrealizedPnL, Is.Null);
+		Assert.That(metrics.TotalPnL, Is.Null);
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(-2m));
+	}
+
 	#region Помощники
 
 	private DbContextOptions<JournalDbContext> CreateOptions() =>
@@ -161,25 +251,41 @@ public class JournalMetricsReadModelTests
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
 
-	private async Task<long> CreateConstructionAsync(string name, decimal capital)
+	private async Task<long> CreateConstructionAsync(string name, decimal capital, ConstructionStatus status = ConstructionStatus.Open)
 	{
 		using var db = new JournalDbContext(CreateOptions());
-		var construction = new Construction { Name = name, Status = ConstructionStatus.Open, AllocatedCapitalUsdt = capital };
+		var construction = new Construction { Name = name, Status = status, AllocatedCapitalUsdt = capital };
 		db.Constructions.Add(construction);
 		await db.SaveChangesAsync();
 		return construction.Id;
 	}
 
-	private async Task AddLinearTradeAsync(string execId, string side, string execQty, string execPrice, string execFee, long execTimeMs)
+	private async Task AddLinearTradeAsync(string execId, string side, string execQty, string execPrice, string execFee, long execTimeMs, string? symbol = null)
 	{
+		var tradeSymbol = symbol ?? LinearSymbol;
 		using var db = new JournalDbContext(CreateOptions());
 		db.RawExecutions.Add(new RawExecution
 		{
 			ExecId = execId,
 			Category = "linear",
-			Symbol = LinearSymbol,
+			Symbol = tradeSymbol,
 			ExecTimeMs = execTimeMs,
-			PayloadJson = ExecutionPayload(execId, LinearSymbol, side, execPrice, execQty, execFee, "USDT", execTimeMs),
+			PayloadJson = ExecutionPayload(execId, tradeSymbol, side, execPrice, execQty, execFee, "USDT", execTimeMs),
+			FetchedAt = FetchedAt,
+		});
+		await db.SaveChangesAsync();
+	}
+
+	/// <summary>Сохраняет линейный инструмент в справочник сырых записей синхронизации: базовой монетой служит префикс символа до USDT.</summary>
+	private async Task SeedLinearInstrumentAsync(string symbol)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawInstruments.Add(new RawInstrument
+		{
+			Symbol = symbol,
+			Category = "linear",
+			PayloadJson =
+				$$"""{"symbol":"{{symbol}}","contractType":"LinearPerpetual","status":"Trading","baseCoin":"{{symbol[..^4]}}","quoteCoin":"USDT","settleCoin":"USDT","deliveryTime":"0","optionsType":""}""",
 			FetchedAt = FetchedAt,
 		});
 		await db.SaveChangesAsync();

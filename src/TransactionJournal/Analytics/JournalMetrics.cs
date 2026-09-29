@@ -25,6 +25,21 @@ public sealed record JournalMetrics
 	public required decimal? TotalPnL { get; init; }
 
 	/// <summary>
+	/// Реализованный PnL журнала — сумма реализованных PnL всех конструкций,
+	/// включая архивные; сбой марок его не затрагивает, значение доступно всегда.
+	// Traceability: openspec:analytics/performance#requirement-journal-pnl-aggregates
+	/// </summary>
+	public required decimal RealizedPnL { get; init; }
+
+	/// <summary>
+	/// Нереализованный PnL журнала — сумма нереализованных оценок конструкций;
+	/// null, пока сбой марок оставил без оценки хотя бы одну конструкцию:
+	/// частичная сумма не подменяет отсутствующую.
+	// Traceability: openspec:analytics/performance#requirement-journal-pnl-aggregates
+	/// </summary>
+	public required decimal? UnrealizedPnL { get; init; }
+
+	/// <summary>
 	/// Отметка времени марок оценки — старейшая из использованных марок; null при
 	/// сбое марок или когда открытым остаткам марки были не нужны.
 	// Traceability: openspec:analytics/performance#scenario-open-residual-valued-at-request

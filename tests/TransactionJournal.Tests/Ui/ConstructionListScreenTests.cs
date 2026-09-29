@@ -279,6 +279,8 @@ public class ConstructionListScreenTests
 			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
 			.ReturnsAsync(new ConstructionListData(
 				null,
+				214.32m,
+				null,
 				null,
 				true,
 				1,
@@ -288,11 +290,13 @@ public class ConstructionListScreenTests
 		var cut = _context.RenderComponent<Constructions>();
 
 		// Assert: нереализованный PnL и итог строки заняты признаком сбоя марок,
-		// сводка помечает отметку марок и итог; реализованный результат и
-		// корректировки остаются видимыми.
+		// сводка помечает отметку марок, нереализованный агрегат и итог;
+		// реализованный результат, корректировки и реализованный агрегат
+		// остаются видимыми.
 		// Требование: сбой марок показывается признаком, реализованные величины
-		// и проценты остаются видимыми.
+		// и проценты остаются видимыми; деградирует только нереализованная часть.
 		// Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated
+		// Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
 		cut.WaitForAssertion(() =>
 		{
 			var row = cut.Find("tr.clickable");
@@ -301,8 +305,49 @@ public class ConstructionListScreenTests
 			Assert.That(row.TextContent, Does.Contain("неполный"));
 			Assert.That(row.TextContent, Does.Contain("+214.32"));
 			Assert.That(row.TextContent, Does.Contain("+87.4"));
-			Assert.That(cut.FindAll(".kstrip .markfail").Count, Is.EqualTo(1));
+			// Сбой марок занимает две ячейки сводки: нереализованный агрегат
+			// и отметку времени марок; реализованный агрегат остаётся числом.
+			Assert.That(cut.FindAll(".kstrip .markfail").Count, Is.EqualTo(2));
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("неполный (сбой марок)"));
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("+214.32"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Сводка показывает разбивку итога на реализованный и нереализованный PnL рядом с итогом")]
+	public void TryIfSummaryShowsPnlBreakdown()
+	{
+		// Arrange: журнал с итогом 125.5, разбивкой на реализованный 214.32
+		// и нереализованный −58.2, отметка времени марок задана.
+		var marksAsOf = new DateTimeOffset(2026, 9, 19, 12, 34, 0, TimeSpan.Zero);
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(
+				Item(7, "Календарь сентябрь", ConstructionStatus.Open, realized: 214.32m, unrealized: -58.2m))
+				with
+			{
+				TotalPnL = 125.5m,
+				RealizedPnL = 214.32m,
+				UnrealizedPnL = -58.2m,
+				MarksAsOf = marksAsOf,
+			});
+
+		// Act: пользователь открывает экран «Конструкции».
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: сводка показывает итог по журналу и рядом с ним реализованный
+		// и нереализованный PnL журнала в том же знаковом формате.
+		// Требование: сводка журнала показывает разбивку итога.
+		// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
+		cut.WaitForAssertion(() =>
+		{
+			var summary = cut.Find(".kstrip").TextContent;
+			Assert.That(summary, Does.Contain("+125.5 USDT"));
+			Assert.That(summary, Does.Contain("реализованный"));
+			Assert.That(summary, Does.Contain("+214.32"));
+			Assert.That(summary, Does.Contain("нереализованный"));
+			Assert.That(summary, Does.Contain("-58.2"));
+			Assert.That(cut.FindAll(".kstrip .markfail"), Has.Count.EqualTo(0));
 		});
 	}
 
@@ -471,10 +516,12 @@ public class ConstructionListScreenTests
 	#region Помощники
 
 	/// <summary>Пустые данные списка: нулевые счётчики и отсутствие строк.</summary>
-	private static ConstructionListData EmptyData() => new(0m, null, false, 0, 0, []);
+	private static ConstructionListData EmptyData() => new(0m, 0m, 0m, null, false, 0, 0, []);
 
 	/// <summary>Данные списка со строками и счётчиком открытых по статусам строк.</summary>
 	private static ConstructionListData CreateData(params ConstructionListItem[] items) => new(
+		0m,
+		0m,
 		0m,
 		null,
 		false,

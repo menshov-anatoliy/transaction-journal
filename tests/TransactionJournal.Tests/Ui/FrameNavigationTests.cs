@@ -47,7 +47,7 @@ public class FrameNavigationTests
 		var list = new Mock<IConstructionListReadModel>();
 		list
 			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConstructionListData(0m, null, false, 0, 0, []));
+			.ReturnsAsync(new ConstructionListData(0m, 0m, 0m, null, false, 0, 0, []));
 		_context.Services.AddSingleton(list.Object);
 
 		// Тулбар списка выполняет синхронизацию через сервис единственной ручной

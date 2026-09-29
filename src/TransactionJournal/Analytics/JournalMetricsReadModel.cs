@@ -185,11 +185,23 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		var totals = constructionMetrics.Select(metrics => metrics.TotalPnL).ToList();
 		decimal? totalPnL = totals.Any(total => total == null) ? null : totals.Sum(total => total.GetValueOrDefault());
 
+		// Разбивка итога по журналу: реализованная часть — сумма по всем конструкциям,
+		// включая архивные, и доступна всегда; нереализованная гаснет в null при сбое
+		// марок хотя бы одной конструкции — то же правило, что у итога. Внешние
+		// корректировки PnL в разбивку не входят: они живут только в итоге.
+		// Traceability: openspec:analytics/performance#requirement-journal-pnl-aggregates
+		var realizedPnL = constructionMetrics.Sum(metrics => metrics.RealizedPnL);
+		decimal? unrealizedPnL = constructionMetrics.Any(metrics => metrics.UnrealizedPnL == null)
+			? null
+			: constructionMetrics.Sum(metrics => metrics.UnrealizedPnL.GetValueOrDefault());
+
 		return new JournalMetrics
 		{
 			Constructions = constructionMetrics,
 			Positions = evaluation.Positions,
 			TotalPnL = totalPnL,
+			RealizedPnL = realizedPnL,
+			UnrealizedPnL = unrealizedPnL,
 			MarksAsOf = evaluation.MarksAsOf,
 			HasMarkFailure = evaluation.HasMarkFailure,
 		};

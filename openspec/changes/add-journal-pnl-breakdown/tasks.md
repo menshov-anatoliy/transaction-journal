@@ -2,8 +2,8 @@
 
 ## 1. Агрегаты журнала в аналитике
 
-- [ ] 1.1 Добавить в `JournalMetrics` поля `RealizedPnL` (всегда доступен) и `UnrealizedPnL` (null при сбое марок) с XML-документацией и метками `Traceability:` к `requirement-journal-pnl-aggregates`; вычислить их в `JournalMetricsReadModel` суммированием по всем конструкциям, включая архивные. Проверить: `dotnet build` без предупреждений документации.
-- [ ] 1.2 Покрыть агрегаты тестами в `JournalMetricsReadModelTests` по сценариям `scenario-journal-breakdown-sums-constructions`, `scenario-journal-unrealized-null-on-any-mark-failure`, `scenario-journal-aggregates-include-archived`, `scenario-journal-breakdown-excludes-adjustments`; тесты пометить метками `Traceability:`. Проверить: `dotnet test --filter JournalMetricsReadModelTests` зелёный.
+- [x] 1.1 Добавить в `JournalMetrics` поля `RealizedPnL` (всегда доступен) и `UnrealizedPnL` (null при сбое марок) с XML-документацией и метками `Traceability:` к `requirement-journal-pnl-aggregates`; вычислить их в `JournalMetricsReadModel` суммированием по всем конструкциям, включая архивные. Проверить: `dotnet build` без предупреждений документации.
+- [x] 1.2 Покрыть агрегаты тестами в `JournalMetricsReadModelTests` по сценариям `scenario-journal-breakdown-sums-constructions`, `scenario-journal-unrealized-null-on-any-mark-failure`, `scenario-journal-aggregates-include-archived`, `scenario-journal-breakdown-excludes-adjustments`; тесты пометить метками `Traceability:`. Проверить: `dotnet test --filter JournalMetricsReadModelTests` зелёный.
 
 ## 2. Сводка экрана «Конструкции»
 

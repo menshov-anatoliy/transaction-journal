@@ -54,7 +54,7 @@ public class AppFrameTests
 		var list = new Mock<IConstructionListReadModel>();
 		list
 			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConstructionListData(0m, null, false, 0, 0, []));
+			.ReturnsAsync(new ConstructionListData(0m, 0m, 0m, null, false, 0, 0, []));
 		_context.Services.AddSingleton(list.Object);
 
 		// Тулбар списка выполняет синхронизацию через сервис единственной ручной
@@ -161,6 +161,92 @@ public class AppFrameTests
 	}
 
 	[TestMethod]
+	[Description("Панель показывает рядом с итогом разбивку на реализованный и нереализованный P&L")]
+	public void TryIfJournalTotalShowsPnlBreakdown()
+	{
+		// Arrange: итог 125.5 складывается из реализованного 100 и нереализованного 25.5.
+		var metrics = new Mock<IJournalMetricsReadModel>();
+		metrics
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateExplicitMetrics(125.5m, 100m, 25.5m));
+		_context.Services.AddSingleton(metrics.Object);
+
+		var cut = RenderFrame(Screen<ConstructionsPage>());
+
+		// Assert: итог несёт разбивку в компактных подписях, формат знака общий
+		// с самим итогом; признака сбоя марок в панели нет.
+		// Требование: панель показывает итог с разбивкой на любом экране.
+		// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("итог по журналу: +125.5 USDT (реализов. +100 / нереализов. +25.5)"));
+			Assert.That(cut.Markup, Does.Not.Contain("сбой марок"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Сбой марок в панели гасит только нереализованную часть, реализованная остаётся видимой")]
+	public void TryIfMarksFailureDegradesUnrealizedOnlyInPanel()
+	{
+		// Arrange: итог недоступен из-за сбоя марок, реализованный агрегат посчитан.
+		var metrics = new Mock<IJournalMetricsReadModel>();
+		metrics
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateExplicitMetrics(null, 214.32m, null));
+		_context.Services.AddSingleton(metrics.Object);
+
+		var cut = RenderFrame(Screen<ConstructionsPage>());
+
+		// Assert: итог помечен неполным с признаком сбоя, нереализованная часть —
+		// прочерком, реализованная часть осталась числом без подмены.
+		// Требование: сбой марок в панели гасит только нереализованную часть.
+		// Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Markup, Does.Contain("итог по журналу: неполный (сбой марок), реализов. +214.32, нереализов. —"));
+		});
+	}
+
+	[TestMethod]
+	[Description("До завершения первого чтения метрик итог панели остаётся многоточием")]
+	public void TryIfPanelKeepsLoadingState()
+	{
+		// Arrange: чтение метрик ещё не завершено — панель показывает многоточие.
+		var pending = new Mock<IJournalMetricsReadModel>();
+		pending
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.Returns(new TaskCompletionSource<JournalMetrics>().Task);
+		_context.Services.AddSingleton(pending.Object);
+
+		var loading = RenderFrame(Screen<ConstructionsPage>());
+
+		// Assert: до завершения первого чтения итог остаётся «…» — без частичных чисел.
+		// Требование: состояние загрузки панели сохранено при появлении разбивки.
+		// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
+		Assert.That(loading.Markup, Does.Contain("итог по журналу: …"));
+	}
+
+	[TestMethod]
+	[Description("Недоступное чтение метрик показывает явную недоступность итога панели")]
+	public void TryIfPanelKeepsUnavailableState()
+	{
+		// Arrange: чтение метрик падает — сырьё повреждено или база недоступна.
+		var failing = new Mock<IJournalMetricsReadModel>();
+		failing
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ThrowsAsync(new InvalidOperationException("база недоступна"));
+		_context.Services.AddSingleton(failing.Object);
+
+		var unavailable = RenderFrame(Screen<ConstructionsPage>());
+
+		// Assert: недоступность панели показывается словами, разбивки нет.
+		// Требование: состояние недоступности панели сохранено при появлении разбивки.
+		// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
+		unavailable.WaitForAssertion(() =>
+			Assert.That(unavailable.Markup, Does.Contain("итог по журналу: недоступен")));
+	}
+
+	[TestMethod]
 	[Description("Статические вкладки каркаса ведут на экраны «Конструкции», «Входящие», «Настройки»")]
 	public void TryIfStaticTabsOfferNavigationBetweenScreens()
 	{
@@ -227,6 +313,21 @@ public class AppFrameTests
 		Constructions = [],
 		Positions = [],
 		TotalPnL = totalPnL,
+		// Разбивка панелью пока не выводится: слагаемые согласованы с итогом.
+		RealizedPnL = totalPnL ?? 0m,
+		UnrealizedPnL = totalPnL is null ? null : 0m,
+		MarksAsOf = null,
+		HasMarkFailure = totalPnL is null,
+	};
+
+	/// <summary>Метрики журнала с явной разбивкой: панельные проверки задают слагаемые независимо от итога.</summary>
+	private static JournalMetrics CreateExplicitMetrics(decimal? totalPnL, decimal realizedPnL, decimal? unrealizedPnL) => new()
+	{
+		Constructions = [],
+		Positions = [],
+		TotalPnL = totalPnL,
+		RealizedPnL = realizedPnL,
+		UnrealizedPnL = unrealizedPnL,
 		MarksAsOf = null,
 		HasMarkFailure = totalPnL is null,
 	};

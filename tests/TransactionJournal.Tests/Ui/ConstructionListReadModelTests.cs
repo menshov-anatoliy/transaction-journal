@@ -26,6 +26,10 @@ public class ConstructionListReadModelTests
 {
 	private static readonly DateTimeOffset OpenedAt = new(2026, 6, 20, 9, 30, 0, TimeSpan.Zero);
 
+	private static readonly DateTimeOffset OldMoment = new(2026, 5, 1, 0, 0, 0, TimeSpan.Zero);
+
+	private static readonly DateTimeOffset NewMoment = new(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+
 	private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
 	private const string LinearSymbol = "BTCUSDT";
@@ -93,6 +97,37 @@ public class ConstructionListReadModelTests
 		Assert.That(data.ConstructionCount, Is.EqualTo(2));
 		Assert.That(data.OpenCount, Is.EqualTo(1));
 		Assert.That(data.TotalPnL, Is.EqualTo(243.52m));
+	}
+
+	[TestMethod]
+	[Description("Список упорядочен по статусу и датам: открытые выше закрытых, внутри групп от новых к старым")]
+	public async Task TryIfListSortedByStatusThenCloseDateThenOpenDate()
+	{
+		// Arrange: пять конструкций в порядке вставки идентификаторов — старая
+		// закрытая, новая закрытая, закрытая без даты закрытия, старая открытая,
+		// новая открытая; даты приходят из метрик аналитики.
+		await SeedAsync(
+			Header("Старая закрытая", ConstructionStatus.Closed, 1000m),
+			Header("Новая закрытая", ConstructionStatus.Closed, 1000m),
+			Header("Закрытая без даты", ConstructionStatus.Closed, 1000m),
+			Header("Старая открытая", ConstructionStatus.Open, 1000m),
+			Header("Новая открытая", ConstructionStatus.Open, 1000m));
+		SetupMetrics(null,
+			MetricsWithMoments(1, closedAt: OldMoment, openedAt: OldMoment),
+			MetricsWithMoments(2, closedAt: NewMoment, openedAt: OldMoment),
+			MetricsWithMoments(3, closedAt: null, openedAt: OldMoment),
+			MetricsWithMoments(4, closedAt: null, openedAt: OldMoment),
+			MetricsWithMoments(5, closedAt: null, openedAt: NewMoment));
+
+		// Act: читаем данные экрана «Конструкции».
+		var data = await _readModel.ReadAsync();
+
+		// Assert: сначала открытые — по дате открытия от более новых к более
+		// старым, затем закрытые — по дате закрытия от более новых к более
+		// старым, строки без даты закрытия завершают группу.
+		// Требование: список упорядочен по статусу и датам.
+		// Traceability: openspec:ui/screens#scenario-list-sorted-by-status-and-dates
+		Assert.That(data.Items.Select(item => item.ConstructionId).ToArray(), Is.EqualTo(new long[] { 5, 4, 2, 1, 3 }));
 	}
 
 	[TestMethod]
@@ -174,6 +209,48 @@ public class ConstructionListReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Сводка переносит разбивку PnL журнала из метрик аналитики без пересчёта")]
+	public async Task TryIfSummaryCarriesPnlBreakdownFromMetrics()
+	{
+		// Arrange: аналитика вернула разбивку, отличную от итога и от частей
+		// строк, — модель списка должна пронести её как есть, не пересчитывая.
+		// Настройка мока собственная: общая заглушка SetupMetrics согласует
+		// разбивку с итогом, здесь важна независимость величин.
+		// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
+		await SeedAsync(
+			Header("Календарь сентябрь", ConstructionStatus.Open, 3000m),
+			Header("Контртренд ETH", ConstructionStatus.Closed, 2000m));
+		_metrics
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new JournalMetrics
+			{
+				Constructions =
+				[
+					MetricsOf(1, 214.32m, -58.2m),
+					MetricsOf(2, 60m, 5m),
+				],
+				Positions = [],
+				TotalPnL = 221.12m,
+				RealizedPnL = 274.32m,
+				UnrealizedPnL = -53.2m,
+				MarksAsOf = null,
+				HasMarkFailure = false,
+			});
+
+		// Act: читаем данные экрана.
+		var data = await _readModel.ReadAsync();
+
+		// Assert: реализованный и нереализованный агрегаты журнала дошли до
+		// сводки ровно в том виде, в каком их отдала аналитика.
+		// Требование: правила агрегации и деградации принадлежат аналитике,
+		// список их не повторяет.
+		// Traceability: openspec:analytics/performance#requirement-journal-pnl-aggregates
+		Assert.That(data.TotalPnL, Is.EqualTo(221.12m));
+		Assert.That(data.RealizedPnL, Is.EqualTo(274.32m));
+		Assert.That(data.UnrealizedPnL, Is.EqualTo(-53.2m));
+	}
+
+	[TestMethod]
 	[Description("Пустой журнал даёт пустой список и нулевой счётчик")]
 	public async Task TryIfEmptyJournalGivesEmptyList()
 	{
@@ -207,15 +284,18 @@ public class ConstructionListReadModelTests
 		var data = await readModel.ReadAsync();
 
 		// Assert: сбой марок доходит до данных списка — нереализованная оценка
-		// и итог строки null, итог журнала неполный, отметка времени марок
-		// неизвестна с признаком сбоя; реализованный результат (−1 комиссия)
-		// остаётся видимым.
+		// и итог строки null, итог журнала неполный, нереализованный агрегат
+		// погашен, отметка времени марок неизвестна с признаком сбоя;
+		// реализованный агрегат (−1 комиссия) остаётся суммой по всем конструкциям.
 		// Требование: сбой марок показывается признаком в нереализованных
 		// столбцах, реализованные величины остаются видимыми.
 		// Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated
+		// Traceability: openspec:analytics/performance#scenario-journal-unrealized-null-on-any-mark-failure
 		// Traceability: change:add-ui-screens/design#d4
 		Assert.That(data.HasMarkFailure, Is.True);
 		Assert.That(data.TotalPnL, Is.Null);
+		Assert.That(data.RealizedPnL, Is.EqualTo(-1m));
+		Assert.That(data.UnrealizedPnL, Is.Null);
 		Assert.That(data.MarksAsOf, Is.Null);
 		var row = data.Items.Single();
 		Assert.That(row.UnrealizedPnL, Is.Null);
@@ -331,6 +411,9 @@ public class ConstructionListReadModelTests
 				Constructions = constructions,
 				Positions = [],
 				TotalPnL = totalPnL,
+				// Разбивка списком не читается: слагаемые согласованы с итогом.
+				RealizedPnL = totalPnL ?? 0m,
+				UnrealizedPnL = totalPnL is null ? null : 0m,
 				MarksAsOf = null,
 				HasMarkFailure = totalPnL is null,
 			});
@@ -350,6 +433,24 @@ public class ConstructionListReadModelTests
 		TotalPnLPercent = unrealized is null ? null : (realized + unrealized.Value) / 10m,
 		OpenedAt = OpenedAt,
 		ClosedAt = null,
+		Duration = TimeSpan.FromDays(92),
+	};
+
+	/// <summary>Метрики конструкции с заданными моментами открытия и закрытия: остальное — простые значения.</summary>
+	private static ConstructionMetrics MetricsWithMoments(long constructionId, DateTimeOffset? closedAt, DateTimeOffset openedAt) => new()
+	{
+		ConstructionId = constructionId,
+		AllocatedCapitalUsdt = 1000m,
+		RealizedPnL = 10m,
+		UnrealizedPnL = 0m,
+		AdjustmentsPnL = 0m,
+		TotalPnL = 10m,
+		RealizedPnLPercent = 1m,
+		UnrealizedPnLPercent = 0m,
+		AdjustmentsPnLPercent = 0m,
+		TotalPnLPercent = 1m,
+		OpenedAt = openedAt,
+		ClosedAt = closedAt,
 		Duration = TimeSpan.FromDays(92),
 	};
 

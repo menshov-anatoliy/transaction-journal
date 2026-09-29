@@ -48,19 +48,27 @@ public sealed record ConstructionListItem(
 	DateTimeOffset? ClosedAt);
 
 /// <summary>
-/// Данные экрана «Конструкции»: сводка журнала — итог, отметка времени марок
-/// и счётчик конструкций с числом открытых, — и строки таблицы конструкций.
+/// Данные экрана «Конструкции»: сводка журнала — итог с разбивкой на
+/// реализованный и нереализованный PnL, отметка времени марок и счётчик
+/// конструкций с числом открытых, — и строки таблицы конструкций.
 /// Счётчик описывает видимые (неархивные) конструкции: скрытые из списка
 /// в счётчике не числятся.
 /// </summary>
 /// <param name="TotalPnL">Итог по журналу; null, пока сбой марок оставляет его неполным.</param>
+/// <param name="RealizedPnL">Реализованный PnL журнала — сумма реализованных частей всех конструкций, включая архивные; сбой марок его не затрагивает.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL журнала; null при сбое марок хотя бы одной конструкции.</param>
 /// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое марок или без открытых остатков.</param>
 /// <param name="HasMarkFailure">Признак сбоя марок: провайдер не оценил хотя бы один открытый остаток журнала.</param>
 /// <param name="ConstructionCount">Число видимых конструкций списка.</param>
 /// <param name="OpenCount">Число конструкций со статусом «открыта» среди видимых.</param>
-/// <param name="Items">Строки таблицы конструкций, упорядоченные по идентификатору.</param>
+/// <param name="Items">Строки таблицы конструкций, упорядоченные по статусу и датам.</param>
+// Разбивка итога переносится из метрик аналитики как есть: правила агрегации
+// и null-деградации принадлежат аналитике, модель списка их не повторяет.
+// Traceability: openspec:analytics/performance#requirement-journal-pnl-aggregates
 public sealed record ConstructionListData(
 	decimal? TotalPnL,
+	decimal RealizedPnL,
+	decimal? UnrealizedPnL,
 	DateTimeOffset? MarksAsOf,
 	bool HasMarkFailure,
 	int ConstructionCount,
@@ -174,12 +182,37 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 		// из них открыты — числа сходятся со строками таблицы. Признак сбоя марок
 		// проходит из аналитики без пересчёта: ему принадлежит решение, была ли
 		// недоступна оценка нереализованной части.
+		// Список упорядочен по смыслу чтения, а не по ключу хранилища: сначала
+		// открытые конструкции, затем закрытые; внутри группы строки с датой
+		// закрытия идут от более новых к более старым, за ними — по дате
+		// открытия от более новых к более старым. Архивные в список не попадают.
+		// Traceability: openspec:ui/screens#scenario-list-sorted-by-status-and-dates
+		var orderedItems = items
+			.OrderBy(item => StatusRank(item.Status))
+			.ThenByDescending(item => item.ClosedAt)
+			.ThenByDescending(item => item.OpenedAt)
+			.ThenBy(item => item.ConstructionId)
+			.ToList();
+
 		return new ConstructionListData(
 			metrics.TotalPnL,
+			// Разбивка проходит из метрик журнала без пересчёта — тем же жестом,
+			// что итог, отметка марок и признак сбоя.
+			// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
+			metrics.RealizedPnL,
+			metrics.UnrealizedPnL,
 			metrics.MarksAsOf,
 			metrics.HasMarkFailure,
-			items.Count,
-			items.Count(item => item.Status == ConstructionStatus.Open),
-			items);
+			orderedItems.Count,
+			orderedItems.Count(item => item.Status == ConstructionStatus.Open),
+			orderedItems);
 	}
+
+	/// <summary>Порядок группы статуса в списке: открытые выше закрытых.</summary>
+	private static int StatusRank(ConstructionStatus status) => status switch
+	{
+		ConstructionStatus.Open => 0,
+		ConstructionStatus.Closed => 1,
+		_ => 2,
+	};
 }
