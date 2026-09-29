@@ -9,6 +9,7 @@ using TransactionJournal.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Materialization;
+using TransactionJournal.Ops;
 using TransactionJournal.Sync;
 
 // Локальный .env загружается до создания хоста и любых регистраций: значения файла
@@ -88,6 +89,27 @@ builder.Services.AddTransient<DeliveryWindowPass>();
 builder.Services.AddTransient<ExecutionCategorySync>();
 builder.Services.AddTransient<DeliveryCategorySync>();
 builder.Services.AddTransient<InstrumentReferenceSync>();
+
+// Подсистема резервных копий журнала: консистентный снапшот работающей базы через
+// VACUUM INTO в настроенный каталог с ротацией по количеству копий. Опции читаются
+// из конфигурации при старте: Backup:Directory (дефолт App_Data/backups) и
+// Backup:RetentionLimit (дефолт 15); относительный каталог разрешается от корня
+// содержимого. Сервис живёт singleton-ом над собственными опциями контекста:
+// каждый вызов создаёт короткоживущий контекст.
+// Traceability: openspec:ops/db-backup#requirement-backup-consistent-snapshot
+// Traceability: openspec:ops/db-backup#requirement-backup-retention
+var configuredBackupOptions = BackupOptionsReader.Read(builder.Configuration);
+builder.Services.AddSingleton(new JournalBackupOptions
+{
+	Directory = Path.IsPathRooted(configuredBackupOptions.Directory)
+		? configuredBackupOptions.Directory
+		: Path.Combine(builder.Environment.ContentRootPath, configuredBackupOptions.Directory),
+	RetentionLimit = configuredBackupOptions.RetentionLimit,
+});
+builder.Services.AddSingleton(sp => new JournalBackupService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<JournalBackupOptions>()));
+builder.Services.AddSingleton<IJournalBackupService>(sp => sp.GetRequiredService<JournalBackupService>());
 
 // Адаптер сырого хранилища живёт singleton-ом над собственными опциями контекста:
 // каждый вызов создаёт короткоживущий контекст, поэтому длительная сессия Blazor Server
