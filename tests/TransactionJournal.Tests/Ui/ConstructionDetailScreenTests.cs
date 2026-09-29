@@ -124,7 +124,9 @@ public class ConstructionDetailScreenTests
 		cut.WaitForAssertion(() =>
 		{
 			var summary = cut.Find(".kstrip").TextContent;
-			Assert.That(summary, Does.Contain("итог"));
+			Assert.That(summary, Does.Contain("Общий P&L"));
+			Assert.That(summary, Does.Contain("Реализ. P&L"));
+			Assert.That(summary, Does.Contain("Нереализ. P&L"));
 			Assert.That(summary, Does.Contain("+399 USDT"));
 			Assert.That(summary, Does.Contain("+13.3%"));
 			Assert.That(summary, Does.Contain("-1"));

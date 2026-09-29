@@ -191,18 +191,19 @@ else
 		</div>
 	}
 
-	@* Сводка метрик конструкции: итог, процент от капитала, разбивка по
-	   реализованному и нереализованному результату, сумма корректировок,
-	   период с длительностью и отметка времени марок оценки. *@
+	@* Сводка метрик конструкции: общий P&L, процент от капитала, разбивка на
+	   реализованную и нереализованную части, сумма корректировок, период
+	   с длительностью и отметка времени марок оценки. Подписи итога и его
+	   частей названы как колонки таблицы позиций, величины раскрашены знаком. *@
 	@* Traceability: openspec:ui/screens#requirement-construction-detail-screen *@
 	<div class="kstrip">
-		<div>итог
+		<div>Общий P&L
 			@if (_data.Metrics.TotalPnL is null)
 			{
 				@* Итог без нереализованной части неполный — признак сбоя марок,
 				   а не прочерк «нулевого» итога. *@
 				@* Traceability: change:add-ui-screens/design#d4 *@
-				<b class="markfail" title="Итог неполный: нереализованная часть не оценена из-за сбоя марок">неполный (сбой марок)</b>
+				<b class="markfail" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя марок">неполный (сбой марок)</b>
 			}
 			else
 			{
@@ -223,8 +224,8 @@ else
 			}
 			<b class="@SignClass(_data.Metrics.TotalPnLPercent)">@FormatPercent(_data.Metrics.TotalPnLPercent)</b>
 		</div>
-		<div>реализованный<b class="@SignClass(_data.Metrics.RealizedPnL)">@FormatPnL(_data.Metrics.RealizedPnL)</b></div>
-		<div>нереализованный
+		<div>Реализ. P&L<b class="@SignClass(_data.Metrics.RealizedPnL)">@FormatPnL(_data.Metrics.RealizedPnL)</b></div>
+		<div>Нереализ. P&L
 			@if (_data.HasMarkFailure)
 			{
 				@* Сбой марок — видимое состояние: нереализованная оценка не построена,
@@ -234,7 +235,7 @@ else
 			}
 			else
 			{
-				<b>@FormatUnrealized(_data.Metrics.UnrealizedPnL)</b>
+				<b class="@SignClass(_data.Metrics.UnrealizedPnL)">@FormatUnrealized(_data.Metrics.UnrealizedPnL)</b>
 			}
 		</div>
 		<div>корректировки<b class="@SignClass(_data.Metrics.AdjustmentsPnL)">@FormatAdjustments(_data.Metrics.AdjustmentsPnL)</b></div>
