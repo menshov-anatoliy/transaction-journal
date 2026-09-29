@@ -26,8 +26,7 @@ namespace TransactionJournal.Tests.Ui;
 /// как место хранения секрета; без настроенного ключа показывается явное состояние
 /// вместо маски; кнопка «Синхронизировать сейчас» пополняет журнал синхронизаций
 /// строкой со временем, режимом, результатом и статусом, предупреждения сверки видны
-/// и работу не блокируют; «Переразобрать сырые записи заново» запускается только
-/// после явного подтверждения; «Собрать конструкции» требует подтверждения с
+/// и работу не блокируют; «Собрать конструкции» требует подтверждения с
 /// перечнем безвозвратных потерь и сообщением об автоматической резервной копии
 /// базы; «Собрать из „Входящих”» запускается сразу
 /// без подтверждения; обе команды сборки показывают счётчики итога пересбора;
@@ -47,7 +46,6 @@ public class SettingsScreenTests
 	private Bunit.TestContext _context = null!;
 	private string _databasePath = null!;
 	private DbContextOptions<JournalDbContext> _options = null!;
-	private CountingReparseService _reparse = null!;
 	private CountingAssemblyService _assembly = null!;
 
 	[TestInitialize]
@@ -82,17 +80,12 @@ public class SettingsScreenTests
 		// переключатель читается и пишется в таблицу AppSetting, как в работе.
 		_context.Services.AddSingleton<IBackupPolicyStore>(new BackupPolicyStore(_options));
 
-		// Команда переразбора подменяется считающей заглушкой: проверки следят,
-		// что без подтверждения она не вызывалась вовсе.
-		_reparse = new CountingReparseService();
-		_context.Services.AddSingleton<IJournalReparseService>(_reparse);
-
 		// Команда сборки конструкций подменяется считающей заглушкой: проверки
 		// следят, что без подтверждения сборка не вызывалась вовсе.
 		_assembly = new CountingAssemblyService();
 		_context.Services.AddSingleton<IConstructionAssemblyService>(_assembly);
 
-		// Сигнал изменений журнала: экран оповещает каркас после переразбора;
+		// Сигнал изменений журнала: экран оповещает каркас после команд сборки;
 		// без подписчиков в изолированном рендере он безопасно бездействует.
 		_context.Services.AddScoped<JournalChangeSignal>();
 	}
@@ -320,58 +313,6 @@ public class SettingsScreenTests
 	}
 
 	[TestMethod]
-	[Description("Переразбор требует явного подтверждения: без него команда не запускается, отмена закрывает вопрос")]
-	public void TryIfReparseRequiresExplicitConfirmation()
-	{
-		// Act: пользователь открывает «Настройки» и нажимает команду переразбора.
-		var cut = _context.RenderComponent<SettingsPage>();
-		FindButton(cut, "Переразобрать сырые записи заново").Click();
-
-		// Assert: появился явный вопрос подтверждения с объяснением последствий
-		// и выходом «Отмена»; сама команда не запускалась — сервис не вызывался.
-		// Требование: переразбор требует подтверждения опасного действия.
-		// Traceability: openspec:ui/screens#scenario-settings-reparse-confirmation
-		Assert.That(cut.Markup, Does.Contain("Доменные представления будут перестроены"));
-		Assert.That(FindButton(cut, "Переразобрать").TextContent, Is.EqualTo("Переразобрать"));
-		Assert.That(FindButton(cut, "Отмена").TextContent, Is.EqualTo("Отмена"));
-		Assert.That(_reparse.CallCount, Is.EqualTo(0));
-
-		// Act: пользователь отменяет опасное действие.
-		FindButton(cut, "Отмена").Click();
-
-		// Assert: вопрос закрыт, переразбор так и не запускался — без
-		// подтверждения команда не начинает работу.
-		Assert.That(cut.Markup, Does.Not.Contain("Доменные представления будут перестроены"));
-		Assert.That(_reparse.CallCount, Is.EqualTo(0));
-	}
-
-	[TestMethod]
-	[Description("Подтверждённый переразбор запускается один раз и показывает итог со счётчиками проекции")]
-	public void TryIfConfirmedReparseRunsOnceAndReportsOutcome()
-	{
-		// Arrange: команда вернёт итог с двумя сделками и одним предупреждением сверки.
-		_reparse.Result = CreateReparseResult();
-		var cut = _context.RenderComponent<SettingsPage>();
-		FindButton(cut, "Переразобрать сырые записи заново").Click();
-
-		// Act: пользователь явно подтверждает опасное действие.
-		FindButton(cut, "Переразобрать").Click();
-
-		// Assert: команда выполнена ровно один раз, итог со счётчиками доменных
-		// представлений и предупреждениями сверки показан под командой, вопрос
-		// подтверждения закрыт.
-		cut.WaitForAssertion(() =>
-		{
-			Assert.That(_reparse.CallCount, Is.EqualTo(1));
-			Assert.That(cut.Markup, Does.Contain("Переразбор завершён"));
-			Assert.That(cut.Markup, Does.Contain("сделок во «Входящих» 2"));
-			Assert.That(cut.Markup, Does.Contain("закрывающих записей 0"));
-			Assert.That(cut.Markup, Does.Contain("предупреждений сверки 1"));
-			Assert.That(cut.Markup, Does.Not.Contain("Доменные представления будут перестроены"));
-		});
-	}
-
-	[TestMethod]
 	[Description("Сборка конструкций требует явного подтверждения: без него команда не запускается, отмена закрывает вопрос")]
 	// Сценарий: подтверждение показывает перечень безвозвратных потерь, отмена
 	// ничего не запускает — данные остаются нетронутыми.
@@ -508,72 +449,6 @@ public class SettingsScreenTests
 	/// <summary>Находит кнопку по её тексту: на «Настройках» несколько команд в разных блоках.</summary>
 	private static IElement FindButton(IRenderedFragment cut, string text) =>
 		cut.FindAll("button").Single(button => button.TextContent.Trim() == text);
-
-	/// <summary>Итог переразбора: две сделки «Входящих» и одно предупреждение сверки.</summary>
-	private static JournalMaterializationResult CreateReparseResult() => new()
-	{
-		InboxTrades =
-		[
-			new MaterializedTrade
-			{
-				ExecId = "exec-opt-buy",
-				Category = "option",
-				Symbol = "BTC-29DEC23-45000-C",
-				ExecutedAt = new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero),
-				Quantity = 0.0001m,
-				Price = 45000m,
-				Fee = 0.01m,
-				FeeCurrency = "USDT",
-				IsMaker = true,
-			},
-			new MaterializedTrade
-			{
-				ExecId = "exec-linear-sell",
-				Category = "linear",
-				Symbol = "BTCUSDT",
-				ExecutedAt = new DateTimeOffset(2023, 12, 28, 10, 30, 0, TimeSpan.Zero),
-				Quantity = -0.01m,
-				Price = 42000m,
-				Fee = -0.0001m,
-				FeeCurrency = "BTC",
-				IsMaker = false,
-			},
-		],
-		ExpiryClosingEntries = [],
-		ReconciliationWarnings =
-		[
-			new ExpiryReconciliationWarning
-			{
-				Symbol = "BTC-29DEC23-45000-C",
-				DeliveryTime = new DateTimeOffset(2023, 12, 29, 8, 0, 0, TimeSpan.Zero),
-				DeliveryRpl = 0.2m,
-				OwnResult = 0.27m,
-				Difference = -0.07m,
-				SourceKey = "BTC-29DEC23-45000-C|1703846400000",
-			},
-		],
-	};
-
-	/// <summary>Заглушка команды переразбора: считает вызовы и возвращает подготовленный итог.</summary>
-	private sealed class CountingReparseService : IJournalReparseService
-	{
-		/// <summary>Число запусков команды: проверки следят, что без подтверждения запуска нет.</summary>
-		public int CallCount { get; private set; }
-
-		/// <summary>Итог, возвращаемый при запуске; не задан — пустая проекция.</summary>
-		public JournalMaterializationResult? Result { get; set; }
-
-		public Task<JournalMaterializationResult> ReparseAsync(CancellationToken cancellationToken = default)
-		{
-			CallCount++;
-			return Task.FromResult(Result ?? new JournalMaterializationResult
-			{
-				InboxTrades = [],
-				ExpiryClosingEntries = [],
-				ReconciliationWarnings = [],
-			});
-		}
-	}
 
 	/// <summary>Заглушка команды сборки конструкций: считает вызовы и возвращает подготовленный итог.</summary>
 	private sealed class CountingAssemblyService : IConstructionAssemblyService

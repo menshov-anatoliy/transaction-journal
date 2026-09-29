@@ -145,9 +145,9 @@ builder.Services.AddTransient<IJournalSyncService>(sp => new BackupGuardedSyncSe
 	sp.GetRequiredService<IBackupPolicyStore>(),
 	sp.GetRequiredService<JournalSyncService>()));
 
-// Команда «Переразобрать сырые записи заново» на «Настройках»: полная пересборка
-// доменных представлений из локального сырья без сетевых запросов; экран зависит
-// от интерфейса, тесты экрана подменяют её заглушкой.
+// Сервис переразбора сырых записей: полная пересборка доменных представлений из
+// локального сырья без сетевых запросов. Команда снята с экрана «Настройки»,
+// сервис оставлен зарегистрированным в DI.
 // Traceability: openspec:ui/screens#scenario-settings-reparse-confirmation
 builder.Services.AddSingleton<IJournalReparseService, JournalReparseService>();
 

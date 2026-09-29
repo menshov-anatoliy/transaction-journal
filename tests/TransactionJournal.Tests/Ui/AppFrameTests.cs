@@ -62,10 +62,6 @@ public class AppFrameTests
 		// команды: каркасным проверкам достаточно заглушки без запусков.
 		_context.Services.AddSingleton(new Mock<IJournalSyncService>().Object);
 
-		// «Настройки» выполняют переразбор через собственную команду: каркасным
-		// проверкам достаточно заглушки без запусков.
-		_context.Services.AddSingleton(new Mock<IJournalReparseService>().Object);
-
 		// «Настройки» выполняют сборку конструкций через собственную команду:
 		// каркасным проверкам достаточно заглушки без запусков.
 		// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#requirement-settings-assembly-action
