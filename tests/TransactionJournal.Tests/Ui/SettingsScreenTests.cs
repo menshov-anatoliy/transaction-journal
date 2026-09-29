@@ -12,6 +12,7 @@ using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Materialization;
+using TransactionJournal.Ops;
 using TransactionJournal.Sync;
 using SettingsPage = TransactionJournal.Components.Pages.Settings;
 using Assert = NUnit.Framework.Assert;
@@ -29,7 +30,9 @@ namespace TransactionJournal.Tests.Ui;
 /// после явного подтверждения; «Собрать конструкции» требует подтверждения с
 /// перечнем безвозвратных потерь и сообщением об автоматической резервной копии
 /// базы; «Собрать из „Входящих”» запускается сразу
-/// без подтверждения; обе команды сборки показывают счётчики итога пересбора.
+/// без подтверждения; обе команды сборки показывают счётчики итога пересбора;
+/// переключатель копирования перед синхронизацией включён по умолчанию и
+/// сохраняет выключенное состояние в базу журнала.
 /// Traceability: openspec:ui/screens#requirement-settings-screen
 /// </summary>
 [TestClass]
@@ -74,6 +77,10 @@ public class SettingsScreenTests
 		_context.Services.AddSingleton(_options);
 		_context.Services.AddSingleton<ISyncJournalReadModel, SyncJournalReadModel>();
 		_context.Services.AddSingleton<IJournalSyncService>(new UnusedSyncService());
+
+		// Хранилище политики копирования настоящее — над временной базой:
+		// переключатель читается и пишется в таблицу AppSetting, как в работе.
+		_context.Services.AddSingleton<IBackupPolicyStore>(new BackupPolicyStore(_options));
 
 		// Команда переразбора подменяется считающей заглушкой: проверки следят,
 		// что без подтверждения она не вызывалась вовсе.
@@ -232,6 +239,50 @@ public class SettingsScreenTests
 		Assert.That(cut.Markup, Does.Contain("инкрементальная догрузка"));
 		Assert.That(cut.Markup, Does.Contain("прерван: retCode=10006 превышение частоты запросов"));
 		Assert.That(cut.Markup, Does.Contain("ошибка"));
+	}
+
+	[TestMethod]
+	[Description("Переключатель копирования перед синхронизацией включён по умолчанию")]
+	public void TryIfSyncBackupToggleEnabledByDefault()
+	{
+		// Act: пользователь открывает «Настройки» на чистой базе — строки политики нет.
+		var cut = _context.RenderComponent<SettingsPage>();
+
+		// Assert: флажок копирования перед синхронизацией показан включённым —
+		// отсутствие строки политики хранилище трактует как «включён», дефолт
+		// записи не требует.
+		// Требование: переключатель резервного копирования перед синхронизацией
+		// включён по умолчанию.
+		// Traceability: openspec:ui/screens#requirement-settings-screen
+		cut.WaitForAssertion(() => Assert.That(
+			cut.Find("input[type=checkbox]").HasAttribute("checked"), Is.True));
+	}
+
+	[TestMethod]
+	[Description("Выключенный переключатель сохраняет политику без копии и запускает синхронизацию")]
+	public void TryIfSyncBackupToggleOffPersistsPolicyAndRunsSync()
+	{
+		// Arrange: команда синхронизации закрывает строку журнала, как настоящий
+		// сервис; ветвь «без копии» при выключенной политике покрывают тесты
+		// декоратора — здесь проверяется проводка переключателя до политики.
+		_context.Services.AddSingleton<IJournalSyncService>(
+			new JournalWritingSyncService(_options, Now));
+		var store = _context.Services.GetRequiredService<IBackupPolicyStore>();
+		var cut = _context.RenderComponent<SettingsPage>();
+
+		// Act: пользователь выключает переключатель — выбор уходит в базу, —
+		// затем запускает синхронизацию.
+		cut.Find("input[type=checkbox]").Change(false);
+		cut.WaitForAssertion(() => Assert.That(
+			store.IsBackupBeforeSyncEnabledAsync().GetAwaiter().GetResult(), Is.False));
+		cut.FindAll("button").Single(button => button.TextContent.Contains("Синхронизировать")).Click();
+
+		// Assert: политика сохранена выключенной, синхронизация запускается —
+		// в журнале появляется строка запуска.
+		// Требование: выключенный переключатель запускает синхронизацию без копии.
+		// Traceability: openspec:ui/screens#scenario-settings-sync-backup-toggle
+		cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("успех")));
+		Assert.That(store.IsBackupBeforeSyncEnabledAsync().GetAwaiter().GetResult(), Is.False);
 	}
 
 	[TestMethod]

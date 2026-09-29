@@ -9,6 +9,7 @@ using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Ops;
 using TransactionJournal.Sync;
 using ConstructionDetailPage = TransactionJournal.Components.Pages.ConstructionDetail;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
@@ -81,6 +82,15 @@ public class FrameNavigationTests
 		// Внешние корректировки PnL добавляются и правятся сервисом корректировок
 		// домена: навигационным проверкам достаточно заглушки без мутаций.
 		_context.Services.AddSingleton(new Mock<IPnLAdjustmentService>().Object);
+
+		// Детали конструкции создают опциональную копию перед удалением через
+		// сервис резервных копий: навигационным проверкам достаточно заглушки,
+		// возвращающей успешную копию без обращения к файловой системе.
+		var backups = new Mock<IJournalBackupService>();
+		backups
+			.Setup(service => service.CreateBackupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new JournalBackupResult { FileName = "journal-navigation.db" });
+		_context.Services.AddSingleton(backups.Object);
 
 		// Сигнал изменений журнала: экран оповещает каркас после действий,
 		// каркас перечитывает панель без навигации.

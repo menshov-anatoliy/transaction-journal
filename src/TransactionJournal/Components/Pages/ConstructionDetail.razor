@@ -6,6 +6,8 @@
 @using TransactionJournal.Components.Pages
 @using TransactionJournal.Data
 @using TransactionJournal.Domain
+@using TransactionJournal.Ops
+@inject IJournalBackupService Backups
 @inject IConstructionDetailReadModel Detail
 @inject IConstructionService Constructions
 @inject ICommentService Comments
@@ -183,9 +185,16 @@ else
 	else if (_action == DetailAction.Delete)
 	{
 		@* Удаление требует явного подтверждения: подтверждение — отдельный шаг,
-		   без него команда удаления не запускается. *@
+		   без него команда удаления не запускается. Флажок опциональной резервной
+		   копии включён по умолчанию: при подтверждении копия создаётся до команды
+		   домена, неудача копирования отменяет удаление с сообщением об ошибке. *@
+		@* Traceability: openspec:ui/screens#scenario-detail-delete-offers-backup *@
 		<div class="action-form">
 			<span class="action-warning">Удалить пустую конструкцию «@_data.Name»? Действие необратимо.</span>
+			<label class="action-label">
+				<input type="checkbox" @bind="_deleteBackupEnabled" />
+				сделать резервную копию базы перед удалением
+			</label>
 			<button type="button" class="btn danger" disabled="@_busy" @onclick="DeleteAsync">Удалить</button>
 			<button type="button" class="btn" disabled="@_busy" @onclick="CancelAction">Отмена</button>
 		</div>
@@ -799,6 +808,13 @@ else
 	private string _capitalInput = string.Empty;
 	private bool _capitalInvalid;
 
+	/// <summary>Причина копии, попадающая в имя файла резервной копии удаления конструкции.</summary>
+	private const string DeleteBackupReason = "delete-construction";
+
+	/// <summary>Флажок опциональной резервной копии в диалоге удаления: включён
+	/// по умолчанию, состояние живёт в диалоге и не персистится.</summary>
+	private bool _deleteBackupEnabled = true;
+
 	/// <summary>Черновики формы риска: проценты, USDT и единица пользовательского ввода.</summary>
 	private string _riskPercentInput = string.Empty;
 	private string _riskUsdtInput = string.Empty;
@@ -996,6 +1012,9 @@ else
 	private void BeginDelete()
 	{
 		_action = DetailAction.Delete;
+		// Флажок копии возвращается к включённому состоянию при каждом открытии
+		// диалога: опция предлагается включённой по умолчанию и не персистится.
+		_deleteBackupEnabled = true;
 		_capitalInvalid = false;
 		_actionError = null;
 	}
@@ -1288,12 +1307,33 @@ else
 	/// <summary>
 	/// Удаляет пустую конструкцию после подтверждения и возвращает пользователя
 	/// к списку; отказ домена доходит причиной, конструкция остаётся на экране.
+	/// При включённом флажке опциональной копии перед командой домена создаётся
+	/// резервная копия базы с причиной «delete-construction»: неудача копирования
+	/// отменяет удаление и доходит сообщением об ошибке.
 	/// </summary>
 	// Отказ удаления показывает причину — какие записи блокируют удаление;
 	// успешное удаление закрывает экран деталей переходом к списку.
 	// Traceability: openspec:ui/screens#scenario-detail-delete-refused-with-reason
 	private async Task DeleteAsync()
 	{
+		// Опциональная копия предшествует команде домена: неудача копирования
+		// отменяет удаление без обращения к сервису — данные конструкции нетронуты;
+		// при выключенном флажке удаление выполняется без копии.
+		// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+		// Traceability: openspec:ui/screens#scenario-detail-delete-offers-backup
+		if (_deleteBackupEnabled)
+		{
+			try
+			{
+				await Backups.CreateBackupAsync(DeleteBackupReason);
+			}
+			catch (Exception ex)
+			{
+				_actionError = $"Удаление отменено: резервная копия не создана — {ex.Message}";
+				return;
+			}
+		}
+
 		await RunActionAsync(
 			() => Constructions.DeleteAsync(ConstructionId),
 			"Удаление не выполнено");

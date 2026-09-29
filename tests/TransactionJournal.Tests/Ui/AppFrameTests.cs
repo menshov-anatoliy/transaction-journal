@@ -13,6 +13,7 @@ using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.ConstructionAssembly;
+using TransactionJournal.Ops;
 using TransactionJournal.Sync;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
 using InboxPage = TransactionJournal.Components.Pages.Inbox;
@@ -69,6 +70,24 @@ public class AppFrameTests
 		// каркасным проверкам достаточно заглушки без запусков.
 		// Traceability: change:add-construction-auto-assembly/specs/ui/screens/spec#requirement-settings-assembly-action
 		_context.Services.AddSingleton(new Mock<IConstructionAssemblyService>().Object);
+
+		// Детали конструкции создают опциональную копию перед удалением через
+		// сервис резервных копий: каркасным проверкам достаточно заглушки,
+		// возвращающей успешную копию без обращения к файловой системе.
+		var backups = new Mock<IJournalBackupService>();
+		backups
+			.Setup(service => service.CreateBackupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new JournalBackupResult { FileName = "journal-frame.db" });
+		_context.Services.AddSingleton(backups.Object);
+
+		// «Настройки» читают политику копирования перед синхронизацией из
+		// собственного хранилища: каркасным проверкам достаточно заглушки
+		// с включённым по умолчанию состоянием.
+		var policy = new Mock<IBackupPolicyStore>();
+		policy
+			.Setup(store => store.IsBackupBeforeSyncEnabledAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(true);
+		_context.Services.AddSingleton(policy.Object);
 
 		// Каркас подписывается на сигнал изменений журнала после мутаций экранов:
 		// каркасным проверкам достаточно молчащего сигнала без подписчиков.

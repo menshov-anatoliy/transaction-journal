@@ -42,7 +42,7 @@ public class BackupGuardedSyncServiceTests
 
 	[TestMethod]
 	[Description("Неудача копии проходит наружу исключением и не запускает синхронизацию")]
-	public async Task ThrowOnBackupFailureWithoutStartingSync()
+	public void ThrowOnBackupFailureWithoutStartingSync()
 	{
 		// Требование: неудача копии блокирует запуск — внутренний сервис не вызывается,
 		// поэтому строка SyncRun не создаётся: запуск ещё не начинался.
@@ -56,7 +56,7 @@ public class BackupGuardedSyncServiceTests
 			inner);
 
 		// Act
-		var thrown = Assert.ThrowsAsync<IOException>(async () => await service.SyncAsync());
+		var thrown = Assert.ThrowsAsync<IOException>(() => service.SyncAsync());
 
 		// Assert: исключение — именно причина неудавшейся копии; синхронизация не стартовала.
 		Assert.That(thrown, Is.SameAs(failure));

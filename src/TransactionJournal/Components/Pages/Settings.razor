@@ -8,9 +8,11 @@
 @using TransactionJournal.Data
 @using TransactionJournal.Domain.ConstructionAssembly
 @using TransactionJournal.Materialization
+@using TransactionJournal.Ops
 @using TransactionJournal.Sync
 @inject SettingsReadModel Connection
 @inject IJournalSyncService SyncService
+@inject IBackupPolicyStore BackupPolicy
 @inject ISyncJournalReadModel SyncJournal
 @inject IJournalReparseService Reparse
 @inject IConstructionAssemblyService Assembly
@@ -57,6 +59,23 @@ else
 @* Traceability: change:add-ui-screens/design#d3 *@
 <div class="toolbar">
 	<button type="button" class="btn" disabled="@_syncRunning" @onclick="RunSyncAsync">Синхронизировать сейчас</button>
+</div>
+
+@* Переключатель опционального копирования перед синхронизацией: включён по
+   умолчанию, состояние живёт в базе журнала и переживает перезапуск. Пока
+   переключатель включён, синхронизация не начинается до успешного создания
+   копии; выключенный переключатель запускает синхронизацию без копии.
+   Неудавшаяся запись откатывает флажок и доходит сообщением. *@
+@* Traceability: openspec:ui/screens#scenario-settings-sync-backup-toggle *@
+<div class="action-form">
+	<label class="action-label">
+		<input type="checkbox" @bind="_syncBackupEnabled" @bind:after="SaveSyncBackupAsync" />
+		делать резервную копию базы перед синхронизацией
+	</label>
+	@if (_backupPolicyError is not null)
+	{
+		<span class="validation-message">@_backupPolicyError</span>
+	}
 </div>
 
 @if (_syncRunning)
@@ -259,10 +278,52 @@ else if (_assemblyResult is not null)
 	private ConstructionRebuildResult? _assemblyResult;
 	private string? _assemblyError;
 
+	/// <summary>Переключатель опциональной копии перед синхронизацией: включён
+	/// по умолчанию, состояние живёт в базе журнала (таблица AppSetting).</summary>
+	private bool _syncBackupEnabled = true;
+	private string? _backupPolicyError;
+
 	protected override async Task OnInitializedAsync()
 	{
 		_connection = Connection.GetConnection();
+
+		// Переключатель копирования читается при открытии экрана: отсутствие строки
+		// политики хранилище трактует как «включён» — дефолт записи не требует.
+		// Traceability: openspec:ui/screens#scenario-settings-sync-backup-toggle
+		try
+		{
+			_syncBackupEnabled = await BackupPolicy.IsBackupBeforeSyncEnabledAsync();
+			_backupPolicyError = null;
+		}
+		catch (Exception ex)
+		{
+			_backupPolicyError = $"Переключатель копирования недоступен: {ex.Message}";
+		}
+
 		await RefreshJournalAsync();
+	}
+
+	/// <summary>
+	/// Сохраняет переключатель копирования перед синхронизацией в базе журнала:
+	/// неудавшаяся запись откатывает флажок к прежнему положению и доходит
+	/// сообщением — фактическая политика остаётся прежней.
+	/// </summary>
+	// Флажок отражает фактическое состояние политики: пользователь видит,
+	// сохранён ли выбор, а следующий запуск синхронизации пойдёт по записи.
+	// Traceability: openspec:ui/screens#scenario-settings-sync-backup-toggle
+	private async Task SaveSyncBackupAsync()
+	{
+		var desired = _syncBackupEnabled;
+		try
+		{
+			await BackupPolicy.SetBackupBeforeSyncEnabledAsync(desired);
+			_backupPolicyError = null;
+		}
+		catch (Exception ex)
+		{
+			_backupPolicyError = $"Переключатель не сохранён: {ex.Message}";
+			_syncBackupEnabled = !desired;
+		}
 	}
 
 	/// <summary>

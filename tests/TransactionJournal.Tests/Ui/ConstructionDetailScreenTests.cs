@@ -12,6 +12,7 @@ using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Ops;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -48,6 +49,7 @@ public class ConstructionDetailScreenTests
 	private Mock<IManualCloseMarkService> _marks = null!;
 	private Mock<IInstrumentMarkSource> _markSource = null!;
 	private Mock<IPnLAdjustmentService> _adjustments = null!;
+	private Mock<IJournalBackupService> _backups = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -86,6 +88,14 @@ public class ConstructionDetailScreenTests
 		// сервисом корректировок домена — экран проверяется против заглушки.
 		_adjustments = new Mock<IPnLAdjustmentService>();
 		_context.Services.AddSingleton(_adjustments.Object);
+
+		// Опциональная резервная копия перед удалением создаётся сервисом копий:
+		// по умолчанию копия удаётся — проверки отказа копии переопределяют настройку.
+		_backups = new Mock<IJournalBackupService>();
+		_backups
+			.Setup(service => service.CreateBackupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new JournalBackupResult { FileName = "journal-delete-construction.db" });
+		_context.Services.AddSingleton(_backups.Object);
 
 		// Сигнал изменений журнала оповещает каркас после действий экрана;
 		// без подписчиков в изолированном рендере он безопасно бездействует.
@@ -1044,6 +1054,120 @@ public class ConstructionDetailScreenTests
 		FindButton(cut, "Удалить").Click();
 
 		// Assert: удаление выполнено, экран закрывается переходом к списку.
+		_constructions.Verify(service => service.DeleteAsync(7, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(navigation.Uri, Does.EndWith("/")));
+	}
+
+	[TestMethod]
+	[Description("Диалог удаления предлагает флажок резервной копии, включённый по умолчанию")]
+	public void TryIfDeleteDialogOffersBackupCheckboxEnabledByDefault()
+	{
+		// Arrange: пустая конструкция — кнопка удаления предложена.
+		var cut = RenderDetail();
+
+		// Act: пользователь открывает диалог удаления.
+		FindButton(cut, "Удалить…").Click();
+
+		// Assert: диалог содержит флажок резервной копии, включённый по умолчанию.
+		// Требование: подтверждение удаления предлагает резервную копию базы
+		// перед удалением, включённую по умолчанию.
+		// Traceability: openspec:ui/screens#scenario-detail-delete-offers-backup
+		cut.WaitForAssertion(() =>
+		{
+			var checkbox = cut.Find(".action-form input[type=checkbox]");
+			Assert.That(checkbox.HasAttribute("checked"), Is.True);
+			Assert.That(cut.Find(".action-form").TextContent, Does.Contain("резервную копию базы"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Подтверждённое удаление с включённым флажком создаёт копию базы до удаления")]
+	public void TryIfDeleteWithBackupCreatesCopyBeforeDeletion()
+	{
+		// Arrange: пустая конструкция; копия и удаление фиксируются в общем
+		// порядке вызовов — копия обязана предшествовать команде домена.
+		var navigation = _context.Services.GetRequiredService<NavigationManager>();
+		navigation.NavigateTo("/constructions/7");
+		var cut = RenderDetail();
+
+		var sequence = new MockSequence();
+		_backups.InSequence(sequence)
+			.Setup(service => service.CreateBackupAsync("delete-construction", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new JournalBackupResult { FileName = "journal-delete-construction.db" });
+		_constructions.InSequence(sequence)
+			.Setup(service => service.DeleteAsync(7, It.IsAny<CancellationToken>()))
+			.Returns(Task.CompletedTask);
+
+		// Act: пользователь подтверждает удаление с флажком по умолчанию.
+		FindButton(cut, "Удалить…").Click();
+		FindButton(cut, "Удалить").Click();
+
+		// Assert: сначала создаётся копия с причиной delete-construction и только
+		// затем конструкция удаляется, экран закрывается переходом к списку.
+		// Требование: при включённом флажке копия базы предшествует удалению.
+		// Traceability: openspec:ui/screens#scenario-detail-delete-offers-backup
+		_backups.Verify(
+			service => service.CreateBackupAsync("delete-construction", It.IsAny<CancellationToken>()),
+			Times.Once);
+		_constructions.Verify(service => service.DeleteAsync(7, It.IsAny<CancellationToken>()), Times.Once);
+		cut.WaitForAssertion(() => Assert.That(navigation.Uri, Does.EndWith("/")));
+	}
+
+	[TestMethod]
+	[Description("Неудача резервной копии отменяет удаление с сообщением об ошибке")]
+	public void TryIfDeleteBackupFailureCancelsDeletion()
+	{
+		// Arrange: сервис копий имитирует неудачу копирования.
+		_backups
+			.Setup(service => service.CreateBackupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+			.ThrowsAsync(new IOException("нет места на диске"));
+
+		var cut = RenderDetail();
+
+		// Act: пользователь подтверждает удаление при включённом флажке.
+		FindButton(cut, "Удалить…").Click();
+		FindButton(cut, "Удалить").Click();
+
+		// Assert: удаление не запускается, конструкция остаётся на экране,
+		// пользователь видит причину неудавшейся копии.
+		// Требование: пока опция копирования включена, неудача копии блокирует
+		// операцию удаления.
+		// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+		_backups.Verify(
+			service => service.CreateBackupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+			Times.Once);
+		_constructions.Verify(service => service.DeleteAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
+		cut.WaitForAssertion(() =>
+		{
+			var error = cut.Find(".note-error").TextContent;
+			Assert.That(error, Does.Contain("Удаление отменено"));
+			Assert.That(error, Does.Contain("резервная копия не создана"));
+			Assert.That(error, Does.Contain("нет места на диске"));
+		});
+		Assert.That(cut.Find("h1").TextContent, Does.Contain("Календарь сентябрь"));
+	}
+
+	[TestMethod]
+	[Description("Снятый флажок удаляет конструкцию без создания резервной копии")]
+	public void TryIfDeleteWithoutBackupSkipsCopy()
+	{
+		// Arrange: пустая конструкция; пользователь снимает флажок копии.
+		var navigation = _context.Services.GetRequiredService<NavigationManager>();
+		navigation.NavigateTo("/constructions/7");
+		var cut = RenderDetail();
+
+		// Act: пользователь снимает флажок и подтверждает удаление.
+		FindButton(cut, "Удалить…").Click();
+		cut.Find(".action-form input[type=checkbox]").Change(false);
+		FindButton(cut, "Удалить").Click();
+
+		// Assert: копия не создаётся, удаление выполняется, экран закрывается
+		// переходом к списку.
+		// Требование: при выключенной опции операция выполняется без копии.
+		// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+		_backups.Verify(
+			service => service.CreateBackupAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+			Times.Never);
 		_constructions.Verify(service => service.DeleteAsync(7, It.IsAny<CancellationToken>()), Times.Once);
 		cut.WaitForAssertion(() => Assert.That(navigation.Uri, Does.EndWith("/")));
 	}
