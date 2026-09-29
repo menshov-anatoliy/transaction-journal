@@ -313,7 +313,7 @@ public class AppFrameTests
 		Constructions = [],
 		Positions = [],
 		TotalPnL = totalPnL,
-		// Разбивка панелью пока не выводится: слагаемые согласованы с итогом.
+		// Слагаемые согласованы с итогом: проверки одного итога не завязаны на разбивку.
 		RealizedPnL = totalPnL ?? 0m,
 		UnrealizedPnL = totalPnL is null ? null : 0m,
 		MarksAsOf = null,
