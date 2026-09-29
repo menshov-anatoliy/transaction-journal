@@ -304,6 +304,45 @@ public class ConstructionAssemblyServiceTests
 	}
 
 	[TestMethod]
+	[Description("Неудача резервной копии блокирует пересбор: снимок не читается, данные журнала не меняются")]
+	// Копия создаётся до любой работы пересбора; когда копирование падает,
+	// пересбор не запускается и сырьё остаётся нетронутым.
+	// Traceability: openspec:domain/construction-assembly#scenario-rebuild-blocked-without-backup
+	public async Task TryIfRebuildBlockedWithoutBackup()
+	{
+		// Arrange: в сырьё есть записи для пересбора, но копирование базы падает.
+		SeedRawStorage();
+		var backup = new StubJournalBackupService { Failure = new IOException("нет места на диске") };
+		var snapshotStore = new CountingSnapshotStore();
+		var service = new ConstructionAssemblyService(
+			snapshotStore,
+			backup,
+			CreateOptions(),
+			new FixedTimeProvider(Now));
+
+		// Act: пересбор отклоняется исключением неудавшейся копии.
+		try
+		{
+			await service.RebuildAsync();
+			Assert.Fail("Ожидалось исключение неудавшейся резервной копии.");
+		}
+		catch (IOException failure)
+		{
+			Assert.That(failure.Message, Is.EqualTo("нет места на диске"), "Причина неудачи копии проходит наружу");
+		}
+
+		// Assert: копия запрашивалась с причиной «rebuild» ровно один раз и до
+		// чтения снимка сырья — пересбор даже не начал работу, сырьё не изменено.
+		Assert.That(backup.Reasons, Is.EqualTo(new[] { "rebuild" }), "Попытка копии с причиной rebuild предшествует пересбору");
+		Assert.That(snapshotStore.LoadCalls, Is.EqualTo(0), "Снимок сырья не читается без успешной копии");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(await db.RawExecutions.CountAsync(), Is.EqualTo(6), "Сырые записи остались нетронутыми");
+			Assert.That(await db.Constructions.CountAsync(), Is.EqualTo(0), "Доменные таблицы не вычищались");
+		}
+	}
+
+	[TestMethod]
 	[Description("Сборка из «Входящих» обрабатывает только непривязанные записи и переживает повторный запуск")]
 	// Повторный запуск после синхронизации обрабатывает только новые «Входящие»:
 	// прежние привязки и закрытая конструкция не изменяются, создаются только
@@ -316,8 +355,15 @@ public class ConstructionAssemblyServiceTests
 		// закрыла сделка e6, обнулив фьючерсный остаток; затем синхронизация
 		// принесла новые записи — докупку колла и сделку робота.
 		SeedRawStorage();
-		var service = CreateService();
+		var backup = new StubJournalBackupService();
+		var service = CreateService(backupService: backup);
 		await service.RebuildAsync();
+
+		// Пересбор сделал ровно одну копию с причиной «rebuild»; дальнейших копий
+		// инкрементная сборка не добавляет — для «Входящих» защита не предусмотрена.
+		// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+		Assert.That(backup.Reasons, Is.EqualTo(new[] { "rebuild" }), "Пересбор сделал одну копию с причиной rebuild");
+		var backupsAfterRebuild = backup.Reasons.Count;
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			db.RawExecutions.Add(Raw("e7", "option", EthCall1600, Ms(2026, 8, 15, 10, 0),
@@ -364,6 +410,11 @@ public class ConstructionAssemblyServiceTests
 		var after = CaptureState();
 		Assert.That(after.Constructions, Is.EqualTo(before.Constructions), "Повторный прогон не меняет конструкции");
 		Assert.That(after.Userdata, Is.EqualTo(before.Userdata), "Повторный прогон не меняет привязки");
+
+		// Инкрементная сборка выполняется без резервного копирования: копии делает
+		// только полный пересбор, для «Входящих» защита не предусмотрена.
+		// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
+		Assert.That(backup.Reasons.Count, Is.EqualTo(backupsAfterRebuild), "Инкрементная сборка не создаёт резервных копий");
 	}
 
 	[TestMethod]
@@ -641,7 +692,16 @@ public class ConstructionAssemblyServiceTests
 	public void ThrowOnNullRawSnapshotStore()
 	{
 		// Arrange — Act — Assert
-		new ConstructionAssemblyService(null!, CreateOptions());
+		new ConstructionAssemblyService(null!, new StubJournalBackupService(), CreateOptions());
+	}
+
+	[TestMethod]
+	[Description("Null-сервис резервных копий отклоняется конструктором")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public void ThrowOnNullBackupService()
+	{
+		// Arrange — Act — Assert
+		new ConstructionAssemblyService(new StubSnapshotStore(), null!, CreateOptions());
 	}
 
 	[TestMethod]
@@ -650,14 +710,15 @@ public class ConstructionAssemblyServiceTests
 	public void ThrowOnNullDbContextOptions()
 	{
 		// Arrange — Act — Assert
-		new ConstructionAssemblyService(new StubSnapshotStore(), null!);
+		new ConstructionAssemblyService(new StubSnapshotStore(), new StubJournalBackupService(), null!);
 	}
 
 	#region Помощники
 
 	/// <summary>Команда пересбора над настоящим адаптером сырого хранилища, как в работе.</summary>
-	private ConstructionAssemblyService CreateService(TimeProvider? timeProvider = null) => new(
+	private ConstructionAssemblyService CreateService(TimeProvider? timeProvider = null, StubJournalBackupService? backupService = null) => new(
 		new JournalSyncStore(CreateOptions()),
+		backupService ?? new StubJournalBackupService(),
 		CreateOptions(),
 		timeProvider ?? new FixedTimeProvider(Now));
 
@@ -921,6 +982,26 @@ public class ConstructionAssemblyServiceTests
 				Executions = [],
 				Deliveries = [],
 			});
+	}
+
+	/// <summary>
+	/// Считающий источник снимка: пустой снимок и счётчик чтений — проверка
+	/// блокировки следит, что пересбор без успешной копии сырьё не открывал.
+	/// </summary>
+	private sealed class CountingSnapshotStore : IJournalRawSnapshotStore
+	{
+		public int LoadCalls { get; private set; }
+
+		public Task<JournalRawSnapshot> LoadAsync(CancellationToken cancellationToken = default)
+		{
+			LoadCalls++;
+			return Task.FromResult(new JournalRawSnapshot
+			{
+				Instruments = [],
+				Executions = [],
+				Deliveries = [],
+			});
+		}
 	}
 
 	/// <summary>Спецификация опциона в справочнике с каноническим временем доставки 08:00 UTC.</summary>

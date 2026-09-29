@@ -169,6 +169,7 @@ public class ConstructionAssemblyHistoryReconciliationTests
 	/// <summary>Команда пересбора над настоящим адаптером сырого хранилища с фиксированным временем.</summary>
 	private ConstructionAssemblyService CreateService() => new(
 		new JournalSyncStore(CreateOptions()),
+		new StubJournalBackupService(),
 		CreateOptions(),
 		new FixedTimeProvider(FixedNow));
 

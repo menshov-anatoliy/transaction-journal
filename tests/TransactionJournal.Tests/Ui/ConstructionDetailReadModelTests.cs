@@ -505,6 +505,7 @@ public class ConstructionDetailReadModelTests
 		SeedAssemblyRawStorage();
 		var assembly = new ConstructionAssemblyService(
 			new JournalSyncStore(CreateOptions()),
+			new StubJournalBackupService(),
 			CreateOptions(),
 			new FixedTimeProvider(AssemblyNow));
 		await assembly.RebuildAsync();

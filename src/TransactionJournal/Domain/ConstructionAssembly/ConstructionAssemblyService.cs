@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Bybit;
 using TransactionJournal.Data;
 using TransactionJournal.Materialization;
+using TransactionJournal.Ops;
 using TransactionJournal.Sync;
 
 namespace TransactionJournal.Domain.ConstructionAssembly;
@@ -63,20 +64,24 @@ public sealed record ConstructionRebuildResult
 public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 {
 	private readonly IJournalRawSnapshotStore _rawSnapshotStore;
+	private readonly IJournalBackupService _backupService;
 	private readonly DbContextOptions<JournalDbContext> _options;
 	private readonly TimeProvider _timeProvider;
 
-	/// <summary>Создаёт команду пересбора над сырым хранилищем и опциями контекста журнала.</summary>
+	/// <summary>Создаёт команду пересбора над сырым хранилищем, сервисом резервных копий и опциями контекста журнала.</summary>
 	/// <param name="rawSnapshotStore">Источник полного снимка сырых записей журнала.</param>
+	/// <param name="backupService">Сервис резервных копий; пересбор обязан стартовать после успешной копии.</param>
 	/// <param name="options">Опции EF-контекста журнала; база развёрнута миграциями.</param>
 	/// <param name="timeProvider">Поставщик времени для границы OTM-закрывающих; по умолчанию системные часы.</param>
 	/// <exception cref="ArgumentNullException">Какая-либо обязательная зависимость не задана.</exception>
 	public ConstructionAssemblyService(
 		IJournalRawSnapshotStore rawSnapshotStore,
+		IJournalBackupService backupService,
 		DbContextOptions<JournalDbContext> options,
 		TimeProvider? timeProvider = null)
 	{
 		_rawSnapshotStore = rawSnapshotStore ?? throw new ArgumentNullException(nameof(rawSnapshotStore));
+		_backupService = backupService ?? throw new ArgumentNullException(nameof(backupService));
 		_options = options ?? throw new ArgumentNullException(nameof(options));
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
@@ -84,6 +89,13 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 	/// <inheritdoc cref="IConstructionAssemblyService.RebuildAsync" />
 	public async Task<ConstructionRebuildResult> RebuildAsync(CancellationToken cancellationToken = default)
 	{
+		// Обязательная резервная копия предшествует любой работе пересбора: копия
+		// создаётся до чтения снимка сырья и транзакции вычищения, неудача копирования
+		// проходит наружу исключением и блокирует пересбор — данные журнала нетронуты.
+		// Traceability: openspec:ops/db-backup#requirement-backup-mandatory-before-rebuild
+		// Traceability: openspec:domain/construction-assembly#scenario-rebuild-blocked-without-backup
+		await _backupService.CreateBackupAsync("rebuild", cancellationToken).ConfigureAwait(false);
+
 		// Пересбор работает только над локальным сырьём: снимок читается целиком,
 		// план строится в памяти и применяется одной транзакцией — сырьё, справочник
 		// инструментов и состояние синхронизации операция не трогает.
