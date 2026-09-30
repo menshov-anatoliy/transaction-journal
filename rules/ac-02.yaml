@@ -1,0 +1,34 @@
+id: ac-02
+title: Норма прибыли прикрытого интрадея
+character: risk-mode
+technique: null
+clarity: crisp
+scope: open-constructions
+status: active
+thresholds:
+  - name: monthlyProfitNorm
+    value: 5
+    unit: percent
+  - name: quarterlyProfitNorm
+    value: 10
+    unit: percent
+  - name: annualProfitNorm
+    value: "30-40"
+    unit: percent
+trigger:
+  description: >-
+    Условие не проверяется движком: правило задаёт плановую доходность, от
+    которой считается плановая прибыль конструкции (ac-14).
+  implementation: null
+action:
+  description: >-
+    Сверять результат конструкций с нормой прикрытого интрадея: 5% от капитала
+    в месяц, 10% за квартал, 30–40% годовых в общей сумме сделок.
+  hintTemplate: null
+sources:
+  - tag: ЛИЧ
+    file: "Инструкции/Инвестиции - Ведение опционных позиций.md"
+    quotes:
+      - '«На 1 месяц ориентировочная доходность 5% от капитала»'
+      - '«На квартал (3 месяца) - 10% от капитала.»'
+      - '«Годовая доходность ПИ: В общей сумме сделок 30-40% годовых.»'
