@@ -76,6 +76,26 @@ public class CommentMarkdownTests
 	}
 
 	[TestMethod]
+	[Description("Опасные схемы ссылок не создают активные ссылки")]
+	public void TryIfUnsafeLinkSchemesRenderAsText()
+	{
+		// Arrange: ссылки пытаются использовать схемы, исполняемые или загружающие данные в браузере.
+		var comment = "[скрипт](javascript:alert(document.cookie)) [данные](data:text/html,опасно) [сайт](https://example.com) [раздел](/local)";
+
+		// Act
+		var html = CommentMarkdown.Render(comment);
+
+		// Assert: подписи остаются текстом, но опасные URL не попадают в HTML-ссылки.
+		// Traceability: openspec:ui/screens#scenario-comment-unsafe-link-schemes-not-rendered
+		Assert.That(html, Does.Contain("скрипт"));
+		Assert.That(html, Does.Contain("данные"));
+		Assert.That(html, Does.Not.Contain("href=\"javascript:"));
+		Assert.That(html, Does.Not.Contain("href=\"data:"));
+		Assert.That(html, Does.Contain("<a href=\"https://example.com\">сайт</a>"));
+		Assert.That(html, Does.Contain("<a href=\"/local\">раздел</a>"));
+	}
+
+	[TestMethod]
 	[Description("Null и пустой комментарий рендерятся в null")]
 	public void TryIfNullOrWhitespaceRendersNull()
 	{

@@ -1,0 +1,31 @@
+id: ac-04
+title: Распределение капитала 10/90 и свободное ГО
+character: risk-mode
+technique: null
+clarity: crisp
+scope: open-constructions
+status: active
+thresholds:
+  - name: intradayCapitalShare
+    value: 10
+    unit: percent
+  - name: passiveCapitalShare
+    value: 90
+    unit: percent
+trigger:
+  description: >-
+    Условие не проверяется движком: распределение внешнего капитала недоступно
+    журналу. Правило — статический чек-лист сводки.
+  implementation: null
+action:
+  description: >-
+    10% рискового капитала направлять на прикрытый интрадей; 90% со срочного
+    рынка — в фонды ликвидности (fixed income), продажу непокрытых краёв,
+    арбитражные стратегии и неэффективности.
+  hintTemplate: null
+sources:
+  - tag: ПИ
+    file: "Обучение/Лекции/Илья Коровин. Прикрытый интрадей.md"
+    quotes:
+      - '«10% рискового капитала направлены на Прикрытый интрадей, 90% просто лежат на срочном рынке.»'
+      - '«1. Вывод со срочного рынка на fixed income (фонды ликвидности). 2. Продажа непокрытых краёв (непротиворнчивая ПИ стратегия) 3. Арбитражные стратегии. 4. Неэффективности.»'
