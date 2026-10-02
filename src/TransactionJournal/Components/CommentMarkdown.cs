@@ -1,4 +1,6 @@
 using Markdig;
+using Markdig.Syntax;
+using Markdig.Syntax.Inlines;
 
 namespace TransactionJournal.Components;
 
@@ -27,6 +29,8 @@ public static class CommentMarkdown
 	// Одиночный перенос строки без пустой строки отображается разрывом
 	// строки, а не исходным символом перевода строки.
 	// Traceability: openspec:ui/screens#scenario-comment-single-newline-breaks-line
+	// Небезопасные URI удаляются как ссылки, но подписи Markdown остаются обычным текстом.
+	// Traceability: openspec:ui/screens#scenario-comment-unsafe-link-schemes-not-rendered
 	public static string? Render(string? comment)
 	{
 		if (string.IsNullOrEmpty(comment))
@@ -34,6 +38,46 @@ public static class CommentMarkdown
 			return null;
 		}
 
-		return Markdown.ToHtml(comment, Pipeline);
+		var document = Markdown.Parse(comment, Pipeline);
+		foreach (var link in document.Descendants<LinkInline>().Where(link => !HasSafeUrl(link.Url)).ToArray())
+		{
+			for (var child = link.FirstChild; child is not null;)
+			{
+				var next = child.NextSibling;
+				child.Remove();
+				link.InsertBefore(child);
+				child = next;
+			}
+
+			link.Remove();
+		}
+
+		return Markdown.ToHtml(document, Pipeline);
+	}
+
+	private static bool HasSafeUrl(string? url)
+	{
+		if (string.IsNullOrEmpty(url))
+		{
+			return true;
+		}
+
+		if (url.Any(char.IsControl))
+		{
+			return false;
+		}
+
+		var normalizedUrl = url.Trim();
+		var schemeSeparator = normalizedUrl.IndexOf(':');
+		var pathSeparator = normalizedUrl.IndexOfAny(['/', '?', '#']);
+		if (schemeSeparator < 0 || pathSeparator >= 0 && pathSeparator < schemeSeparator)
+		{
+			return true;
+		}
+
+		var scheme = normalizedUrl[..schemeSeparator];
+		return scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+			|| scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+			|| scheme.Equals(Uri.UriSchemeMailto, StringComparison.OrdinalIgnoreCase);
 	}
 }
