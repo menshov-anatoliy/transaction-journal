@@ -58,3 +58,21 @@ Traceability ID: scenario-corpus-unknown-key-continues
 Traceability ID: scenario-corpus-null-implementation-checklist
 - **WHEN** у карточки `trigger.implementation: null`
 - **THEN** она не порождает подсказок и входит в статический чек-лист сводки
+
+### Requirement: Объявленные конфликтные пары проверяются валидностью корпуса
+
+Необязательное поле `conflicts_with` карточки SHALL объявлять идентификаторы правил, которые не могут быть активны одновременно с ней; объявление SHALL трактоваться симметрично — достаточно записи с одной из сторон. Корпус, в котором оба члена объявленной пары имеют `status: active`, SHALL быть невалидным: проход останавливается агрегированной ошибкой до построения снимка и любых чтений — тем же механизмом, что битая карточка ([#36](https://github.com/menshov-anatoliy/transaction-journal/issues/36)). Пара с `retired`-карточкой SHALL быть валидной; объявление SHALL сохраняться как документация известного напряжения источников.
+
+Traceability ID: requirement-corpus-declared-conflicts-validated
+
+#### Scenario: Два активных члена пары останавливают проход
+Traceability ID: scenario-corpus-conflict-pair-active-fails-pass
+- **WHEN** в корпусе две карточки связаны объявлением `conflicts_with` и обе имеют `status: active`
+- **THEN** проход не начинается: нет снимка, подсказок и сводки
+- **AND** агрегированная ошибка называет обе карточки пары
+
+#### Scenario: Retired-член пары не ломает корпус
+Traceability ID: scenario-corpus-conflict-pair-retired-valid
+- **WHEN** в объявленной паре одна карточка имеет `status: retired`
+- **THEN** корпус валиден, проход продолжается
+- **AND** retired-карточка не исполняется, но гасит живые записи
