@@ -7,8 +7,8 @@ scope: open-constructions
 status: active
 thresholds:
   - name: partialCloseExample
-    value: "7/10"
-    unit: contracts
+    value: 7
+    unit: contracts-of-10
 trigger:
   description: >-
     Резкие колебания базового актива взрывают IV опционов конструкции; прибыль
