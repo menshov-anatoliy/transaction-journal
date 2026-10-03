@@ -24,19 +24,20 @@
 
 @if (_connection is null)
 {
-	@* Ключ не настроен: вместо маски — явное состояние с указанием переменных
-	   окружения, где пользователь задаёт ключ и секрет. *@
+	@* Ключ не настроен: вместо маски — явное состояние с указанием ключей
+	   локального файла секретов, где пользователь задаёт ключ и секрет. *@
 	@* Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed *@
 	<p class="note">
-		Ключ не настроен: задайте переменные окружения
-		@EnvironmentBybitCredentialsProvider.ApiKeyVariableName и
-		@EnvironmentBybitCredentialsProvider.ApiSecretVariableName и перезапустите журнал.
+		Ключ не настроен: заполните
+		@ConfigurationBybitCredentialsProvider.ApiKeyConfigKey и
+		@ConfigurationBybitCredentialsProvider.ApiSecretConfigKey
+		в файле @ConfigurationBybitCredentialsProvider.LocalFileName и перезапустите журнал.
 	</p>
 }
 else
 {
 	@* Блок подключения: ключ маскирован, секрет интерфейсу не передаётся и не
-	   вводится через экран — место его хранения только переменные окружения. *@
+	   вводится через экран — место его хранения только локальный файл секретов. *@
 	@* Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed *@
 	<div class="kv">
 		<div class="k">API-ключ (read-only)</div>

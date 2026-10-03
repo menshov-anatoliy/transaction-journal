@@ -9,7 +9,7 @@ namespace TransactionJournal.Components.Pages;
 /// </summary>
 /// <param name="MaskedApiKey">Маска API-ключа вида «abcd······wxyz».</param>
 /// <param name="AccountDescription">Тип аккаунта и права ключа.</param>
-/// <param name="SecretStorage">Место хранения секрета с именами переменных окружения.</param>
+/// <param name="SecretStorage">Место хранения секрета: локальный файл секретов.</param>
 public sealed record ConnectionInfo(string MaskedApiKey, string AccountDescription, string SecretStorage);
 
 /// <summary>
@@ -19,7 +19,8 @@ public sealed record ConnectionInfo(string MaskedApiKey, string AccountDescripti
 /// или ввести через интерфейс.
 /// </summary>
 // Секрет не доходит до состояния компонента: пользовательские правки ключа
-// интерфейсом не предусматриваются, место хранения — переменные окружения.
+// интерфейсом не предусматриваются, место его хранения — локальный файл
+// секретов appsettings.Local.json.
 // Traceability: openspec:ui/screens#requirement-settings-screen
 public sealed class SettingsReadModel
 {
@@ -53,13 +54,16 @@ public sealed class SettingsReadModel
 		}
 		catch (InvalidOperationException)
 		{
-			// Переменные окружения с ключом или секретом не заданы —
-			// конфигурация не готова, экран не показывает никаких значений.
+			// Ключ или секрет не заданы в конфигурации — она не готова,
+			// экран не показывает никаких значений.
 			return null;
 		}
 
-		var storage = $"переменные окружения {EnvironmentBybitCredentialsProvider.ApiKeyVariableName}"
-			+ $" / {EnvironmentBybitCredentialsProvider.ApiSecretVariableName} — внутри журнала не хранится";
+		// Место хранения секрета собирается из констант конфигурационных ключей:
+		// текст на экране не может разойтись с тем, что читает поставщик.
+		// Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed
+		var storage = $"файл {ConfigurationBybitCredentialsProvider.LocalFileName},"
+			+ $" секция {ConfigurationBybitCredentialsProvider.SectionName} — внутри журнала не хранится";
 		return new ConnectionInfo(MaskKey(credentials.ApiKey), AccountText, storage);
 	}
 

@@ -12,13 +12,15 @@ using TransactionJournal.Materialization;
 using TransactionJournal.Ops;
 using TransactionJournal.Sync;
 
-// Локальный .env загружается до создания хоста и любых регистраций: значения файла
-// попадают в переменные процесса раньше первого чтения конфигурации потребителями
-// (сейчас — поставщиком учётных данных Bybit), отсутствующий файл не является ошибкой.
-// Traceability: openspec:config/env-file#requirement-env-file-loaded-on-startup
-AppEnvFile.Load();
-
 var builder = WebApplication.CreateBuilder(args);
+
+// Локальный файл секретов подключается последним провайдером конфигурации и потому
+// перекрывает appsettings.json, переменные окружения и аргументы командной строки;
+// файл необязательный — его отсутствие штатно, а потребитель секрета сообщит о
+// незастроенном значении только в момент обращения к нему.
+// Traceability: openspec:config/local-secrets#requirement-local-secrets-single-file
+builder.Configuration.AddJsonFile(
+	ConfigurationBybitCredentialsProvider.LocalFileName, optional: true, reloadOnChange: false);
 
 builder.Services.AddRazorComponents()
 	.AddInteractiveServerComponents();
@@ -34,9 +36,10 @@ var connectionString = builder.Configuration.GetConnectionString("Journal")
 	?? $"Data Source={databasePath}";
 builder.Services.AddDbContext<JournalDbContext>(options => options.UseSqlite(connectionString));
 
-// Поставщик ключа Bybit: dev-реализация из переменных окружения;
-// постоянное место хранения секрета определит тикет #4.
-builder.Services.AddSingleton<IBybitCredentialsProvider, EnvironmentBybitCredentialsProvider>();
+// Поставщик ключа Bybit: читает ключи из конфигурации, куда они попадают из
+// локального файла секретов appsettings.Local.json.
+// Traceability: openspec:config/local-secrets#requirement-local-secrets-single-file
+builder.Services.AddSingleton<IBybitCredentialsProvider, ConfigurationBybitCredentialsProvider>();
 
 // Read-модель блока подключения «Настроек»: забирает учётные данные у поставщика
 // вместо компонента и отдаёт экрану только маску ключа — секрет не доходит до

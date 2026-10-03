@@ -22,8 +22,9 @@ namespace TransactionJournal.Tests.Ui;
 
 /// <summary>
 /// Проверки экрана «Настройки»: API-ключ показан маскированно, секрет не отображается
-/// нигде и не проходит в состояние компонента, экран указывает на переменные окружения
-/// как место хранения секрета; без настроенного ключа показывается явное состояние
+/// нигде и не проходит в состояние компонента, экран указывает на локальный файл
+/// секретов appsettings.Local.json как место хранения секрета; без настроенного
+/// ключа показывается явное состояние
 /// вместо маски; кнопка «Синхронизировать сейчас» пополняет журнал синхронизаций
 /// строкой со временем, режимом, результатом и статусом, предупреждения сверки видны
 /// и работу не блокируют; «Собрать конструкции» требует подтверждения с
@@ -110,7 +111,7 @@ public class SettingsScreenTests
 	}
 
 	[TestMethod]
-	[Description("Ключ показан маскированно, секрет не отображается нигде, указаны переменные окружения")]
+	[Description("Ключ показан маскированно, секрет не отображается нигде, указан локальный файл секретов")]
 	public void TryIfSecretIsNeverDisplayed()
 	{
 		// Act: пользователь открывает «Настройки» с настроенным ключом.
@@ -118,14 +119,14 @@ public class SettingsScreenTests
 
 		// Assert: ключ виден только маской «первые четыре ······ последние четыре»,
 		// полный ключ и секрет в разметке отсутствуют, а местом хранения секрета
-		// названы переменные окружения.
+		// назван локальный файл секретов appsettings.Local.json.
 		// Требование: секрет не отображается на экране настроек.
 		// Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed
 		Assert.That(cut.Markup, Does.Contain("abcd······wxyz"));
 		Assert.That(cut.Markup, Does.Not.Contain(ApiKey));
 		Assert.That(cut.Markup, Does.Not.Contain(ApiSecret));
-		Assert.That(cut.Markup, Does.Contain(EnvironmentBybitCredentialsProvider.ApiKeyVariableName));
-		Assert.That(cut.Markup, Does.Contain(EnvironmentBybitCredentialsProvider.ApiSecretVariableName));
+		Assert.That(cut.Markup, Does.Contain(ConfigurationBybitCredentialsProvider.LocalFileName));
+		Assert.That(cut.Markup, Does.Contain($"секция {ConfigurationBybitCredentialsProvider.SectionName}"));
 	}
 
 	[TestMethod]
@@ -146,21 +147,24 @@ public class SettingsScreenTests
 	}
 
 	[TestMethod]
-	[Description("Без настроенного ключа экран показывает явное состояние с именами переменных окружения")]
+	[Description("Без настроенного ключа экран показывает явное состояние с указанием файла и ключей")]
 	public void TryIfUnconfiguredKeyShowsExplicitState()
 	{
-		// Arrange: переменные окружения не заданы — поставщик отказывает.
+		// Arrange: локальный файл секретов не задаёт пару ключ/секрет —
+		// поставщик отказывает.
 		_context.Services.AddSingleton<IBybitCredentialsProvider>(
 			new ThrowingCredentials());
 
 		// Act: пользователь открывает «Настройки».
 		var cut = _context.RenderComponent<SettingsPage>();
 
-		// Assert: вместо маски — явное сообщение с именами переменных окружения;
-		// никаких значений ключа и секрета на экране нет.
+		// Assert: вместо маски — явное сообщение с именами файла и конфигурационных
+		// ключей; никаких значений ключа и секрета на экране нет.
+		// Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed
 		Assert.That(cut.Markup, Does.Contain("Ключ не настроен"));
-		Assert.That(cut.Markup, Does.Contain(EnvironmentBybitCredentialsProvider.ApiKeyVariableName));
-		Assert.That(cut.Markup, Does.Contain(EnvironmentBybitCredentialsProvider.ApiSecretVariableName));
+		Assert.That(cut.Markup, Does.Contain(ConfigurationBybitCredentialsProvider.ApiKeyConfigKey));
+		Assert.That(cut.Markup, Does.Contain(ConfigurationBybitCredentialsProvider.ApiSecretConfigKey));
+		Assert.That(cut.Markup, Does.Contain(ConfigurationBybitCredentialsProvider.LocalFileName));
 		Assert.That(cut.Markup, Does.Not.Contain("······"));
 		Assert.That(cut.Markup, Does.Not.Contain(ApiSecret));
 	}
@@ -491,12 +495,13 @@ public class SettingsScreenTests
 		public BybitCredentials GetCredentials() => new(apiKey, apiSecret);
 	}
 
-	/// <summary>Подменяет отказ не настроенных переменных окружения.</summary>
+	/// <summary>Подменяет отказ незастроенного локального файла секретов.</summary>
 	private sealed class ThrowingCredentials : IBybitCredentialsProvider
 	{
 		public BybitCredentials GetCredentials() =>
 			throw new InvalidOperationException(
-				$"Не задана переменная окружения {EnvironmentBybitCredentialsProvider.ApiKeyVariableName}.");
+				$"Не задан API-ключ Bybit: заполните {ConfigurationBybitCredentialsProvider.ApiKeyConfigKey} "
+				+ $"в файле {ConfigurationBybitCredentialsProvider.LocalFileName}.");
 	}
 
 	/// <summary>Заглушка команды синхронизации: проверки блока подключения кнопку не нажимают.</summary>
