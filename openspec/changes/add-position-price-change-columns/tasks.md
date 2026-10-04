@@ -10,8 +10,8 @@
 
 ## 3. Колонки таблицы позиций
 
-- [ ] 3.1 Вывести в `ConstructionDetail.razor` колонки «Стоимость» и «Изм. цены, %» после «Сред. цена закрытия»: значение со знаком у открытой позиции с марками, прочерк у закрытой, признак сбоя котировок у открытой без марок; поправить colspan пустой строки с 13 до 15. Проверить тестами `ConstructionDetailScreenTests`: колонки с величинами, прочерки закрытой позиции, признак сбоя и сохранность остальных колонок (спек: `scenario-detail-position-value-and-price-change-columns`, `scenario-detail-position-value-price-change-degradation`)
+- [x] 3.1 Вывести в `ConstructionDetail.razor` колонки «Стоимость» и «Изм. цены, %» после «Сред. цена закрытия»: значение со знаком у открытой позиции с марками, прочерк у закрытой, признак сбоя котировок у открытой без марок; поправить colspan пустой строки с 13 до 15. Проверить тестами `ConstructionDetailScreenTests`: колонки с величинами, прочерки закрытой позиции, признак сбоя и сохранность остальных колонок (спек: `scenario-detail-position-value-and-price-change-columns`, `scenario-detail-position-value-price-change-degradation`)
 
 ## 4. Интеграционная проверка
 
-- [ ] 4.1 Прогнать полный набор тестов решения и убедиться, что новых падений нет; прогнать `openspec validate add-position-price-change-columns --strict` без замечаний
+- [x] 4.1 Прогнать полный набор тестов решения и убедиться, что новых падений нет; прогнать `openspec validate add-position-price-change-columns --strict` без замечаний

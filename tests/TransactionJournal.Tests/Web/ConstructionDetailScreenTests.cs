@@ -324,10 +324,11 @@ public class ConstructionDetailScreenTests
 
 		var cut = RenderDetail();
 
-		// Assert: признаки сбоя марок занимают «Нереализ. P&L» и «Общий P&L»
-		// строки позиции, а «Стоимость», «Нереализ. P&L», итог и отметка марок —
-		// в сводке; реализованные величины — реализованный P&L, средняя цена
-		// входа, комиссии и время открытия — остаются видимыми.
+		// Assert: признаки сбоя марок занимают «Стоимость», «Изм. цены, %»,
+		// «Нереализ. P&L» и «Общий P&L» строки позиции, а «Стоимость»,
+		// «Нереализ. P&L», итог и отметка марок — в сводке; реализованные
+		// величины — реализованный P&L, средняя цена входа, комиссии и время
+		// открытия — остаются видимыми.
 		// Требование: сбой марок — видимое состояние, реализованные величины
 		// остаются видимыми; сводочная стоимость деградирует тем же признаком.
 		// Traceability: openspec:ui/screens#scenario-detail-position-total-pnl-marks-failure
@@ -337,11 +338,13 @@ public class ConstructionDetailScreenTests
 			Assert.That(cut.FindAll(".kstrip .markfail").Count, Is.EqualTo(4));
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("-1"));
 			var row = cut.Find("tbody tr");
-			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(2));
+			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(4));
 			var cells = row.QuerySelectorAll("td");
-			Assert.That(cells[4].TextContent.Trim(), Is.EqualTo("-1 (-0.1%)"));
+			Assert.That(cells[4].QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
 			Assert.That(cells[5].QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
-			Assert.That(cells[6].QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
+			Assert.That(cells[6].TextContent.Trim(), Is.EqualTo("-1 (-0.1%)"));
+			Assert.That(cells[7].QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
+			Assert.That(cells[8].QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
 			Assert.That(row.TextContent, Does.Contain("42000"));
 			Assert.That(row.TextContent, Does.Contain("1"));
 			Assert.That(row.TextContent, Does.Contain(DisplayTime.FormatMoment(new DateTimeOffset(2026, 9, 19, 21, 32, 0, TimeSpan.Zero))));
@@ -367,8 +370,8 @@ public class ConstructionDetailScreenTests
 		var cut = RenderDetail();
 
 		// Assert: состав колонок ровно выводимый — колонки «Средняя», «Марка»,
-		// «Результат», «Стоимость» и «% P&L от стоимости» отсутствуют;
-		// общий P&L — абсолют со знаком и процент от капитала в скобках.
+		// «Результат» и «% P&L от стоимости» отсутствуют; общий P&L — абсолют
+		// со знаком и процент от капитала в скобках.
 		// Требование: строка позиции показывает вход, выход и итог.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
 		cut.WaitForAssertion(() =>
@@ -380,6 +383,8 @@ public class ConstructionDetailScreenTests
 				"Остаток",
 				"Сред. цена входа",
 				"Сред. цена закрытия",
+				"Стоимость",
+				"Изм. цены, %",
 				"Реализ. P&L",
 				"Нереализ. P&L",
 				"Общий P&L",
@@ -400,6 +405,12 @@ public class ConstructionDetailScreenTests
 			Assert.That(rows[0].TextContent, Does.Contain(DisplayTime.FormatMoment(openedAt)));
 			Assert.That(rows[0].TextContent, Does.Contain(DisplayTime.FormatMoment(closedAt)));
 			Assert.That(rows[1].TextContent, Does.Contain("-45 (-1.5%)"));
+			// Закрытая позиция не имеет ни стоимости, ни процента изменения
+			// цены: обе колонки прочерком.
+			// Traceability: openspec:ui/screens#scenario-detail-position-value-price-change-degradation
+			var closedCells = rows[1].QuerySelectorAll("td");
+			Assert.That(closedCells[4].TextContent.Trim(), Is.EqualTo("—"));
+			Assert.That(closedCells[5].TextContent.Trim(), Is.EqualTo("—"));
 		});
 	}
 
@@ -408,14 +419,15 @@ public class ConstructionDetailScreenTests
 	public void TryIfPositionsTableShowsSeparatePnlParts()
 	{
 		// Arrange: открытая позиция с доступными марками — реализованная часть 150
-		// (5% капитала), нереализованная 49 (1.6% капитала), общий 199 (6.6%);
-		// рядом закрытая позиция, у которой нереализованной части нет.
+		// (5% капитала), нереализованная 49 (1.6% капитала), общий 199 (6.6%),
+		// стоимость остатка 4249 и движение цены +1.2%; рядом закрытая позиция,
+		// у которой нереализованной части нет.
 		var openedAt = new DateTimeOffset(2026, 6, 20, 9, 30, 0, TimeSpan.Zero);
 		_detail
 			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
 			.ReturnsAsync(CreateData(MetricsOf(), hasOpenResidual: true, positions:
 			[
-				new ConstructionPositionRow("BTCUSDT", 0.1m, 42000m, null, 150m, 5m, 49m, 1.6m, 199m, 6.6m, 1.5m, openedAt, null, true, null),
+				new ConstructionPositionRow("BTCUSDT", 0.1m, 42000m, null, 150m, 5m, 49m, 1.6m, 199m, 6.6m, 1.5m, openedAt, null, true, null, 4249m, 1.2m),
 				new ConstructionPositionRow("ETHUSDT", 0m, 3000m, 2900m, -45m, -1.5m, 0m, 0m, -45m, -1.5m, 0.8m, openedAt, openedAt, false, null),
 			]));
 
@@ -431,12 +443,47 @@ public class ConstructionDetailScreenTests
 		{
 			var rows = cut.FindAll("table")[0].QuerySelectorAll("tbody tr");
 			var openCells = rows[0].QuerySelectorAll("td");
-			Assert.That(openCells[4].TextContent.Trim(), Is.EqualTo("+150 (+5%)"));
-			Assert.That(openCells[5].TextContent.Trim(), Is.EqualTo("+49 (+1.6%)"));
-			Assert.That(openCells[6].TextContent.Trim(), Is.EqualTo("+199 (+6.6%)"));
+			Assert.That(openCells[6].TextContent.Trim(), Is.EqualTo("+150 (+5%)"));
+			Assert.That(openCells[7].TextContent.Trim(), Is.EqualTo("+49 (+1.6%)"));
+			Assert.That(openCells[8].TextContent.Trim(), Is.EqualTo("+199 (+6.6%)"));
 			var closedCells = rows[1].QuerySelectorAll("td");
-			Assert.That(closedCells[4].TextContent.Trim(), Is.EqualTo("-45 (-1.5%)"));
-			Assert.That(closedCells[5].TextContent.Trim(), Is.EqualTo("—"));
+			Assert.That(closedCells[6].TextContent.Trim(), Is.EqualTo("-45 (-1.5%)"));
+			Assert.That(closedCells[7].TextContent.Trim(), Is.EqualTo("—"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Колонки стоимости и изменения цены показывают знаковые величины открытых позиций")]
+	public void TryIfPositionsTableShowsValueAndPriceChangeColumns()
+	{
+		// Arrange: открытая длинная позиция — средняя цена остатка 100 при марке
+		// 110 (стоимость +11, изменение цены +10%); открытая короткая — средняя
+		// цена 50 при марке 45 (стоимость -9, изменение цены тоже +10%):
+		// плюс всегда движение «в прибыль».
+		_detail
+			.Setup(model => model.ReadAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(MetricsOf(), hasOpenResidual: true, positions:
+			[
+				new ConstructionPositionRow("BTCUSDT", 0.1m, 100m, null, 0m, null, 1m, null, 1m, null, 0m, new DateTimeOffset(2026, 6, 20, 9, 30, 0, TimeSpan.Zero), null, true, null, 11m, 10m),
+				new ConstructionPositionRow("ETHUSDT", -0.2m, 50m, null, 0m, null, 1m, null, 1m, null, 0m, new DateTimeOffset(2026, 6, 20, 9, 30, 0, TimeSpan.Zero), null, true, null, -9m, 10m),
+			]));
+
+		var cut = RenderDetail();
+
+		// Assert: «Стоимость» выводит нетто-величину «марка × знаковый остаток»
+		// со знаком, «Изм. цены, %» — движение марки от средней цены остатка,
+		// приведённое к направлению позиции.
+		// Требование: колонки стоимости и изменения цены открытой позиции.
+		// Traceability: openspec:ui/screens#scenario-detail-position-value-and-price-change-columns
+		cut.WaitForAssertion(() =>
+		{
+			var rows = cut.FindAll("table")[0].QuerySelectorAll("tbody tr");
+			var longCells = rows[0].QuerySelectorAll("td");
+			Assert.That(longCells[4].TextContent.Trim(), Is.EqualTo("+11"));
+			Assert.That(longCells[5].TextContent.Trim(), Is.EqualTo("+10%"));
+			var shortCells = rows[1].QuerySelectorAll("td");
+			Assert.That(shortCells[4].TextContent.Trim(), Is.EqualTo("-9"));
+			Assert.That(shortCells[5].TextContent.Trim(), Is.EqualTo("+10%"));
 		});
 	}
 
@@ -1278,13 +1325,13 @@ public class ConstructionDetailScreenTests
 		FindRowButton(positionsTable, "изменить").Click();
 
 		// Assert: в строке появилось ровно одно многострочное поле — поле
-		// комментария в своей колонке (одиннадцатой); остаток и прочие величины
+		// комментария в своей колонке (тринадцатой); остаток и прочие величины
 		// позиции остаются текстом. Требование: доступно только текстовое поле
 		// комментария, остаток позиции не редактируется.
 		// Traceability: openspec:ui/screens#scenario-position-comment-without-residual-edit
 		var row = cut.FindAll("table")[0].QuerySelectorAll("tbody tr").Single();
 		Assert.That(row.QuerySelectorAll("textarea"), Has.Length.EqualTo(1));
-		Assert.That(row.QuerySelectorAll("td")[11].QuerySelectorAll("textarea"), Has.Length.EqualTo(1));
+		Assert.That(row.QuerySelectorAll("td")[13].QuerySelectorAll("textarea"), Has.Length.EqualTo(1));
 		Assert.That(row.QuerySelectorAll("td")[1].QuerySelectorAll("textarea"), Is.Empty);
 		Assert.That(row.QuerySelectorAll("td")[1].TextContent.Trim(), Is.EqualTo("+0.1"));
 

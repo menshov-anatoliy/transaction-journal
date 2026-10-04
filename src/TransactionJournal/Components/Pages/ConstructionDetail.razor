@@ -386,6 +386,8 @@ else
 				<th>Остаток</th>
 				<th>Сред. цена входа</th>
 				<th>Сред. цена закрытия</th>
+				<th>Стоимость</th>
+				<th>Изм. цены, %</th>
 				<th>Реализ. P&L</th>
 				<th>Нереализ. P&L</th>
 				<th>Общий P&L</th>
@@ -402,7 +404,7 @@ else
 			{
 				@* Пустая таблица — явное сообщение об отсутствии, а не пустая разметка. *@
 				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
-				<tr><td colspan="13" class="empty">позиций нет</td></tr>
+				<tr><td colspan="15" class="empty">позиций нет</td></tr>
 			}
 			@foreach (var position in _data.Positions)
 			{
@@ -411,6 +413,43 @@ else
 					<td>@FormatQuantity(position.Residual)</td>
 					<td>@FormatAmount(position.AverageEntryPrice)</td>
 					<td>@FormatAmount(position.AverageClosePrice)</td>
+					@* Стоимость открытого остатка — нетто-величина «текущая марка ×
+					   знаковый остаток» в USDT: закрытой позиции — прочерк, открытой
+					   без марок — признак сбоя, иначе знаковая величина. *@
+					@* Traceability: openspec:ui/screens#scenario-detail-position-value-and-price-change-columns *@
+					@* Traceability: openspec:ui/screens#scenario-detail-position-value-price-change-degradation *@
+					<td>
+						@if (!position.IsOpen)
+						{
+							<span>—</span>
+						}
+						else if (position.MarkValue is null)
+						{
+							<span class="markfail" title="Провайдер котировок недоступен — стоимость не оценена">сбой котировок</span>
+						}
+						else
+						{
+							<span class="@SignClass(position.MarkValue)">@FormatPnL(position.MarkValue.Value)</span>
+						}
+					</td>
+					@* Процент изменения цены от средней цены остатка приведён к
+					   направлению позиции: плюс всегда движение «в прибыль»; закрытой
+					   позиции — прочерк, открытой без марок — признак сбоя. *@
+					@* Traceability: openspec:ui/screens#scenario-detail-position-value-and-price-change-columns *@
+					<td>
+						@if (!position.IsOpen)
+						{
+							<span>—</span>
+						}
+						else if (position.PriceChangePercent is null)
+						{
+							<span class="markfail" title="Провайдер котировок недоступен — процент изменения цены не оценён">сбой котировок</span>
+						}
+						else
+						{
+							<span class="@SignClass(position.PriceChangePercent)">@FormatPercent(position.PriceChangePercent)</span>
+						}
+					</td>
 					<td><span class="@SignClass(position.RealizedPnL)">@FormatPnLWithPercent(position.RealizedPnL, position.RealizedPnLPercent)</span></td>
 					@* Нереализованная часть: закрытой позиции — прочерк, открытой
 					   без марок — признак сбоя, иначе оценка марками со знаком
