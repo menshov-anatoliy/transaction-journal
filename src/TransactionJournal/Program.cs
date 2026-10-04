@@ -23,6 +23,9 @@ using TransactionJournal.Hints.Display;
 using TransactionJournal.Hints.Ports;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Infrastructure.Consultations;
+using TransactionJournal.Consultations;
+using TransactionJournal.Consultations.Ports;
 using TransactionJournal.Domain;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -300,6 +303,14 @@ builder.Services.AddSingleton(sp => new ConstructionDetailReadModel(
 	sp.GetRequiredService<IJournalMetricsReadModel>(),
 	sp.GetRequiredService<PositionReadModel>()));
 builder.Services.AddSingleton<IConstructionDetailReadModel>(sp => sp.GetRequiredService<ConstructionDetailReadModel>());
+
+// Консультации: порты объявлены в проекте Consultations, адаптеры живут здесь
+// и в Infrastructure (направление «адаптер → порт»); снимок контекста собирается
+// кодом поверх read-моделей журнала, живые подсказки движка в него не входят.
+// Traceability: openspec:architecture/solution-structure#requirement-dependencies-point-inward
+// Traceability: openspec:consultations/context#requirement-context-deterministic-snapshot
+builder.Services.AddSingleton<IRuleCorpusReader, RulesCorpusConsultationAdapter>();
+builder.Services.AddSingleton<IConsultationContextReader, ConsultationContextReader>();
 
 var app = builder.Build();
 

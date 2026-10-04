@@ -124,8 +124,8 @@ public sealed class RulesCorpusLoader
 		var scope = BoundedScalar(map, "scope", Scopes, fileName, problems);
 		var status = BoundedScalar(map, "status", Statuses, fileName, problems);
 		var thresholds = ParseThresholds(map, fileName, problems);
-		var (implementation, _) = ParseTrigger(map, fileName, problems);
-		var hintTemplate = ParseAction(map, fileName, problems);
+		var (implementation, triggerDescription) = ParseTrigger(map, fileName, problems);
+		var (hintTemplate, actionDescription) = ParseAction(map, fileName, problems);
 		var sources = ParseSources(map, fileName, problems);
 		var conflictsWith = ParseConflictsWith(map, fileName, problems);
 
@@ -154,6 +154,8 @@ public sealed class RulesCorpusLoader
 			Status = ParseStatus(status!),
 			Thresholds = thresholds,
 			TriggerImplementation = implementation,
+			TriggerDescription = triggerDescription,
+			ActionDescription = actionDescription,
 			HintTemplate = hintTemplate,
 			Sources = sources,
 			ConflictsWith = conflictsWith,
@@ -226,41 +228,47 @@ public sealed class RulesCorpusLoader
 		return thresholds;
 	}
 
-	private static (string? Implementation, bool HasImplementation) ParseTrigger(YamlMappingNode map, string fileName, List<string> problems)
+	private static (string? Implementation, string? Description) ParseTrigger(YamlMappingNode map, string fileName, List<string> problems)
 	{
 		if (Child(map, "trigger") is not YamlMappingNode triggerMap)
 		{
 			problems.Add($"{fileName}: поле 'trigger' отсутствует или не является отображением");
-			return (null, false);
+			return (null, null);
 		}
 
 		// Неизвестный движку ключ и implementation: null схеме соответствуют —
 		// это не битость: карточка уходит в чек-лист, проход продолжается.
 		// Traceability: openspec:hints/rules-corpus#requirement-corpus-unimplemented-trigger-checklist
-		if (!triggerMap.Children.ContainsKey(new YamlScalarNode("implementation")))
+		if (triggerMap.Children.ContainsKey(new YamlScalarNode("implementation")) == false)
 		{
 			problems.Add($"{fileName}: в 'trigger' отсутствует поле 'implementation' (null допустим — правило без машинной реализации)");
-			return (null, false);
+			return (null, null);
 		}
 
-		return (OptionalScalar(triggerMap, "implementation"), true);
+		// Человекочитаемое описание триггера — информационное поле схемы: не
+		// проверяется и не влияет на исполнение, нужно краткому содержанию
+		// индекса корпуса в снимке консультации.
+		return (OptionalScalar(triggerMap, "implementation"), OptionalScalar(triggerMap, "description"));
 	}
 
-	private static string? ParseAction(YamlMappingNode map, string fileName, List<string> problems)
+	private static (string? HintTemplate, string? Description) ParseAction(YamlMappingNode map, string fileName, List<string> problems)
 	{
 		if (Child(map, "action") is not YamlMappingNode actionMap)
 		{
 			problems.Add($"{fileName}: поле 'action' отсутствует или не является отображением");
-			return null;
+			return (null, null);
 		}
 
-		if (!actionMap.Children.ContainsKey(new YamlScalarNode("hintTemplate")))
+		if (actionMap.Children.ContainsKey(new YamlScalarNode("hintTemplate")) == false)
 		{
 			problems.Add($"{fileName}: в 'action' отсутствует поле 'hintTemplate' (null допустим у правил без машинного триггера)");
-			return null;
+			return (null, null);
 		}
 
-		return OptionalScalar(actionMap, "hintTemplate");
+		// Человекочитаемое описание действия — информационное поле схемы: не
+		// проверяется и не влияет на исполнение, нужно краткому содержанию
+		// индекса корпуса в снимке консультации.
+		return (OptionalScalar(actionMap, "hintTemplate"), OptionalScalar(actionMap, "description"));
 	}
 
 	private static List<RuleSource> ParseSources(YamlMappingNode map, string fileName, List<string> problems)

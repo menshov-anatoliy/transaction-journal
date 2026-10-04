@@ -27,6 +27,10 @@
          как у доменных store-портов (ADR-0007/ADR-0008).
          Traceability: openspec:architecture/solution-structure#requirement-dependencies-point-inward -->
     <ProjectReference Include="..\TransactionJournal.Hints\TransactionJournal.Hints.csproj" />
+    <!-- Адаптер детерминированного снимка контекста консультации: направление
+         «адаптер → порт», как у остальных портов окружения.
+         Traceability: openspec:architecture/solution-structure#requirement-dependencies-point-inward -->
+    <ProjectReference Include="..\TransactionJournal.Consultations\TransactionJournal.Consultations.csproj" />
   </ItemGroup>
 
 </Project>

@@ -45,7 +45,9 @@ internal static class CorpusYaml
 		string? hintTemplate = null,
 		IReadOnlyList<(string Name, string Value, string Unit)>? thresholds = null,
 		string scope = "open-constructions",
-		string character = "risk-mode")
+		string character = "risk-mode",
+		string? triggerDescription = null,
+		string? actionDescription = null)
 	{
 		var sb = new StringBuilder();
 		sb.AppendLine($"id: {id}");
@@ -71,10 +73,10 @@ internal static class CorpusYaml
 		}
 
 		sb.AppendLine("trigger:");
-		sb.AppendLine($"  description: Тестовое условие правила {id}.");
+		sb.AppendLine($"  description: {triggerDescription ?? $"Тестовое условие правила {id}."}");
 		sb.AppendLine($"  implementation: {implementation ?? "null"}");
 		sb.AppendLine("action:");
-		sb.AppendLine($"  description: Тестовое действие правила {id}.");
+		sb.AppendLine($"  description: {actionDescription ?? $"Тестовое действие правила {id}."}");
 		if (hintTemplate is null)
 		{
 			sb.AppendLine("  hintTemplate: null");
