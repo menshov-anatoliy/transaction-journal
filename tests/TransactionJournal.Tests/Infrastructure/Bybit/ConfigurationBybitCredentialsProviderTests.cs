@@ -2,6 +2,10 @@ using System.Net.Http;
 using Microsoft.Extensions.Configuration;
 using NUnit.Framework;
 using TransactionJournal.Infrastructure.Bybit;
+using TransactionJournal.Application.Bybit;
+using TransactionJournal.Application;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -29,8 +33,8 @@ public class ConfigurationBybitCredentialsProviderTests
 		var configuration = new ConfigurationBuilder()
 			.AddInMemoryCollection(new Dictionary<string, string?>
 			{
-				[ConfigurationBybitCredentialsProvider.ApiKeyConfigKey] = apiKey,
-				[ConfigurationBybitCredentialsProvider.ApiSecretConfigKey] = apiSecret,
+				[BybitCredentialsConfig.ApiKeyConfigKey] = apiKey,
+				[BybitCredentialsConfig.ApiSecretConfigKey] = apiSecret,
 			})
 			.Build();
 		var provider = new ConfigurationBybitCredentialsProvider(configuration);
@@ -61,12 +65,12 @@ public class ConfigurationBybitCredentialsProviderTests
 		var values = new Dictionary<string, string?>();
 		if (apiKey is not null)
 		{
-			values[ConfigurationBybitCredentialsProvider.ApiKeyConfigKey] = apiKey;
+			values[BybitCredentialsConfig.ApiKeyConfigKey] = apiKey;
 		}
 
 		if (apiSecret is not null)
 		{
-			values[ConfigurationBybitCredentialsProvider.ApiSecretConfigKey] = apiSecret;
+			values[BybitCredentialsConfig.ApiSecretConfigKey] = apiSecret;
 		}
 
 		var configuration = new ConfigurationBuilder()
@@ -79,10 +83,10 @@ public class ConfigurationBybitCredentialsProviderTests
 
 		// Assert: сообщение ошибки называет и файл, и конфигурационный ключ —
 		// владелец сразу видит, куда вписать значение.
-		Assert.That(exception!.Message, Does.Contain(ConfigurationBybitCredentialsProvider.LocalFileName));
+		Assert.That(exception!.Message, Does.Contain(BybitCredentialsConfig.LocalFileName));
 		Assert.That(exception.Message, Does.Contain(string.IsNullOrWhiteSpace(apiKey)
-			? ConfigurationBybitCredentialsProvider.ApiKeyConfigKey
-			: ConfigurationBybitCredentialsProvider.ApiSecretConfigKey));
+			? BybitCredentialsConfig.ApiKeyConfigKey
+			: BybitCredentialsConfig.ApiSecretConfigKey));
 	}
 
 	[TestMethod]
@@ -102,10 +106,10 @@ public class ConfigurationBybitCredentialsProviderTests
 		try
 		{
 			File.WriteAllText(
-				Path.Combine(tempDirectory, ConfigurationBybitCredentialsProvider.LocalFileName),
+				Path.Combine(tempDirectory, BybitCredentialsConfig.LocalFileName),
 				$$"""
 				{
-				  "{{ConfigurationBybitCredentialsProvider.SectionName}}": {
+				  "{{BybitCredentialsConfig.SectionName}}": {
 				    "ApiKey": "local-file-key",
 				    "ApiSecret": "local-file-secret"
 				  }
@@ -116,7 +120,7 @@ public class ConfigurationBybitCredentialsProviderTests
 
 			var configuration = new ConfigurationBuilder()
 				.AddEnvironmentVariables()
-				.AddJsonFile(Path.Combine(tempDirectory, ConfigurationBybitCredentialsProvider.LocalFileName))
+				.AddJsonFile(Path.Combine(tempDirectory, BybitCredentialsConfig.LocalFileName))
 				.Build();
 			var provider = new ConfigurationBybitCredentialsProvider(configuration);
 

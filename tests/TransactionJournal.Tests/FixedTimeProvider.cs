@@ -1,3 +1,6 @@
+using TransactionJournal.Application;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 namespace TransactionJournal.Tests;
 
 /// <summary>

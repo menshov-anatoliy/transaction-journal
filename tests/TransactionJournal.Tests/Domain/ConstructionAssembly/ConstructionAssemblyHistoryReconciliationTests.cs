@@ -7,7 +7,10 @@ using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Sync;
-using TransactionJournal.Sync;
+using TransactionJournal.Application.Sync;
+using TransactionJournal.Application;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 

@@ -1,3 +1,4 @@
+using TransactionJournal.Application.Bybit;
 using System.Text.Json;
 
 namespace TransactionJournal.Infrastructure.Bybit;

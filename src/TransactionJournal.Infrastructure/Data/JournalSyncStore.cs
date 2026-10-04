@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Domain.Bybit;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Sync;
-using TransactionJournal.Infrastructure.Bybit;
+using TransactionJournal.Application.Bybit;
 
 namespace TransactionJournal.Infrastructure.Data;
 

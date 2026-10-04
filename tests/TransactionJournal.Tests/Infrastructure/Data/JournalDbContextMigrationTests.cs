@@ -5,6 +5,9 @@ using TransactionJournal.Infrastructure.Data;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 using TransactionJournal.Domain.Data;
+using TransactionJournal.Application;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 
 namespace TransactionJournal.Tests.Infrastructure.Data;
 

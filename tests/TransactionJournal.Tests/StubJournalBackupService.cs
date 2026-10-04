@@ -1,4 +1,8 @@
+using TransactionJournal.Application.Ops;
 using TransactionJournal.Infrastructure.Ops;
+using TransactionJournal.Application;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 
 namespace TransactionJournal.Tests;
 

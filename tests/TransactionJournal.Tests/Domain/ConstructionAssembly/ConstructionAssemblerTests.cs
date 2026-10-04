@@ -3,7 +3,10 @@ using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Domain.Materialization;
-using TransactionJournal.Materialization;
+using TransactionJournal.Application.Materialization;
+using TransactionJournal.Application;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 

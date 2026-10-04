@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
-using TransactionJournal.Analytics;
+using TransactionJournal.Application.Analytics;
 using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
@@ -15,6 +15,9 @@ using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Application;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 

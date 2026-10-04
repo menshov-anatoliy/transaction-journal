@@ -1,20 +1,24 @@
 using Microsoft.EntityFrameworkCore;
+using TransactionJournal;
+using TransactionJournal.Application;
+using TransactionJournal.Application.Analytics;
+using TransactionJournal.Application.Bybit;
+using TransactionJournal.Application.Materialization;
+using TransactionJournal.Application.Ops;
+using TransactionJournal.Application.Sync;
+using TransactionJournal.Infrastructure.Analytics;
+using TransactionJournal.Infrastructure.Bybit;
+using TransactionJournal.Infrastructure.Sync;
+using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Sync;
-using TransactionJournal;
-using TransactionJournal.Analytics;
-using TransactionJournal.Infrastructure.Bybit;
 using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
-using TransactionJournal.Domain.Data;
-using TransactionJournal.Infrastructure.Data;
-using TransactionJournal.Domain;
-using TransactionJournal.Domain.ConstructionAssembly;
-using TransactionJournal.Materialization;
 using TransactionJournal.Infrastructure.Ops;
-using TransactionJournal.Ops;
-using TransactionJournal.Sync;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Domain;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,7 +28,7 @@ var builder = WebApplication.CreateBuilder(args);
 // незастроенном значении только в момент обращения к нему.
 // Traceability: openspec:config/local-secrets#requirement-local-secrets-single-file
 builder.Configuration.AddJsonFile(
-	ConfigurationBybitCredentialsProvider.LocalFileName, optional: true, reloadOnChange: false);
+	BybitCredentialsConfig.LocalFileName, optional: true, reloadOnChange: false);
 
 builder.Services.AddRazorComponents()
 	.AddInteractiveServerComponents();

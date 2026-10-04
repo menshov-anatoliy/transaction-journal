@@ -1,3 +1,4 @@
+using TransactionJournal.Application.Ops;
 using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;

@@ -42,6 +42,8 @@ Domain → Infrastructure → Application → Web. Domain собирается �
 
 Store-порты домена (снапшот журнала, справочник инструментов) — в Domain; шлюзы внешних систем (IBybitHistoryGateway, IFreshInstrumentMarkSource) и read-only контракт чтения для `--mcp`/R3 — в Application. Infrastructure реализует всё и регистрируется в composition root Web. Так ADR-0003 подтверждается без изменений: `--mcp` — раннее ветвление того же exe, контракт — порты Application.
 
+Применительно к коду, уже потребляющему хранилище (use-case-сервисы, read-модели страниц), это означает разрез контракт/реализация: интерфейс и его DTO живут в Application, реализация поверх `JournalDbContext` — в Infrastructure. Иначе контракт тянет за собой EF-зависимость и Application не остаётся слоем оркестрации без ввода-вывода наружу.
+
 ### D4. Namespace = проект, подпространства сохраняются
 
 Root namespace равен имени проекта; внутренние подпространства не схлопываются: `TransactionJournal.Application.Sync`, `TransactionJournal.Infrastructure.Bybit` и т. п. Это сохраняет читаемость происхождения кода и делает диффы переноса механическими (замена префикса namespace и `using`).

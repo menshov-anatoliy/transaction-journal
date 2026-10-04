@@ -22,7 +22,8 @@ Traceability ID: scenario-ef-bybit-ops-in-infrastructure
 #### Scenario: Use-case-сервисы и read-модели живут в Application
 Traceability ID: scenario-usecases-in-application
 - **WHEN** сервис читает или пишет хранилище в рамках use-case или собирает read-модель
-- **THEN** он размещается в `TransactionJournal.Application`
+- **THEN** контракт потребителя (интерфейс use-case-сервиса или read-модели с его DTO) объявлен в `TransactionJournal.Application`
+- **AND** реализация, читающая SQLite, размещается в `TransactionJournal.Infrastructure` и регистрируется в composition root Web
 - **AND** слои Materialization, Sync и Analytics входят в Application как оркестрация
 
 #### Scenario: Blazor и Program.cs живут в Web

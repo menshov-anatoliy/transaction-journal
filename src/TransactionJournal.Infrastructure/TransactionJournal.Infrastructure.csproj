@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\TransactionJournal.Application\TransactionJournal.Application.csproj" />
     <ProjectReference Include="..\TransactionJournal.Domain\TransactionJournal.Domain.csproj" />
   </ItemGroup>
 

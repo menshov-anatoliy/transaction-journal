@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TransactionJournal.Application</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.12" />
+  </ItemGroup>
+
+  <!-- В монолите internal-типы Bybit (BybitJson) были доступны всей сборке:
+       сохраняем видимость для реализаций в Infrastructure и зеркальных тестов. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TransactionJournal.Infrastructure" />
+    <InternalsVisibleTo Include="TransactionJournal" />
+    <InternalsVisibleTo Include="TransactionJournal.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TransactionJournal.Domain\TransactionJournal.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

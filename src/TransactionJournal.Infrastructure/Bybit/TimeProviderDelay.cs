@@ -1,3 +1,4 @@
+using TransactionJournal.Application.Bybit;
 using System.Threading.Tasks;
 
 namespace TransactionJournal.Infrastructure.Bybit;

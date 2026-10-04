@@ -1,3 +1,4 @@
+using TransactionJournal.Application.Bybit;
 using System.Net.Http;
 using Polly;
 using Polly.Retry;

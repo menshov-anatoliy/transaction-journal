@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Infrastructure.Bybit;
+using TransactionJournal.Application.Bybit;
 using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
@@ -13,9 +14,13 @@ using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Domain.Data;
-using TransactionJournal.Materialization;
+using TransactionJournal.Application.Materialization;
 using TransactionJournal.Infrastructure.Ops;
-using TransactionJournal.Sync;
+using TransactionJournal.Application.Sync;
+using TransactionJournal.Application;
+using TransactionJournal.Application.Ops;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 using SettingsPage = TransactionJournal.Components.Pages.Settings;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
@@ -127,8 +132,8 @@ public class SettingsScreenTests
 		Assert.That(cut.Markup, Does.Contain("abcd······wxyz"));
 		Assert.That(cut.Markup, Does.Not.Contain(ApiKey));
 		Assert.That(cut.Markup, Does.Not.Contain(ApiSecret));
-		Assert.That(cut.Markup, Does.Contain(ConfigurationBybitCredentialsProvider.LocalFileName));
-		Assert.That(cut.Markup, Does.Contain($"секция {ConfigurationBybitCredentialsProvider.SectionName}"));
+		Assert.That(cut.Markup, Does.Contain(BybitCredentialsConfig.LocalFileName));
+		Assert.That(cut.Markup, Does.Contain($"секция {BybitCredentialsConfig.SectionName}"));
 	}
 
 	[TestMethod]
@@ -164,9 +169,9 @@ public class SettingsScreenTests
 		// ключей; никаких значений ключа и секрета на экране нет.
 		// Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed
 		Assert.That(cut.Markup, Does.Contain("Ключ не настроен"));
-		Assert.That(cut.Markup, Does.Contain(ConfigurationBybitCredentialsProvider.ApiKeyConfigKey));
-		Assert.That(cut.Markup, Does.Contain(ConfigurationBybitCredentialsProvider.ApiSecretConfigKey));
-		Assert.That(cut.Markup, Does.Contain(ConfigurationBybitCredentialsProvider.LocalFileName));
+		Assert.That(cut.Markup, Does.Contain(BybitCredentialsConfig.ApiKeyConfigKey));
+		Assert.That(cut.Markup, Does.Contain(BybitCredentialsConfig.ApiSecretConfigKey));
+		Assert.That(cut.Markup, Does.Contain(BybitCredentialsConfig.LocalFileName));
 		Assert.That(cut.Markup, Does.Not.Contain("······"));
 		Assert.That(cut.Markup, Does.Not.Contain(ApiSecret));
 	}
@@ -502,8 +507,8 @@ public class SettingsScreenTests
 	{
 		public BybitCredentials GetCredentials() =>
 			throw new InvalidOperationException(
-				$"Не задан API-ключ Bybit: заполните {ConfigurationBybitCredentialsProvider.ApiKeyConfigKey} "
-				+ $"в файле {ConfigurationBybitCredentialsProvider.LocalFileName}.");
+				$"Не задан API-ключ Bybit: заполните {BybitCredentialsConfig.ApiKeyConfigKey} "
+				+ $"в файле {BybitCredentialsConfig.LocalFileName}.");
 	}
 
 	/// <summary>Заглушка команды синхронизации: проверки блока подключения кнопку не нажимают.</summary>

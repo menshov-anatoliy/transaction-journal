@@ -1,3 +1,4 @@
+using TransactionJournal.Application.Bybit;
 using System.Globalization;
 using TransactionJournal.Domain.Bybit;
 

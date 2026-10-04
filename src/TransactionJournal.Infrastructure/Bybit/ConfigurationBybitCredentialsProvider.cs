@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using TransactionJournal.Application.Bybit;
 
 namespace TransactionJournal.Infrastructure.Bybit;
 
@@ -12,18 +13,6 @@ namespace TransactionJournal.Infrastructure.Bybit;
 // Traceability: openspec:config/local-secrets#requirement-local-secrets-single-file
 public sealed class ConfigurationBybitCredentialsProvider : IBybitCredentialsProvider
 {
-	/// <summary>Имя локального файла секретов рядом с приложением.</summary>
-	public const string LocalFileName = "appsettings.Local.json";
-
-	/// <summary>Имя секции конфигурации с настройками Bybit.</summary>
-	public const string SectionName = "Bybit";
-
-	/// <summary>Ключ конфигурации с API-ключом Bybit.</summary>
-	public const string ApiKeyConfigKey = "Bybit:ApiKey";
-
-	/// <summary>Ключ конфигурации с секретом API-ключа Bybit.</summary>
-	public const string ApiSecretConfigKey = "Bybit:ApiSecret";
-
 	private readonly IConfiguration _configuration;
 
 	/// <summary>Создаёт поставщика поверх корневой конфигурации приложения.</summary>
@@ -44,19 +33,19 @@ public sealed class ConfigurationBybitCredentialsProvider : IBybitCredentialsPro
 	// Traceability: openspec:config/local-secrets#scenario-local-secrets-missing-file-normal
 	public BybitCredentials GetCredentials()
 	{
-		var apiKey = _configuration[ApiKeyConfigKey];
-		var apiSecret = _configuration[ApiSecretConfigKey];
+		var apiKey = _configuration[BybitCredentialsConfig.ApiKeyConfigKey];
+		var apiSecret = _configuration[BybitCredentialsConfig.ApiSecretConfigKey];
 
 		if (string.IsNullOrWhiteSpace(apiKey))
 		{
 			throw new InvalidOperationException(
-				$"Не задан API-ключ Bybit: заполните {ApiKeyConfigKey} в файле {LocalFileName}.");
+				$"Не задан API-ключ Bybit: заполните {BybitCredentialsConfig.ApiKeyConfigKey} в файле {BybitCredentialsConfig.LocalFileName}.");
 		}
 
 		if (string.IsNullOrWhiteSpace(apiSecret))
 		{
 			throw new InvalidOperationException(
-				$"Не задан секрет API-ключа Bybit: заполните {ApiSecretConfigKey} в файле {LocalFileName}.");
+				$"Не задан секрет API-ключа Bybit: заполните {BybitCredentialsConfig.ApiSecretConfigKey} в файле {BybitCredentialsConfig.LocalFileName}.");
 		}
 
 		return new BybitCredentials(apiKey, apiSecret);

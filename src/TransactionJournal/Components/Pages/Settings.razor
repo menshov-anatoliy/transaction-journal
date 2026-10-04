@@ -3,13 +3,11 @@
 @rendermode InteractiveServer
 
 @using System.Globalization
-@using TransactionJournal.Infrastructure.Bybit
+@using TransactionJournal.Application.Bybit
 @using TransactionJournal.Components.Layout
 @using TransactionJournal.Domain.Data
-@using TransactionJournal.Domain.ConstructionAssembly
-@using TransactionJournal.Domain.Data
-@using TransactionJournal.Infrastructure.Ops
-@using TransactionJournal.Sync
+@using TransactionJournal.Application.Ops
+@using TransactionJournal.Application.Sync
 @inject SettingsReadModel Connection
 @inject IJournalSyncService SyncService
 @inject IBackupPolicyStore BackupPolicy
@@ -30,9 +28,9 @@
 	@* Traceability: openspec:ui/screens#scenario-settings-secret-never-displayed *@
 	<p class="note">
 		Ключ не настроен: заполните
-		@ConfigurationBybitCredentialsProvider.ApiKeyConfigKey и
-		@ConfigurationBybitCredentialsProvider.ApiSecretConfigKey
-		в файле @ConfigurationBybitCredentialsProvider.LocalFileName и перезапустите журнал.
+		@BybitCredentialsConfig.ApiKeyConfigKey и
+		@BybitCredentialsConfig.ApiSecretConfigKey
+		в файле @BybitCredentialsConfig.LocalFileName и перезапустите журнал.
 	</p>
 }
 else
