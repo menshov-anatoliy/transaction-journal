@@ -2,8 +2,8 @@
 
 ## 1. Проект окружения и порты
 
-- [ ] 1.1 Создать проект `src/TransactionJournal.Consultations` (зависимость только от Domain), добавить в solution и проверить сборку; зеркальные тесты структуры расширить на новый проект. Проверить: `requirement-solution-five-projects` — сценарий `scenario-consultations-own-environment-project`; сборка решения зелёная.
-- [ ] 1.2 Объявить порты в проекте: `IConsultationContextReader` (снимок контекста), `IRuleCorpusReader` (индекс и карточки корпуса), `IConsultationStore` (диалоги и сообщения); убедиться в отсутствии ссылки Consultations → Hints. Проверить: `requirement-dependencies-point-inward` — сценарий `scenario-environments-not-linked`.
+- [x] 1.1 Создать проект `src/TransactionJournal.Consultations` (зависимость только от Domain), добавить в solution и проверить сборку; зеркальные тесты структуры расширить на новый проект. Проверить: `requirement-solution-five-projects` — сценарий `scenario-consultations-own-environment-project`; сборка решения зелёная.
+- [x] 1.2 Объявить порты в проекте: `IConsultationContextReader` (снимок контекста), `IRuleCorpusReader` (индекс и карточки корпуса), `IConsultationStore` (диалоги и сообщения); убедиться в отсутствии ссылки Consultations → Hints. Проверить: `requirement-dependencies-point-inward` — сценарий `scenario-environments-not-linked`.
 
 ## 2. Снимок контекста и инструкции агента
 
