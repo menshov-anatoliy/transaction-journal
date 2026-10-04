@@ -306,6 +306,12 @@ else
 		}
 	</div>
 
+	@* Панель подсказок конструкции: живые подсказки сверху по группам
+	   справочника v1, терминальная история свёрнута, карточка полного состава,
+	   кнопки «Применено»/«Отклонено» — единственные мутации подсказок. *@
+	@* Traceability: openspec:ui/screens#requirement-ui-hint-panel-in-construction *@
+	<HintsPanel ConstructionId="ConstructionId" />
+
 	<h2>Позиции</h2>
 	@if (_markFormSymbol is not null)
 	{

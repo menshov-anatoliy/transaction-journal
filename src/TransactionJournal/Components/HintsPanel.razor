@@ -1,0 +1,227 @@
+@namespace TransactionJournal.Components
+@using TransactionJournal.Hints.Display
+@using TransactionJournal.Hints.Ports
+@inject IHintDisplayReadModel HintDisplays
+
+@* Панель «Подсказки» одного субъекта: живые подсказки сверху по группам
+   справочника v1, терминальная история свёрнута. Карточка показывает полный
+   состав подсказки; кнопки «Применено»/«Отклонено» на живой подсказке —
+   единственные мутации подсказок в UI. Субъект выбирается параметром:
+   задан ConstructionId — панель конструкции, иначе — субъект «журнал». *@
+@* Traceability: openspec:ui/screens#requirement-ui-hint-panel-in-construction *@
+@* Traceability: openspec:ui/screens#requirement-ui-portfolio-hint-panel *@
+<div class="hints-panel">
+	<h2>Подсказки</h2>
+
+	@if (_unavailable)
+	{
+		@* Хранилище подсказок не прочитано — явное состояние вместо пустой панели. *@
+		<p class="note">Подсказки недоступны: не удалось прочитать хранилище. Обновите экран.</p>
+	}
+	else if (_panel is null)
+	{
+		<p class="note">Чтение подсказок…</p>
+	}
+	else if (_panel.LiveCount == 0 && _panel.History.Count == 0)
+	{
+		@* Пустая панель — явное сообщение об отсутствии подсказок у субъекта. *@
+		<p class="note empty-hints">подсказок нет</p>
+	}
+	else
+	{
+		@foreach (var section in _panel.LiveGroups)
+		{
+			@* Группы справочника v1 без пустых: пустые группы read-модель
+			   не возвращает и панель не рисует. *@
+			@* Traceability: openspec:ui/screens#requirement-ui-hint-section-groups *@
+			<div class="hint-group">
+				<h3>@(section.Group.Title)</h3>
+				@foreach (var hint in section.Hints)
+				{
+					@HintCard(hint)
+				}
+			</div>
+		}
+
+		@if (_panel.History.Count > 0)
+		{
+			<div class="hint-history">
+				<button type="button" class="btn history-toggle" @onclick="ToggleHistory">
+					@(_historyOpen ? $"Свернуть историю ({_panel.History.Count})" : $"История ({_panel.History.Count})")
+				</button>
+				@if (_historyOpen)
+				{
+					@* Терминальная история: applied/dismissed/expired без кнопок —
+					   переходов из терминальных статусов нет. *@
+					@foreach (var hint in _panel.History)
+					{
+						@HintCard(hint)
+					}
+				}
+			</div>
+		}
+	}
+</div>
+
+@code {
+	/// <summary>Идентификатор конструкции-субъекта; null — панель субъекта «журнал».</summary>
+	[Parameter] public long? ConstructionId { get; set; }
+
+	private HintPanelData? _panel;
+
+	private bool _unavailable;
+
+	private bool _historyOpen;
+
+	protected override async Task OnParametersSetAsync() => await RefreshAsync();
+
+	/// <summary>
+	/// Перечитывает панель субъекта из хранилища подсказок и помечает показанные
+	/// живые подсказки первым показом; вызывается при открытии, после мутаций
+	/// кнопок и после прохода — панель не показывает устаревших записей.
+	/// </summary>
+	public async Task RefreshAsync()
+	{
+		try
+		{
+			_panel = ConstructionId is { } constructionId
+				? await HintDisplays.ReadConstructionPanelAsync(constructionId)
+				: await HintDisplays.ReadJournalPanelAsync();
+			_unavailable = false;
+		}
+		catch (Exception)
+		{
+			_panel = null;
+			_unavailable = true;
+			return;
+		}
+
+		await MarkShownHintsAsync();
+	}
+
+	/// <summary>Переключает свёрнутость терминальной истории.</summary>
+	private void ToggleHistory() => _historyOpen = !_historyOpen;
+
+	/// <summary>
+	/// Кнопка «Применено»: человек завершает жизненный цикл подсказки
+	/// терминальным статусом applied, панель перечитывается.
+	/// </summary>
+	// Переход ставит только человек в UI; терминальный статус reopen не имеет.
+	// Traceability: openspec:hints/hint-lifecycle#requirement-hint-lifecycle-transitions
+	private async Task ApplyAsync(long hintId)
+	{
+		await HintDisplays.ApplyAsync(hintId);
+		await RefreshAsync();
+	}
+
+	/// <summary>
+	/// Кнопка «Отклонено»: человек завершает жизненный цикл подсказки
+	/// терминальным статусом dismissed; повтор подсказки в окне подавлен.
+	/// </summary>
+	// Переход ставит только человек в UI; терминальный статус reopen не имеет.
+	// Traceability: openspec:hints/hint-lifecycle#requirement-hint-lifecycle-transitions
+	private async Task DismissAsync(long hintId)
+	{
+		await HintDisplays.DismissAsync(hintId);
+		await RefreshAsync();
+	}
+
+	/// <summary>Помечает впервые показанные живые подсказки отметкой firstSeenAt.</summary>
+	// Автопометка первого показа — следствие показа в UI, а не действия человека;
+	// повторные показы запись не меняют — помечаются только записи без отметки.
+	// Traceability: openspec:hints/hint-lifecycle#requirement-hint-lifecycle-transitions
+	private async Task MarkShownHintsAsync()
+	{
+		if (_panel is null)
+		{
+			return;
+		}
+
+		var seenAt = DateTimeOffset.Now;
+		foreach (var section in _panel.LiveGroups)
+		{
+			foreach (var hint in section.Hints)
+			{
+				if (hint.FirstSeenAt is null)
+				{
+					await HintDisplays.MarkSeenAsync(hint.Id, seenAt);
+				}
+			}
+		}
+	}
+
+	/// <summary>Разметка карточки полного состава подсказки.</summary>
+	// Карточка несёт весь денормализованный снимок записи: текст, характер,
+	// чёткость, rule id, источники с цитатами, факты триггера, as-of и статус;
+	// у живой подсказки видны кнопки «Применено»/«Отклонено».
+	// Traceability: openspec:ui/screens#scenario-ui-hint-card-full-composition
+	private RenderFragment HintCard(HintRecord hint) => @<article class="hint-card @CardStatusClass(hint.Status)">
+		<p class="hint-text">@hint.Text</p>
+		<dl class="hint-meta">
+			<div><dt>характер</dt><dd>@HintCharacterLabels.LabelOf(hint.Character)</dd></div>
+			<div><dt>чёткость</dt><dd>@hint.Clarity</dd></div>
+			<div><dt>правило</dt><dd>@hint.RuleId</dd></div>
+			<div><dt>as-of</dt><dd>@DisplayTime.FormatMoment(hint.AsOf)</dd></div>
+			<div><dt>статус</dt><dd class="@CardStatusClass(hint.Status)">@StatusText(hint.Status)</dd></div>
+		</dl>
+		@if (hint.Facts.Count > 0)
+		{
+			@* Факты триггера — пары ключ-значение, заполнившие шаблон карточки. *@
+			<ul class="hint-facts">
+				@foreach (var fact in hint.Facts)
+				{
+					<li><b>@fact.Key</b> @fact.Value</li>
+				}
+			</ul>
+		}
+		@if (hint.Sources.Count > 0)
+		{
+			@* Атрибуция происхождения: тег источника, путь файла и цитаты-доказательства. *@
+			<ul class="hint-sources">
+				@foreach (var source in hint.Sources)
+				{
+					<li>
+						<span class="hint-source-tag">@source.Tag</span>
+						<span class="hint-source-file">@source.File</span>
+						<ul class="hint-source-quotes">
+							@foreach (var quote in source.Quotes)
+							{
+								<li>@quote</li>
+							}
+						</ul>
+					</li>
+				}
+			</ul>
+		}
+		@if (hint.Status == HintStatus.New)
+		{
+			@* Кнопки завершения жизненного цикла только у живой подсказки;
+			   других мутаций подсказок UI не предоставляет. *@
+			@* Traceability: openspec:ui/screens#scenario-ui-apply-dismiss-buttons *@
+			<div class="hint-actions">
+				<button type="button" class="btn primary" @onclick="() => ApplyAsync(hint.Id)">Применено</button>
+				<button type="button" class="btn" @onclick="() => DismissAsync(hint.Id)">Отклонено</button>
+			</div>
+		}
+	</article>;
+
+	/// <summary>Класс карточки по статусу записи — окраска живой и терминальных.</summary>
+	private static string CardStatusClass(HintStatus status) => status switch
+	{
+		HintStatus.New => "hint-new",
+		HintStatus.Applied => "hint-applied",
+		HintStatus.Dismissed => "hint-dismissed",
+		HintStatus.Expired => "hint-expired",
+		_ => string.Empty,
+	};
+
+	/// <summary>Статус записи словами для карточки.</summary>
+	private static string StatusText(HintStatus status) => status switch
+	{
+		HintStatus.New => "живая",
+		HintStatus.Applied => "применена",
+		HintStatus.Dismissed => "отклонена",
+		HintStatus.Expired => "погашена",
+		_ => "неизвестен",
+	};
+}

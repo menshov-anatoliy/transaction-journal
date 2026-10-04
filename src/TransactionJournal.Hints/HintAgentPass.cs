@@ -18,7 +18,7 @@ using TransactionJournal.Hints.Ports;
 // Traceability: openspec:hints/engine-pass#requirement-engine-deterministic-selection
 // Traceability: openspec:hints/hint-lifecycle#requirement-hint-dedup-rule-subject-window
 /// </summary>
-public sealed class HintAgentPass
+public sealed class HintAgentPass : IHintPassRunner
 {
 	private readonly RulesCorpusLoader _corpusLoader;
 

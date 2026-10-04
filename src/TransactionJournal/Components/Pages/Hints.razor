@@ -1,0 +1,239 @@
+@page "/hints"
+
+@rendermode InteractiveServer
+
+@using TransactionJournal.Components.Layout
+@using TransactionJournal.Hints
+@using TransactionJournal.Hints.Display
+@using TransactionJournal.Hints.Ports
+@inject IHintDisplayReadModel HintDisplays
+
+<PageTitle>Подсказки — Журнал Bybit</PageTitle>
+
+<h1>Подсказки</h1>
+
+@* Журнал подсказок — общий read-only список всех записей по всем субъектам:
+   карточки полного состава без кнопок, фильтры статуса, характера и группы.
+   Мутации жизненного цикла живут только в панелях субъектов. *@
+@* Traceability: openspec:ui/screens#requirement-ui-hint-log *@
+<div class="toolbar hints-log-toolbar">
+	<select class="action-input log-filter" @bind="_statusFilter" @bind:after="LoadAsync">
+		<option value="">статус: все</option>
+		<option value="@((int)HintStatus.New)">статус: живая</option>
+		<option value="@((int)HintStatus.Applied)">статус: применена</option>
+		<option value="@((int)HintStatus.Dismissed)">статус: отклонена</option>
+		<option value="@((int)HintStatus.Expired)">статус: погашена</option>
+	</select>
+	<select class="action-input log-filter" @bind="_groupFilter" @bind:after="OnGroupChangedAsync">
+		<option value="">группа: все</option>
+		@foreach (var group in HintSectionGroups.V1)
+		{
+			<option value="@group.Id">группа: @group.Title</option>
+		}
+	</select>
+	<select class="action-input log-filter" @bind="_characterFilter" @bind:after="LoadAsync">
+		<option value="">характер: все</option>
+		@* Набор характеров сужается выбранной группой: группа — фильтр по
+		   набору характеров, характер вне группы вместе с группой не сочетается. *@
+		@* Traceability: openspec:ui/screens#scenario-ui-hint-log-group-filter *@
+		@foreach (var character in AvailableCharacters)
+		{
+			<option value="@character">характер: @HintCharacterLabels.LabelOf(character)</option>
+		}
+	</select>
+	@if (HasActiveFilter)
+	{
+		<button type="button" class="btn" @onclick="ResetFiltersAsync">Сбросить фильтры</button>
+	}
+</div>
+
+@if (_unavailable)
+{
+	@* Хранилище подсказок не прочитано — явное состояние вместо пустого списка. *@
+	<p class="note note-error">Журнал подсказок недоступен: не удалось прочитать хранилище. Обновите экран.</p>
+}
+else if (_loading)
+{
+	<p class="note">Чтение журнала…</p>
+}
+else if (_entries.Count == 0)
+{
+	@* Фильтры без результата — явное состояние, отличающее пустой журнал
+	   от пустого результата фильтров. *@
+	<p class="note empty-hints">@(_isFiltered ? "по фильтру записей нет" : "записей нет")</p>
+}
+else
+{
+	<div class="hints-log">
+		@foreach (var hint in _entries)
+		{
+			@* Карточка журнала несёт полный состав записи и субъект; кнопок
+			   мутации нет — жизненный цикл меняется только в панели субъекта. *@
+			@* Traceability: openspec:ui/screens#requirement-ui-hint-log *@
+			<article class="hint-card @CardStatusClass(hint.Status)">
+				<p class="hint-text">@hint.Text</p>
+				<dl class="hint-meta">
+					<div><dt>субъект</dt><dd>@SubjectText(hint)</dd></div>
+					<div><dt>характер</dt><dd>@HintCharacterLabels.LabelOf(hint.Character)</dd></div>
+					<div><dt>группа</dt><dd>@HintSectionGroups.Resolve(hint.Character).Title</dd></div>
+					<div><dt>чёткость</dt><dd>@hint.Clarity</dd></div>
+					<div><dt>правило</dt><dd>@hint.RuleId</dd></div>
+					<div><dt>as-of</dt><dd>@DisplayTime.FormatMoment(hint.AsOf)</dd></div>
+					<div><dt>статус</dt><dd class="@CardStatusClass(hint.Status)">@StatusText(hint.Status)</dd></div>
+				</dl>
+				@if (hint.Facts.Count > 0)
+				{
+					<ul class="hint-facts">
+						@foreach (var fact in hint.Facts)
+						{
+							<li><b>@fact.Key</b> @fact.Value</li>
+						}
+					</ul>
+				}
+				@if (hint.Sources.Count > 0)
+				{
+					<ul class="hint-sources">
+						@foreach (var source in hint.Sources)
+						{
+							<li>
+								<span class="hint-source-tag">@source.Tag</span>
+								<span class="hint-source-file">@source.File</span>
+								<ul class="hint-source-quotes">
+									@foreach (var quote in source.Quotes)
+									{
+										<li>@quote</li>
+									}
+								</ul>
+							</li>
+						}
+					</ul>
+				}
+			</article>
+		}
+	</div>
+}
+
+@code {
+	private IReadOnlyList<HintRecord> _entries = [];
+
+	private bool _loading = true;
+
+	private bool _unavailable;
+
+	private string _statusFilter = string.Empty;
+
+	private string _groupFilter = string.Empty;
+
+	private string _characterFilter = string.Empty;
+
+	protected override async Task OnInitializedAsync() => await LoadAsync();
+
+	/// <summary>Фильтр журнала, собранный из выбранных значений; пустые значения означают «без ограничения».</summary>
+	private HintLogFilter? BuildFilter()
+	{
+		if (_statusFilter.Length == 0 && _groupFilter.Length == 0 && _characterFilter.Length == 0)
+		{
+			return null;
+		}
+
+		return new HintLogFilter
+		{
+			Status = _statusFilter.Length == 0 ? null : (HintStatus)int.Parse(_statusFilter, System.Globalization.CultureInfo.InvariantCulture),
+			Character = _characterFilter.Length == 0 ? null : _characterFilter,
+			GroupId = _groupFilter.Length == 0 ? null : _groupFilter,
+		};
+	}
+
+	/// <summary>Журнал прочтён хотя бы с одним активным фильтром — текст пустого результата различает случаи.</summary>
+	private bool _isFiltered;
+
+	/// <summary>Есть хотя бы один активный фильтр — показывается кнопка сброса.</summary>
+	private bool HasActiveFilter => _statusFilter.Length > 0 || _groupFilter.Length > 0 || _characterFilter.Length > 0;
+
+	/// <summary>Характеры, доступные в фильтре: выбранные группой — только её набор, иначе весь справочник v1.</summary>
+	// Группа — фильтр по набору характеров: список характеров сужается до
+	// состава выбранной группы.
+	// Traceability: openspec:ui/screens#scenario-ui-hint-log-group-filter
+	private IReadOnlyList<string> AvailableCharacters =>
+		_groupFilter.Length == 0
+			? HintCharacterLabels.Labels.Keys.ToList()
+			: HintSectionGroups.V1.Single(group => group.Id == _groupFilter).Characters;
+
+	/// <summary>Перечитывает журнал с текущими фильтрами; вызывается при открытии и смене фильтров.</summary>
+	// Журнал читается свежим сверху — read-модель сортирует записи по времени
+	// генерации.
+	// Traceability: openspec:ui/screens#scenario-ui-hint-log-filters
+	private async Task LoadAsync()
+	{
+		_loading = true;
+		_unavailable = false;
+
+		try
+		{
+			var filter = BuildFilter();
+			_isFiltered = filter is not null;
+			_entries = await HintDisplays.ReadLogAsync(filter);
+		}
+		catch (Exception)
+		{
+			_entries = [];
+			_unavailable = true;
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
+
+	/// <summary>Смена группы: сужает список характеров и снимает характер вне новой группы.</summary>
+	// Характер вне состава выбранной группы не сочетается с ней — выбор
+	// сбрасывается к «все» при смене группы.
+	// Traceability: openspec:ui/screens#scenario-ui-hint-log-group-filter
+	private async Task OnGroupChangedAsync()
+	{
+		if (_groupFilter.Length > 0
+			&& _characterFilter.Length > 0
+			&& !HintSectionGroups.V1.Single(group => group.Id == _groupFilter).Characters.Contains(_characterFilter, StringComparer.Ordinal))
+		{
+			_characterFilter = string.Empty;
+		}
+
+		await LoadAsync();
+	}
+
+	/// <summary>Сбрасывает все фильтры к «все» и перечитывает журнал целиком.</summary>
+	private async Task ResetFiltersAsync()
+	{
+		_statusFilter = string.Empty;
+		_groupFilter = string.Empty;
+		_characterFilter = string.Empty;
+		await LoadAsync();
+	}
+
+	/// <summary>Субъект записи словами: «журнал» или «конструкция N».</summary>
+	// Субъект денормализован в записи: ForJournal — портфельный субъект,
+	// ForConstruction — конструкция с её идентификатором.
+	private static string SubjectText(HintRecord hint) => hint.Subject.ConstructionId is { } constructionId
+		? $"конструкция {constructionId}"
+		: "журнал";
+
+	/// <summary>Класс карточки по статусу записи — окраска живой и терминальных.</summary>
+	private static string CardStatusClass(HintStatus status) => status switch
+	{
+		HintStatus.New => "hint-new",
+		HintStatus.Applied => "hint-applied",
+		HintStatus.Dismissed => "hint-dismissed",
+		HintStatus.Expired => "hint-expired",
+		_ => string.Empty,
+	};
+
+	/// <summary>Статус записи словами для карточки.</summary>
+	private static string StatusText(HintStatus status) => status switch
+	{
+		HintStatus.New => "живая",
+		HintStatus.Applied => "применена",
+		HintStatus.Dismissed => "отклонена",
+		HintStatus.Expired => "погашена",
+		_ => "неизвестен",
+	};
+}

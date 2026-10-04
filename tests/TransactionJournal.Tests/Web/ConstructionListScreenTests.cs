@@ -1,4 +1,5 @@
 using Bunit;
+using AngleSharp.Dom;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -16,6 +17,9 @@ using TransactionJournal.Application.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Hints;
+using TransactionJournal.Hints.Display;
+using TransactionJournal.Hints.Ports;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -36,6 +40,8 @@ public class ConstructionListScreenTests
 	private Mock<IConstructionListReadModel> _list = null!;
 	private Mock<IFrameReadModel> _frame = null!;
 	private Mock<IJournalSyncService> _sync = null!;
+	private Mock<IHintDisplayReadModel> _hints = null!;
+	private Mock<IHintPassRunner> _passRunner = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -58,6 +64,25 @@ public class ConstructionListScreenTests
 		// Сервис единственной ручной команды синхронизации тулбара.
 		_sync = new Mock<IJournalSyncService>();
 		_context.Services.AddSingleton(_sync.Object);
+
+		// Read-модель подсказок: по умолчанию панель журнала пуста, живых
+		// подсказок у конструкций нет — проверки подсказок переопределяют.
+		_hints = new Mock<IHintDisplayReadModel>();
+		_hints
+			.Setup(model => model.ReadJournalPanelAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(EmptyPanel());
+		_hints
+			.Setup(model => model.ReadLiveCountsByConstructionAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new Dictionary<long, int>());
+		_context.Services.AddSingleton(_hints.Object);
+
+		// Запуск прохода подсказок кнопкой обзорного экрана: по умолчанию
+		// проход завершается без созданных записей.
+		_passRunner = new Mock<IHintPassRunner>();
+		_passRunner
+			.Setup(runner => runner.RunAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CompletedPass());
+		_context.Services.AddSingleton(_passRunner.Object);
 	}
 
 	[TestCleanup]
@@ -519,6 +544,144 @@ public class ConstructionListScreenTests
 		});
 	}
 
+	[TestMethod]
+	[Description("Строка конструкции с живыми подсказками показывает индикатор с их числом")]
+	public void TryIfBadgeShowsLiveCount()
+	{
+		// Arrange: в списке две конструкции, у первой — две живые подсказки,
+		// у второй живых подсказок нет.
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(
+				Item(7, "Календарь сентябрь", ConstructionStatus.Open),
+				Item(8, "Контртренд ETH", ConstructionStatus.Open)));
+		_hints
+			.Setup(model => model.ReadLiveCountsByConstructionAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new Dictionary<long, int> { [7] = 2 });
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: строка первой конструкции показывает индикатор с числом живых
+		// подсказок; вторая строка без индикатора.
+		// Требование: индикатор показывает число живых подсказок конструкции.
+		// Traceability: openspec:ui/screens#scenario-ui-badge-shows-live-count
+		cut.WaitForAssertion(() =>
+		{
+			var badges = cut.FindAll(".hint-badge");
+			Assert.That(badges, Has.Count.EqualTo(1));
+			Assert.That(badges[0].TextContent, Is.EqualTo("2"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Строка конструкции без живых подсказок не показывает индикатор")]
+	public void TryIfBadgeHiddenWhenNoLiveHints()
+	{
+		// Arrange: у конструкции живых подсказок нет — словарь индикаторов её не содержит.
+		_list
+			.Setup(model => model.ReadAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(CreateData(Item(7, "Календарь сентябрь", ConstructionStatus.Open)));
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: индикатор в строке отсутствует — ноль живых подсказок не рисуется.
+		// Требование: у конструкции без живых подсказок индикатор отсутствует.
+		// Traceability: openspec:ui/screens#scenario-ui-badge-hidden-when-none
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.FindAll(".hint-badge"), Has.Count.EqualTo(0)));
+	}
+
+	[TestMethod]
+	[Description("Обзорный экран показывает панель подсказок журнала")]
+	public void TryIfJournalPanelShowsOnOverview()
+	{
+		// Arrange: у журнала одна живая портфельная подсказка.
+		var hint = Hint(31, HintSubject.ForJournal(), "risk-mode", "Лимит риска периода исчерпан");
+		_hints
+			.Setup(model => model.ReadJournalPanelAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(PanelOf(HintSubject.ForJournal(), sectionOf: ("risk-mode", "Риск-режим", [hint])));
+
+		var cut = _context.RenderComponent<Constructions>();
+
+		// Assert: панель подсказок субъекта «журнал» показана на обзорном
+		// экране с группой справочника и текстом подсказки.
+		// Требование: портфельные подсказки показывает обзорный экран.
+		// Traceability: openspec:ui/screens#requirement-ui-portfolio-hint-panel
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll(".hints-panel"), Has.Count.EqualTo(1));
+			Assert.That(cut.Find(".hints-panel h3").TextContent, Is.EqualTo("Риск-режим"));
+			Assert.That(cut.Find(".hints-panel .hint-text").TextContent, Does.Contain("Лимит риска периода исчерпан"));
+		});
+	}
+
+	[TestMethod]
+	[Description("Кнопка прохода запускает агент и показывает итог с перечитыванием панелей")]
+	public void TryIfManualPassRunsEngine()
+	{
+		// Arrange: проход создаёт две подсказки и гасит одну.
+		_passRunner
+			.Setup(runner => runner.RunAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPassResult
+			{
+				Outcome = HintPassOutcome.Completed,
+				AsOf = new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero),
+				CreatedHints = 2,
+				ExpiredHints = 1,
+			});
+
+		var cut = _context.RenderComponent<Constructions>();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tr.clickable"), Has.Count.EqualTo(0)));
+
+		// Act: пользователь нажимает кнопку запуска прохода подсказок.
+		FindButton(cut, "Запустить проход подсказок").Click();
+
+		// Assert: итог прохода показан под кнопкой, панели и индикаторы
+		// перечитаны после прохода.
+		// Требование: ручной проход выполняет тот же код агента, что и
+		// плановый, и обновляет подсказки на экране.
+		// Traceability: openspec:ui/screens#scenario-ui-manual-pass-runs-engine
+		// Traceability: openspec:ui/screens#requirement-ui-manual-pass-button
+		cut.WaitForAssertion(() =>
+			Assert.That(cut.Find(".note-ok").TextContent, Does.Contain("Проход завершён: создано 2, погашено 1")));
+		_hints.Verify(model => model.ReadLiveCountsByConstructionAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+		_hints.Verify(model => model.ReadJournalPanelAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+	}
+
+	[TestMethod]
+	[Description("Невалидный корпус правил показывает агрегированный список проблем")]
+	public void TryIfManualPassCorpusError()
+	{
+		// Arrange: проход сломан невалидным корпусом — проблема в одной карточке,
+		// проход до чтения журнала и рынка не дошёл.
+		_passRunner
+			.Setup(runner => runner.RunAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPassResult
+			{
+				Outcome = HintPassOutcome.CorpusInvalid,
+				AsOf = new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero),
+				Diagnostics = ["карточка risk-window: пустой шаблон текста"],
+			});
+
+		var cut = _context.RenderComponent<Constructions>();
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("tr.clickable"), Has.Count.EqualTo(0)));
+
+		// Act: пользователь нажимает кнопку запуска прохода подсказок.
+		FindButton(cut, "Запустить проход подсказок").Click();
+
+		// Assert: экран показывает ошибку корпуса со списком проблем карточек.
+		// Требование: ошибка корпуса показывается агрегированным списком
+		// проблем, записи подсказок при этом не создаются.
+		// Traceability: openspec:ui/screens#scenario-ui-manual-pass-corpus-error
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.Find(".note-error").TextContent, Does.Contain("Корпус правил невалиден"));
+			var problems = cut.FindAll(".corpus-problems li");
+			Assert.That(problems, Has.Count.EqualTo(1));
+			Assert.That(problems[0].TextContent, Does.Contain("карточка risk-window: пустой шаблон текста"));
+		});
+	}
+
 	#region Помощники
 
 	/// <summary>Пустые данные списка: нулевые счётчики и отсутствие строк.</summary>
@@ -583,6 +746,58 @@ public class ConstructionListScreenTests
 		Executions = new Dictionary<string, ExecutionCategorySyncResult>(StringComparer.Ordinal),
 		Deliveries = new Dictionary<string, DeliveryCategorySyncResult>(StringComparer.Ordinal),
 	};
+
+	/// <summary>Пустые данные панели подсказок: ни живых групп, ни истории.</summary>
+	private static HintPanelData EmptyPanel(HintSubject? subject = null) => new()
+	{
+		Subject = subject ?? HintSubject.ForJournal(),
+		LiveGroups = [],
+		History = [],
+	};
+
+	/// <summary>Панель подсказок с одной живой группой; история не задана.</summary>
+	private static HintPanelData PanelOf(HintSubject subject, (string Id, string Title, IReadOnlyList<HintRecord> Hints) sectionOf)
+	{
+		var definition = HintSectionGroups.V1.Single(group => group.Id == sectionOf.Id);
+		return new HintPanelData
+		{
+			Subject = subject,
+			LiveGroups = [new HintSection { Group = definition, Hints = sectionOf.Hints }],
+			History = [],
+		};
+	}
+
+	/// <summary>Живая подсказка с денормализованным снимком момента генерации.</summary>
+	private static HintRecord Hint(
+		long id,
+		HintSubject subject,
+		string character,
+		string text,
+		HintStatus status = HintStatus.New) => new()
+	{
+		Id = id,
+		RuleId = "rule-" + character,
+		Subject = subject,
+		Character = character,
+		Clarity = "crisp",
+		Sources = [],
+		Text = text,
+		Facts = new Dictionary<string, string>(StringComparer.Ordinal),
+		AsOf = new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero),
+		Status = status,
+		FirstSeenAt = new DateTimeOffset(2026, 9, 19, 12, 5, 0, TimeSpan.Zero),
+	};
+
+	/// <summary>Завершённый исход прохода без созданных записей.</summary>
+	private static HintPassResult CompletedPass() => new()
+	{
+		Outcome = HintPassOutcome.Completed,
+		AsOf = new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero),
+	};
+
+	/// <summary>Кнопка тулбара по видимому тексту.</summary>
+	private static IElement FindButton(IRenderedComponent<IComponent> cut, string text) =>
+		cut.FindAll("button").Single(button => button.TextContent.Trim() == text);
 
 	#endregion
 }

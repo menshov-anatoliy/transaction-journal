@@ -563,3 +563,81 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
 	text-align: start;
 }
+
+/* ===== Подсказки агента: индикатор, панель, журнал ===== */
+/* Индикатор живых подсказок в строке списка конструкций: число живых записей.
+   Traceability: openspec:ui/screens#requirement-ui-construction-hint-badge */
+.hint-badge {
+	display: inline-block;
+	min-width: 18px;
+	padding: 1px 6px;
+	border-radius: 9px;
+	background: #1f6feb;
+	color: #f0f6fc;
+	font-size: 11px;
+	text-align: center;
+}
+
+/* Панель «Подсказки»: группы справочника v1 и карточки полного состава.
+   Traceability: openspec:ui/screens#requirement-ui-hint-panel-in-construction */
+.hints-panel { margin: 10px 0 16px; }
+.hints-panel h2 { margin-bottom: 6px; }
+.hints-panel .empty-hints { color: #8b949e; }
+.hint-group h3 { font-size: 13px; margin: 10px 0 6px; color: #c9d1d9; }
+
+.hint-card {
+	background: #161b22;
+	border-left: 3px solid #1f6feb;
+	padding: 8px 10px;
+	margin: 6px 0;
+	font-size: 12px;
+}
+
+.hint-card.hint-applied { border-left-color: #3fb950; }
+.hint-card.hint-dismissed { border-left-color: #8b949e; }
+.hint-card.hint-expired { border-left-color: #8b949e; opacity: 0.75; }
+
+.hint-card .hint-text { margin: 0 0 6px; color: #f0f6fc; font-size: 13px; }
+
+.hint-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 16px;
+	margin: 0 0 6px;
+	color: #8b949e;
+}
+
+.hint-meta div { display: flex; gap: 6px; }
+.hint-meta dt { color: #8b949e; }
+.hint-meta dd { margin: 0; color: #c9d1d9; }
+
+.hint-facts, .hint-sources, .hint-source-quotes {
+	margin: 4px 0;
+	padding-left: 18px;
+	color: #8b949e;
+}
+
+.hint-source-tag {
+	display: inline-block;
+	background: #21262d;
+	border-radius: 4px;
+	padding: 0 5px;
+	margin-right: 6px;
+	color: #c9d1d9;
+	font-family: ui-monospace, Consolas, monospace;
+	font-size: 11px;
+}
+
+.hint-source-file { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+
+.hint-actions { margin-top: 6px; display: flex; gap: 8px; }
+
+.hint-history { margin-top: 8px; }
+.history-toggle { margin-bottom: 4px; }
+
+.corpus-problems { margin: 6px 0 0; padding-left: 20px; }
+
+/* Кнопка ручного прохода подсказок — собственный тулбар секции подсказок
+   обзорного экрана, команды журнала не смешивает.
+   Traceability: openspec:ui/screens#requirement-ui-manual-pass-button */
+.hints-toolbar { display: flex; gap: 8px; margin: 10px 0 4px; }

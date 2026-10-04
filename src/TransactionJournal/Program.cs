@@ -19,6 +19,7 @@ using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Infrastructure.Hints;
 using TransactionJournal.Hints;
 using TransactionJournal.Hints.Corpus;
+using TransactionJournal.Hints.Display;
 using TransactionJournal.Hints.Ports;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
@@ -277,6 +278,12 @@ builder.Services.AddSingleton(_ => new RulesCorpusLoader(
 	builder.Configuration["Hints:RulesPath"]
 	?? Path.Combine(AppContext.BaseDirectory, "rules")));
 builder.Services.AddSingleton<HintAgentPass>();
+builder.Services.AddSingleton<IHintPassRunner>(sp => sp.GetRequiredService<HintAgentPass>());
+// Read-модель отображения подсказок: панель субъекта, индикаторы списка и
+// общий журнал группируются при чтении поверх хранилища подсказок; кнопки
+// «Применено»/«Отклонено» и первый показ идут через неё же.
+// Traceability: openspec:ui/screens#requirement-ui-hint-section-groups
+builder.Services.AddSingleton<IHintDisplayReadModel, HintDisplayReadModel>();
 
 // Read-модель экрана «Конструкции»: соединяет метрики аналитики журнала с именами
 // и ручными статусами конструкций, скрывая архивные из списка и его счётчика.

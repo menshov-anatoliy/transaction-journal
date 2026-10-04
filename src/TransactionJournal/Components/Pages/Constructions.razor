@@ -9,9 +9,14 @@
 @using TransactionJournal.Domain
 @using TransactionJournal.Domain.Data
 @using TransactionJournal.Application.Sync
+@using TransactionJournal.Hints
+@using TransactionJournal.Hints.Display
+@using TransactionJournal.Hints.Ports
 @inject IConstructionListReadModel List
 @inject IFrameReadModel Frame
 @inject IJournalSyncService SyncService
+@inject IHintDisplayReadModel HintDisplays
+@inject IHintPassRunner PassRunner
 @inject NavigationManager Navigation
 
 <PageTitle>Конструкции — Журнал Bybit</PageTitle>
@@ -94,13 +99,67 @@ else
 		<div>конструкций<b>@CountLabel</b></div>
 	</div>
 
-	@* Таблица конструкций со столбцами метрик аналитики; клик по строке открывает
-	   детали конструкции. *@
-	<table>
-		<thead>
-			<tr>
-				<th>Конструкция</th>
-				<th>Статус</th>
+		@* Секция подсказок журнала: панель субъекта «журнал» с теми же правилами
+		   состава и кнопками, что и в деталях конструкции, и кнопка ручного запуска
+		   прохода агента — фоновое выполнение с индикатором занятости. Кнопка живёт
+		   в собственном тулбаре секции подсказок, команды журнала не смешивает. *@
+		@* Traceability: openspec:ui/screens#requirement-ui-portfolio-hint-panel *@
+		@* Traceability: openspec:ui/screens#requirement-ui-manual-pass-button *@
+		<div class="hints-toolbar">
+			<button type="button" class="btn" disabled="@_passRunning" @onclick="RunHintsPassAsync">Запустить проход подсказок</button>
+		</div>
+
+		@if (_passRunning)
+		{
+			@* Проход выполняется в фоне: кнопка заблокирована, экран не ждёт его
+			   завершения для остальной работы. *@
+			@* Traceability: openspec:ui/screens#requirement-ui-manual-pass-button *@
+			<p class="note" role="status">Проход подсказок выполняется…</p>
+		}
+		else if (_passError is not null)
+		{
+			<p class="note note-error" role="alert"><b>Проход подсказок прерван:</b> @_passError</p>
+		}
+		else if (_passResult is { Outcome: HintPassOutcome.Completed } completed)
+		{
+			@* Итог закрытого прохода: счётчики созданных и погашенных записей;
+			   панели и индикаторы перечитаны по результатам прохода. *@
+			@* Traceability: openspec:ui/screens#scenario-ui-manual-pass-runs-engine *@
+			<p class="note note-ok" role="status">Проход завершён: создано @completed.CreatedHints, погашено @completed.ExpiredHints</p>
+		}
+		else if (_passResult is { Outcome: HintPassOutcome.SkippedMarketUnavailable } skipped)
+		{
+			<p class="note" role="status">Проход пропущен: марки недоступны — @skipped.Diagnostics?.FirstOrDefault()</p>
+		}
+		else if (_passResult is { Outcome: HintPassOutcome.CorpusInvalid } invalid)
+		{
+			@* Ошибка корпуса показывается агрегированным списком проблем карточек —
+			   владелец приводит корпус в порядок до следующего запуска. *@
+			@* Traceability: openspec:ui/screens#scenario-ui-manual-pass-corpus-error *@
+			<div class="note note-error" role="alert">
+				<b>Корпус правил невалиден:</b>
+				<ul class="corpus-problems">
+					@foreach (var problem in invalid.Diagnostics ?? [])
+					{
+						<li>@problem</li>
+					}
+				</ul>
+			</div>
+		}
+
+		@* Панель подсказок субъекта «журнал»: портфельные подсказки обзорного
+		   экрана — живые сверху по группам, история свёрнута. *@
+		@* Traceability: openspec:ui/screens#requirement-ui-portfolio-hint-panel *@
+		<HintsPanel @ref="_journalPanel" />
+
+		@* Таблица конструкций со столбцами метрик аналитики; клик по строке открывает
+		   детали конструкции. *@
+		<table>
+			<thead>
+				<tr>
+					<th>Конструкция</th>
+					<th>Подсказки</th>
+					<th>Статус</th>
 				<th>Капитал</th>
 				<th>Реализов.</th>
 				<th>Нереализов.</th>
@@ -115,12 +174,21 @@ else
 			@if (_data.Items.Count == 0)
 			{
 				@* Пустой список — явное сообщение об отсутствии, а не пустая разметка. *@
-				<tr><td colspan="10" class="empty">конструкций нет</td></tr>
+				<tr><td colspan="11" class="empty">конструкций нет</td></tr>
 			}
 			@foreach (var item in _data.Items)
 			{
 				<tr class="clickable" title="Открыть детали конструкции" @onclick="() => OpenDetail(item.ConstructionId)">
 					<td>@item.Name</td>
+					<td>
+						@* Индикатор живых подсказок конструкции: число живых записей;
+						   у конструкции без живых подсказок индикатор отсутствует. *@
+						@* Traceability: openspec:ui/screens#requirement-ui-construction-hint-badge *@
+						@if (_liveCounts.TryGetValue(item.ConstructionId, out var liveHintCount))
+						{
+							<span class="hint-badge" title="@LiveBadgeTitle(liveHintCount)">@liveHintCount</span>
+						}
+					</td>
 					<td><span class="@StatusClass(item.Status)">@StatusText(item.Status)</span></td>
 					<td>@FormatAmount(item.AllocatedCapitalUsdt)</td>
 					<td><span class="@SignClass(item.RealizedPnL)">@FormatPnL(item.RealizedPnL)</span></td>
@@ -176,6 +244,11 @@ else
 	private bool _syncRunning;
 	private JournalSyncResult? _syncResult;
 	private string? _syncError;
+	private IReadOnlyDictionary<long, int> _liveCounts = new Dictionary<long, int>();
+	private bool _passRunning;
+	private HintPassResult? _passResult;
+	private string? _passError;
+	private HintsPanel? _journalPanel;
 
 	protected override async Task OnInitializedAsync() => await RefreshAsync();
 
@@ -213,7 +286,74 @@ else
 			// остаётся доступной без числа, сама навигация не зависит от счётчика.
 			_inboxCount = null;
 		}
+
+		await RefreshHintsAsync();
 	}
+
+	/// <summary>
+	/// Перечитывает данные подсказок экрана: индикаторы живых подсказок списка
+	/// и панель субъекта «журнал»; вызывается при открытии экрана и после
+	/// прохода агента — панели и индикаторы не показывают устаревших записей.
+	/// </summary>
+	// Индикаторы считаются по живым записям конструкций; конструкция без живых
+	// подсказок индикатора не имеет.
+	// Traceability: openspec:ui/screens#requirement-ui-construction-hint-badge
+	// Traceability: openspec:ui/screens#scenario-ui-manual-pass-runs-engine
+	private async Task RefreshHintsAsync()
+	{
+		try
+		{
+			_liveCounts = await HintDisplays.ReadLiveCountsByConstructionAsync();
+		}
+		catch (Exception)
+		{
+			// Индикаторы нечитаемы — строки списка остаются работоспособными
+			// без бейджей, панель подсказок показывает своё состояние сама.
+			_liveCounts = new Dictionary<long, int>();
+		}
+
+		if (_journalPanel is not null)
+		{
+			await _journalPanel.RefreshAsync();
+		}
+	}
+
+	/// <summary>
+	/// Выполняет ручной проход агента подсказок: запуск идёт до конца в фоне,
+	/// кнопка блокируется на время работы; по завершении панели и индикаторы
+	/// перечитываются, исход прохода с диагностикой показывается под кнопкой.
+	/// </summary>
+	// Проход — тот же код, которым пойдут плановые проходы: невалидный корпус
+	// возвращает агрегированный список проблем без создания записей.
+	// Traceability: openspec:ui/screens#requirement-ui-manual-pass-button
+	// Traceability: openspec:ui/screens#scenario-ui-manual-pass-runs-engine
+	private async Task RunHintsPassAsync()
+	{
+		_passRunning = true;
+		_passResult = null;
+		_passError = null;
+
+		try
+		{
+			_passResult = await PassRunner.RunAsync();
+		}
+		catch (Exception ex)
+		{
+			// Непредвиденный сбой прохода доходит причиной — повтор запускается
+			// новым нажатием, панель остаётся на прежних данных.
+			_passError = ex.Message;
+		}
+		finally
+		{
+			_passRunning = false;
+		}
+
+		await RefreshHintsAsync();
+	}
+
+	/// <summary>Подсказка наведения индикатора: число живых подсказок словами.</summary>
+	private static string LiveBadgeTitle(int count) =>
+		$"живых подсказок: {count}";
 
 	/// <summary>
 	/// Выполняет единственную ручную команду синхронизации: запуск идёт до конца,

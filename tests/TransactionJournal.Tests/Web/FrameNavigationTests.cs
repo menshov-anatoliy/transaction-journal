@@ -14,6 +14,9 @@ using TransactionJournal.Application;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Hints;
+using TransactionJournal.Hints.Display;
+using TransactionJournal.Hints.Ports;
 using ConstructionDetailPage = TransactionJournal.Components.Pages.ConstructionDetail;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
 using Assert = NUnit.Framework.Assert;
@@ -98,6 +101,40 @@ public class FrameNavigationTests
 		// Сигнал изменений журнала: экран оповещает каркас после действий,
 		// каркас перечитывает панель без навигации.
 		_context.Services.AddScoped<JournalChangeSignal>();
+
+		// Панель подсказок и кнопка прохода обзорного экрана читают подсказки
+		// через собственную read-модель: навигационным проверкам достаточно
+		// пустой панели и завершённого без записей прохода.
+		var hints = new Mock<IHintDisplayReadModel>();
+		hints
+			.Setup(model => model.ReadConstructionPanelAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPanelData
+			{
+				Subject = HintSubject.ForConstruction(7),
+				LiveGroups = [],
+				History = [],
+			});
+		hints
+			.Setup(model => model.ReadJournalPanelAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPanelData
+			{
+				Subject = HintSubject.ForJournal(),
+				LiveGroups = [],
+				History = [],
+			});
+		hints
+			.Setup(model => model.ReadLiveCountsByConstructionAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new Dictionary<long, int>());
+		_context.Services.AddSingleton(hints.Object);
+		var passRunner = new Mock<IHintPassRunner>();
+		passRunner
+			.Setup(runner => runner.RunAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPassResult
+			{
+				Outcome = HintPassOutcome.Completed,
+				AsOf = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+			});
+		_context.Services.AddSingleton(passRunner.Object);
 	}
 
 	[TestCleanup]
@@ -163,7 +200,7 @@ public class FrameNavigationTests
 		// несёт точку ручного статуса и крестик закрытия; её фиксированное место —
 		// сразу после вкладки «Конструкции».
 		// Traceability: openspec:ui/screens#requirement-app-frame-navigation
-		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(4)));
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(5)));
 		var tabs = cut.FindAll("nav.tabs a");
 		Assert.That(tabs[0].GetAttribute("href"), Is.EqualTo("/"));
 		Assert.That(tabs[1].GetAttribute("href"), Is.EqualTo("/constructions/7"));
@@ -195,7 +232,7 @@ public class FrameNavigationTests
 		// Assert: приложение возвращает пользователя к списку конструкций
 		// и убирает вкладку.
 		// Traceability: openspec:ui/screens#scenario-transit-tab-closes-to-list
-		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(3)));
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(4)));
 		Assert.That(cut.FindAll(".transit-tab"), Has.Count.EqualTo(0));
 		Assert.That(navigation.Uri, Does.EndWith("/"));
 	}
@@ -212,7 +249,7 @@ public class FrameNavigationTests
 		var navigation = _context.Services.GetRequiredService<NavigationManager>();
 		navigation.NavigateTo("/constructions/7");
 		var cut = RenderFrame(DetailScreen(7));
-		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(4)));
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(5)));
 
 		// Act: пользователь уходит на статический экран «Входящие».
 		navigation.NavigateTo("/inbox");
@@ -224,7 +261,7 @@ public class FrameNavigationTests
 
 		// Act: крестик закрывает вкладку и из статического экрана.
 		cut.Find(".tab-close").Click();
-		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(3)));
+		cut.WaitForAssertion(() => Assert.That(cut.FindAll("nav.tabs a"), Has.Count.EqualTo(4)));
 		Assert.That(navigation.Uri, Does.EndWith("/"));
 	}
 

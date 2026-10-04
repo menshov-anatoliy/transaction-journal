@@ -17,6 +17,9 @@ using TransactionJournal.Application;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Hints;
+using TransactionJournal.Hints.Display;
+using TransactionJournal.Hints.Ports;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -54,6 +57,7 @@ public class ConstructionDetailScreenTests
 	private Mock<IInstrumentMarkSource> _markSource = null!;
 	private Mock<IPnLAdjustmentService> _adjustments = null!;
 	private Mock<IJournalBackupService> _backups = null!;
+	private Mock<IHintDisplayReadModel> _hints = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -104,6 +108,20 @@ public class ConstructionDetailScreenTests
 		// Сигнал изменений журнала оповещает каркас после действий экрана;
 		// без подписчиков в изолированном рендере он безопасно бездействует.
 		_context.Services.AddScoped<JournalChangeSignal>();
+
+		// Read-модель подсказок для панели деталей: по умолчанию панель
+		// конструкции пуста — проверки подсказок переопределяют выдачу.
+		var hints = new Mock<IHintDisplayReadModel>();
+		hints
+			.Setup(model => model.ReadConstructionPanelAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPanelData
+			{
+				Subject = HintSubject.ForConstruction(7),
+				LiveGroups = [],
+				History = [],
+			});
+		_context.Services.AddSingleton(hints.Object);
+		_hints = hints;
 	}
 
 	[TestCleanup]
@@ -2038,6 +2056,59 @@ public class ConstructionDetailScreenTests
 			Assert.That(cut.FindAll("table")[3].TextContent, Does.Contain("корректировок нет"));
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("—"));
 		});
+	}
+
+	[TestMethod]
+	[Description("Детали конструкции показывают панель подсказок этого субъекта")]
+	public void TryIfDetailShowsHintsPanel()
+	{
+		// Arrange: панель конструкции 7 с одной живой подсказкой.
+		_hints
+			.Setup(model => model.ReadConstructionPanelAsync(7, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPanelData
+			{
+				Subject = HintSubject.ForConstruction(7),
+				LiveGroups =
+				[
+					new HintSection
+					{
+						Group = HintSectionGroups.V1.Single(group => group.Id == "construction-management"),
+						Hints =
+						[
+							new HintRecord
+							{
+								Id = 31,
+								RuleId = "rule-exit",
+								Subject = HintSubject.ForConstruction(7),
+								Character = "exit",
+								Clarity = "crisp",
+								Sources = [],
+								Text = "Рассмотри выход по плану",
+								Facts = new Dictionary<string, string>(StringComparer.Ordinal),
+								AsOf = new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero),
+								Status = HintStatus.New,
+								FirstSeenAt = new DateTimeOffset(2026, 9, 19, 12, 5, 0, TimeSpan.Zero),
+							},
+						],
+					},
+				],
+				History = [],
+			});
+
+		// Act: пользователь открывает детали конструкции.
+		var cut = RenderDetail();
+
+		// Assert: панель подсказок показана в деталях и читает панель именно
+		// этой конструкции; подсказка видна с кнопками жизненного цикла.
+		// Требование: панель «Подсказки» в деталях конструкции.
+		// Traceability: openspec:ui/screens#requirement-ui-hint-panel-in-construction
+		cut.WaitForAssertion(() =>
+		{
+			Assert.That(cut.FindAll(".hints-panel"), Has.Count.EqualTo(1));
+			Assert.That(cut.Find(".hints-panel .hint-text").TextContent, Does.Contain("Рассмотри выход по плану"));
+			Assert.That(cut.FindAll(".hints-panel .hint-actions button"), Has.Count.EqualTo(2));
+		});
+		_hints.Verify(model => model.ReadConstructionPanelAsync(7, It.IsAny<CancellationToken>()), Times.Once);
 	}
 
 	#region Помощники

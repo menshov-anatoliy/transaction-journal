@@ -21,6 +21,9 @@ using TransactionJournal.Application;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Hints;
+using TransactionJournal.Hints.Display;
+using TransactionJournal.Hints.Ports;
 using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
 using InboxPage = TransactionJournal.Components.Pages.Inbox;
 using SettingsPage = TransactionJournal.Components.Pages.Settings;
@@ -67,6 +70,32 @@ public class AppFrameTests
 		// Тулбар списка выполняет синхронизацию через сервис единственной ручной
 		// команды: каркасным проверкам достаточно заглушки без запусков.
 		_context.Services.AddSingleton(new Mock<IJournalSyncService>().Object);
+
+		// Панель подсказок и кнопка прохода обзорного экрана читают подсказки
+		// через собственную read-модель: каркасным проверкам достаточно пустой
+		// панели и завершённого без записей прохода.
+		var hints = new Mock<IHintDisplayReadModel>();
+		hints
+			.Setup(model => model.ReadJournalPanelAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPanelData
+			{
+				Subject = HintSubject.ForJournal(),
+				LiveGroups = [],
+				History = [],
+			});
+		hints
+			.Setup(model => model.ReadLiveCountsByConstructionAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new Dictionary<long, int>());
+		_context.Services.AddSingleton(hints.Object);
+		var passRunner = new Mock<IHintPassRunner>();
+		passRunner
+			.Setup(runner => runner.RunAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new HintPassResult
+			{
+				Outcome = HintPassOutcome.Completed,
+				AsOf = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+			});
+		_context.Services.AddSingleton(passRunner.Object);
 
 		// «Настройки» выполняют сборку конструкций через собственную команду:
 		// каркасным проверкам достаточно заглушки без запусков.
@@ -275,17 +304,20 @@ public class AppFrameTests
 
 		var cut = RenderFrame(Screen<ConstructionsPage>());
 
-		// Assert: три статические вкладки с адресами корня, «Входящих» и «Настроек».
-		// Требование: навигация состоит из статических вкладок трёх экранов.
+		// Assert: четыре статические вкладки с адресами корня, «Входящих»,
+		// «Подсказок» и «Настроек».
+		// Требование: навигация состоит из статических вкладок экранов каркаса.
 		// Traceability: openspec:ui/screens#requirement-app-frame-navigation
 		var tabs = cut.FindAll("nav.tabs a");
-		Assert.That(tabs, Has.Count.EqualTo(3));
+		Assert.That(tabs, Has.Count.EqualTo(4));
 		Assert.That(tabs[0].GetAttribute("href"), Is.EqualTo("/"));
 		Assert.That(tabs[0].TextContent, Does.Contain("Конструкции"));
 		Assert.That(tabs[1].GetAttribute("href"), Is.EqualTo("/inbox"));
 		Assert.That(tabs[1].TextContent, Does.Contain("Входящие"));
-		Assert.That(tabs[2].GetAttribute("href"), Is.EqualTo("/settings"));
-		Assert.That(tabs[2].TextContent, Does.Contain("Настройки"));
+		Assert.That(tabs[2].GetAttribute("href"), Is.EqualTo("/hints"));
+		Assert.That(tabs[2].TextContent, Does.Contain("Подсказки"));
+		Assert.That(tabs[3].GetAttribute("href"), Is.EqualTo("/settings"));
+		Assert.That(tabs[3].TextContent, Does.Contain("Настройки"));
 	}
 
 	[TestMethod]
@@ -304,6 +336,7 @@ public class AppFrameTests
 		Assert.That(tabs[1].ClassList, Does.Contain("active"));
 		Assert.That(tabs[0].ClassList, Does.Not.Contain("active"));
 		Assert.That(tabs[2].ClassList, Does.Not.Contain("active"));
+		Assert.That(tabs[3].ClassList, Does.Not.Contain("active"));
 
 		// Act: навигация на «Конструкции» подсвечивает первую вкладку.
 		navigation.NavigateTo("/");
@@ -313,6 +346,7 @@ public class AppFrameTests
 		Assert.That(tabs[0].ClassList, Does.Contain("active"));
 		Assert.That(tabs[1].ClassList, Does.Not.Contain("active"));
 		Assert.That(tabs[2].ClassList, Does.Not.Contain("active"));
+		Assert.That(tabs[3].ClassList, Does.Not.Contain("active"));
 	}
 
 	#region Помощники
