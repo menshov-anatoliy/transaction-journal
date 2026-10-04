@@ -25,4 +25,9 @@
     <Folder Include="App_Data\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Корпус правил деплоится рядом с exe: дефолтный путь загрузчика — rules/ в BaseDirectory. -->
+    <None Include="..\..\rules\**\*.yaml" CopyToOutputDirectory="PreserveNewest" Link="rules\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

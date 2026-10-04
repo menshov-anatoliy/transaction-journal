@@ -33,5 +33,5 @@
 
 ## 6. Сквозная приёмка движка
 
-- [ ] 6.1 Прогнать полный набор фикстурных e2e: все 11 триггеров парами, дедуп-окно, fail-fast корпуса, пограничные гашения, панель показывает факты триггера ([#31](https://github.com/menshov-anatoliy/transaction-journal/issues/31)). Проверить: `dotnet test` зелёный; `openspec validate add-hints-engine --strict`.
-- [ ] 6.2 Сверить раскладку с инвариантами `architecture/solution-structure`: Hints → только Domain, адаптеры в Infrastructure, регистрация в Web. Проверить: ревью ссылок проектов.
+- [x] 6.1 Прогнать полный набор фикстурных e2e: все 11 триггеров парами, дедуп-окно, fail-fast корпуса, пограничные гашения, панель показывает факты триггера ([#31](https://github.com/menshov-anatoliy/transaction-journal/issues/31)). Проверить: `dotnet test` зелёный; `openspec validate add-hints-engine --strict`.
+- [x] 6.2 Сверить раскладку с инвариантами `architecture/solution-structure`: Hints → только Domain, адаптеры в Infrastructure, регистрация в Web. Проверить: ревью ссылок проектов.
