@@ -1,4 +1,5 @@
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Ops;
 using TransactionJournal.Sync;
 using Microsoft.VisualStudio.TestTools.UnitTesting;

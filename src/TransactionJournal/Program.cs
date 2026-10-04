@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Sync;
 using TransactionJournal;
 using TransactionJournal.Analytics;
 using TransactionJournal.Bybit;

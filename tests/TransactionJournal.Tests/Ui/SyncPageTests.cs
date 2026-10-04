@@ -7,6 +7,7 @@ using NUnit.Framework;
 using TransactionJournal.Bybit;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
 using SyncPage = TransactionJournal.Components.Pages.Sync;

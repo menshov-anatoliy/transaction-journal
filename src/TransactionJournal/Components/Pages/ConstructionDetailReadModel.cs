@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Analytics;
 using TransactionJournal.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Materialization;
 
 namespace TransactionJournal.Components.Pages;

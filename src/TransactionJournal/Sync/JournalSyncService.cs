@@ -1,4 +1,6 @@
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Sync;
 using TransactionJournal.Materialization;
 
 namespace TransactionJournal.Sync;

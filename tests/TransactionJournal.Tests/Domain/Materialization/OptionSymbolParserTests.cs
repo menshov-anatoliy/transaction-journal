@@ -1,10 +1,10 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
-using TransactionJournal.Materialization;
+using TransactionJournal.Domain.Materialization;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
-namespace TransactionJournal.Tests.Materialization;
+namespace TransactionJournal.Tests.Domain.Materialization;
 
 /// <summary>
 /// Проверки разбора символа опциона Bybit формата {BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}]

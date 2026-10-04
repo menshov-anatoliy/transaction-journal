@@ -1,4 +1,4 @@
-namespace TransactionJournal.Analytics;
+namespace TransactionJournal.Domain.Analytics;
 
 /// <summary>
 /// Вид записи единого потока позиции для движка FIFO: сделка исполнения либо

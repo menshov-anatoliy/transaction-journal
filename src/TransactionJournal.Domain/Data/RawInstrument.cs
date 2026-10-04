@@ -1,4 +1,4 @@
-namespace TransactionJournal.Data;
+namespace TransactionJournal.Domain.Data;
 
 /// <summary>
 /// Необработанная спецификация инструмента из публичного эндпоинта Bybit

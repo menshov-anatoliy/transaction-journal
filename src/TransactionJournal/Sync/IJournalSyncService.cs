@@ -1,3 +1,4 @@
+using TransactionJournal.Domain.Data;
 namespace TransactionJournal.Sync;
 
 /// <summary>

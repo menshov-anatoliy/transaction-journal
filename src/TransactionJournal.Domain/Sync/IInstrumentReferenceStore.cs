@@ -1,7 +1,7 @@
-using TransactionJournal.Bybit;
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Bybit;
+using TransactionJournal.Domain.Data;
 
-namespace TransactionJournal.Sync;
+namespace TransactionJournal.Domain.Sync;
 
 /// <summary>
 /// Порт сырого хранилища справочника инструментов: проверка известных символов

@@ -1,4 +1,5 @@
 using System.Globalization;
+using TransactionJournal.Domain.Bybit;
 
 namespace TransactionJournal.Bybit;
 

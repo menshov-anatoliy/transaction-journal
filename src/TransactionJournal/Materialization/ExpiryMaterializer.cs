@@ -1,6 +1,8 @@
 using System.Text.Json;
 using TransactionJournal.Bybit;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Materialization;
 
 namespace TransactionJournal.Materialization;
 

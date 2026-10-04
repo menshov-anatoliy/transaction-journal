@@ -1,4 +1,4 @@
-namespace TransactionJournal.Sync;
+namespace TransactionJournal.Domain.Sync;
 
 /// <summary>
 /// Порт чтения полного снимка сырых записей журнала: материализатор строит доменные

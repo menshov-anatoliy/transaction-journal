@@ -1,4 +1,4 @@
-namespace TransactionJournal.Analytics;
+namespace TransactionJournal.Domain.Analytics;
 
 /// <summary>
 /// Результат сопоставления FIFO по потоку записей позиции: непокрытый остаток

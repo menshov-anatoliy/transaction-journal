@@ -1,4 +1,4 @@
-namespace TransactionJournal.Analytics;
+namespace TransactionJournal.Domain.Analytics;
 
 /// <summary>
 /// Запись единого хронологического потока позиции — вход движка FIFO: сделка

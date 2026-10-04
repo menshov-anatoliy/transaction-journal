@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Bybit;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Sync;
 using TransactionJournal.Tests.Bybit;

@@ -1,4 +1,4 @@
-namespace TransactionJournal.Data;
+namespace TransactionJournal.Domain.Data;
 
 /// <summary>
 /// Необработанная delivery-запись экспирации из Bybit V5 API (GET /v5/asset/delivery-record).

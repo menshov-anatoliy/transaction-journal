@@ -1,3 +1,4 @@
+using TransactionJournal.Domain.Sync;
 namespace TransactionJournal.Sync;
 
 /// <summary>Итог пакетной записи сырых delivery-записей.</summary>

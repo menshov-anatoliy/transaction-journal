@@ -125,7 +125,7 @@ namespace TransactionJournal.Data.Migrations
 					b.ToTable("PositionComments");
 				});
 
-			modelBuilder.Entity("TransactionJournal.Data.RawDelivery", b =>
+			modelBuilder.Entity("TransactionJournal.Domain.Data.RawDelivery", b =>
 				{
 					b.Property<long>("Id")
 						.ValueGeneratedOnAdd()
@@ -157,7 +157,7 @@ namespace TransactionJournal.Data.Migrations
 					b.ToTable("RawDeliveries");
 				});
 
-			modelBuilder.Entity("TransactionJournal.Data.RawExecution", b =>
+			modelBuilder.Entity("TransactionJournal.Domain.Data.RawExecution", b =>
 				{
 					b.Property<long>("Id")
 						.ValueGeneratedOnAdd()
@@ -193,7 +193,7 @@ namespace TransactionJournal.Data.Migrations
 					b.ToTable("RawExecutions");
 				});
 
-			modelBuilder.Entity("TransactionJournal.Data.RawInstrument", b =>
+			modelBuilder.Entity("TransactionJournal.Domain.Data.RawInstrument", b =>
 				{
 					b.Property<long>("Id")
 						.ValueGeneratedOnAdd()
@@ -222,7 +222,7 @@ namespace TransactionJournal.Data.Migrations
 					b.ToTable("RawInstruments");
 				});
 
-			modelBuilder.Entity("TransactionJournal.Data.SyncRun", b =>
+			modelBuilder.Entity("TransactionJournal.Domain.Data.SyncRun", b =>
 				{
 					b.Property<long>("Id")
 						.ValueGeneratedOnAdd()

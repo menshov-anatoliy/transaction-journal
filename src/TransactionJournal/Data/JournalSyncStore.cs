@@ -1,6 +1,9 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Bybit;
+using TransactionJournal.Domain.Bybit;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Sync;
 using TransactionJournal.Sync;
 
 namespace TransactionJournal.Data;

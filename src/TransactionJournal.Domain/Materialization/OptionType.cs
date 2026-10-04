@@ -1,4 +1,4 @@
-namespace TransactionJournal.Materialization;
+namespace TransactionJournal.Domain.Materialization;
 
 /// <summary>Тип опциона Bybit: Call или Put.</summary>
 public enum OptionType

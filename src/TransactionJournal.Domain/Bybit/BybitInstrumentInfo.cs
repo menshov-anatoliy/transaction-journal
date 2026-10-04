@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace TransactionJournal.Bybit;
+namespace TransactionJournal.Domain.Bybit;
 
 /// <summary>
 /// Спецификация инструмента из GET /v5/market/instruments-info: канонические тип опциона,

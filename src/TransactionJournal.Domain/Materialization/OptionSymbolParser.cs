@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace TransactionJournal.Materialization;
+namespace TransactionJournal.Domain.Materialization;
 
 /// <summary>
 /// Разбор символа опциона Bybit формата {BASE}-{dMMMyy}-{strike}-{C|P}[-{QUOTE}]

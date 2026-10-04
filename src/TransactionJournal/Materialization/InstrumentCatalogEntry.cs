@@ -1,3 +1,5 @@
+using TransactionJournal.Domain.Materialization;
+
 namespace TransactionJournal.Materialization;
 
 /// <summary>

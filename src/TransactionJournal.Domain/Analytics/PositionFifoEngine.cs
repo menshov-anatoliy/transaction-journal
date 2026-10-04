@@ -1,4 +1,4 @@
-namespace TransactionJournal.Analytics;
+namespace TransactionJournal.Domain.Analytics;
 
 /// <summary>
 /// Движок FIFO результата позиции: сопоставляет встречные части единого

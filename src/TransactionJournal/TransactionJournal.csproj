@@ -17,6 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\TransactionJournal.Domain\TransactionJournal.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="App_Data\" />
   </ItemGroup>
 

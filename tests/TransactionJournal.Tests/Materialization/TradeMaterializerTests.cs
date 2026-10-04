@@ -1,12 +1,12 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Materialization;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
-
 namespace TransactionJournal.Tests.Materialization;
-
 /// <summary>
 /// Проверки материализатора сделок «Входящих»: вывод сделок из сырых записей
 /// исполнения с атрибутами биржевой записи (знак количества по стороне, execPrice,

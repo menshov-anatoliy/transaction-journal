@@ -1,3 +1,5 @@
+using TransactionJournal.Domain.Analytics;
+
 namespace TransactionJournal.Analytics;
 
 /// <summary>

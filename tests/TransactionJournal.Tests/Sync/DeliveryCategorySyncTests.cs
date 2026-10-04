@@ -2,6 +2,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Bybit;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Sync;
 using TransactionJournal.Sync;
 using TransactionJournal.Tests.Bybit;
 using Assert = NUnit.Framework.Assert;

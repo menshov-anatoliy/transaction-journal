@@ -1,5 +1,4 @@
-using TransactionJournal.Data;
-using TransactionJournal.Materialization;
+using TransactionJournal.Domain.Materialization;
 
 namespace TransactionJournal.Domain.ConstructionAssembly;
 

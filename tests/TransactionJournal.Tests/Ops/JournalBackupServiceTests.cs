@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Ops;
 using TransactionJournal.Tests;
 using Assert = NUnit.Framework.Assert;

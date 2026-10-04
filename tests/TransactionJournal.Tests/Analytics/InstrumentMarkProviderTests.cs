@@ -4,6 +4,7 @@ using NUnit.Framework;
 using TransactionJournal.Analytics;
 using TransactionJournal.Bybit;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Tests.Bybit;
 using Assert = NUnit.Framework.Assert;

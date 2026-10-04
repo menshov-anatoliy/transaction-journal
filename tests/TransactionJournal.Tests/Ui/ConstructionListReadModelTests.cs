@@ -6,6 +6,7 @@ using NUnit.Framework;
 using TransactionJournal.Analytics;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Materialization;
 using Assert = NUnit.Framework.Assert;

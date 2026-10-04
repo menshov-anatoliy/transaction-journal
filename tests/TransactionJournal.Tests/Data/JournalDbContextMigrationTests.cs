@@ -3,6 +3,7 @@ using NUnit.Framework;
 using TransactionJournal.Data;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
+using TransactionJournal.Domain.Data;
 
 namespace TransactionJournal.Tests.Data;
 

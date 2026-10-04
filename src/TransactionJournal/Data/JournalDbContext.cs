@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TransactionJournal.Domain.Data;
 
 namespace TransactionJournal.Data;
 

@@ -2,6 +2,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using TransactionJournal.Bybit;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Bybit;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Materialization;
 
 namespace TransactionJournal.Materialization;
 

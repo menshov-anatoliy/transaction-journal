@@ -1,4 +1,4 @@
-namespace TransactionJournal.Data;
+namespace TransactionJournal.Domain.Data;
 
 /// <summary>
 /// Необработанная запись исполнения сделки из Bybit V5 API.

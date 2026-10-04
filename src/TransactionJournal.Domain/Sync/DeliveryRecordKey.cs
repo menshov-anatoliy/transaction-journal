@@ -1,4 +1,4 @@
-namespace TransactionJournal.Sync;
+namespace TransactionJournal.Domain.Sync;
 
 /// <summary>
 /// Идемпотентный ключ delivery-записи: пара symbol + deliveryTime, по которой

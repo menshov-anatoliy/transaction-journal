@@ -1,4 +1,4 @@
-namespace TransactionJournal.Materialization;
+namespace TransactionJournal.Domain.Materialization;
 
 /// <summary>
 /// Разобранные из символа опциона Bybit части: базовый актив, дата экспирации,

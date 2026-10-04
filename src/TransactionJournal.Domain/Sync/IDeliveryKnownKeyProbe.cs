@@ -1,4 +1,4 @@
-namespace TransactionJournal.Sync;
+namespace TransactionJournal.Domain.Sync;
 
 /// <summary>
 /// Порт проверки известных журналу delivery-записей по ключу symbol + deliveryTime:

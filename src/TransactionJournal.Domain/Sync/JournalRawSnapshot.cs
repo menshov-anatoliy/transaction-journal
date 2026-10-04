@@ -1,6 +1,6 @@
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 
-namespace TransactionJournal.Sync;
+namespace TransactionJournal.Domain.Sync;
 
 /// <summary>
 /// Снимок всех сырых записей хранилища журнала для полного переразбора доменных

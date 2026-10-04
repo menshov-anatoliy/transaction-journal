@@ -1,5 +1,3 @@
-using TransactionJournal.Data;
-
 namespace TransactionJournal.Domain.ConstructionAssembly;
 
 /// <summary>

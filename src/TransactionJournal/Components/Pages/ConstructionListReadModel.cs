@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Analytics;
 using TransactionJournal.Data;
+using TransactionJournal.Domain;
 
 namespace TransactionJournal.Components.Pages;
 

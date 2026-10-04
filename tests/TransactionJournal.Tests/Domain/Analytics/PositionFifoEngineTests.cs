@@ -1,13 +1,14 @@
 using System.Globalization;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
-using TransactionJournal.Analytics;
+using TransactionJournal.Domain.Analytics;
 using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Materialization;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
-namespace TransactionJournal.Tests.Analytics;
+namespace TransactionJournal.Tests.Domain.Analytics;
 
 /// <summary>
 /// Проверки движка FIFO результата позиции: встречные записи закрывают старейшие

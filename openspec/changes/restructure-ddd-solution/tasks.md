@@ -2,10 +2,11 @@
 
 ## 1. Шаг Domain — каркас решения и чистое ядро
 
-- [ ] 1.1 Создать проекты `src/TransactionJournal.Domain` (net9.0, библиотека) и включить его в solution; корневой namespace — `TransactionJournal.Domain`. Проверить: `dotnet build` решения зелёный, новый проект без пакетных ссылок.
-- [ ] 1.2 Перенести POCO-сущности папки `Domain` и чистые движки/парсеры (ConstructionAssembler, ConstructionNameBuilder, PositionFifoEngine, OptionSymbolParser, LinearSymbolParser) с сохранением подпространств; обновить namespace и `using`. Проверить: сборка Domain без ссылок на EF/Bybit/Ops (`requirement-domain-poco-purity`).
-- [ ] 1.3 Объявить в Domain store-порты (IJournalRawSnapshotStore, IInstrumentReferenceStore, probe-интерфейсы), временно реализовав их в текущем проекте, чтобы решение собиралось. Проверить: сборка и `dotnet test` зелёные без правки ассертов (`requirement-migration-steps-keep-green`).
-- [ ] 1.4 Перенести тесты перенесённого кода в зеркальную папку `tests/TransactionJournal.Tests/Domain`, обновив только namespace. Проверить: полный `dotnet test` зелёный, ассерты не менялись.
+- [x] 1.1 Создать проекты `src/TransactionJournal.Domain` (net9.0, библиотека) и включить его в solution; корневой namespace — `TransactionJournal.Domain`. Проверить: `dotnet build` решения зелёный, новый проект без пакетных ссылок.
+- [x] 1.2 Перенести POCO-сущности папки `Domain` и чистые движки/парсеры (ConstructionAssembler, ConstructionNameBuilder, PositionFifoEngine, OptionSymbolParser, LinearSymbolParser) с сохранением подпространств; обновить namespace и `using`. Проверить: сборка Domain без ссылок на EF/Bybit/Ops (`requirement-domain-poco-purity`).
+- [x] 1.3 Объявить в Domain store-порты (IJournalRawSnapshotStore, IInstrumentReferenceStore, probe-интерфейсы), временно реализовав их в текущем проекте, чтобы решение собиралось. Проверить: сборка и `dotnet test` зелёные без правки ассертов (`requirement-migration-steps-keep-green`).
+- [x] 1.4 Перенести тесты перенесённого кода в зеркальную папку `tests/TransactionJournal.Tests/Domain`, обновив только namespace. Проверить: полный `dotnet test` зелёный, ассерты не менялись.
+- [x] 1.5 Отклонение от чистой механики (Risks design.md): вместе с портами в Domain перенесены их контрактные типы (`JournalRawSnapshot`, `DeliveryRecordKey`, `RawInstrument`/`RawExecution`/`RawDelivery`/`SyncRun`, `BybitInstrumentInfo`) — иначе тип остаётся «в слое своей зависимости» и Domain не может описать контракт порта. В Designer/Snapshot-файлах EF-миграций обновлены строки имён сущностей `TransactionJournal.Data.*` → `TransactionJournal.Domain.Data.*`; схема БД и поведение не менялись. Реализации портов (`JournalSyncStore`) остаются в текущем проекте до шага 2.2. Отклонение войдёт в отчёт 5.2.
 
 ## 2. Шаг Infrastructure — EF, Bybit, Ops
 

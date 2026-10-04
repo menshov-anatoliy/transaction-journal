@@ -1,4 +1,4 @@
-namespace TransactionJournal.Data;
+namespace TransactionJournal.Domain.Data;
 
 /// <summary>Режим запуска синхронизации: первичный backfill или инкрементальная догрузка.</summary>
 public enum SyncRunMode

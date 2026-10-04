@@ -11,6 +11,7 @@ using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Data;
 using TransactionJournal.Domain.ConstructionAssembly;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Materialization;
 using TransactionJournal.Ops;
 using TransactionJournal.Sync;

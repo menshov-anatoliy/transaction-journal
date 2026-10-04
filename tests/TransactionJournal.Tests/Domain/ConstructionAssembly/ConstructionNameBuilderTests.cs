@@ -1,6 +1,6 @@
 using NUnit.Framework;
 using TransactionJournal.Domain.ConstructionAssembly;
-using TransactionJournal.Materialization;
+using TransactionJournal.Domain.Materialization;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
