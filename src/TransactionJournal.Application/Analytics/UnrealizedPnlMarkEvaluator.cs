@@ -130,15 +130,16 @@ public sealed class UnrealizedPnlMarkEvaluator
 	/// цены открытого остатка, умноженная на знаковый остаток, — направление
 	/// остатка задаёт знак результата и для длинных, и для коротких позиций.
 	/// Здесь же собирается общий PnL позиции из реализованной и только что
-	/// оценённой нереализованной частей; позиции без марки возвращаются как есть:
-	/// их нереализованная часть и общий PnL остаются null, остальные метрики
-	/// не меняются.
+	/// оценённой нереализованной частей и стоимость позиции — та же марка,
+	/// умноженная на знаковый остаток; позиции без марки возвращаются как есть:
+	/// их нереализованная часть, общий PnL и стоимость остаются null, остальные
+	/// метрики не меняются.
 	/// </summary>
 	private static PositionMetrics EvaluatePosition(PositionMetrics position, Dictionary<string, InstrumentMarkSnapshot> marks)
 	{
 		// Закрытая позиция оценку не получает: её нереализованная часть уже ноль,
 		// марка и средняя цена закрытой позиции не вычисляются, общий PnL равен
-		// реализованному ещё в калькуляторе.
+		// реализованному ещё в калькуляторе, стоимости по маркам у неё нет.
 		if (position.Residual == 0m)
 		{
 			return position;
@@ -155,11 +156,15 @@ public sealed class UnrealizedPnlMarkEvaluator
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-mark-failure
 		var unrealizedPnL = (mark.MarkPrice - position.AverageOpenPrice.Value) * position.Residual;
+		// Стоимость позиции строится из той же марки, что и нереализованная
+		// оценка: лонг даёт положительную стоимость, шорт — отрицательную.
+		// Traceability: openspec:analytics/performance#scenario-open-position-net-mark-value
 		return position with
 		{
 			MarkPrice = mark.MarkPrice,
 			UnrealizedPnL = unrealizedPnL,
 			TotalPnL = position.RealizedPnL + unrealizedPnL,
+			MarkValue = mark.MarkPrice * position.Residual,
 		};
 	}
 

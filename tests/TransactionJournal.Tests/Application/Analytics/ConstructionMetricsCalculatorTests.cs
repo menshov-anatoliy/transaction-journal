@@ -261,6 +261,99 @@ public class ConstructionMetricsCalculatorTests
 	}
 
 	[TestMethod]
+	[Description("Стоимость конструкции — сумма стоимостей открытых позиций")]
+	public void TryIfConstructionValueSumsOpenPositionValues()
+	{
+		// Arrange: открытый лонг BTC со стоимостью 240 и открытый шорт ETH со
+		// стоимостью −150; выделенный капитал 3000.
+		// Требование: стоимость конструкции — сумма стоимостей открытых позиций,
+		// занято капитала — стоимость в процентах от капитала.
+		// Traceability: openspec:analytics/performance#scenario-construction-value-sums-positions
+		// Traceability: openspec:analytics/performance#scenario-capital-usage-computed-when-capital-set
+		var positions = new[]
+		{
+			OpenPosition(FirstSymbol, 0, 9.97m, markValue: 240m),
+			OpenPosition(SecondSymbol, 10, -2.5m, residual: -3m, markValue: -150m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, 3000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+
+		// Assert: 240 − 150 = 90; занято капитала 90 / 3000 × 100 = 3 %.
+		Assert.That(metrics.MarkValue, Is.EqualTo(90m));
+		Assert.That(metrics.CapitalUsagePercent, Is.EqualTo(3m));
+	}
+
+	[TestMethod]
+	[Description("Закрытая конструкция стоимости не имеет")]
+	public void TryIfClosedConstructionHasNoMarkValue()
+	{
+		// Arrange: обе позиции конструкции закрыты — стоимостей у позиций нет.
+		// Требование: без открытых остатков стоимость конструкции отсутствует,
+		// занятость капитала не вычисляется, остальные метрики не задеты.
+		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-mark-value
+		var positions = new[]
+		{
+			ClosedPosition(FirstSymbol, 0, 30, 9.97m),
+			ClosedPosition(SecondSymbol, 10, 50, -2.5m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+
+		// Assert: стоимость и занятость null, реализованный итог на месте.
+		Assert.That(metrics.MarkValue, Is.Null);
+		Assert.That(metrics.CapitalUsagePercent, Is.Null);
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(7.47m));
+		Assert.That(metrics.TotalPnL, Is.EqualTo(7.47m));
+	}
+
+	[TestMethod]
+	[Description("Неоцененный открытый остаток обнуляет стоимость конструкции")]
+	public void TryIfUnevaluatedOpenResidualNullsConstructionValue()
+	{
+		// Arrange: открытый остаток ETH оценен марками, открытый остаток BTC — нет.
+		// Требование: стоимость конструкции недоступна, пока хоть один открытый
+		// остаток не оценен; занятость капитала деградирует вместе со стоимостью.
+		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-mark-value
+		var positions = new[]
+		{
+			OpenPosition(FirstSymbol, 0, 0m),
+			OpenPosition(SecondSymbol, 10, 0m, markValue: 90m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+
+		// Assert: стоимость и занятость null, реализованные величины не задеты.
+		Assert.That(metrics.MarkValue, Is.Null);
+		Assert.That(metrics.CapitalUsagePercent, Is.Null);
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(0m));
+	}
+
+	[TestMethod]
+	[Description("Отрицательная стоимость даёт отрицательную занятость капитала")]
+	public void TryIfNegativeValueYieldsNegativeCapitalUsage()
+	{
+		// Arrange: открытый шорт со стоимостью −40; капитал то задан, то нет.
+		// Требование: занятость капитала сохраняет знак стоимости; незаданный
+		// капитал оставляет стоимость, но занятость не вычисляется.
+		// Traceability: openspec:analytics/performance#scenario-capital-usage-computed-when-capital-set
+		// Traceability: openspec:analytics/performance#scenario-capital-usage-absent-without-capital
+		var positions = new[] { OpenPosition(FirstSymbol, 0, 0m, residual: -1m, markValue: -40m) };
+
+		// Act: один набор при капитале 200 и при незаданном капитале.
+		var withCapital = _calculator.Calculate(ConstructionId, 200m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+		var withoutCapital = _calculator.Calculate(ConstructionId, null, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+
+		// Assert: −40 / 200 × 100 = −20 %; без капитала стоимость остаётся.
+		Assert.That(withCapital.MarkValue, Is.EqualTo(-40m));
+		Assert.That(withCapital.CapitalUsagePercent, Is.EqualTo(-20m));
+		Assert.That(withoutCapital.MarkValue, Is.EqualTo(-40m));
+		Assert.That(withoutCapital.CapitalUsagePercent, Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Null-набор позиций отклоняется")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnNullPositions()
@@ -315,11 +408,11 @@ public class ConstructionMetricsCalculatorTests
 	};
 
 	/// <summary>Строит метрики открытой позиции: ненулевой остаток, нереализованная оценка ещё не подставлена.</summary>
-	private static PositionMetrics OpenPosition(string symbol, int openedAt, decimal realizedPnL, long? constructionId = null) => new()
+	private static PositionMetrics OpenPosition(string symbol, int openedAt, decimal realizedPnL, long? constructionId = null, decimal residual = 1m, decimal? markValue = null) => new()
 	{
 		ConstructionId = constructionId ?? ConstructionId,
 		Symbol = symbol,
-		Residual = 1m,
+		Residual = residual,
 		RealizedPnL = realizedPnL,
 		AccumulatedFees = 0.03m,
 		AverageOpenPrice = 120m,
@@ -328,6 +421,7 @@ public class ConstructionMetricsCalculatorTests
 		TotalPnL = null,
 		MarkPrice = null,
 		UnrealizedPnL = null,
+		MarkValue = markValue,
 		OpenedAt = At(openedAt),
 		ClosedAt = null,
 		Duration = null,

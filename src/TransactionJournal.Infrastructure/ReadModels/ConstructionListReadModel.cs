@@ -86,7 +86,9 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				item.TotalPnL,
 				item.TotalPnLPercent,
 				item.OpenedAt,
-				item.ClosedAt));
+				item.ClosedAt,
+				item.MarkValue,
+				item.CapitalUsagePercent));
 		}
 
 		// Счётчик сводки описывает видимые конструкции: сколько в списке и сколько

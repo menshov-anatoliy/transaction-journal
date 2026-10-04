@@ -214,6 +214,38 @@ public class ConstructionListReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Строки списка несут стоимость и занятость капитала с деградацией")]
+	public async Task TryIfRowCarriesMarkValueAndCapitalUsage()
+	{
+		// Arrange: открытая конструкция с капиталом 3000 и стоимостью 90 даёт
+		// занятость 3 %; конструкция без капитала передаёт стоимость −40 как есть,
+		// занятость у неё отсутствует.
+		// Требование: колонки «Стоимость» и «Занято капитала, %» переносятся
+		// из метрик аналитики без пересчёта, без капитала занятость — null.
+		// Traceability: openspec:ui/screens#scenario-list-value-and-capital-usage-columns
+		// Traceability: openspec:analytics/performance#scenario-capital-usage-computed-when-capital-set
+		// Traceability: openspec:analytics/performance#scenario-capital-usage-absent-without-capital
+		await SeedAsync(
+			Header("Календарь сентябрь", ConstructionStatus.Open, 3000m),
+			Header("Контртренд ETH", ConstructionStatus.Open, null));
+		SetupMetrics(null,
+			MetricsOf(1, 20m, 30m) with { MarkValue = 90m, CapitalUsagePercent = 3m },
+			MetricsOf(2, 0m, 0m) with { MarkValue = -40m });
+
+		// Act: читаем данные экрана.
+		var data = await _readModel.ReadAsync();
+
+		// Assert: строка с капиталом несёт стоимость и занятость; строка без
+		// капитала сохраняет стоимость, занятость остаётся незаданной.
+		var withCapital = data.Items.Single(item => item.ConstructionId == 1);
+		Assert.That(withCapital.MarkValue, Is.EqualTo(90m));
+		Assert.That(withCapital.CapitalUsagePercent, Is.EqualTo(3m));
+		var withoutCapital = data.Items.Single(item => item.ConstructionId == 2);
+		Assert.That(withoutCapital.MarkValue, Is.EqualTo(-40m));
+		Assert.That(withoutCapital.CapitalUsagePercent, Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Сводка переносит разбивку PnL журнала из метрик аналитики без пересчёта")]
 	public async Task TryIfSummaryCarriesPnlBreakdownFromMetrics()
 	{
@@ -356,7 +388,7 @@ public class ConstructionListReadModelTests
 		await db.SaveChangesAsync();
 	}
 
-	private static Construction Header(string name, ConstructionStatus status, decimal capital) => new()
+	private static Construction Header(string name, ConstructionStatus status, decimal? capital) => new()
 	{
 		Name = name,
 		Status = status,

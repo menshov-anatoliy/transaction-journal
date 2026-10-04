@@ -19,12 +19,15 @@ public sealed class ConstructionMetricsCalculator
 	/// PnL. Итог — сумма реализованного и нереализованного PnL позиций и
 	/// корректировок; неоцененный открытый остаток обнуляет только нереализованную
 	/// часть и зависящий от неё итог, остальные метрики возвращаются как есть.
-	/// Проценты считаются от текущего значения выделенного капитала; незаданный
-	/// или нулевой капитал не образует базы процентов — процентные величины
-	/// возвращаются отсутствующими. Даты выводятся из записей: открытие —
-	/// время первой сделки, закрытие — момент обнуления последней позиции;
-	/// длительность открытой конструкции считается от первой сделки до переданного
-	/// текущего момента.
+	/// Стоимость конструкции — сумма стоимостей открытых позиций; без открытых
+	/// остатков или при неоцененном открытом остатке она отсутствует, остальные
+	/// метрики не меняются. Занято капитала, % — стоимость в процентах от текущего
+	/// значения выделенного капитала. Проценты считаются от текущего значения
+	/// выделенного капитала; незаданный или нулевой капитал не образует базы
+	/// процентов — процентные величины возвращаются отсутствующими. Даты выводятся
+	/// из записей: открытие — время первой сделки, закрытие — момент обнуления
+	/// последней позиции; длительность открытой конструкции считается от первой
+	/// сделки до переданного текущего момента.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, для которой вычисляются метрики.</param>
 	/// <param name="allocatedCapitalUsdt">Текущий выделенный капитал конструкции в USDT — база процентов; null, когда капитал не задан.</param>
@@ -71,6 +74,17 @@ public sealed class ConstructionMetricsCalculator
 			: positionList.Sum(position => position.UnrealizedPnL.GetValueOrDefault());
 		decimal? totalPnL = unrealizedPnL == null ? null : realizedPnL + unrealizedPnL.Value + adjustmentsPnL;
 
+		// Стоимость конструкции — сумма стоимостей открытых позиций: закрытые
+		// позиции стоимости не имеют, а неоцененный открытый остаток делает
+		// стоимость недоступной целиком, не задевая остальные метрики.
+		// Traceability: openspec:analytics/performance#scenario-construction-value-sums-positions
+		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-mark-value
+		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-mark-value
+		var openResiduals = positionList.Where(position => position.Residual != 0m).ToList();
+		decimal? markValue = openResiduals.Count == 0 || openResiduals.Any(position => position.MarkValue == null)
+			? null
+			: openResiduals.Sum(position => position.MarkValue.GetValueOrDefault());
+
 		// Проценты — чистые функции текущих данных: базой служит текущее значение
 		// выделенного капитала, поэтому правка капитала меняет только процентные
 		// величины; незаданный или нулевой капитал базы не образует — проценты
@@ -81,6 +95,12 @@ public sealed class ConstructionMetricsCalculator
 		decimal? Percent(decimal? value) => value == null || allocatedCapitalUsdt is null or 0m
 			? null
 			: value.Value / allocatedCapitalUsdt.Value * 100m;
+
+		// Занято капитала, % — та же база, что и у процентных величин PnL, но
+		// значением служит стоимость конструкции: знак стоимости сохраняется.
+		// Traceability: openspec:analytics/performance#scenario-capital-usage-computed-when-capital-set
+		// Traceability: openspec:analytics/performance#scenario-capital-usage-absent-without-capital
+		var capitalUsagePercent = Percent(markValue);
 
 		// Даты выводятся из записей позиций: открытие — время первой сделки (первая
 		// запись самой ранней позиции), закрытие — момент обнуления последней
@@ -103,10 +123,12 @@ public sealed class ConstructionMetricsCalculator
 			UnrealizedPnL = unrealizedPnL,
 			AdjustmentsPnL = adjustmentsPnL,
 			TotalPnL = totalPnL,
+			MarkValue = markValue,
 			RealizedPnLPercent = Percent(realizedPnL),
 			UnrealizedPnLPercent = Percent(unrealizedPnL),
 			AdjustmentsPnLPercent = Percent(adjustmentsPnL),
 			TotalPnLPercent = Percent(totalPnL),
+			CapitalUsagePercent = capitalUsagePercent,
 			OpenedAt = openedAt,
 			ClosedAt = closedAt,
 			Duration = duration,

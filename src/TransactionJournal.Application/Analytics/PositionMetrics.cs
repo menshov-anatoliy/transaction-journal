@@ -70,6 +70,15 @@ public sealed record PositionMetrics
 	/// </summary>
 	public required decimal? UnrealizedPnL { get; init; }
 
+	/// <summary>
+	/// Текущая стоимость позиции по маркам — нетто-величина «марка × знаковый
+	/// остаток»: длинный остаток даёт положительную стоимость, короткий —
+	/// отрицательную. Закрытая позиция стоимости не имеет; до оценки марками
+	/// и при сбое марок стоимость остаётся null, остальные метрики не меняются.
+	// Traceability: openspec:analytics/performance#requirement-mark-value-of-position-and-construction
+	/// </summary>
+	public decimal? MarkValue { get; init; }
+
 	/// <summary>Дата открытия — время первой записи позиции.</summary>
 	public required DateTimeOffset OpenedAt { get; init; }
 

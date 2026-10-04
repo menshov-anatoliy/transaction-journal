@@ -22,12 +22,18 @@ namespace TransactionJournal.Application;
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы процентов или при недоступном итоге.</param>
 /// <param name="OpenedAt">Дата открытия — время первой сделки; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой конструкции.</param>
+/// <param name="MarkValue">Стоимость открытых позиций конструкции по маркам; null при закрытой конструкции или недоступной оценке марок.</param>
+/// <param name="CapitalUsagePercent">Занятость капитала — стоимость в процентах от капитала; null без базы процентов или стоимости.</param>
 // Капитал передаётся незаданным как есть: прочерк вместо значения — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
 // Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
 // Величины риска и профита выводятся обеими единицами чистым конвертером:
 // введённая единица первоисточника, незаполненная вычисляется от капитала.
 // Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
+// Стоимость и занятость капитала переносятся из метрик аналитики как есть:
+// правила оценки и деградации при сбое марок остаются в аналитике.
+// Traceability: openspec:ui/screens#scenario-list-value-and-capital-usage-columns
+// Traceability: openspec:analytics/performance#requirement-mark-value-of-position-and-construction
 public sealed record ConstructionListItem(
 	long ConstructionId,
 	string Name,
@@ -43,7 +49,9 @@ public sealed record ConstructionListItem(
 	decimal? TotalPnL,
 	decimal? TotalPnLPercent,
 	DateTimeOffset? OpenedAt,
-	DateTimeOffset? ClosedAt);
+	DateTimeOffset? ClosedAt,
+	decimal? MarkValue = null,
+	decimal? CapitalUsagePercent = null);
 
 /// <summary>
 /// Данные экрана «Конструкции»: сводка журнала — итог с разбивкой на

@@ -26,6 +26,8 @@ namespace TransactionJournal.Application;
 /// <param name="ClosedAt">Время закрытия — момент обнуления остатка; null, пока позиция открыта.</param>
 /// <param name="IsOpen">Позиция открыта, пока остаток не нулевой.</param>
 /// <param name="Comment">Комментарий позиции по ключу «конструкция × инструмент»; null — комментария нет.</param>
+/// <param name="MarkValue">Текущая стоимость позиции — нетто «марка × знаковый остаток»; null у закрытой позиции и при сбое марок.</param>
+/// <param name="TotalPnLPercentOfValue">Общий P&L процентом от стоимости позиции; null при недоступном P&L или неположительной стоимости.</param>
 // Строка показывает картину позиции её записями: вход, выход,
 // раздельные части реализованного и нереализованного результата
 // с процентом от капитала, общий P&L с процентом, комиссии и времена.
@@ -33,6 +35,9 @@ namespace TransactionJournal.Application;
 // Раздельные части выводятся колонками «Реализ. P&L» и «Нереализ. P&L»:
 // реализованная часть видна всегда, нереализованная деградирует вместе с марками.
 // Traceability: openspec:ui/screens#scenario-detail-position-pnl-parts
+// Стоимость и процент P&L от стоимости выводятся рядом с общим P&L:
+// обе величины деградируют вместе с марками.
+// Traceability: openspec:ui/screens#requirement-construction-detail-screen
 public sealed record ConstructionPositionRow(
 	string Symbol,
 	decimal Residual,
@@ -48,7 +53,9 @@ public sealed record ConstructionPositionRow(
 	DateTimeOffset OpenedAt,
 	DateTimeOffset? ClosedAt,
 	bool IsOpen,
-	string? Comment);
+	string? Comment,
+	decimal? MarkValue = null,
+	decimal? TotalPnLPercentOfValue = null);
 
 /// <summary>
 /// Строка таблицы сделок деталей конструкции: сделка с атрибутами биржевой
@@ -131,7 +138,7 @@ public sealed record ConstructionAdjustmentRow(
 /// <param name="HasOpenResidual">У конструкции есть открытый остаток — марки нужны её нереализованной оценке.</param>
 /// <param name="HasMarkFailure">Сбой марок оставил нереализованную оценку конструкции непостроенной.</param>
 /// <param name="MarksAsOf">Отметка времени марок оценки из аналитики журнала.</param>
-/// <param name="Positions">Строки таблицы позиций, упорядоченные по инструменту.</param>
+/// <param name="Positions">Строки таблицы позиций: открытые раньше закрытых, внутри — CALL, PUT, прочие, затем тикер и экспирация.</param>
 /// <param name="Trades">Строки таблицы сделок в хронологическом порядке.</param>
 /// <param name="ClosingEntries">Строки таблицы закрывающих записей в хронологическом порядке.</param>
 /// <param name="ClosingWarnings">Предупреждения об избыточных закрывающих записях конструкции.</param>

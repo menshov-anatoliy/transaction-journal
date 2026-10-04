@@ -91,6 +91,9 @@ public class UnrealizedPnlMarkEvaluatorTests
 		var shortPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
 		Assert.That(shortPosition.MarkPrice, Is.EqualTo(90m));
 		Assert.That(shortPosition.UnrealizedPnL, Is.EqualTo(10m));
+		// Стоимость строится из той же марки: 130 × 0.5 = 65 и 90 × (−1) = −90.
+		Assert.That(longPosition.MarkValue, Is.EqualTo(65m));
+		Assert.That(shortPosition.MarkValue, Is.EqualTo(-90m));
 
 		// Assert: общий PnL открытых позиций собран из реализованной и
 		// нереализованной частей; закрытая позиция осталась без марки и
@@ -119,6 +122,66 @@ public class UnrealizedPnlMarkEvaluatorTests
 		Assert.That(metrics.UnrealizedPnL, Is.EqualTo(15m));
 		Assert.That(metrics.TotalPnL, Is.EqualTo(34.97m));
 		Assert.That(metrics.UnrealizedPnLPercent, Is.EqualTo(1.5m));
+	}
+
+	[TestMethod]
+	[Description("Стоимость открытой позиции — нетто-величина марки и знакового остатка со знаком")]
+	public async Task TryIfMarkValueIsNetOfMarkAndResidual()
+	{
+		// Arrange: длинный остаток 2 при марке 120 и короткий остаток −3 при марке
+		// 50; средние цены равны маркам, чтобы нереализованная часть не мешала.
+		// Требование: стоимость открытой позиции — «марка × знаковый остаток»:
+		// лонг даёт положительную стоимость, шорт — отрицательную.
+		// Traceability: openspec:analytics/performance#scenario-open-position-net-mark-value
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 120m, At(120)));
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentMarkSnapshot(ShortSymbol, 50m, At(121)));
+		var positions = new[]
+		{
+			OpenPosition(LongSymbol, FirstConstructionId, 2m, 120m, 0m),
+			OpenPosition(ShortSymbol, FirstConstructionId, -3m, 50m, 0m),
+		};
+
+		// Act
+		var evaluation = await _evaluator.EvaluateAsync(positions);
+
+		// Assert: 120 × 2 = 240 и 50 × (−3) = −150 — знак несёт знаковый остаток.
+		Assert.That(evaluation.Positions.Single(position => position.Symbol == LongSymbol).MarkValue, Is.EqualTo(240m));
+		Assert.That(evaluation.Positions.Single(position => position.Symbol == ShortSymbol).MarkValue, Is.EqualTo(-150m));
+	}
+
+	[TestMethod]
+	[Description("Закрытая позиция и сбой марки оставляют стоимость null")]
+	public async Task TryIfClosedPositionAndMarkFailureLeaveNoMarkValue()
+	{
+		// Arrange: закрытая позиция с нулевым остатком и открытый остаток ETH;
+		// марка ETH недоступна — биржа отвечает ошибкой.
+		// Требование: закрытая позиция стоимости не имеет; сбой марок гасит
+		// стоимость открытой ноги, не трогая реализованные метрики.
+		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-mark-value
+		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-mark-value
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ThrowsAsync(new BybitApiException(10001, "params error"));
+		var positions = new[]
+		{
+			ClosedPosition(LongSymbol, FirstConstructionId, 9.97m),
+			OpenPosition(ShortSymbol, FirstConstructionId, -1m, 100m, -2.5m),
+		};
+
+		// Act
+		var evaluation = await _evaluator.EvaluateAsync(positions);
+
+		// Assert: обе стоимости null, реализованный результат открытой позиции
+		// остался без изменений, сбой марки отмечен.
+		Assert.That(evaluation.Positions.Single(position => position.Symbol == LongSymbol).MarkValue, Is.Null);
+		var openPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
+		Assert.That(openPosition.MarkValue, Is.Null);
+		Assert.That(openPosition.RealizedPnL, Is.EqualTo(-2.5m));
+		Assert.That(evaluation.HasMarkFailure, Is.True);
 	}
 
 	[TestMethod]

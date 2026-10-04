@@ -42,6 +42,15 @@ public sealed record ConstructionMetrics
 	/// </summary>
 	public required decimal? TotalPnL { get; init; }
 
+	/// <summary>
+	/// Текущая стоимость конструкции в USDT — сумма стоимостей её открытых
+	/// позиций; null без открытых остатков и пока хоть один открытый остаток
+	/// не оценен марками: недоступная стоимость обнуляет только её и занятость
+	/// капитала, остальные метрики не меняются.
+	// Traceability: openspec:analytics/performance#requirement-mark-value-of-position-and-construction
+	/// </summary>
+	public decimal? MarkValue { get; init; }
+
 	/// <summary>Реализованный PnL в процентах от текущего выделенного капитала; null при нулевом капитале.</summary>
 	public required decimal? RealizedPnLPercent { get; init; }
 
@@ -53,6 +62,14 @@ public sealed record ConstructionMetrics
 
 	/// <summary>Итог в процентах от текущего выделенного капитала; null при нулевом капитале или недоступном итоге.</summary>
 	public required decimal? TotalPnLPercent { get; init; }
+
+	/// <summary>
+	/// Занято капитала, % — стоимость конструкции в процентах от текущего
+	/// выделенного капитала; null при незаданном или нулевом капитале и когда
+	/// стоимость недоступна. Отрицательная стоимость даёт отрицательный процент.
+	// Traceability: openspec:analytics/performance#requirement-capital-usage-from-value
+	/// </summary>
+	public decimal? CapitalUsagePercent { get; init; }
 
 	/// <summary>Дата открытия — время первой сделки конструкции; null, пока сделок нет.</summary>
 	public required DateTimeOffset? OpenedAt { get; init; }
