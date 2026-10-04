@@ -324,12 +324,12 @@ public class ConstructionDetailScreenTests
 
 		var cut = RenderDetail();
 
-		// Assert: признаки сбоя марок занимают «Нереализованный», «Общий P&L»
-		// и «Стоимость» строки позиции, а также «Стоимость» сводки; реализованные
-		// величины — реализованный P&L, средняя цена входа, комиссии и время
-		// открытия — остаются видимыми.
+		// Assert: признаки сбоя марок занимают «Нереализ. P&L» и «Общий P&L»
+		// строки позиции, а «Стоимость», «Нереализ. P&L», итог и отметка марок —
+		// в сводке; реализованные величины — реализованный P&L, средняя цена
+		// входа, комиссии и время открытия — остаются видимыми.
 		// Требование: сбой марок — видимое состояние, реализованные величины
-		// остаются видимыми; стоимость деградирует тем же признаком.
+		// остаются видимыми; сводочная стоимость деградирует тем же признаком.
 		// Traceability: openspec:ui/screens#scenario-detail-position-total-pnl-marks-failure
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-mark-value
 		cut.WaitForAssertion(() =>
@@ -337,7 +337,7 @@ public class ConstructionDetailScreenTests
 			Assert.That(cut.FindAll(".kstrip .markfail").Count, Is.EqualTo(4));
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("-1"));
 			var row = cut.Find("tbody tr");
-			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(3));
+			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(2));
 			var cells = row.QuerySelectorAll("td");
 			Assert.That(cells[4].TextContent.Trim(), Is.EqualTo("-1 (-0.1%)"));
 			Assert.That(cells[5].QuerySelectorAll(".markfail").Length, Is.EqualTo(1));
@@ -366,13 +366,11 @@ public class ConstructionDetailScreenTests
 
 		var cut = RenderDetail();
 
-		// Assert: состав колонок ровно выводимый — колонки «Средняя», «Марка»
-		// и «Результат» отсутствуют, стоимость и процент P&L от стоимости идут
-		// после «Общий P&L»; общий P&L — абсолют со знаком и процент
-		// от капитала в скобках.
+		// Assert: состав колонок ровно выводимый — колонки «Средняя», «Марка»,
+		// «Результат», «Стоимость» и «% P&L от стоимости» отсутствуют;
+		// общий P&L — абсолют со знаком и процент от капитала в скобках.
 		// Требование: строка позиции показывает вход, выход и итог.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
-		// Traceability: openspec:ui/screens#scenario-detail-position-value-columns
 		cut.WaitForAssertion(() =>
 		{
 			var headers = cut.FindAll("table")[0].QuerySelectorAll("thead th").Select(cell => cell.TextContent.Trim()).ToArray();
@@ -385,8 +383,6 @@ public class ConstructionDetailScreenTests
 				"Реализ. P&L",
 				"Нереализ. P&L",
 				"Общий P&L",
-				"Стоимость",
-				"% P&L от стоимости",
 				"Всего комиссий",
 				"Время открытия",
 				"Время закрытия",
@@ -1282,14 +1278,13 @@ public class ConstructionDetailScreenTests
 		FindRowButton(positionsTable, "изменить").Click();
 
 		// Assert: в строке появилось ровно одно многострочное поле — поле
-		// комментария в своей колонке (тринадцатой — после колонок стоимости
-		// и процента P&L от стоимости); остаток и прочие величины позиции
-		// остаются текстом. Требование: доступно только текстовое поле
+		// комментария в своей колонке (одиннадцатой); остаток и прочие величины
+		// позиции остаются текстом. Требование: доступно только текстовое поле
 		// комментария, остаток позиции не редактируется.
 		// Traceability: openspec:ui/screens#scenario-position-comment-without-residual-edit
 		var row = cut.FindAll("table")[0].QuerySelectorAll("tbody tr").Single();
 		Assert.That(row.QuerySelectorAll("textarea"), Has.Length.EqualTo(1));
-		Assert.That(row.QuerySelectorAll("td")[13].QuerySelectorAll("textarea"), Has.Length.EqualTo(1));
+		Assert.That(row.QuerySelectorAll("td")[11].QuerySelectorAll("textarea"), Has.Length.EqualTo(1));
 		Assert.That(row.QuerySelectorAll("td")[1].QuerySelectorAll("textarea"), Is.Empty);
 		Assert.That(row.QuerySelectorAll("td")[1].TextContent.Trim(), Is.EqualTo("+0.1"));
 

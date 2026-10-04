@@ -379,11 +379,6 @@ else
 	@* При сбое марок признак занимают «Нереализ. P&L» и «Общий P&L»,
 	   реализованный и остальные колонки остаются без признака. *@
 	@* Traceability: openspec:ui/screens#scenario-detail-position-total-pnl-marks-failure *@
-	@* Колонки стоимости и процента P&L от стоимости идут после «Общий P&L»:
-	   стоимость открыта при живом остатке, процент — только при положительной
-	   стоимости; закрытая позиция и неположительная база выводят прочерк. *@
-	@* Traceability: openspec:ui/screens#scenario-detail-position-value-columns *@
-	@* Traceability: openspec:ui/screens#scenario-detail-position-value-degradation *@
 	<table>
 		<thead>
 			<tr>
@@ -394,8 +389,6 @@ else
 				<th>Реализ. P&L</th>
 				<th>Нереализ. P&L</th>
 				<th>Общий P&L</th>
-				<th>Стоимость</th>
-				<th>% P&L от стоимости</th>
 				<th>Всего комиссий</th>
 				<th>Время открытия</th>
 				<th>Время закрытия</th>
@@ -409,7 +402,7 @@ else
 			{
 				@* Пустая таблица — явное сообщение об отсутствии, а не пустая разметка. *@
 				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
-				<tr><td colspan="15" class="empty">позиций нет</td></tr>
+				<tr><td colspan="13" class="empty">позиций нет</td></tr>
 			}
 			@foreach (var position in _data.Positions)
 			{
@@ -447,30 +440,8 @@ else
 						else
 						{
 							<span class="@SignClass(position.TotalPnL)">@FormatPnLWithPercent(position.TotalPnL.GetValueOrDefault(), position.TotalPnLPercent)</span>
-						}
+							}
 					</td>
-					@* Стоимость позиции: у закрытой позиции — прочерк, у открытой при
-					   сбое марок — признак сбоя, иначе знаковая марочная величина. *@
-					@* Traceability: openspec:ui/screens#scenario-detail-position-value-columns *@
-					<td>
-						@if (!position.IsOpen)
-						{
-							<span>—</span>
-						}
-						else if (position.MarkValue is null)
-						{
-							<span class="markfail" title="Провайдер котировок недоступен — стоимость позиции не оценена">сбой котировок</span>
-						}
-						else
-						{
-							<span class="@SignClass(position.MarkValue)">@FormatPnL(position.MarkValue.Value)</span>
-						}
-					</td>
-					@* Процент общего P&L от стоимости: только при положительной
-					   стоимости и доступном PnL — иначе прочерк без подмены
-					   абсолютных величин. *@
-					@* Traceability: openspec:ui/screens#scenario-detail-position-value-degradation *@
-					<td><span class="@SignClass(position.TotalPnLPercentOfValue)">@FormatPercent(position.TotalPnLPercentOfValue)</span></td>
 					<td>@FormatAmount(position.AccumulatedFees)</td>
 					<td>@FormatDate(position.OpenedAt)</td>
 					<td>@(position.ClosedAt is { } closedAt ? FormatDate(closedAt) : "—")</td>

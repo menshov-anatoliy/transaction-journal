@@ -141,14 +141,6 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			? null
 			: pnl.Value / allocatedCapitalUsdt.Value * 100m;
 
-		// Процент P&L от стоимости считается только от положительной стоимости:
-		// нулевой стоимости нечем делить, а отрицательная база дала бы процент
-		// с перевёрнутым знаком.
-		// Traceability: openspec:analytics/performance#requirement-position-pnl-percent-of-value
-		decimal? PercentOfValue(decimal? pnl, decimal? markValue) => pnl == null || markValue is not > 0m
-			? null
-			: pnl.Value / markValue.Value * 100m;
-
 		// Порядок строк: открытые позиции раньше закрытых, затем CALL, PUT и прочие
 		// инструменты, затем тикер по кодам символов и экспирация по возрастанию —
 		// ближайшие серии опционов выше дальних.
@@ -174,9 +166,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				position.OpenedAt,
 				position.ClosedAt,
 				position.Residual != 0m,
-				commentsBySymbol.GetValueOrDefault(position.Symbol),
-				position.MarkValue,
-				PercentOfValue(position.TotalPnL, position.MarkValue)))
+				commentsBySymbol.GetValueOrDefault(position.Symbol)))
 			.ToList();
 	}
 

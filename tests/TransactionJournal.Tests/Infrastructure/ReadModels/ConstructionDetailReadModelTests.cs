@@ -288,8 +288,6 @@ public class ConstructionDetailReadModelTests
 			nameof(ConstructionPositionRow.ClosedAt),
 			nameof(ConstructionPositionRow.IsOpen),
 			nameof(ConstructionPositionRow.Comment),
-			nameof(ConstructionPositionRow.MarkValue),
-			nameof(ConstructionPositionRow.TotalPnLPercentOfValue),
 		}));
 	}
 
@@ -338,48 +336,6 @@ public class ConstructionDetailReadModelTests
 		// Первые шесть строк открыты, две последние закрыты.
 		Assert.That(data.Positions.Take(6).Select(position => position.IsOpen), Is.All.True);
 		Assert.That(data.Positions.Skip(6).Select(position => position.IsOpen), Is.All.False);
-	}
-
-	[TestMethod]
-	[Description("Строка позиции несёт стоимость и процент P&L от стоимости с деградацией")]
-	public async Task TryIfPositionRowCarriesValueAndPnlPercentOfValue()
-	{
-		// Arrange: открытый лонг BTCUSDT (вход 100), открытый шорт ETHUSDT
-		// (вход 100) и закрытый опцион (куплен по 100, продан по 150); марка
-		// всех инструментов — 200.
-		// Требование: стоимость строки — нетто «марка × знаковый остаток»,
-		// процент P&L от стоимости — только при положительной стоимости.
-		// Traceability: openspec:ui/screens#scenario-detail-position-value-columns
-		// Traceability: openspec:analytics/performance#scenario-positive-value-yields-pnl-percent
-		// Traceability: openspec:analytics/performance#scenario-nonpositive-value-yields-no-percent
-		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-mark-value
-		SeedOrderingInstruments();
-		var construction = await _constructionService.CreateAsync("Стоимость ног", null);
-		await AddRawExecutionAsync("v1", LinearSymbol, "linear", "Buy", "1", "100", ExecMs(2023, 12, 28, 10, 0), "USDT");
-		await AddRawExecutionAsync("v2", EthPerpSymbol, "linear", "Sell", "1", "100", ExecMs(2023, 12, 28, 11, 0), "USDT");
-		await AddRawExecutionAsync("v3", CallSymbol, "option", "Buy", "1", "100", ExecMs(2023, 12, 28, 10, 30), "USDC");
-		await AddRawExecutionAsync("v4", CallSymbol, "option", "Sell", "1", "150", ExecMs(2023, 12, 28, 12, 0), "USDC");
-		await _bindingService.BindBatchAsync(construction.Id, new[] { "v1", "v2", "v3", "v4" });
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(200m, FetchedAt));
-
-		// Act: читаем таблицу позиций конструкции.
-		var data = await readModel.ReadAsync(construction.Id);
-
-		// Assert: лонг — стоимость 200 и процент 100 / 200 × 100 = 50 %;
-		// шорт — стоимость −200, отрицательная база процента не даёт;
-		// закрытая нога стоимости не имеет, процент тоже отсутствует.
-		var longRow = data.Positions.Single(position => position.Symbol == LinearSymbol);
-		Assert.That(longRow.MarkValue, Is.EqualTo(200m));
-		Assert.That(longRow.TotalPnL, Is.EqualTo(100m));
-		Assert.That(longRow.TotalPnLPercentOfValue, Is.EqualTo(50m));
-		var shortRow = data.Positions.Single(position => position.Symbol == EthPerpSymbol);
-		Assert.That(shortRow.MarkValue, Is.EqualTo(-200m));
-		Assert.That(shortRow.TotalPnL, Is.EqualTo(-100m));
-		Assert.That(shortRow.TotalPnLPercentOfValue, Is.Null);
-		var closedRow = data.Positions.Single(position => position.Symbol == CallSymbol);
-		Assert.That(closedRow.MarkValue, Is.Null);
-		Assert.That(closedRow.TotalPnL, Is.EqualTo(50m));
-		Assert.That(closedRow.TotalPnLPercentOfValue, Is.Null);
 	}
 
 	[TestMethod]
@@ -537,9 +493,6 @@ public class ConstructionDetailReadModelTests
 		Assert.That(position.RealizedPnLPercent, Is.EqualTo(-0.1m));
 		Assert.That(position.UnrealizedPnL, Is.Null);
 		Assert.That(position.UnrealizedPnLPercent, Is.Null);
-		// Стоимость деградирует вместе с марками: без марки стоимости нет.
-		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-mark-value
-		Assert.That(position.MarkValue, Is.Null);
 		Assert.That(position.Residual, Is.EqualTo(0.1m));
 		Assert.That(position.AverageEntryPrice, Is.EqualTo(42000m));
 	}
