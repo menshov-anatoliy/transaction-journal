@@ -207,7 +207,7 @@ public class AppFrameTests
 
 		// Assert: панель помечает итог неполным, не показывая частичную сумму.
 		// Traceability: change:add-ui-screens/design#d4
-		cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("итог по журналу: неполный (сбой марок)")));
+		cut.WaitForAssertion(() => Assert.That(cut.Markup, Does.Contain("итог по журналу: неполный (сбой котировок)")));
 	}
 
 	[TestMethod]
@@ -230,7 +230,7 @@ public class AppFrameTests
 		cut.WaitForAssertion(() =>
 		{
 			Assert.That(cut.Markup, Does.Contain("итог по журналу: +125.5 USDT (реализов. +100 / нереализов. +25.5)"));
-			Assert.That(cut.Markup, Does.Not.Contain("сбой марок"));
+			Assert.That(cut.Markup, Does.Not.Contain("сбой котировок"));
 		});
 	}
 
@@ -253,7 +253,7 @@ public class AppFrameTests
 		// Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
 		cut.WaitForAssertion(() =>
 		{
-			Assert.That(cut.Markup, Does.Contain("итог по журналу: неполный (сбой марок), реализов. +214.32, нереализов. —"));
+			Assert.That(cut.Markup, Does.Contain("итог по журналу: неполный (сбой котировок), реализов. +214.32, нереализов. —"));
 		});
 	}
 

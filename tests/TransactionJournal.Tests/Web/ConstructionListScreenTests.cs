@@ -332,14 +332,14 @@ public class ConstructionListScreenTests
 		{
 			var row = cut.Find("tr.clickable");
 			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(2));
-			Assert.That(row.TextContent, Does.Contain("сбой марок"));
+			Assert.That(row.TextContent, Does.Contain("сбой котировок"));
 			Assert.That(row.TextContent, Does.Contain("неполный"));
 			Assert.That(row.TextContent, Does.Contain("+214.32"));
 			Assert.That(row.TextContent, Does.Contain("+87.4"));
 			// Сбой марок занимает две ячейки сводки: нереализованный агрегат
 			// и отметку времени марок; реализованный агрегат остаётся числом.
 			Assert.That(cut.FindAll(".kstrip .markfail").Count, Is.EqualTo(2));
-			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("неполный (сбой марок)"));
+			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("неполный (сбой котировок)"));
 			Assert.That(cut.Find(".kstrip").TextContent, Does.Contain("+214.32"));
 		});
 	}
@@ -518,7 +518,7 @@ public class ConstructionListScreenTests
 		cut.WaitForAssertion(() =>
 		{
 			Assert.That(cut.FindAll(".rp-fail"), Has.Count.EqualTo(1));
-			Assert.That(cut.Find(".rp-fail").TextContent, Does.Contain("сбой марок"));
+			Assert.That(cut.Find(".rp-fail").TextContent, Does.Contain("сбой котировок"));
 			Assert.That(cut.FindAll(".rp-bar"), Has.Count.EqualTo(0));
 		});
 	}

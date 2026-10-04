@@ -212,7 +212,7 @@ else
 				@* Итог без нереализованной части неполный — признак сбоя марок,
 				   а не прочерк «нулевого» итога. *@
 				@* Traceability: change:add-ui-screens/design#d4 *@
-				<b class="markfail" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя марок">неполный (сбой марок)</b>
+				<b class="markfail" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя котировок">неполный (сбой котировок)</b>
 			}
 			else
 			{
@@ -240,7 +240,7 @@ else
 				@* Сбой марок — видимое состояние: нереализованная оценка не построена,
 				   признак сбоя занимает её место; реализованный результат виден. *@
 				@* Traceability: change:add-ui-screens/design#d4 *@
-				<b class="markfail" title="Провайдер марок недоступен — нереализованный PnL не оценён">сбой марок</b>
+				<b class="markfail" title="Провайдер котировок недоступен — нереализованный PnL не оценён">сбой котировок</b>
 			}
 			else
 			{
@@ -248,17 +248,17 @@ else
 			}
 		</div>
 		<div>корректировки<b class="@SignClass(_data.Metrics.AdjustmentsPnL)">@FormatAdjustments(_data.Metrics.AdjustmentsPnL)</b></div>
-		<div>марки на
+		<div>котировки на
 			@if (_data.HasMarkFailure)
 			{
 				@* Нереализованные величины сопровождаются отметкой времени марок;
 				   при сбое провайдера время получения марок неизвестно. *@
 				@* Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period *@
-				<b class="markfail" title="Провайдер марок недоступен — время получения марок неизвестно">сбой марок</b>
+				<b class="markfail" title="Провайдер котировок недоступен — время получения котировок неизвестно">сбой котировок</b>
 			}
 			else if (_data.HasOpenResidual == false)
 			{
-				<b title="Открытых остатков нет — марки оценке не нужны">не нужны</b>
+				<b title="Открытых остатков нет — котировки оценке не нужны">не нужны</b>
 			}
 			else
 			{
@@ -396,7 +396,7 @@ else
 						}
 						else if (position.UnrealizedPnL is null)
 						{
-							<span class="markfail" title="Провайдер марок недоступен — нереализованный PnL не оценён">сбой марок</span>
+							<span class="markfail" title="Провайдер котировок недоступен — нереализованный PnL не оценён">сбой котировок</span>
 						}
 						else
 						{
@@ -409,7 +409,7 @@ else
 					<td>
 						@if (position.IsOpen && position.TotalPnL is null)
 						{
-							<span class="markfail" title="Провайдер марок недоступен — общий P&L не оценён">сбой марок</span>
+							<span class="markfail" title="Провайдер котировок недоступен — общий P&L не оценён">сбой котировок</span>
 						}
 						else
 						{

@@ -80,16 +80,16 @@ else
 				@* Сбой марок гасит только нереализованную часть сводки: признак
 				   сбоя занимает её место, итог и реализованный остаются видимыми. *@
 				@* Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated *@
-				<b class="markfail" title="Провайдер марок недоступен — нереализованный PnL журнала не оценён">сбой марок</b>
+				<b class="markfail" title="Провайдер котировок недоступен — нереализованный PnL журнала не оценён">сбой котировок</b>
 			}
 		</div>
-		<div>марки на
+		<div>котировки на
 			@if (_data.HasMarkFailure)
 			{
 				@* Отметка времени марок деградирует при сбое провайдера: сводка
 				   показывает признак сбоя, реализованные величины остаются видимыми. *@
 				@* Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated *@
-				<b class="markfail" title="Провайдер марок недоступен — время получения марок неизвестно">сбой марок</b>
+				<b class="markfail" title="Провайдер котировок недоступен — время получения котировок неизвестно">сбой котировок</b>
 			}
 			else
 			{
@@ -129,7 +129,7 @@ else
 		}
 		else if (_passResult is { Outcome: HintPassOutcome.SkippedMarketUnavailable } skipped)
 		{
-			<p class="note" role="status">Проход пропущен: марки недоступны — @skipped.Diagnostics?.FirstOrDefault()</p>
+			<p class="note" role="status">Проход пропущен: котировки недоступны — @skipped.Diagnostics?.FirstOrDefault()</p>
 		}
 		else if (_passResult is { Outcome: HintPassOutcome.CorpusInvalid } invalid)
 		{
@@ -199,7 +199,7 @@ else
 							   не построена, признак сбоя занимает её место; реализованный
 							   результат и корректировки строки остаются видимыми. *@
 							@* Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated *@
-							<span class="markfail" title="Провайдер марок недоступен — нереализованный PnL не оценён">сбой марок</span>
+							<span class="markfail" title="Провайдер котировок недоступен — нереализованный PnL не оценён">сбой котировок</span>
 						}
 						else
 						{
@@ -213,7 +213,7 @@ else
 							{
 								@* Итог без нереализованной части неполный — признак сбоя марок,
 								   а не прочерк «нулевого» итога. *@
-								<span class="markfail" title="Итог неполный: нереализованная часть не оценена из-за сбоя марок">неполный</span>
+								<span class="markfail" title="Итог неполный: нереализованная часть не оценена из-за сбоя котировок">неполный</span>
 							}
 							else
 							{
@@ -429,7 +429,7 @@ else
 			// Traceability: change:add-ui-screens/design#d4
 			if (_data?.TotalPnL is not { } total)
 			{
-				return "неполный (сбой марок)";
+				return "неполный (сбой котировок)";
 			}
 
 			return $"{FormatPnL(total)} USDT";

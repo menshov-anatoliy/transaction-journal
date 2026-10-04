@@ -966,7 +966,7 @@ public class ConstructionDetailScreenTests
 		// Traceability: openspec:ui/screens#scenario-hint-unavailable-on-marks-failure
 		cut.WaitForAssertion(() =>
 		{
-			Assert.That(cut.Find(".rp-detail").TextContent, Does.Contain("сбой марок"));
+			Assert.That(cut.Find(".rp-detail").TextContent, Does.Contain("сбой котировок"));
 			Assert.That(cut.FindAll(".rp-detail .rp-bar"), Has.Count.EqualTo(0));
 		});
 	}

@@ -285,7 +285,7 @@
 			// Traceability: change:add-ui-screens/design#d4
 			if (_journal.TotalPnL is null)
 			{
-				return $"итог по журналу: неполный (сбой марок), реализов. {FormatPnL(_journal.RealizedPnL)}, нереализов. —";
+				return $"итог по журналу: неполный (сбой котировок), реализов. {FormatPnL(_journal.RealizedPnL)}, нереализов. —";
 			}
 
 			return $"итог по журналу: {FormatPnL(_journal.TotalPnL.Value)} USDT (реализов. {FormatPnL(_journal.RealizedPnL)} / нереализов. {FormatPnL(_journal.UnrealizedPnL.GetValueOrDefault())})";
