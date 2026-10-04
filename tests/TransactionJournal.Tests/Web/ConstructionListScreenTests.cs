@@ -320,18 +320,20 @@ public class ConstructionListScreenTests
 
 		var cut = _context.RenderComponent<Constructions>();
 
-		// Assert: нереализованный PnL и итог строки заняты признаком сбоя марок,
-		// сводка помечает отметку марок, нереализованный агрегат и итог;
-		// реализованный результат, корректировки и реализованный агрегат
-		// остаются видимыми.
+		// Assert: нереализованный PnL, итог и стоимость строки заняты признаком
+		// сбоя марок, сводка помечает отметку марок, нереализованный агрегат
+		// и итог; реализованный результат, корректировки и реализованный
+		// агрегат остаются видимыми.
 		// Требование: сбой марок показывается признаком, реализованные величины
-		// и проценты остаются видимыми; деградирует только нереализованная часть.
+		// и проценты остаются видимыми; деградирует только нереализованная часть,
+		// стоимость деградирует тем же признаком.
 		// Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated
+		// Traceability: openspec:ui/screens#scenario-list-value-degradation
 		// Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
 		cut.WaitForAssertion(() =>
 		{
 			var row = cut.Find("tr.clickable");
-			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(2));
+			Assert.That(row.QuerySelectorAll(".markfail").Length, Is.EqualTo(3));
 			Assert.That(row.TextContent, Does.Contain("сбой котировок"));
 			Assert.That(row.TextContent, Does.Contain("неполный"));
 			Assert.That(row.TextContent, Does.Contain("+214.32"));

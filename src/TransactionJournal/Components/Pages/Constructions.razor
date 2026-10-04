@@ -161,20 +161,22 @@ else
 					<th>Подсказки</th>
 					<th>Статус</th>
 				<th>Капитал</th>
-				<th>Реализов.</th>
-				<th>Нереализов.</th>
-				<th>Коррект.</th>
-				<th>Итог</th>
-				<th>% капитала</th>
-				<th>Открыта</th>
-				<th>Закрыта</th>
+					<th>Стоимость</th>
+					<th>Реализов.</th>
+					<th>Нереализов.</th>
+					<th>Коррект.</th>
+					<th>Итог</th>
+					<th>% капитала</th>
+					<th>Занято капитала, %</th>
+					<th>Открыта</th>
+					<th>Закрыта</th>
 			</tr>
 		</thead>
 		<tbody>
 			@if (_data.Items.Count == 0)
 			{
-				@* Пустой список — явное сообщение об отсутствии, а не пустая разметка. *@
-				<tr><td colspan="11" class="empty">конструкций нет</td></tr>
+					@* Пустой список — явное сообщение об отсутствии, а не пустая разметка. *@
+					<tr><td colspan="13" class="empty">конструкций нет</td></tr>
 			}
 			@foreach (var item in _data.Items)
 			{
@@ -191,6 +193,25 @@ else
 					</td>
 					<td><span class="@StatusClass(item.Status)">@StatusText(item.Status)</span></td>
 					<td>@FormatAmount(item.AllocatedCapitalUsdt)</td>
+					@* Стоимость открытых остатков строки: при сбое марок — тот же признак
+					   сбоя, что у нереализованного PnL, без открытых остатков — прочерк,
+					   иначе знаковая величина (кредитовая конструкция отрицательна). *@
+					@* Traceability: openspec:ui/screens#scenario-list-value-and-capital-usage-columns *@
+					@* Traceability: openspec:ui/screens#scenario-list-value-degradation *@
+					<td>
+						@if (item.MarkValue is null && item.UnrealizedPnL is null)
+						{
+							<span class="markfail" title="Провайдер котировок недоступен — стоимость не оценена">сбой котировок</span>
+						}
+						else if (item.MarkValue is null)
+						{
+							<span>—</span>
+						}
+						else
+						{
+							<span class="@SignClass(item.MarkValue)">@FormatPnL(item.MarkValue.Value)</span>
+						}
+					</td>
 					<td><span class="@SignClass(item.RealizedPnL)">@FormatPnL(item.RealizedPnL)</span></td>
 					<td>
 						@if (item.UnrealizedPnL is null)
@@ -229,6 +250,10 @@ else
 							TotalPnL="item.TotalPnL" />
 					</td>
 					<td><span class="@SignClass(item.TotalPnLPercent)">@FormatPercent(item.TotalPnLPercent)</span></td>
+					@* Занятость капитала — стоимость в процентах от капитала со знаком:
+					   без заданного капитала или недоступной стоимости — прочерк. *@
+					@* Traceability: openspec:analytics/performance#requirement-capital-usage-from-value *@
+					<td><span class="@SignClass(item.CapitalUsagePercent)">@FormatPercent(item.CapitalUsagePercent)</span></td>
 					<td>@FormatDate(item.OpenedAt)</td>
 					<td>@FormatDate(item.ClosedAt)</td>
 				</tr>

@@ -233,6 +233,32 @@ else
 			}
 			<b class="@SignClass(_data.Metrics.TotalPnLPercent)">@FormatPercent(_data.Metrics.TotalPnLPercent)</b>
 		</div>
+		<div>Стоимость
+			@* Стоимость открытых остатков по текущим маркам: без открытых остатков
+			   стоимости нет — прочерк, при сбое марок — признак сбоя, иначе
+			   знаковая величина (кредитовая конструкция отрицательна). *@
+			@* Traceability: openspec:ui/screens#scenario-detail-summary-value-and-usage *@
+			@* Traceability: openspec:analytics/performance#requirement-mark-value-of-position-and-construction *@
+			@if (_data.HasOpenResidual == false)
+			{
+				<b title="Открытых остатков нет — стоимости нет">—</b>
+			}
+			else if (_data.HasMarkFailure)
+			{
+				<b class="markfail" title="Провайдер котировок недоступен — стоимость не оценена">сбой котировок</b>
+			}
+			else
+			{
+				<b class="@SignClass(_data.Metrics.MarkValue)">@FormatPnL(_data.Metrics.MarkValue.GetValueOrDefault())</b>
+			}
+		</div>
+		<div>Занято капитала, %
+			@* Занятость капитала — стоимость в процентах от капитала со знаком:
+			   без заданного капитала или недоступной стоимости — прочерк,
+			   абсолютные величины при этом не меняются. *@
+			@* Traceability: openspec:analytics/performance#requirement-capital-usage-from-value *@
+			<b class="@SignClass(_data.Metrics.CapitalUsagePercent)">@FormatPercent(_data.Metrics.CapitalUsagePercent)</b>
+		</div>
 		<div>Реализ. P&L<b class="@SignClass(_data.Metrics.RealizedPnL)">@FormatPnL(_data.Metrics.RealizedPnL)</b></div>
 		<div>Нереализ. P&L
 			@if (_data.HasMarkFailure)
@@ -353,6 +379,11 @@ else
 	@* При сбое марок признак занимают «Нереализ. P&L» и «Общий P&L»,
 	   реализованный и остальные колонки остаются без признака. *@
 	@* Traceability: openspec:ui/screens#scenario-detail-position-total-pnl-marks-failure *@
+	@* Колонки стоимости и процента P&L от стоимости идут после «Общий P&L»:
+	   стоимость открыта при живом остатке, процент — только при положительной
+	   стоимости; закрытая позиция и неположительная база выводят прочерк. *@
+	@* Traceability: openspec:ui/screens#scenario-detail-position-value-columns *@
+	@* Traceability: openspec:ui/screens#scenario-detail-position-value-degradation *@
 	<table>
 		<thead>
 			<tr>
@@ -363,6 +394,8 @@ else
 				<th>Реализ. P&L</th>
 				<th>Нереализ. P&L</th>
 				<th>Общий P&L</th>
+				<th>Стоимость</th>
+				<th>% P&L от стоимости</th>
 				<th>Всего комиссий</th>
 				<th>Время открытия</th>
 				<th>Время закрытия</th>
@@ -376,7 +409,7 @@ else
 			{
 				@* Пустая таблица — явное сообщение об отсутствии, а не пустая разметка. *@
 				@* Traceability: openspec:ui/screens#scenario-detail-empty-table-message *@
-				<tr><td colspan="13" class="empty">позиций нет</td></tr>
+				<tr><td colspan="15" class="empty">позиций нет</td></tr>
 			}
 			@foreach (var position in _data.Positions)
 			{
@@ -416,6 +449,28 @@ else
 							<span class="@SignClass(position.TotalPnL)">@FormatPnLWithPercent(position.TotalPnL.GetValueOrDefault(), position.TotalPnLPercent)</span>
 						}
 					</td>
+					@* Стоимость позиции: у закрытой позиции — прочерк, у открытой при
+					   сбое марок — признак сбоя, иначе знаковая марочная величина. *@
+					@* Traceability: openspec:ui/screens#scenario-detail-position-value-columns *@
+					<td>
+						@if (!position.IsOpen)
+						{
+							<span>—</span>
+						}
+						else if (position.MarkValue is null)
+						{
+							<span class="markfail" title="Провайдер котировок недоступен — стоимость позиции не оценена">сбой котировок</span>
+						}
+						else
+						{
+							<span class="@SignClass(position.MarkValue)">@FormatPnL(position.MarkValue.Value)</span>
+						}
+					</td>
+					@* Процент общего P&L от стоимости: только при положительной
+					   стоимости и доступном PnL — иначе прочерк без подмены
+					   абсолютных величин. *@
+					@* Traceability: openspec:ui/screens#scenario-detail-position-value-degradation *@
+					<td><span class="@SignClass(position.TotalPnLPercentOfValue)">@FormatPercent(position.TotalPnLPercentOfValue)</span></td>
 					<td>@FormatAmount(position.AccumulatedFees)</td>
 					<td>@FormatDate(position.OpenedAt)</td>
 					<td>@(position.ClosedAt is { } closedAt ? FormatDate(closedAt) : "—")</td>
