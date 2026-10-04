@@ -1,18 +1,22 @@
-namespace TransactionJournal.Hints;
+﻿namespace TransactionJournal.Hints;
 
+using TransactionJournal.Hints.Corpus;
 using TransactionJournal.Hints.Ports;
 
 /// <summary>
 /// Каркас прохода агента подсказок. Проход детерминирован: отбор подсказок
 /// делает код по ключам триггеров корпуса, LLM не участвует. Фазы прохода
-/// выполняются в строгом порядке: снимок журнала → рыночные марки → оценка
-/// триггеров → дедуп и запись; недоступность марок пропускает проход целиком.
+/// выполняются в строгом порядке: снимок корпуса → снимок журнала → рыночные
+/// марки → оценка триггеров → дедуп и запись; невалидный корпус ломает проход
+/// до любых чтений, недоступность марок пропускает проход целиком.
 /// Загрузчик корпуса (предусловие валидности), реестр триггеров и дедуп-окно
 /// наращиваются следующими задачами change.
 // Traceability: openspec:hints/engine-pass#requirement-engine-deterministic-selection
 /// </summary>
 public sealed class HintAgentPass
 {
+	private readonly RulesCorpusLoader _corpusLoader;
+
 	private readonly IJournalSnapshotReader _journalSnapshotReader;
 
 	private readonly IMarkSource _markSource;
@@ -22,17 +26,20 @@ public sealed class HintAgentPass
 	private readonly IClock _clock;
 
 	/// <summary>Создаёт проход над портами окружения агента.</summary>
+	/// <param name="corpusLoader">Загрузчик корпуса правил — предусловие валидности прохода.</param>
 	/// <param name="journalSnapshotReader">Порт журнал-снапшота.</param>
 	/// <param name="markSource">Порт рыночных марок.</param>
 	/// <param name="hintStore">Порт хранения подсказок.</param>
 	/// <param name="clock">Часы окружения — источник as-of прохода.</param>
 	/// <exception cref="ArgumentNullException">Порт не задан.</exception>
 	public HintAgentPass(
+		RulesCorpusLoader corpusLoader,
 		IJournalSnapshotReader journalSnapshotReader,
 		IMarkSource markSource,
 		IHintStore hintStore,
 		IClock clock)
 	{
+		_corpusLoader = corpusLoader ?? throw new ArgumentNullException(nameof(corpusLoader));
 		_journalSnapshotReader = journalSnapshotReader ?? throw new ArgumentNullException(nameof(journalSnapshotReader));
 		_markSource = markSource ?? throw new ArgumentNullException(nameof(markSource));
 		_hintStore = hintStore ?? throw new ArgumentNullException(nameof(hintStore));
@@ -45,6 +52,35 @@ public sealed class HintAgentPass
 	public async Task<HintPassResult> RunAsync(CancellationToken cancellationToken = default)
 	{
 		var asOf = _clock.UtcNow;
+
+		// Фаза 0: снимок корпуса — предусловие валидности прохода. Невалидный
+		// корпус ломает проход до построения снимка и любых чтений журнала и
+		// рынка: ни подсказки, ни записи не производятся; хост продолжает
+		// работать, диагностика видна на входе запуска.
+		// Traceability: openspec:hints/rules-corpus#requirement-corpus-validity-precondition
+		RulesCorpusSnapshot corpus;
+		try
+		{
+			corpus = _corpusLoader.Load();
+		}
+		catch (CorpusInvalidException ex)
+		{
+			return new HintPassResult
+			{
+				Outcome = HintPassOutcome.CorpusInvalid,
+				AsOf = asOf,
+				Diagnostics = ex.Problems,
+			};
+		}
+
+		// Активные правила без машинной реализации (implementation: null или
+		// неизвестный движку ключ) валидны: подсказок не порождают, проход
+		// продолжается; их идентификаторы уходят в чек-лист сводки и лог
+		// «непокрытых кодом».
+		// Traceability: openspec:hints/rules-corpus#requirement-corpus-unimplemented-trigger-checklist
+		var unimplementedRuleIds = corpus.UnimplementedCards
+			.Select(card => card.Id)
+			.ToArray();
 
 		// Фаза 1: снимок журнала — данные триггеров строятся до любых решений прохода.
 		var snapshot = await _journalSnapshotReader.ReadAsync(cancellationToken).ConfigureAwait(false);
@@ -81,6 +117,7 @@ public sealed class HintAgentPass
 			AsOf = asOf,
 			CreatedHints = 0,
 			ExpiredHints = 0,
+			UnimplementedRuleIds = unimplementedRuleIds,
 		};
 	}
 }
@@ -115,4 +152,11 @@ public sealed record HintPassResult
 
 	/// <summary>Диагностика прохода: причина пропуска, проблемы корпуса; null — диагностик нет.</summary>
 	public IReadOnlyList<string>? Diagnostics { get; init; }
+
+	/// <summary>
+	/// Идентификаторы активных правил без машинной реализации — чек-лист сводки
+	/// и лог «непокрытых кодом»; проход при них продолжается.
+	// Traceability: openspec:hints/rules-corpus#requirement-corpus-unimplemented-trigger-checklist
+	/// </summary>
+	public IReadOnlyList<string> UnimplementedRuleIds { get; init; } = Array.Empty<string>();
 }

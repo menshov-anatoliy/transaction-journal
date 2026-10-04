@@ -18,6 +18,7 @@ using TransactionJournal.Components.Pages;
 using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Infrastructure.Hints;
 using TransactionJournal.Hints;
+using TransactionJournal.Hints.Corpus;
 using TransactionJournal.Hints.Ports;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
@@ -269,6 +270,12 @@ builder.Services.AddSingleton<IJournalSnapshotReader>(sp => new JournalSnapshotR
 	sp.GetRequiredService<IJournalMetricsReadModel>()));
 builder.Services.AddSingleton<IMarkSource>(sp => new HintsMarkSource(
 	sp.GetRequiredService<IFreshInstrumentMarkSource>()));
+// Каталог корпуса правил: дефолт rules/ рядом с exe, путь переопределяется
+// настройкой Hints:RulesPath; правки карточек действуют со следующего прохода.
+// Traceability: openspec:hints/rules-corpus#requirement-corpus-snapshot-per-pass
+builder.Services.AddSingleton(_ => new RulesCorpusLoader(
+	builder.Configuration["Hints:RulesPath"]
+	?? Path.Combine(AppContext.BaseDirectory, "rules")));
 builder.Services.AddSingleton<HintAgentPass>();
 
 // Read-модель экрана «Конструкции»: соединяет метрики аналитики журнала с именами
