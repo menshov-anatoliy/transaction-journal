@@ -92,6 +92,9 @@ public class HintAgentPassRecordAndSubjectTests
 				.Setup(store => store.AddAsync(It.IsAny<HintRecord>(), It.IsAny<CancellationToken>()))
 				.Callback<HintRecord, CancellationToken>((record, _) => added.Add(record))
 				.ReturnsAsync((HintRecord record, CancellationToken _) => record);
+			hintStore
+				.Setup(store => store.ListLiveAsync(It.IsAny<CancellationToken>()))
+				.ReturnsAsync([]);
 			var clock = new Mock<IClock>();
 			clock.SetupGet(clock => clock.UtcNow).Returns(HintPassHarness.FixedNow);
 			var pass = new HintAgentPass(

@@ -23,6 +23,9 @@ public class HintAgentPassCorpusTests
 	private static HintAgentPass BuildPass(string corpusDir, Mock<IJournalSnapshotReader> journalReader, Mock<IMarkSource> markSource)
 	{
 		var hintStore = new Mock<IHintStore>();
+		hintStore
+			.Setup(store => store.ListLiveAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync([]);
 		var clock = new Mock<IClock>();
 		clock.SetupGet(clock => clock.UtcNow).Returns(FixedNow);
 		return new HintAgentPass(
