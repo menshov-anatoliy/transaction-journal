@@ -311,6 +311,14 @@ builder.Services.AddSingleton<IConstructionDetailReadModel>(sp => sp.GetRequired
 // Traceability: openspec:consultations/context#requirement-context-deterministic-snapshot
 builder.Services.AddSingleton<IRuleCorpusReader, RulesCorpusConsultationAdapter>();
 builder.Services.AddSingleton<IConsultationContextReader, ConsultationContextReader>();
+// Инструкции агента консультаций: дефолт consultation-prompt.md рядом с
+// rules/, путь переопределяется настройкой Consultations:InstructionsPath;
+// валидный файл переопределяет встроенный дефолт, отсутствие или битость
+// файла чат не ломает — правки владельца действуют со следующего сообщения.
+// Traceability: openspec:consultations/context#requirement-context-agent-instructions-file
+builder.Services.AddSingleton(_ => new ConsultationInstructions(
+	builder.Configuration["Consultations:InstructionsPath"]
+	?? Path.Combine(AppContext.BaseDirectory, ConsultationInstructions.DefaultFileName)));
 
 var app = builder.Build();
 

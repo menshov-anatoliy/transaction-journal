@@ -9,7 +9,7 @@
 
 - [x] 2.1 Адаптер `IConsultationContextReader` в Infrastructure поверх read-моделей ConstructionDetail/JournalMetrics: markdown-снимок «конструкция + портфельные агрегаты + лимиты» с as-of каждого раздела; живые подсказки движка в снимок не попадают. Проверить: `requirement-context-deterministic-snapshot` — сценарии `scenario-context-primary-facts-with-asof`, `scenario-context-hints-excluded`.
 - [x] 2.2 Адаптер `IRuleCorpusReader` в composition root поверх `RulesCorpusLoader`: компактный индекс всех карточек (id + краткое содержание); полный текст — только по id. Проверить: `scenario-context-card-index-only`.
-- [ ] 2.3 Инструкции агента `consultation-prompt.md`: настраиваемый путь, дефолт рядом с `rules/`, встроенный дефолт в коде; обязательные принципы — сценарии «если/то» без прогнозов цены, цитирование id карточек, маркировка «вне корпуса правил», пост-мортем закрытых конструкций. Проверить: `requirement-context-agent-instructions-file`, `requirement-context-scenario-conduct`, `requirement-context-postmortem-mode` — контракт-тест состава дефолтных инструкций и сценарии `scenario-context-instructions-override`, `scenario-context-instructions-missing-ok`.
+- [x] 2.3 Инструкции агента `consultation-prompt.md`: настраиваемый путь, дефолт рядом с `rules/`, встроенный дефолт в коде; обязательные принципы — сценарии «если/то» без прогнозов цены, цитирование id карточек, маркировка «вне корпуса правил», пост-мортем закрытых конструкций. Проверить: `requirement-context-agent-instructions-file`, `requirement-context-scenario-conduct`, `requirement-context-postmortem-mode` — контракт-тест состава дефолтных инструкций и сценарии `scenario-context-instructions-override`, `scenario-context-instructions-missing-ok`.
 
 ## 3. Инструменты и агентный цикл
 
