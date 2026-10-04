@@ -23,6 +23,10 @@
   <ItemGroup>
     <ProjectReference Include="..\TransactionJournal.Application\TransactionJournal.Application.csproj" />
     <ProjectReference Include="..\TransactionJournal.Domain\TransactionJournal.Domain.csproj" />
+    <!-- Адаптеры портов окружения подсказок: направление «адаптер → порт»,
+         как у доменных store-портов (ADR-0007/ADR-0008).
+         Traceability: openspec:architecture/solution-structure#requirement-dependencies-point-inward -->
+    <ProjectReference Include="..\TransactionJournal.Hints\TransactionJournal.Hints.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,8 +2,8 @@
 
 ## 1. Каркас проекта Hints и порты
 
-- [ ] 1.1 Создать проект `src/TransactionJournal.Hints` (net9.0) со ссылкой только на `TransactionJournal.Domain`; включить в solution; объявить порты `IJournalSnapshotReader`, `IMarkSource`, `IHintStore`, `IClock` и каркас прохода (`HintAgentPass`). Проверить: `dotnet build` решения; Hints не ссылается на Application/Infrastructure/Web (`requirement-dependencies-point-inward`).
-- [ ] 1.2 Реализовать в Infrastructure адаптеры портов: чтение журнал-снапшота поверх EF, источник марок поверх Bybit-клиента, `IHintStore` с миграцией таблиц подсказок в существующей SQLite; зарегистрировать в composition root Web. Проверить: `dotnet test` зелёный, миграция применяется к копии рабочей базы.
+- [x] 1.1 Создать проект `src/TransactionJournal.Hints` (net9.0) со ссылкой только на `TransactionJournal.Domain`; включить в solution; объявить порты `IJournalSnapshotReader`, `IMarkSource`, `IHintStore`, `IClock` и каркас прохода (`HintAgentPass`). Проверить: `dotnet build` решения; Hints не ссылается на Application/Infrastructure/Web (`requirement-dependencies-point-inward`).
+- [x] 1.2 Реализовать в Infrastructure адаптеры портов: чтение журнал-снапшота поверх EF, источник марок поверх Bybit-клиента, `IHintStore` с миграцией таблиц подсказок в существующей SQLite; зарегистрировать в composition root Web. Проверить: `dotnet test` зелёный, миграция применяется к копии рабочей базы.
 
 ## 2. Снимок корпуса и валидация
 

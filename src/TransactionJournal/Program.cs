@@ -16,6 +16,9 @@ using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
 using TransactionJournal.Infrastructure.Ops;
+using TransactionJournal.Infrastructure.Hints;
+using TransactionJournal.Hints;
+using TransactionJournal.Hints.Ports;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
 using TransactionJournal.Domain;
@@ -252,6 +255,21 @@ builder.Services.AddSingleton(sp => new JournalMetricsReadModel(
 	sp.GetRequiredService<IFreshInstrumentMarkSource>(),
 	sp.GetRequiredService<IInstrumentMarkSource>()));
 builder.Services.AddSingleton<IJournalMetricsReadModel>(sp => sp.GetRequiredService<JournalMetricsReadModel>());
+
+// Окружение агента подсказок: порты объявлены в проекте Hints, адаптеры живут
+// здесь и в Infrastructure (направление «адаптер → порт»); домен о подсказках
+// не знает (ADR-0007). Хранилище подсказок и читатель снапшота — singleton над
+// собственными опциями контекста: каждый вызов создаёт короткоживущий контекст.
+// Traceability: openspec:architecture/solution-structure#requirement-dependencies-point-inward
+builder.Services.AddSingleton<IClock, SystemClock>();
+builder.Services.AddSingleton<IHintStore>(sp => new HintStore(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton<IJournalSnapshotReader>(sp => new JournalSnapshotReader(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<IJournalMetricsReadModel>()));
+builder.Services.AddSingleton<IMarkSource>(sp => new HintsMarkSource(
+	sp.GetRequiredService<IFreshInstrumentMarkSource>()));
+builder.Services.AddSingleton<HintAgentPass>();
 
 // Read-модель экрана «Конструкции»: соединяет метрики аналитики журнала с именами
 // и ручными статусами конструкций, скрывая архивные из списка и его счётчика.

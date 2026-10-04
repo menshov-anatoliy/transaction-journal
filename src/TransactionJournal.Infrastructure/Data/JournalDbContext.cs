@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Hints;
 
 namespace TransactionJournal.Infrastructure.Data;
 
@@ -46,6 +47,9 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 
 	/// <summary>Настройки приложения уровня рантайма: пользовательские переключатели.</summary>
 	public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+
+	/// <summary>Подсказки агента — записи окружения всей историей; домен их не видит. Сущность внутренняя: читает её адаптер хранилища того же проекта.</summary>
+	internal DbSet<HintEntity> Hints => Set<HintEntity>();
 
 	/// <inheritdoc />
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -183,6 +187,39 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 		// Traceability: openspec:ops/db-backup#requirement-backup-optional-operations
 		modelBuilder.Entity<AppSetting>()
 			.HasKey(setting => setting.Key);
+
+		#endregion
+
+		#region Таблицы подсказок агента
+
+		// Подсказки — записи окружения, а не домена: сущность живёт в Infrastructure,
+		// ссылка на конструкцию хранится значением без внешнего ключа, история
+		// хранится целиком и терминальные записи не удаляются.
+		// Traceability: openspec:hints/hint-lifecycle#requirement-hint-self-describing-record
+		modelBuilder.Entity<HintEntity>()
+			.Property(hint => hint.SubjectKind)
+			.HasConversion<string>();
+
+		modelBuilder.Entity<HintEntity>()
+			.Property(hint => hint.Status)
+			.HasConversion<string>();
+
+		// Поиск окна дедупа «правило × субъект (+ период)» — самый частый запрос
+		// прохода: составной индекс делает его точечным, включая сравнение периода.
+		// Traceability: openspec:hints/hint-lifecycle#requirement-hint-dedup-rule-subject-window
+		modelBuilder.Entity<HintEntity>()
+			.HasIndex(hint => new
+			{
+				hint.RuleId,
+				hint.SubjectKind,
+				hint.SubjectConstructionId,
+				hint.WindowPeriodKey,
+			});
+
+		// Живые записи (панель, журнал подсказок, гашения агента) отбираются
+		// по статусу — индекс держит этот фильтр дешёвым.
+		modelBuilder.Entity<HintEntity>()
+			.HasIndex(hint => hint.Status);
 
 		#endregion
 	}

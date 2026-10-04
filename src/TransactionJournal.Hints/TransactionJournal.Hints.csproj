@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TransactionJournal.Hints</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Окружение агента подсказок: зависит только от домена (ADR-0007/ADR-0008).
+       Ссылки на Application, Infrastructure и Web запрещены: свои потребности
+       движок выражает портами, реализуемыми адаптерами Infrastructure.
+       Traceability: openspec:architecture/solution-structure#requirement-dependencies-point-inward -->
+  <ItemGroup>
+    <ProjectReference Include="..\TransactionJournal.Domain\TransactionJournal.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
