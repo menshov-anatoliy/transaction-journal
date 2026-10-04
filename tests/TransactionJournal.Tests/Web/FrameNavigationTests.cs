@@ -19,7 +19,7 @@ using ConstructionsPage = TransactionJournal.Components.Pages.Constructions;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
-namespace TransactionJournal.Tests.Ui;
+namespace TransactionJournal.Tests.Web;
 
 /// <summary>
 /// Проверки бейджа «Входящих» и транзитной именованной вкладки конструкции:

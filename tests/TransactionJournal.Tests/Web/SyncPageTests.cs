@@ -20,7 +20,7 @@ using SyncPage = TransactionJournal.Components.Pages.Sync;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
-namespace TransactionJournal.Tests.Ui;
+namespace TransactionJournal.Tests.Web;
 
 /// <summary>
 /// Проверки минимальной страницы синхронизации: кнопка «Синхронизировать» запускает

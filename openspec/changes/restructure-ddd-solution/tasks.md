@@ -24,9 +24,9 @@
 
 ## 4. Шаг Web — Components и composition root
 
-- [ ] 4.1 Перенести `Components`, `Properties`, `wwwroot` и `Program.cs` в проект `TransactionJournal` (Web); composition root регистрирует Application-сервисы и Infrastructure-адаптеры. Проверить: `dotnet build`, имя exe и `App_Data` прежние (`scenario-exe-name-appdata-unchanged`).
-- [ ] 4.2 Проверить контракт запуска: запуск без аргументов поднимает веб-интерфейс, запуск с `--mcp` ветвится до веб-хоста (`scenario-mcp-branches-before-web-host`). Проверить: ручной запуск обоих режимов.
-- [ ] 4.3 Перенести UI-тесты в `tests/TransactionJournal.Tests/Web`; прогнать весь набор. Проверить: полный `dotnet test` зелёный, ассерты идентичны исходным.
+- [x] 4.1 Перенести `Components`, `Properties`, `wwwroot` и `Program.cs` в проект `TransactionJournal` (Web); composition root регистрирует Application-сервисы и Infrastructure-адаптеры. Проверить: `dotnet build`, имя exe и `App_Data` прежние (`scenario-exe-name-appdata-unchanged`). Примечание: перенос фактически завершился шагами 1–3 — в Web-проекте остались только UI-артефакты; в этом шаге удалены пустые папки-остатки слоёв и добавлена явная ссылка Web → Application (инвариант направления зависимостей).
+- [x] 4.2 Проверить контракт запуска: запуск без аргументов поднимает веб-интерфейс, запуск с `--mcp` ветвится до веб-хоста (`scenario-mcp-branches-before-web-host`). Проверить: ручной запуск обоих режимов. Отклонение: веб-режим проверен живым запуском (HTTP 200 на `/`); ветвление `--mcp` в коде не реализовано и не существовало до реструктуризации (проверено git-историей `git log -S '--mcp'`), контракт «как до реструктуризации» сохранён тривиально — аргумент игнорируется, exe поднимает веб-хост. Нюанс войдёт в отчёт 5.2.
+- [x] 4.3 Перенести UI-тесты в `tests/TransactionJournal.Tests/Web`; прогнать весь набор. Проверить: полный `dotnet test` зелёный, ассерты идентичны исходным.
 
 ## 5. Сквозная сверка реструктуризации
 

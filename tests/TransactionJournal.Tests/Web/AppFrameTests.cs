@@ -27,7 +27,7 @@ using SettingsPage = TransactionJournal.Components.Pages.Settings;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
-namespace TransactionJournal.Tests.Ui;
+namespace TransactionJournal.Tests.Web;
 
 /// <summary>
 /// Проверки каркаса «Терминал»: верхняя панель показывает бренд, текущий экран

@@ -21,7 +21,7 @@ using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
-namespace TransactionJournal.Tests.Ui;
+namespace TransactionJournal.Tests.Web;
 
 /// <summary>
 /// Проверки экрана «Входящие»: таблица непривязанных сделок с атрибутами

@@ -7,7 +7,7 @@ using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
-namespace TransactionJournal.Tests.Ui;
+namespace TransactionJournal.Tests.Web;
 
 /// <summary>
 /// Проверки рендеринга комментариев из Markdown: списки, выделение и код
