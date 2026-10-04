@@ -86,6 +86,72 @@ public class BybitTickersClientTests
 	}
 
 	[TestMethod]
+	[Description("Тикеры отдают опциональные рыночные поля консультаций из зафиксированных ответов обеих категорий")]
+	public async Task TryIfTickersExposeOptionalMarketFieldsForConsultationTools()
+	{
+		// Arrange: те же зафиксированные ответы официальной документации — тикер опциона
+		// с греками и волатильностями, тикер линейного перпа со ставкой фандинга.
+		_handler.EnqueueJson(LoadFixture("tickers-option.json"));
+		_handler.EnqueueJson(LoadFixture("tickers-linear.json"));
+
+		// Act: запрашиваем тикеры обеих категорий.
+		var option = (await _client.GetTickersAsync(new BybitTickerQuery
+		{
+			Category = "option",
+			Symbol = "BTC-29DEC23-25000-C",
+		})).Single();
+		var linear = (await _client.GetTickersAsync(new BybitTickerQuery
+		{
+			Category = "linear",
+			Symbol = "BTCUSDT",
+		})).Single();
+
+		// Assert: опционный тикер отдаёт греки, волатильности, бид-аск и открытый
+		// интерес — сырьё компактной проекции доски для инструментов консультаций.
+		// Traceability: change:add-assistant-chat/design#d3
+		Assert.Multiple(() =>
+		{
+			Assert.That(option.Delta, Is.EqualTo(0.3426m));
+			Assert.That(option.Gamma, Is.EqualTo(0.00010967m));
+			Assert.That(option.Vega, Is.EqualTo(31.1594m));
+			Assert.That(option.Theta, Is.EqualTo(-11.2011m));
+			Assert.That(option.MarkIv, Is.EqualTo(0.5417m));
+			Assert.That(option.Bid1Iv, Is.EqualTo(0.5389m));
+			Assert.That(option.Ask1Iv, Is.EqualTo(0.5445m));
+			Assert.That(option.Bid1Price, Is.EqualTo(24.5m));
+			Assert.That(option.Bid1Size, Is.EqualTo(2m));
+			Assert.That(option.Ask1Price, Is.EqualTo(25.5m));
+			Assert.That(option.Ask1Size, Is.EqualTo(2m));
+			Assert.That(option.OpenInterest, Is.EqualTo(5770m));
+		});
+
+		// Assert: чужие категории полей у опциона пусты — поля опциональны,
+		// поведение потребителя марки от их появления не меняется.
+		Assert.Multiple(() =>
+		{
+			Assert.That(option.FundingRate, Is.Null);
+			Assert.That(option.OpenInterestValue, Is.Null);
+		});
+
+		// Assert: линейный перп отдаёт ставку фандинга, открытый интерес в обеих
+		// валютах и бид-аск — сырьё снимка рынка для инструментов консультаций,
+		// а греков и волатильностей у него нет.
+		// Traceability: change:add-assistant-chat/design#d3
+		Assert.Multiple(() =>
+		{
+			Assert.That(linear.FundingRate, Is.EqualTo(0.0001m));
+			Assert.That(linear.OpenInterest, Is.EqualTo(74033.459m));
+			Assert.That(linear.OpenInterestValue, Is.EqualTo(2052656378.86m));
+			Assert.That(linear.Bid1Price, Is.EqualTo(27744.5m));
+			Assert.That(linear.Bid1Size, Is.EqualTo(84.149m));
+			Assert.That(linear.Ask1Price, Is.EqualTo(27745.5m));
+			Assert.That(linear.Ask1Size, Is.EqualTo(81.116m));
+			Assert.That(linear.Delta, Is.Null);
+			Assert.That(linear.MarkIv, Is.Null);
+		});
+	}
+
+	[TestMethod]
 	[Description("Запрос тикеров без категории отклоняется до сетевого вызова")]
 	[ExpectedException(typeof(ArgumentException))]
 	public void ThrowOnTickersQueryWithoutCategory()
