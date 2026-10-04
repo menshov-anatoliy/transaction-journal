@@ -13,10 +13,10 @@
 
 ## 3. Машинные триггеры
 
-- [ ] 3.1 Реестр триггеров и каркас чистой функции `(снапшот, марки, карточка) → факты | нет`; пороги только из `thresholds` карточки; вычисления журнала поверх движков Domain (FIFO, сборка, Risk/Profit цели Construction). Проверить: юнит-тесты каркаса на фикстуре одного правила.
-- [ ] 3.2 Реализовать 11 ключей v1: `risk-limit-period`, `uncovered-sale-margin`, `profit-target-reached`, `edge-sale-cap`, `roll-time-window`, `roll-threshold`, `atm-decay-window`, `min-straddle-size`, `flat-win-streak`, `unfreeze-profit-ratio`, `synthetic-close-itm`. Проверить: `requirement-engine-v1-trigger-set` — фикстурные e2e на каждый ключ парами «сработало / не сработало» ([#31](https://github.com/menshov-anatoliy/transaction-journal/issues/31)).
-- [ ] 3.3 Рендер подсказок: `hintTemplate` + факты; чёткость — императив / префикс «[решение]»; фиксация фактов, тегов источников и as-of при генерации. Проверить: `requirement-engine-clarity-shapes-wording`, `requirement-engine-self-describing-record` — тесты формулировок и неизменности записи после правки карточки.
-- [ ] 3.4 Пропуск прохода при недоступности марок с диагностикой; определение субъекта «конструкция»/«журнал» по правилу. Проверить: `requirement-engine-market-unavailable-skips-pass`, `requirement-hint-subject-v1-closed-set`.
+- [x] 3.1 Реестр триггеров и каркас чистой функции `(снапшот, марки, карточка) → факты | нет`; пороги только из `thresholds` карточки; вычисления журнала поверх движков Domain (FIFO, сборка, Risk/Profit цели Construction). Проверить: юнит-тесты каркаса на фикстуре одного правила.
+- [x] 3.2 Реализовать 11 ключей v1: `risk-limit-period`, `uncovered-sale-margin`, `profit-target-reached`, `edge-sale-cap`, `roll-time-window`, `roll-threshold`, `atm-decay-window`, `min-straddle-size`, `flat-win-streak`, `unfreeze-profit-ratio`, `synthetic-close-itm`. Проверить: `requirement-engine-v1-trigger-set` — фикстурные e2e на каждый ключ парами «сработало / не сработало» ([#31](https://github.com/menshov-anatoliy/transaction-journal/issues/31)).
+- [x] 3.3 Рендер подсказок: `hintTemplate` + факты; чёткость — императив / префикс «[решение]»; фиксация фактов, тегов источников и as-of при генерации. Проверить: `requirement-engine-clarity-shapes-wording`, `requirement-engine-self-describing-record` — тесты формулировок и неизменности записи после правки карточки.
+- [x] 3.4 Пропуск прохода при недоступности марок с диагностикой; определение субъекта «конструкция»/«журнал» по правилу. Проверить: `requirement-engine-market-unavailable-skips-pass`, `requirement-hint-subject-v1-closed-set`.
 
 ## 4. Дедуп и жизненный цикл
 

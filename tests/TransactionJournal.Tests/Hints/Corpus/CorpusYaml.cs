@@ -31,31 +31,60 @@ internal static class CorpusYaml
 
 	/// <summary>
 	/// Собирает валидную карточку схемы корпуса: машинный ключ подменяется
-	/// параметром (null — implementation: null), статус и конфликтное объявление —
-	/// опционально; retired-блок добавляется вместе с причиной снятия.
+	/// параметром (null — implementation: null), статус, чёткость, шаблон,
+	/// пороги и конфликтное объявление — опционально; retired-блок добавляется
+	/// вместе с причиной снятия.
 	/// </summary>
 	public static string Card(
 		string id,
 		string? implementation = null,
 		string status = "active",
 		IReadOnlyList<string>? conflictsWith = null,
-		string? retiredReason = null)
+		string? retiredReason = null,
+		string clarity = "crisp",
+		string? hintTemplate = null,
+		IReadOnlyList<(string Name, string Value, string Unit)>? thresholds = null,
+		string scope = "open-constructions",
+		string character = "risk-mode")
 	{
 		var sb = new StringBuilder();
 		sb.AppendLine($"id: {id}");
 		sb.AppendLine($"title: Правило {id}");
-		sb.AppendLine("character: risk-mode");
+		sb.AppendLine($"character: {character}");
 		sb.AppendLine("technique: null");
-		sb.AppendLine("clarity: crisp");
-		sb.AppendLine("scope: open-constructions");
+		sb.AppendLine($"clarity: {clarity}");
+		sb.AppendLine($"scope: {scope}");
 		sb.AppendLine($"status: {status}");
-		sb.AppendLine("thresholds: []");
+		if (thresholds is { Count: > 0 })
+		{
+			sb.AppendLine("thresholds:");
+			foreach (var (name, value, unit) in thresholds)
+			{
+				sb.AppendLine($"  - name: {name}");
+				sb.AppendLine($"    value: '{value}'");
+				sb.AppendLine($"    unit: {unit}");
+			}
+		}
+		else
+		{
+			sb.AppendLine("thresholds: []");
+		}
+
 		sb.AppendLine("trigger:");
 		sb.AppendLine($"  description: Тестовое условие правила {id}.");
 		sb.AppendLine($"  implementation: {implementation ?? "null"}");
 		sb.AppendLine("action:");
 		sb.AppendLine($"  description: Тестовое действие правила {id}.");
-		sb.AppendLine("  hintTemplate: null");
+		if (hintTemplate is null)
+		{
+			sb.AppendLine("  hintTemplate: null");
+		}
+		else
+		{
+			sb.AppendLine("  hintTemplate: >-");
+			sb.AppendLine($"    {hintTemplate}");
+		}
+
 		if (conflictsWith is { Count: > 0 })
 		{
 			sb.AppendLine("conflicts_with:");
