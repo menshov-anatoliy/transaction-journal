@@ -1,12 +1,14 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using TransactionJournal.Bybit;
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Bybit;
+using TransactionJournal.Infrastructure.Bybit;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Domain.Sync;
 using TransactionJournal.Materialization;
-using TransactionJournal.Ops;
+using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Sync;
 
 namespace TransactionJournal.Domain.ConstructionAssembly;

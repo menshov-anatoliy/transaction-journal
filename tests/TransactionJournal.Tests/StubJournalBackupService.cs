@@ -1,4 +1,4 @@
-using TransactionJournal.Ops;
+using TransactionJournal.Infrastructure.Ops;
 
 namespace TransactionJournal.Tests;
 

@@ -1,14 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
-using TransactionJournal.Bybit;
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
-using ManualTimeProvider = TransactionJournal.Tests.Bybit.ManualTimeProvider;
+using ManualTimeProvider = TransactionJournal.Tests.Infrastructure.Bybit.ManualTimeProvider;
 
 namespace TransactionJournal.Tests.Sync;
 

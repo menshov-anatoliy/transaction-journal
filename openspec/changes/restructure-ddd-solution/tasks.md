@@ -10,9 +10,10 @@
 
 ## 2. Шаг Infrastructure — EF, Bybit, Ops
 
-- [ ] 2.1 Создать проект `src/TransactionJournal.Infrastructure` со ссылками на Domain; перенести `Data` (JournalDbContext, fluent-конфигурации, миграции), `Bybit`-клиент и `Ops`; namespace — `TransactionJournal.Infrastructure.*`. Проверить: `dotnet build` решения и `dotnet test` зелёные (`scenario-ef-bybit-ops-in-infrastructure`).
-- [ ] 2.2 Перенести реализации store-портов Domain в Infrastructure. Проверить: `dotnet test --filter` по тестам портов зелёный, поведение неизменно.
-- [ ] 2.3 Перенести тесты EF/Bybit/Ops в `tests/TransactionJournal.Tests/Infrastructure`. Проверить: полный `dotnet test` зелёный без правки ассертов.
+- [x] 2.1 Создать проект `src/TransactionJournal.Infrastructure` со ссылками на Domain; перенести `Data` (JournalDbContext, fluent-конфигурации, миграции), `Bybit`-клиент и `Ops`; namespace — `TransactionJournal.Infrastructure.*`. Проверить: `dotnet build` решения и `dotnet test` зелёные (`scenario-ef-bybit-ops-in-infrastructure`).
+- [x] 2.2 Перенести реализации store-портов Domain в Infrastructure. Проверить: `dotnet test --filter` по тестам портов зелёный, поведение неизменно.
+- [x] 2.3 Перенести тесты EF/Bybit/Ops в `tests/TransactionJournal.Tests/Infrastructure`. Проверить: полный `dotnet test` зелёный без правки ассертов.
+- [x] 2.4 Отклонения от чистой механики (Risks design.md, D6): (а) вместе с реализацией `JournalSyncStore` в Domain перенесены ещё 5 storage-портов из `TransactionJournal.Sync` (IExecutionSyncStateStore, IRawExecutionBatchWriter, IRawDeliveryBatchWriter, ISyncRunJournal, IOptionRawBaseCoinReader) и их контрактные типы (RawExecutionBatchResult, RawDeliveryBatchResult, SyncRunWarnings, BybitExecution, BybitDeliveryRecord) — иначе Infrastructure, ссылающийся на Web, образует цикл. (б) Декоратор `BackupGuardedSyncService` остался в Web-проекте: он зависит от порта `IJournalSyncService`/`JournalSyncResult`, чья реализация и результат тянут цепочку Sync/Materialization-типов, непереносимую в Domain; на шаге 3 декоратор уедет в Application вместе с оркестрацией. (в) В Infrastructure добавлены `InternalsVisibleTo` для Web и тестов: `BybitJson` и другие internal-типы клиента Bybit в монолите были доступны всей сборке. (г) Пакеты EF Sqlite и Polly переехали в Infrastructure; Web сохраняет EF Sqlite (UseSqlite в Program.cs) и EF Design (dotnet-ef). Отклонения войдут в отчёт 5.2. Диагностический тест сверки на живых данных (`BybitStatementDiagnosticRunTests`) красный и на базовом коммите — расхождение данных машины (16 записей), к переносу не относится.
 
 ## 3. Шаг Application — оркестрация, сервисы, read-модели
 

@@ -1,4 +1,4 @@
-using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Sync;
 
 namespace TransactionJournal.Ops;

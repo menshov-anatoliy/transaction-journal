@@ -3,14 +3,16 @@ using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Sync;
 using TransactionJournal;
 using TransactionJournal.Analytics;
-using TransactionJournal.Bybit;
+using TransactionJournal.Infrastructure.Bybit;
 using TransactionJournal.Components;
 using TransactionJournal.Components.Layout;
 using TransactionJournal.Components.Pages;
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Materialization;
+using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Ops;
 using TransactionJournal.Sync;
 

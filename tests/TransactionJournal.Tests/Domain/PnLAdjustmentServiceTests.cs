@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;

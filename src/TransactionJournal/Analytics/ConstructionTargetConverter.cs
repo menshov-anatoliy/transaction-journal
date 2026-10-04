@@ -1,6 +1,6 @@
 namespace TransactionJournal.Analytics;
 
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 
 /// <summary>
 /// Величины плановой границы результата конструкции в обеих единицах: введённая

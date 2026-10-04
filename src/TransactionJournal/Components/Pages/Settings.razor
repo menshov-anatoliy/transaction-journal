@@ -3,12 +3,12 @@
 @rendermode InteractiveServer
 
 @using System.Globalization
-@using TransactionJournal.Bybit
+@using TransactionJournal.Infrastructure.Bybit
 @using TransactionJournal.Components.Layout
-@using TransactionJournal.Data
+@using TransactionJournal.Domain.Data
 @using TransactionJournal.Domain.ConstructionAssembly
 @using TransactionJournal.Domain.Data
-@using TransactionJournal.Ops
+@using TransactionJournal.Infrastructure.Ops
 @using TransactionJournal.Sync
 @inject SettingsReadModel Connection
 @inject IJournalSyncService SyncService

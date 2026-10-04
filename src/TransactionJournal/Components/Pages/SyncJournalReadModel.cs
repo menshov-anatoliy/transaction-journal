@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using TransactionJournal.Data;
 using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Sync;
 using TransactionJournal.Sync;
 
 namespace TransactionJournal.Components.Pages;

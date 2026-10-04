@@ -13,11 +13,11 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.12" />
-    <PackageReference Include="Polly.Core" Version="8.8.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\TransactionJournal.Domain\TransactionJournal.Domain.csproj" />
+    <ProjectReference Include="..\TransactionJournal.Infrastructure\TransactionJournal.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

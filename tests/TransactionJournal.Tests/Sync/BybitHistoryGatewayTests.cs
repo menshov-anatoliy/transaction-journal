@@ -1,9 +1,9 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
-using TransactionJournal.Bybit;
+using TransactionJournal.Infrastructure.Bybit;
 using TransactionJournal.Sync;
-using TransactionJournal.Tests.Bybit;
+using TransactionJournal.Tests.Infrastructure.Bybit;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 

@@ -1,4 +1,5 @@
-using TransactionJournal.Bybit;
+using TransactionJournal.Domain.Bybit;
+using TransactionJournal.Infrastructure.Bybit;
 
 namespace TransactionJournal.Sync;
 

@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Domain.Materialization;

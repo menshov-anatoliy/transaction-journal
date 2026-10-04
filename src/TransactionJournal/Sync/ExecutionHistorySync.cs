@@ -1,6 +1,7 @@
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Data;
 
+using TransactionJournal.Domain.Sync;
 namespace TransactionJournal.Sync;
 
 /// <summary>

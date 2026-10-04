@@ -6,12 +6,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
-using TransactionJournal.Bybit;
-using TransactionJournal.Data;
+using TransactionJournal.Infrastructure.Bybit;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Materialization;
 using TransactionJournal.Sync;
-using TransactionJournal.Tests.Bybit;
+using TransactionJournal.Tests.Infrastructure.Bybit;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 

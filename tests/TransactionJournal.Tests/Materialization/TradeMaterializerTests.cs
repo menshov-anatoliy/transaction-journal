@@ -1,6 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Materialization;

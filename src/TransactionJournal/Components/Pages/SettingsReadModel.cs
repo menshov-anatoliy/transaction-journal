@@ -1,4 +1,4 @@
-using TransactionJournal.Bybit;
+using TransactionJournal.Infrastructure.Bybit;
 
 namespace TransactionJournal.Components.Pages;
 

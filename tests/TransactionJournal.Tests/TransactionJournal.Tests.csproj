@@ -25,7 +25,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Bybit\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Фикстуры лежат в зеркальной папке Infrastructure\Bybit, но в bin тестового
+         прогона копируются по прежнему пути Bybit\Fixtures: LoadFixture в тестах
+         читает их относительно корня вывода, расклад не часть ассертов. -->
+    <Content Include="Infrastructure\Bybit\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" Link="Bybit\Fixtures\%(RecursiveDir)%(Filename)%(Extension)" />
     <Content Include="Domain\ConstructionAssembly\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

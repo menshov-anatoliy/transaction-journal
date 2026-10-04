@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>TransactionJournal.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.12" />
+    <PackageReference Include="Polly.Core" Version="8.8.0" />
+  </ItemGroup>
+
+  <!-- В монолите internal-типы Bybit были доступны всей сборке: сохраняем видимость
+       для Web (парсинг JSON материала) и зеркальных тестов клиента Bybit. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TransactionJournal" />
+    <InternalsVisibleTo Include="TransactionJournal.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TransactionJournal.Domain\TransactionJournal.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

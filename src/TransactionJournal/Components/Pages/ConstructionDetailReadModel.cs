@@ -1,7 +1,8 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Analytics;
-using TransactionJournal.Data;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Materialization;

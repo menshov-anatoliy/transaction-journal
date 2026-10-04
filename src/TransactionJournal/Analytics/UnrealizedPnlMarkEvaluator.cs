@@ -1,5 +1,5 @@
 using System.Net.Http;
-using TransactionJournal.Bybit;
+using TransactionJournal.Infrastructure.Bybit;
 
 namespace TransactionJournal.Analytics;
 

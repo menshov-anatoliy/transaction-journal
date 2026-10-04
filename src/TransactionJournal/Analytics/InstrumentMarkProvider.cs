@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using TransactionJournal.Bybit;
-using TransactionJournal.Data;
+using TransactionJournal.Infrastructure.Bybit;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain;
 
 namespace TransactionJournal.Analytics;
