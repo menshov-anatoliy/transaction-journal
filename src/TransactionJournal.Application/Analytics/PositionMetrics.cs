@@ -79,6 +79,16 @@ public sealed record PositionMetrics
 	/// </summary>
 	public decimal? MarkValue { get; init; }
 
+	/// <summary>
+	/// Процент изменения цены открытого остатка — движение текущей марки от
+	/// средней цены остатка, приведённое к направлению позиции: плюс всегда
+	/// означает движение «в прибыль» (у лонга рост цены, у шорта — падение).
+	/// Закрытая позиция процента не имеет; до оценки марками и при сбое марок
+	/// процент остаётся null, остальные метрики не меняются.
+	// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
+	/// </summary>
+	public decimal? PriceChangePercent { get; init; }
+
 	/// <summary>Дата открытия — время первой записи позиции.</summary>
 	public required DateTimeOffset OpenedAt { get; init; }
 

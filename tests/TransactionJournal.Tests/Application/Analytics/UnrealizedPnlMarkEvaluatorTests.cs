@@ -17,8 +17,9 @@ namespace TransactionJournal.Tests.Analytics;
 /// маркой инструмента на момент запроса и несут отметку времени марок, общая
 /// оценка позиции собирается из реализованной и нереализованной частей, закрытые
 /// позиции марок не требуют вовсе, а сбой тикеров деградирует только в null
-/// нереализованной части, общего PnL и отметки времени — реализованные метрики,
-/// комиссии, даты и проценты возвращаются без изменений. Негативные проверки
+/// нереализованной части, общего PnL, стоимости, процента изменения цены
+/// и отметки времени — реализованные метрики, комиссии, даты и проценты
+/// возвращаются без изменений. Негативные проверки
 /// отклоняют незаданные метрики и отсутствующий источник марок.
 /// </summary>
 [TestClass]
@@ -181,6 +182,84 @@ public class UnrealizedPnlMarkEvaluatorTests
 		var openPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
 		Assert.That(openPosition.MarkValue, Is.Null);
 		Assert.That(openPosition.RealizedPnL, Is.EqualTo(-2.5m));
+		Assert.That(evaluation.HasMarkFailure, Is.True);
+	}
+
+	[TestMethod]
+	[Description("Процент изменения цены остатка приводится знаком к направлению позиции")]
+	public async Task TryIfPriceChangePercentFollowsMarkAndResidualSign()
+	{
+		// Arrange: длинный и короткий остатки со средней ценой остатка 100;
+		// первая волна марок — 110 у обоих инструментов, вторая — 95 у лонга
+		// и 90 у шорта.
+		// Требование: процент изменения цены открытого остатка — движение марки
+		// от средней цены остатка, приведённое к направлению позиции: плюс всегда
+		// означает движение цены «в прибыль».
+		// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
+		// Traceability: openspec:analytics/performance#scenario-long-remainder-price-change-follows-mark
+		// Traceability: openspec:analytics/performance#scenario-short-remainder-price-change-sign-flipped
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 110m, At(120)));
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentMarkSnapshot(ShortSymbol, 110m, At(121)));
+		var positions = new[]
+		{
+			OpenPosition(LongSymbol, FirstConstructionId, 1m, 100m, 0m),
+			OpenPosition(ShortSymbol, FirstConstructionId, -1m, 100m, 0m),
+		};
+
+		// Act: первая волна марок — цена ушла от средней вверх.
+		var upEvaluation = await _evaluator.EvaluateAsync(positions);
+
+		// Assert: рост цены лонгу в прибыль: +10%; шорту — против: −10%.
+		Assert.That(upEvaluation.Positions.Single(position => position.Symbol == LongSymbol).PriceChangePercent, Is.EqualTo(10m));
+		Assert.That(upEvaluation.Positions.Single(position => position.Symbol == ShortSymbol).PriceChangePercent, Is.EqualTo(-10m));
+
+		// Act: вторая волна марок — цена ушла от средней вниз.
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 95m, At(130)));
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentMarkSnapshot(ShortSymbol, 90m, At(131)));
+		var downEvaluation = await _evaluator.EvaluateAsync(positions);
+
+		// Assert: падение цены лонгу в убыток: −5%; шорту — в прибыль: +10%.
+		Assert.That(downEvaluation.Positions.Single(position => position.Symbol == LongSymbol).PriceChangePercent, Is.EqualTo(-5m));
+		Assert.That(downEvaluation.Positions.Single(position => position.Symbol == ShortSymbol).PriceChangePercent, Is.EqualTo(10m));
+	}
+
+	[TestMethod]
+	[Description("Закрытая позиция и сбой марок оставляют процент изменения цены null")]
+	public async Task TryIfClosedPositionAndMarkFailureLeaveNoPriceChangePercent()
+	{
+		// Arrange: закрытая позиция и открытый остаток ETH; марка ETH недоступна —
+		// биржа отвечает ошибкой.
+		// Требование: закрытая позиция процента не имеет; сбой марок гасит процент
+		// открытой ноги, не трогая реализованные метрики и комиссии.
+		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-price-change
+		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-price-change
+		_markSource
+			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ThrowsAsync(new BybitApiException(10001, "params error"));
+		var positions = new[]
+		{
+			ClosedPosition(LongSymbol, FirstConstructionId, 9.97m),
+			OpenPosition(ShortSymbol, FirstConstructionId, -1m, 100m, -2.5m),
+		};
+
+		// Act
+		var evaluation = await _evaluator.EvaluateAsync(positions);
+
+		// Assert: оба процента null, реализованный результат и комиссии открытой
+		// позиции остались живыми, сбой марки отмечен.
+		Assert.That(evaluation.Positions.Single(position => position.Symbol == LongSymbol).PriceChangePercent, Is.Null);
+		var openPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
+		Assert.That(openPosition.PriceChangePercent, Is.Null);
+		Assert.That(openPosition.RealizedPnL, Is.EqualTo(-2.5m));
+		Assert.That(openPosition.AccumulatedFees, Is.EqualTo(0.03m));
 		Assert.That(evaluation.HasMarkFailure, Is.True);
 	}
 

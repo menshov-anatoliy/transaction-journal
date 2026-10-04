@@ -265,8 +265,9 @@ public class ConstructionDetailReadModelTests
 	public void TryIfPositionRowCarriesExactlyDisplayedColumns()
 	{
 		// Assert: контракт строки зафиксирован составом публичных свойств — поля
-		// служебных величин оценки открытого остатка (средняя остатка, марка,
-		// нереализованный PnL) из строки убраны вместе с их колонками.
+		// служебных величин оценки открытого остатка (средняя остатка, марка как
+		// цена) из строки убраны вместе с их колонками; стоимость и процент
+		// изменения цены открытого остатка добавлены выводимыми столбцами.
 		// Требование: строка позиции показывает вход, выход и итог,
 		// колонки «Средняя», «Марка» и «Нереализов.» отсутствуют.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
@@ -288,7 +289,44 @@ public class ConstructionDetailReadModelTests
 			nameof(ConstructionPositionRow.ClosedAt),
 			nameof(ConstructionPositionRow.IsOpen),
 			nameof(ConstructionPositionRow.Comment),
+			nameof(ConstructionPositionRow.MarkValue),
+			nameof(ConstructionPositionRow.PriceChangePercent),
 		}));
+	}
+
+	[TestMethod]
+	[Description("Строки позиций несут стоимость и процент изменения цены открытого остатка")]
+	public async Task TryIfPositionRowsCarryMarkValueAndPriceChangePercent()
+	{
+		// Arrange: конструкция с открытой ногой — покупка 1 BTC по 100 — и закрытой
+		// ногой опциона — покупка 1 по 100 и продажа 1 по 90; свежая марка
+		// провайдера — 110 для обоих инструментов.
+		var construction = await _constructionService.CreateAsync("Смешанная", 1000m);
+		await AddLinearTradeAsync("exec-buy", "Buy", "1", "100", "0", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		await AddOptionTradeAsync("exec-opt-buy", "Buy", "1", "100");
+		await AddOptionTradeAsync("exec-opt-sell", "Sell", "1", "90");
+		await _bindingService.BindBatchAsync(construction.Id, ["exec-opt-buy", "exec-opt-sell"]);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(110m, FetchedAt));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: открытая нога несёт стоимость по марке 110 × 1 = 110 и процент
+		// изменения цены (110 − 100) / 100 × 100 = 10; закрытая нога обе величины
+		// имеет null при живом реализованном результате (90 − 100) × 1 = −10.
+		// Требование: стоимость и процент изменения цены открытого остатка
+		// проходят в строку позиции из метрик, закрытая позиция их не имеет.
+		// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
+		var open = data.Positions.Single(row => row.Symbol == LinearSymbol);
+		Assert.That(open.IsOpen, Is.True);
+		Assert.That(open.MarkValue, Is.EqualTo(110m));
+		Assert.That(open.PriceChangePercent, Is.EqualTo(10m));
+		var closed = data.Positions.Single(row => row.Symbol == CallSymbol);
+		Assert.That(closed.IsOpen, Is.False);
+		Assert.That(closed.MarkValue, Is.Null);
+		Assert.That(closed.PriceChangePercent, Is.Null);
+		Assert.That(closed.RealizedPnL, Is.EqualTo(-10m));
 	}
 
 	[TestMethod]
@@ -495,6 +533,13 @@ public class ConstructionDetailReadModelTests
 		Assert.That(position.UnrealizedPnLPercent, Is.Null);
 		Assert.That(position.Residual, Is.EqualTo(0.1m));
 		Assert.That(position.AverageEntryPrice, Is.EqualTo(42000m));
+		// Стоимость и процент изменения цены открытой ноги при сбое марок — null
+		// наряду с нереализованной частью; реализованный результат и средняя
+		// цена входа остаются живыми.
+		// Требование: сбой марок гасит производные оценки остатка.
+		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-price-change
+		Assert.That(position.MarkValue, Is.Null);
+		Assert.That(position.PriceChangePercent, Is.Null);
 	}
 
 	[TestMethod]

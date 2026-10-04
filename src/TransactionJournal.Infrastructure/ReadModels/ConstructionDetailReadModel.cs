@@ -166,7 +166,13 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				position.OpenedAt,
 				position.ClosedAt,
 				position.Residual != 0m,
-				commentsBySymbol.GetValueOrDefault(position.Symbol)))
+				commentsBySymbol.GetValueOrDefault(position.Symbol),
+				// Стоимость и процент изменения цены открытого остатка проходят
+				// из метрик позиции как есть: их деградация при закрытом остатке
+				// и сбое марок уже решена слоем марок.
+				// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
+				MarkValue: position.MarkValue,
+				PriceChangePercent: position.PriceChangePercent))
 			.ToList();
 	}
 

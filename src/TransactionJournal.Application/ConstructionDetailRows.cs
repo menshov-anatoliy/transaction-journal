@@ -26,6 +26,8 @@ namespace TransactionJournal.Application;
 /// <param name="ClosedAt">Время закрытия — момент обнуления остатка; null, пока позиция открыта.</param>
 /// <param name="IsOpen">Позиция открыта, пока остаток не нулевой.</param>
 /// <param name="Comment">Комментарий позиции по ключу «конструкция × инструмент»; null — комментария нет.</param>
+/// <param name="MarkValue">Стоимость открытого остатка по текущей марке — нетто-величина «марка × знаковый остаток» со знаком; null у закрытой позиции и при сбое марок.</param>
+/// <param name="PriceChangePercent">Процент изменения цены открытого остатка — движение марки от средней цены остатка, приведённое к направлению позиции: плюс — движение «в прибыль»; null у закрытой позиции и при сбое марок.</param>
 // Строка показывает картину позиции её записями: вход, выход,
 // раздельные части реализованного и нереализованного результата
 // с процентом от капитала, общий P&L с процентом, комиссии и времена.
@@ -33,6 +35,10 @@ namespace TransactionJournal.Application;
 // Раздельные части выводятся колонками «Реализ. P&L» и «Нереализ. P&L»:
 // реализованная часть видна всегда, нереализованная деградирует вместе с марками.
 // Traceability: openspec:ui/screens#scenario-detail-position-pnl-parts
+// Стоимость и процент изменения цены открытого остатка проходят из метрик
+// позиции и деградируют вместе с марками: закрытая позиция — null, сбой
+// марок — null при живых реализованных величинах.
+// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
 public sealed record ConstructionPositionRow(
 	string Symbol,
 	decimal Residual,
@@ -48,7 +54,9 @@ public sealed record ConstructionPositionRow(
 	DateTimeOffset OpenedAt,
 	DateTimeOffset? ClosedAt,
 	bool IsOpen,
-	string? Comment);
+	string? Comment,
+	decimal? MarkValue = null,
+	decimal? PriceChangePercent = null);
 
 /// <summary>
 /// Строка таблицы сделок деталей конструкции: сделка с атрибутами биржевой

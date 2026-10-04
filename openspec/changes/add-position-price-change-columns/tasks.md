@@ -2,11 +2,11 @@
 
 ## 1. Метрика процента изменения цены
 
-- [ ] 1.1 Добавить в `PositionMetrics` поле процента изменения цены открытого остатка (null у закрытой позиции и при сбое марок) и вычислять его в `UnrealizedPnlMarkEvaluator` рядом с `MarkValue`: (марка − средняя цена остатка) / средняя цена остатка × 100 × знак остатка. Проверить тестами `UnrealizedPnlMarkEvaluatorTests`: длинный остаток +10%/−5%, короткий −10%/+10%, закрытая позиция — null, сбой марок — null при живых остальных метриках (спек: `requirement-open-remainder-price-change-percent`)
+- [x] 1.1 Добавить в `PositionMetrics` поле процента изменения цены открытого остатка (null у закрытой позиции и при сбое марок) и вычислять его в `UnrealizedPnlMarkEvaluator` рядом с `MarkValue`: (марка − средняя цена остатка) / средняя цена остатка × 100 × знак остатка. Проверить тестами `UnrealizedPnlMarkEvaluatorTests`: длинный остаток +10%/−5%, короткий −10%/+10%, закрытая позиция — null, сбой марок — null при живых остальных метриках (спек: `requirement-open-remainder-price-change-percent`)
 
 ## 2. Строка позиции деталей
 
-- [ ] 2.1 Добавить в `ConstructionPositionRow` поля стоимости и процента изменения цены и передавать их из `PositionMetrics` в `ConstructionDetailReadModel.ReadPositionsAsync`. Проверить тестами `ConstructionDetailReadModelTests`: открытая позиция с марками получает обе величины, закрытая — null, сбой марок — null при живых реализованных величинах
+- [x] 2.1 Добавить в `ConstructionPositionRow` поля стоимости и процента изменения цены и передавать их из `PositionMetrics` в `ConstructionDetailReadModel.ReadPositionsAsync`. Проверить тестами `ConstructionDetailReadModelTests`: открытая позиция с марками получает обе величины, закрытая — null, сбой марок — null при живых реализованных величинах
 
 ## 3. Колонки таблицы позиций
 

@@ -9,8 +9,9 @@ namespace TransactionJournal.Application.Analytics;
 /// и нереализованная оценка — разница марки и средней цены открытого остатка,
 /// умноженная на знаковый остаток; вместе с оценкой возвращается отметка
 /// времени марок. Недоступность тикеров — деградация, а не ошибка: сбой обнуляет
-/// только нереализованную часть и отметку времени, реализованные метрики
-/// позиций возвращаются нетронутыми. Успешная оценка открытых остатков заодно
+/// только производные оценки остатка — нереализованную часть, стоимость, процент
+/// изменения цены и отметку времени, реализованные метрики позиций возвращаются
+/// нетронутыми. Успешная оценка открытых остатков заодно
 /// собирает их общий PnL — реализованный плюс нереализованный.
 // Traceability: openspec:analytics/performance#requirement-unrealized-pnl-current-marks
 // Traceability: change:add-analytics/design#d3
@@ -130,10 +131,11 @@ public sealed class UnrealizedPnlMarkEvaluator
 	/// цены открытого остатка, умноженная на знаковый остаток, — направление
 	/// остатка задаёт знак результата и для длинных, и для коротких позиций.
 	/// Здесь же собирается общий PnL позиции из реализованной и только что
-	/// оценённой нереализованной частей и стоимость позиции — та же марка,
-	/// умноженная на знаковый остаток; позиции без марки возвращаются как есть:
-	/// их нереализованная часть, общий PnL и стоимость остаются null, остальные
-	/// метрики не меняются.
+	/// оценённой нереализованной частей, стоимость позиции — та же марка,
+	/// умноженная на знаковый остаток — и процент изменения цены открытого
+	/// остатка; позиции без марки возвращаются как есть:
+	/// их нереализованная часть, общий PnL, стоимость и процент изменения цены
+	/// остаются null, остальные метрики не меняются.
 	/// </summary>
 	private static PositionMetrics EvaluatePosition(PositionMetrics position, Dictionary<string, InstrumentMarkSnapshot> marks)
 	{
@@ -159,12 +161,19 @@ public sealed class UnrealizedPnlMarkEvaluator
 		// Стоимость позиции строится из той же марки, что и нереализованная
 		// оценка: лонг даёт положительную стоимость, шорт — отрицательную.
 		// Traceability: openspec:analytics/performance#scenario-open-position-net-mark-value
+		// Процент изменения цены строится из той же пары «марка — средняя цена
+		// остатка» и приводится знаком остатка к направлению позиции: плюс
+		// всегда означает движение цены «в прибыль».
+		// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
+		var priceChangePercent = (mark.MarkPrice - position.AverageOpenPrice.Value)
+			/ position.AverageOpenPrice.Value * 100m * Math.Sign(position.Residual);
 		return position with
 		{
 			MarkPrice = mark.MarkPrice,
 			UnrealizedPnL = unrealizedPnL,
 			TotalPnL = position.RealizedPnL + unrealizedPnL,
 			MarkValue = mark.MarkPrice * position.Residual,
+			PriceChangePercent = priceChangePercent,
 		};
 	}
 
