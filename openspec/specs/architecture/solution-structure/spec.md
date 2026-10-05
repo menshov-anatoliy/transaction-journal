@@ -8,7 +8,7 @@
 
 ### Requirement: Решение состоит из проектов DDD-слоёв с фиксированной раскладкой
 
-Решение SHALL состоять из проектов `TransactionJournal.Domain`, `TransactionJournal.Application`, `TransactionJournal.Infrastructure` и `TransactionJournal` (Web); проект `TransactionJournal.Hints` добавляется отдельным change по ADR-0007. Раскладка SHALL следовать принципу: чистая логика без ввода-вывода — Domain; оркестрация с хранилищем — Application; адаптеры и внешние клиенты — Infrastructure; UI и composition root — Web (ADR-0008).
+Решение SHALL состоять из проектов `TransactionJournal.Domain`, `TransactionJournal.Application`, `TransactionJournal.Infrastructure` и `TransactionJournal` (Web); проект `TransactionJournal.Hints` добавляется отдельным change по ADR-0007; проект `TransactionJournal.Consultations` (чат консультаций) — по [ADR-0009](../../../../../../docs/adr/0009-consultation-chat-architecture.md). Раскладка SHALL следовать принципу: чистая логика без ввода-вывода — Domain; оркестрация с хранилищем — Application; адаптеры и внешние клиенты — Infrastructure; UI и composition root — Web (ADR-0008).
 
 Traceability ID: requirement-solution-five-projects
 
@@ -36,9 +36,15 @@ Traceability ID: scenario-blazor-in-web
 - **THEN** он размещается в проекте `TransactionJournal`
 - **AND** composition root (регистрация зависимостей) остаётся в `Program.cs` Web
 
+#### Scenario: Чат консультаций живёт в собственном проекте окружения
+Traceability ID: scenario-consultations-own-environment-project
+- **WHEN** реализуется чат консультаций (агентный цикл, инструменты, стриминг-ответ)
+- **THEN** он размещается в `TransactionJournal.Consultations`
+- **AND** его порты объявлены в самом проекте, а адаптеры — в `TransactionJournal.Infrastructure` и composition root Web
+
 ### Requirement: Зависимости проектов направлены внутрь
 
-Ссылки проектов SHALL быть направлены внутрь: Web → Application → Domain; Infrastructure SHALL ссылаться на Application и Domain, реализуя их порты; будущий проект Hints SHALL зависеть только от Domain. Прямая ссылка, нарушающая направление, SHALL отсутствовать в solution (ADR-0008).
+Ссылки проектов SHALL быть направлены внутрь: Web → Application → Domain; Infrastructure SHALL ссылаться на Application и Domain, реализуя их порты; проекты окружений Hints и Consultations SHALL зависеть только от Domain; Consultations SHALL не ссылаться на Hints — доступ к корпусу правил идёт через собственный порт с адаптером в composition root. Прямая ссылка, нарушающая направление, SHALL отсутствовать в solution ([ADR-0008](../../../../../../docs/adr/0008-ddd-solution-structure.md), [ADR-0009](../../../../../../docs/adr/0009-consultation-chat-architecture.md)).
 
 Traceability ID: requirement-dependencies-point-inward
 
@@ -52,6 +58,12 @@ Traceability ID: scenario-readonly-ports-in-application
 - **WHEN** внешний потребитель читает журнал (режим `--mcp` по ADR-0003, R3-сессия по ADR-0007)
 - **THEN** контракт выражен портами в `TransactionJournal.Application`
 - **AND** реализация чтения из SQLite живёт в `TransactionJournal.Infrastructure`
+
+#### Scenario: Окружения не связываются друг с другом
+Traceability ID: scenario-environments-not-linked
+- **WHEN** проекту Consultations нужны данные корпуса правил из Hints
+- **THEN** прямой ссылки между проектами нет
+- **AND** корпус подключается портом Consultations с адаптером в composition root
 
 ### Requirement: Domain — POCO без зависимостей инфраструктуры
 
