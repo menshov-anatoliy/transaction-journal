@@ -340,9 +340,10 @@ else
 
 	@* Панель консультаций конструкции: диалоги «один вопрос — один диалог»,
 	   новый диалог создаётся первым сообщением, удаление диалога целиком;
-	   чат read-only — без мутаций журнала и сохранения планов. *@
+	   чат read-only — без мутаций журнала и сохранения планов. Закрытая
+	   конструкция переводит панель в режим пост-мортема. *@
 	@* Traceability: openspec:ui/screens#requirement-ui-consultation-panel *@
-	<ConsultationsPanel ConstructionId="ConstructionId" />
+	<ConsultationsPanel ConstructionId="ConstructionId" IsConstructionClosed="@(_data.Status is ConstructionStatus.Closed or ConstructionStatus.Archived)" />
 
 	<h2>Позиции</h2>
 	@if (_markFormSymbol is not null)
