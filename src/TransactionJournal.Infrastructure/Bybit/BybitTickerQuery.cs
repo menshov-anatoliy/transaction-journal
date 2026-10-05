@@ -15,6 +15,14 @@ public sealed record BybitTickerQuery
 	public string? Symbol { get; init; }
 
 	/// <summary>
+	/// Фильтр по базовому активу доски опционов; инструменты консультаций
+	/// запрашивают целую доску одним запросом. По документации биржи применим
+	/// только к категории option.
+	// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+	/// </summary>
+	public string? BaseCoin { get; init; }
+
+	/// <summary>
 	/// Собирает параметры в фиксированном порядке: queryString собирается вручную,
 	/// поэтому порядок пар должен быть детерминированным.
 	/// </summary>
@@ -23,13 +31,18 @@ public sealed record BybitTickerQuery
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(Category);
 
-		var query = new List<KeyValuePair<string, string>>(2)
+		var query = new List<KeyValuePair<string, string>>(3)
 		{
 			new("category", Category),
 		};
 		if (Symbol is not null)
 		{
 			query.Add(new("symbol", Symbol));
+		}
+
+		if (BaseCoin is not null)
+		{
+			query.Add(new("baseCoin", BaseCoin));
 		}
 
 		return query;

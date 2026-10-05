@@ -47,6 +47,10 @@ public sealed class BybitTicker
 
 	#region Подразумеваемая волатильность
 
+	/// <summary>Марка базового актива опциона — якорь окрестности ATM доски; у не-опционов отсутствует.</summary>
+	[JsonPropertyName("underlyingPrice")]
+	public decimal? UnderlyingPrice { get; init; }
+
 	/// <summary>Подразумеваемая волатильность марки опциона; у не-опционов отсутствует.</summary>
 	[JsonPropertyName("markIv")]
 	public decimal? MarkIv { get; init; }

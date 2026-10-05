@@ -9,10 +9,16 @@
 
   <!-- Окружение чата консультаций: зависит только от домена (ADR-0009).
        Ссылки на Application, Infrastructure, Web и Hints запрещены: доступ к
-       корпусу правил идёт через собственный порт с адаптером в composition root.
+       корпусу правил идёт через собственный порт с адаптером в composition root,
+       доступ к рынку — через порт рыночных данных с адаптером в Infrastructure.
        Traceability: openspec:architecture/solution-structure#requirement-dependencies-point-inward -->
   <ItemGroup>
     <ProjectReference Include="..\TransactionJournal.Domain\TransactionJournal.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Реестр read-only инструментов и агентный цикл строятся на абстракциях
+         Microsoft.Extensions.AI (ADR-0009). -->
+    <PackageReference Include="Microsoft.Extensions.AI" Version="9.10.2" />
   </ItemGroup>
 
 </Project>
