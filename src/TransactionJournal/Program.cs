@@ -314,6 +314,13 @@ builder.Services.AddSingleton<IConstructionDetailReadModel>(sp => sp.GetRequired
 // Traceability: openspec:consultations/context#requirement-context-deterministic-snapshot
 builder.Services.AddSingleton<IRuleCorpusReader, RulesCorpusConsultationAdapter>();
 builder.Services.AddSingleton<IConsultationContextReader, ConsultationContextReader>();
+// Хранилище консультаций: SQLite per construction — по одному файлу базы на
+// конструкцию в папке App_Data/consultations; пересбор конструкции стирает её
+// файл базы целиком. Домен о хранилище не знает: порт окружения с адаптером
+// в Infrastructure (ADR-0009).
+// Traceability: openspec:consultations/history#requirement-history-environment-record
+builder.Services.AddSingleton<IConsultationStore>(new ConsultationStore(
+	Path.Combine(dataDirectory, "consultations")));
 // Инструкции агента консультаций: дефолт consultation-prompt.md рядом с
 // rules/, путь переопределяется настройкой Consultations:InstructionsPath;
 // валидный файл переопределяет встроенный дефолт, отсутствие или битость
