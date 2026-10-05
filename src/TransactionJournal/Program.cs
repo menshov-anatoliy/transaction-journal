@@ -355,6 +355,10 @@ builder.Services.AddSingleton<IConsultationMarketReader>(sp => new BybitConsulta
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton<ConsultationTools>();
 builder.Services.AddSingleton<ConsultationAgent>();
+// Конвейер сообщения консультаций для панели «Консультации»: разрешается в
+// момент первого вопроса — незастроенный ключ модели не мешает чтению истории
+// диалогов и работе остального журнала.
+builder.Services.AddSingleton<ConsultationChatService>();
 
 var app = builder.Build();
 

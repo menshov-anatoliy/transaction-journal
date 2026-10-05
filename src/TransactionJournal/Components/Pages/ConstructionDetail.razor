@@ -338,6 +338,12 @@ else
 	@* Traceability: openspec:ui/screens#requirement-ui-hint-panel-in-construction *@
 	<HintsPanel ConstructionId="ConstructionId" />
 
+	@* Панель консультаций конструкции: диалоги «один вопрос — один диалог»,
+	   новый диалог создаётся первым сообщением, удаление диалога целиком;
+	   чат read-only — без мутаций журнала и сохранения планов. *@
+	@* Traceability: openspec:ui/screens#requirement-ui-consultation-panel *@
+	<ConsultationsPanel ConstructionId="ConstructionId" />
+
 	<h2>Позиции</h2>
 	@if (_markFormSymbol is not null)
 	{

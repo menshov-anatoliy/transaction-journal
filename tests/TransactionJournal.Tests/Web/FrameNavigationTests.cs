@@ -12,6 +12,7 @@ using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Application.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Ops;
+using TransactionJournal.Consultations.Ports;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
 using TransactionJournal.Hints;
@@ -135,6 +136,14 @@ public class FrameNavigationTests
 				AsOf = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
 			});
 		_context.Services.AddSingleton(passRunner.Object);
+
+		// Хранилище консультаций для панели деталей: навигационные проверки
+		// рендерят каркас с панелью, консультации им достаточно пустые.
+		var consultations = new Mock<IConsultationStore>();
+		consultations
+			.Setup(store => store.ListDialoguesAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync([]);
+		_context.Services.AddSingleton(consultations.Object);
 	}
 
 	[TestCleanup]

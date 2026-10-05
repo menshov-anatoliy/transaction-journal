@@ -15,6 +15,7 @@ using TransactionJournal.Domain;
 using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Ops;
+using TransactionJournal.Consultations.Ports;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
 using TransactionJournal.Hints;
@@ -122,6 +123,14 @@ public class ConstructionDetailScreenTests
 			});
 		_context.Services.AddSingleton(hints.Object);
 		_hints = hints;
+
+		// Хранилище консультаций для панели деталей: экран проверяет журнал, а не
+		// чат — панель консультаций получает пустую заглушку порта без диалогов.
+		var consultations = new Mock<IConsultationStore>();
+		consultations
+			.Setup(store => store.ListDialoguesAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync([]);
+		_context.Services.AddSingleton(consultations.Object);
 	}
 
 	[TestCleanup]

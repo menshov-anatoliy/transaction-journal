@@ -635,6 +635,36 @@ h1:focus {
 .hint-history { margin-top: 8px; }
 .history-toggle { margin-bottom: 4px; }
 
+/* Панель «Консультации»: диалоги «один вопрос — один диалог», переписка
+   выбранного диалога и read-only ввод; удаления диалогов подтверждаются.
+   Traceability: openspec:ui/screens#requirement-ui-consultation-panel */
+.consultations-panel { margin: 10px 0 16px; }
+.consultations-panel h2 { margin-bottom: 6px; }
+.consultations-panel .empty-consultations { color: #8b949e; }
+
+.consultation-dialogues { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.consultation-dialogue-item { display: flex; align-items: center; gap: 6px; }
+.consultation-dialogue-item.active .consultation-dialogue-open { border-color: #1f6feb; color: #f0f6fc; }
+.consultation-dialogue-confirm { display: flex; align-items: center; gap: 6px; }
+
+.consultation-thread { margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+
+.consultation-message {
+	background: #161b22;
+	border-left: 3px solid #8b949e;
+	padding: 8px 10px;
+	font-size: 12px;
+}
+
+.consultation-message-user { border-left-color: #1f6feb; }
+.consultation-message-assistant { border-left-color: #a371f7; }
+.consultation-message header { display: flex; gap: 10px; margin-bottom: 4px; color: #8b949e; }
+.consultation-message-role { color: #c9d1d9; }
+.consultation-message-text { margin: 0; white-space: pre-wrap; color: #f0f6fc; font-size: 13px; }
+
+.consultation-input { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; }
+.consultation-input .cell-input { flex: 1; }
+
 .corpus-problems { margin: 6px 0 0; padding-left: 20px; }
 
 /* Кнопка ручного прохода подсказок — собственный тулбар секции подсказок

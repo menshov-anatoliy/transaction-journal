@@ -1,0 +1,233 @@
+@namespace TransactionJournal.Components
+@using Microsoft.Extensions.DependencyInjection
+@using TransactionJournal.Consultations
+@using TransactionJournal.Consultations.Ports
+@inject IConsultationStore Store
+@inject IServiceProvider Services
+
+@* Панель «Консультации» конструкции: диалоги «один вопрос — один диалог»,
+   новый диалог создаётся первым сообщением, удаление диалога целиком с
+   подтверждением. Чат read-only: панель не предлагает записей в журнал и
+   сохранения планов — план управления остаётся markdown-текстом ответа. *@
+@* Traceability: openspec:ui/screens#requirement-ui-consultation-panel *@
+<div class="consultations-panel">
+	<h2>Консультации</h2>
+
+	@if (_error is not null)
+	{
+		<p class="note note-error">@_error</p>
+	}
+
+	@if (_dialogues.Count > 0)
+	{
+		@* Список диалогов конструкции: выбор показывает переписку, удаление
+		   стирает диалог со всеми сообщениями без возможности восстановления. *@
+		<div class="consultation-dialogues">
+			@foreach (var dialogue in _dialogues)
+			{
+				var dialogueId = dialogue.Id;
+				<div class="consultation-dialogue-item @(_selectedDialogueId == dialogueId ? "active" : "")">
+					<button type="button" class="btn consultation-dialogue-open" @onclick="() => SelectDialogueAsync(dialogueId)">
+						Диалог @dialogueId (@DisplayTime.FormatMoment(dialogue.CreatedAt))
+					</button>
+					@if (_deleteConfirmDialogueId == dialogueId)
+					{
+						@* Подтверждение — отдельный шаг: без него команда удаления
+						   не запускается, восстановить диалог после удаления нельзя. *@
+						<span class="consultation-dialogue-confirm">
+							<span class="action-warning">Удалить диалог целиком?</span>
+							<button type="button" class="btn danger" @onclick="() => DeleteDialogueAsync(dialogueId)">Удалить</button>
+							<button type="button" class="btn" @onclick="CancelDelete">Отмена</button>
+						</span>
+					}
+					else
+					{
+						<button type="button" class="btn consultation-dialogue-delete" @onclick="() => BeginDelete(dialogueId)">удалить…</button>
+					}
+				</div>
+			}
+		</div>
+	}
+	else
+	{
+		<p class="note empty-consultations">диалогов нет — задайте первый вопрос</p>
+	}
+
+	@if (_selectedDialogueId is { } selectedId)
+	{
+		@* Переписка выбранного диалога: ассистент видит историю только его, —
+		   соседние диалоги изолированы. *@
+		<div class="consultation-thread" data-dialogue="@selectedId">
+			@foreach (var message in _messages)
+			{
+				<article class="consultation-message consultation-message-@RoleClass(message.Role)">
+					<header>
+						<span class="consultation-message-role">@RoleTitle(message.Role)</span>
+						<span class="consultation-message-asof">@DisplayTime.FormatMoment(message.AsOf)</span>
+					</header>
+					<p class="consultation-message-text">@message.Text</p>
+				</article>
+			}
+		</div>
+	}
+
+	<div class="consultation-input">
+		<textarea class="cell-input" rows="3" placeholder="@InputPlaceholder"
+				  disabled="@_generating" @bind="_input" @bind:event="oninput"></textarea>
+		<button type="button" class="btn primary consultation-send" disabled="@_generating" @onclick="SendAsync">Отправить</button>
+		@if (_selectedDialogueId is not null)
+		{
+			@* Продолжение текущего диалога — по желанию владельца: следующий
+			   вопрос без выбранного диалога начинает новый с чистого листа. *@
+			<button type="button" class="btn" disabled="@_generating" @onclick="StartNewDialogue">новый вопрос</button>
+		}
+	</div>
+</div>
+
+@code {
+	/// <summary>Идентификатор конструкции, в контексте которой ведутся консультации.</summary>
+	[Parameter] public long ConstructionId { get; set; }
+
+	private IReadOnlyList<ConsultationDialogue> _dialogues = [];
+
+	private IReadOnlyList<ConsultationMessage> _messages = [];
+
+	private long? _selectedDialogueId;
+
+	private long? _deleteConfirmDialogueId;
+
+	private string _input = string.Empty;
+
+	private bool _generating;
+
+	private string? _error;
+
+	private string InputPlaceholder => _selectedDialogueId is null
+		? "первый вопрос нового диалога"
+		: "продолжить диалог";
+
+	protected override async Task OnParametersSetAsync() => await RefreshAsync();
+
+	/// <summary>Перечитывает список диалогов конструкции и переписку выбранного.</summary>
+	private async Task RefreshAsync()
+	{
+		try
+		{
+			_dialogues = await Store.ListDialoguesAsync(ConstructionId);
+			_messages = _selectedDialogueId is { } selectedId
+				? await Store.ListMessagesAsync(ConstructionId, selectedId)
+				: [];
+			_error = null;
+		}
+		catch (Exception)
+		{
+			_error = "Консультации недоступны: не удалось прочитать хранилище. Обновите экран.";
+		}
+	}
+
+	/// <summary>Выбирает диалог и показывает его переписку.</summary>
+	private async Task SelectDialogueAsync(long dialogueId)
+	{
+		_selectedDialogueId = dialogueId;
+		_deleteConfirmDialogueId = null;
+		await RefreshAsync();
+	}
+
+	/// <summary>Снимает выбор диалога: следующее сообщение начнёт новый диалог.</summary>
+	private void StartNewDialogue()
+	{
+		_selectedDialogueId = null;
+		_messages = [];
+	}
+
+	/// <summary>
+	/// Отправляет вопрос владельца: сообщение без выбранного диалога создаёт
+	/// новый диалог, затем ответ ассистента дочитывается до конца — ответ
+	/// фиксируется в диалоге конвейером консультаций.
+	// Traceability: openspec:ui/screens#scenario-ui-dialogue-started-by-message
+	/// </summary>
+	private async Task SendAsync()
+	{
+		if (_generating || string.IsNullOrWhiteSpace(_input))
+		{
+			return;
+		}
+
+		_generating = true;
+		try
+		{
+			// Конвейер чата разрешается в момент первого вопроса: незастроенный
+			// ключ модели не ломает чтение истории и остальной журнал.
+			var chat = Services.GetRequiredService<ConsultationChatService>();
+			var userMessage = await chat.AppendUserMessageAsync(
+				ConstructionId,
+				_selectedDialogueId,
+				_input);
+
+			// Ответ дочитывается до конца: фиксация ответа в диалоге выполняется
+			// конвейером по завершении стрима; живой показ чанков и статусы тулов
+			// приходят со стримингом перерисовок.
+			await foreach (var _ in chat.StreamAssistantAnswerAsync(ConstructionId, userMessage))
+			{
+			}
+
+			_selectedDialogueId = userMessage.DialogueId;
+			_input = string.Empty;
+			await RefreshAsync();
+		}
+		catch (Exception exception)
+		{
+			_error = $"Ответ не получен: {exception.Message}";
+		}
+		finally
+		{
+			_generating = false;
+		}
+	}
+
+	/// <summary>Начинает шаг подтверждения удаления диалога.</summary>
+	private void BeginDelete(long dialogueId) => _deleteConfirmDialogueId = dialogueId;
+
+	/// <summary>Отменяет подтверждение удаления без мутаций.</summary>
+	private void CancelDelete() => _deleteConfirmDialogueId = null;
+
+	/// <summary>
+	/// Удаляет диалог целиком со всеми сообщениями — hard delete без корзины;
+	/// выбранный после удаления диалог сбрасывается.
+	// Traceability: openspec:consultations/history#scenario-history-hard-delete-dialogue
+	/// </summary>
+	private async Task DeleteDialogueAsync(long dialogueId)
+	{
+		_deleteConfirmDialogueId = null;
+		try
+		{
+			await Store.DeleteDialogueAsync(ConstructionId, dialogueId);
+			if (_selectedDialogueId == dialogueId)
+			{
+				_selectedDialogueId = null;
+			}
+
+			await RefreshAsync();
+		}
+		catch (Exception)
+		{
+			_error = "Консультации недоступны: не удалось удалить диалог. Обновите экран.";
+		}
+	}
+
+	/// <summary>Класс сообщения по роли автора — окраска владельца и помощника.</summary>
+	private static string RoleClass(ConsultationMessageRole role) => role switch
+	{
+		ConsultationMessageRole.User => "user",
+		ConsultationMessageRole.Assistant => "assistant",
+		_ => string.Empty,
+	};
+
+	/// <summary>Роль автора сообщения словами.</summary>
+	private static string RoleTitle(ConsultationMessageRole role) => role switch
+	{
+		ConsultationMessageRole.User => "Вы",
+		ConsultationMessageRole.Assistant => "Помощник",
+		_ => string.Empty,
+	};
+}
