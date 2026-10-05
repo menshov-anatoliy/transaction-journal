@@ -17,8 +17,9 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Реестр read-only инструментов и агентный цикл строятся на абстракциях
-         Microsoft.Extensions.AI (ADR-0009). -->
-    <PackageReference Include="Microsoft.Extensions.AI" Version="9.10.2" />
+         Microsoft.Extensions.AI (ADR-0009); стабильная линия 10.x согласована
+         с адаптером OpenAI-совместимых провайдеров в composition root. -->
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.10.0" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
+using OpenAI;
+using System.ClientModel;
 using TransactionJournal;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
@@ -320,6 +323,26 @@ builder.Services.AddSingleton(_ => new ConsultationInstructions(
 	builder.Configuration["Consultations:InstructionsPath"]
 	?? Path.Combine(AppContext.BaseDirectory, ConsultationInstructions.DefaultFileName)));
 
+// Модель чата консультаций: секция Consultations:ChatModel задаёт провайдера,
+// модель и OpenAI-совместимый эндпоинт (дефолт — z.ai GLM-5.3); смена
+// провайдера или модели выполняется правкой конфигурации без правки кода,
+// без секции чат работает на дефолтах кода.
+// Traceability: openspec:consultations/tools#requirement-tools-chat-model-configurable
+var chatModelOptions = ConsultationChatModelOptions.Resolve(
+	builder.Configuration["Consultations:ChatModel:Provider"],
+	builder.Configuration["Consultations:ChatModel:Model"],
+	builder.Configuration["Consultations:ChatModel:BaseUrl"],
+	builder.Configuration["Consultations:ChatModel:ApiKey"] ?? builder.Configuration["Llm:ApiKey"]);
+// Клиент строится лениво при первом обращении к агентному циклу: незастроенный
+// ключ доступа не мешает остальному журналу работать.
+builder.Services.AddKeyedChatClient(ConsultationAgent.ChatClientServiceKey, _ => CreateConsultationChatClient(chatModelOptions));
+// Агентный цикл: инструменты реестра и keyed клиент соединяются здесь;
+// рыночные данные агента читаются из Bybit через адаптер Infrastructure.
+// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+builder.Services.AddSingleton<IConsultationMarketReader, BybitConsultationMarketReader>();
+builder.Services.AddSingleton<ConsultationTools>();
+builder.Services.AddSingleton<ConsultationAgent>();
+
 var app = builder.Build();
 
 // Журнал разворачивается сам: применяем миграции и включаем WAL-режим SQLite.
@@ -344,4 +367,20 @@ app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();
 
 app.Run();
+
+// Адаптер OpenAI-совместимого провайдера модели чата: ключ обязателен — без
+// него запрос к модели невозможен, ошибка сообщается в момент первого вопроса.
+static IChatClient CreateConsultationChatClient(ConsultationChatModelOptions options)
+{
+	if (string.IsNullOrWhiteSpace(options.ApiKey))
+	{
+		throw new InvalidOperationException(
+			"Ключ модели чата консультаций не задан: заполните Consultations:ChatModel:ApiKey " +
+			"(или запасной Llm:ApiKey) в appsettings.Local.json.");
+	}
+
+	return new OpenAIClient(new ApiKeyCredential(options.ApiKey), new OpenAIClientOptions { Endpoint = new Uri(options.BaseUrl) })
+		.GetChatClient(options.Model)
+		.AsIChatClient();
+}
 
