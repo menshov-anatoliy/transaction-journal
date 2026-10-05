@@ -16,7 +16,9 @@ using TransactionJournal.Infrastructure.Data;
 /// результата, а не исключение: вместе с пометкой недоступности адаптер
 /// возвращает последнюю кэшированную проекцию из кэша марок InstrumentMarkProvider
 /// с явным as-of кэша, чтобы инструмент консультаций ответил структурированным
-/// «недоступно + кэш».
+/// «недоступно + кэш». Деградация покрывает и ошибки конверта биржи, и
+/// транспортные сбои после всех повторов resilience: сеть, DNS, отказ соединения
+/// и таймаут HTTP — для инструмента консультаций это одна недоступность биржи.
 // Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
 // Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
 /// </summary>
@@ -87,16 +89,22 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 			// последняя кэшированная марка перпа из кэша InstrumentMarkProvider, а as-of
 			// снимка — момент её получения, а не момент сбоя.
 			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
-			var cached = await ReadCachedMarkAsync(baseCoin + "USDT", cancellationToken).ConfigureAwait(false);
-			return new ConsultationMarketSnapshot
-			{
-				BaseCoin = baseCoin,
-				AsOf = cached?.ReceivedAt ?? _timeProvider.GetUtcNow(),
-				IsAvailable = false,
-				UnavailableReason = exception.Message,
-				Symbol = cached is null ? null : baseCoin + "USDT",
-				MarkPrice = cached?.Price,
-			};
+			return await SnapshotFromCacheAsync(baseCoin, exception.Message, cancellationToken).ConfigureAwait(false);
+		}
+		catch (HttpRequestException exception)
+		{
+			// Транспортный сбой (сеть, DNS, отказ соединения) после всех повторов
+			// resilience деградирует так же, как ошибка биржи: для инструмента
+			// консультаций это одна недоступность биржи с кэшем и её as-of.
+			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			return await SnapshotFromCacheAsync(baseCoin, exception.Message, cancellationToken).ConfigureAwait(false);
+		}
+		catch (TaskCanceledException exception) when (exception.InnerException is TimeoutException)
+		{
+			// Таймаут HTTP-запроса — та же недоступность биржи; отмена вызывающим
+			// кодом сюда не попадает: у неё нет внутреннего TimeoutException.
+			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			return await SnapshotFromCacheAsync(baseCoin, exception.InnerException.Message, cancellationToken).ConfigureAwait(false);
 		}
 	}
 
@@ -162,27 +170,85 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 			// актива, as-of — момент получения самой старой из них; IV, греки и
 			// бид-аск кэш не хранит, якорь окна — кэшированная марка перпа.
 			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
-			var quotes = await ReadCachedOptionQuotesAsync(baseCoin, cancellationToken).ConfigureAwait(false);
-			decimal? underlyingPrice = null;
-			if (quotes.Count > 0)
-			{
-				underlyingPrice = (await ReadCachedMarkAsync(baseCoin + "USDT", cancellationToken).ConfigureAwait(false))?.Price;
-			}
-
-			return new ConsultationOptionBoard
-			{
-				BaseCoin = baseCoin,
-				AsOf = quotes.Count > 0 ? quotes.Min(quote => quote.ReceivedAt) : _timeProvider.GetUtcNow(),
-				IsAvailable = false,
-				UnavailableReason = exception.Message,
-				UnderlyingPrice = underlyingPrice,
-				TotalTickerCount = quotes.Count,
-				Quotes = [.. quotes.Select(quote => quote.Quote)],
-			};
+			return await BoardFromCacheAsync(baseCoin, exception.Message, cancellationToken).ConfigureAwait(false);
+		}
+		catch (HttpRequestException exception)
+		{
+			// Транспортный сбой после всех повторов resilience деградирует так же,
+			// как ошибка биржи: для инструмента консультаций это одна недоступность
+			// биржи с кэшем марок и её as-of.
+			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			return await BoardFromCacheAsync(baseCoin, exception.Message, cancellationToken).ConfigureAwait(false);
+		}
+		catch (TaskCanceledException exception) when (exception.InnerException is TimeoutException)
+		{
+			// Таймаут HTTP-запроса — та же недоступность биржи; отмена вызывающим
+			// кодом сюда не попадает: у неё нет внутреннего TimeoutException.
+			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			return await BoardFromCacheAsync(baseCoin, exception.InnerException.Message, cancellationToken).ConfigureAwait(false);
 		}
 	}
 
 	#region Деградация в кэш марок
+
+	/// <summary>
+	/// Собирает недоступный снимок: причина сбоя биржи и последняя кэшированная
+	/// марка перпа с моментом её получения в роли as-of; кэш пуст — марки нет,
+	/// as-of совпадает с моментом сбоя.
+	/// </summary>
+	/// <param name="baseCoin">Базовый актив, чей перп ищется в кэше марок.</param>
+	/// <param name="reason">Причина недоступности из исключения сбоя.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	/// <returns>Недоступный снимок с кэшированной маркой, когда она известна.</returns>
+	private async Task<ConsultationMarketSnapshot> SnapshotFromCacheAsync(
+		string baseCoin,
+		string reason,
+		CancellationToken cancellationToken)
+	{
+		var cached = await ReadCachedMarkAsync(baseCoin + "USDT", cancellationToken).ConfigureAwait(false);
+		return new ConsultationMarketSnapshot
+		{
+			BaseCoin = baseCoin,
+			AsOf = cached?.ReceivedAt ?? _timeProvider.GetUtcNow(),
+			IsAvailable = false,
+			UnavailableReason = reason,
+			Symbol = cached is null ? null : baseCoin + "USDT",
+			MarkPrice = cached?.Price,
+		};
+	}
+
+	/// <summary>
+	/// Собирает недоступную доску: причина сбоя биржи и последняя кэшированная
+	/// проекция марок опционов актива, as-of — момент получения самой старой
+	/// марки; якорь окна — кэшированная марка перпа, кэш пуст — пустая проекция.
+	/// </summary>
+	/// <param name="baseCoin">Базовый актив, чьи опционные марки ищутся в кэше.</param>
+	/// <param name="reason">Причина недоступности из исключения сбоя.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	/// <returns>Недоступная доска с кэшированными марками, когда они известны.</returns>
+	private async Task<ConsultationOptionBoard> BoardFromCacheAsync(
+		string baseCoin,
+		string reason,
+		CancellationToken cancellationToken)
+	{
+		var quotes = await ReadCachedOptionQuotesAsync(baseCoin, cancellationToken).ConfigureAwait(false);
+		decimal? underlyingPrice = null;
+		if (quotes.Count > 0)
+		{
+			underlyingPrice = (await ReadCachedMarkAsync(baseCoin + "USDT", cancellationToken).ConfigureAwait(false))?.Price;
+		}
+
+		return new ConsultationOptionBoard
+		{
+			BaseCoin = baseCoin,
+			AsOf = quotes.Count > 0 ? quotes.Min(quote => quote.ReceivedAt) : _timeProvider.GetUtcNow(),
+			IsAvailable = false,
+			UnavailableReason = reason,
+			UnderlyingPrice = underlyingPrice,
+			TotalTickerCount = quotes.Count,
+			Quotes = [.. quotes.Select(quote => quote.Quote)],
+		};
+	}
 
 	/// <summary>Кэшированная марка инструмента с моментом её получения; null — кэш марки не знает.</summary>
 	private async Task<CachedMark?> ReadCachedMarkAsync(string symbol, CancellationToken cancellationToken)

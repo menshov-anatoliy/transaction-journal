@@ -286,12 +286,69 @@ public sealed class BybitConsultationMarketReaderTests
 		Assert.That(board.AsOf, Is.EqualTo(FixedNow));
 	}
 
+	[TestMethod]
+	[Description("Транспортный сбой биржи деградирует снимок в кэш так же, как ошибка конверта")]
+	public async Task ReadSnapshotAsync_TransportOutage_ReturnsCachedPerpMarkWithItsAsOf()
+	{
+		// Arrange: биржа физически недоступна (отказ соединения) — транспорт кидает
+		// HttpRequestException, resilience исчерпывает повторы и отдаёт его наружу.
+		SeedCache(("BTCUSDT", 106000m, CachedAt));
+		var handler = new ScriptedHttpMessageHandler();
+		handler.SetResponder(_ => throw new HttpRequestException("No connection could be made because the target machine actively refused it."));
+
+		var reader = CreateReader(handler, new BybitResilienceOptions { NetworkRetryCount = 1 });
+
+		// Act: читаем снимок при недоступной бирже.
+		var snapshot = await reader.ReadSnapshotAsync("BTC");
+
+		// Assert: исключение не вышло наружу — управляемая недоступность с кэшем
+		// и его as-of; попыток две (исходная + один повтор сети resilience),
+		// второй биржевой запрос ридер сам не инициирует.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(handler.Requests.Count, Is.EqualTo(2));
+		Assert.That(snapshot.IsAvailable, Is.False);
+		Assert.That(snapshot.UnavailableReason, Does.Contain("actively refused"));
+		Assert.That(snapshot.Symbol, Is.EqualTo("BTCUSDT"));
+		Assert.That(snapshot.MarkPrice, Is.EqualTo(106000m));
+		Assert.That(snapshot.AsOf, Is.EqualTo(CachedAt));
+	}
+
+	[TestMethod]
+	[Description("Транспортный сбой биржи деградирует доску в кэш так же, как ошибка конверта")]
+	public async Task ReadOptionBoardAsync_TransportOutage_ReturnsCachedOptionMarksWithTheirAsOf()
+	{
+		// Arrange: кэш несёт марку перпа-якоря и опционную марку BTC, биржа
+		// физически недоступна — транспорт кидает HttpRequestException.
+		SeedCache(
+			("BTCUSDT", 106000m, new DateTimeOffset(2029, 12, 31, 10, 30, 0, TimeSpan.Zero)),
+			("BTC-26DEC25-95000-C", 5160.25m, new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero)));
+		var handler = new ScriptedHttpMessageHandler();
+		handler.SetResponder(_ => throw new HttpRequestException("No connection could be made because the target machine actively refused it."));
+
+		var reader = CreateReader(handler, new BybitResilienceOptions { NetworkRetryCount = 1 });
+
+		// Act: читаем доску при недоступной бирже.
+		var board = await reader.ReadOptionBoardAsync("BTC");
+
+		// Assert: управляемая недоступность с кэшированной проекцией и её as-of.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(board.IsAvailable, Is.False);
+		Assert.That(board.UnavailableReason, Does.Contain("actively refused"));
+		Assert.That(board.UnderlyingPrice, Is.EqualTo(106000m));
+		Assert.That(board.AsOf, Is.EqualTo(new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero)));
+		Assert.That(board.TotalTickerCount, Is.EqualTo(1));
+		Assert.That(board.Quotes.Single().Symbol, Is.EqualTo("BTC-26DEC25-95000-C"));
+	}
+
 	/// <summary>Создаёт адаптер над клиентом тикеров с фиктивным транспортом, кэшем марок и фиксированным временем.</summary>
-	private BybitConsultationMarketReader CreateReader(ScriptedHttpMessageHandler handler)
+	private BybitConsultationMarketReader CreateReader(
+		ScriptedHttpMessageHandler handler,
+		BybitResilienceOptions? resilienceOptions = null)
 	{
 		var tickersClient = new BybitTickersClient(
 			new HttpClient(handler) { BaseAddress = new Uri(TestBaseUrl) },
-			new BybitClientOptions { BaseUrl = TestBaseUrl });
+			new BybitClientOptions { BaseUrl = TestBaseUrl },
+			resilienceOptions);
 		return new BybitConsultationMarketReader(tickersClient, CreateOptions(), new FixedTimeProvider(FixedNow));
 	}
 
