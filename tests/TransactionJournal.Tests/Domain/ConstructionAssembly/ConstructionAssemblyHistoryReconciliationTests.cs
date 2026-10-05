@@ -11,6 +11,7 @@ using TransactionJournal.Application.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Infrastructure.Consultations;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -60,11 +61,14 @@ public class ConstructionAssemblyHistoryReconciliationTests
 
 	private string _databasePath = null!;
 
+	private string _consultationsDirectory = null!;
+
 	[TestInitialize]
 	public void Initialize()
 	{
 		// Каждая проверка работает со своей пустой базой во временной папке.
 		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-assembly-history-{Guid.NewGuid():N}.db");
+		_consultationsDirectory = Path.Combine(Path.GetTempPath(), $"journal-assembly-history-consultations-{Guid.NewGuid():N}");
 		using var db = new JournalDbContext(CreateOptions());
 		db.Database.Migrate();
 	}
@@ -83,6 +87,11 @@ public class ConstructionAssemblyHistoryReconciliationTests
 			{
 				File.Delete(file);
 			}
+		}
+
+		if (Directory.Exists(_consultationsDirectory))
+		{
+			Directory.Delete(_consultationsDirectory, recursive: true);
 		}
 	}
 
@@ -177,6 +186,7 @@ public class ConstructionAssemblyHistoryReconciliationTests
 		new JournalSyncStore(CreateOptions()),
 		new StubJournalBackupService(),
 		CreateOptions(),
+		CreateConsultationStore(),
 		new FixedTimeProvider(FixedNow));
 
 	/// <summary>Создаёт опции контекста журнала над временной SQLite-базой проверки.</summary>
@@ -184,6 +194,9 @@ public class ConstructionAssemblyHistoryReconciliationTests
 		new DbContextOptionsBuilder<JournalDbContext>()
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
+
+	/// <summary>Создаёт настоящее хранилище консультаций над временной папкой проверки.</summary>
+	private ConsultationStore CreateConsultationStore() => new(_consultationsDirectory);
 
 	/// <summary>Загружает фиксированный снимок истории из fixture проверки.</summary>
 	private static JournalRawSnapshot LoadSnapshot()

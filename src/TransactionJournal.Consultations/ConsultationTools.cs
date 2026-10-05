@@ -2,7 +2,9 @@ namespace TransactionJournal.Consultations;
 
 using System.ComponentModel;
 using System.Globalization;
+using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using TransactionJournal.Consultations.Ports;
 using TransactionJournal.Domain.Materialization;
@@ -35,6 +37,14 @@ public sealed class ConsultationTools
 	/// <summary>Максимум страйков одной экспирации в проекции доски — ближайшие к якорю окном.</summary>
 	private const int MaxStrikesPerExpiry = 21;
 
+	// Компактная сериализация аргументов вызовов: рыночный след читается адаптером,
+	// а не человеком.
+	private static readonly JsonSerializerOptions CompactJsonOptions = new()
+	{
+		WriteIndented = false,
+		PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+	};
+
 	private readonly IRuleCorpusReader _ruleCorpusReader;
 
 	private readonly IConsultationMarketReader _marketReader;
@@ -51,22 +61,44 @@ public sealed class ConsultationTools
 	/// <summary>
 	/// Собирает реестр инструментов ассистента: ровно три read-only функции
 	/// с фиксированными именами; проверка реестра показывает отсутствие
-	/// пишущих инструментов.
+	/// пишущих инструментов. Накопитель следа опционален: каждый вызов тула
+	/// записывается в него в момент исполнения — вместе с as-of отданных данных.
 	// Traceability: openspec:consultations/tools#scenario-tools-no-write-tools
+	// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
 	/// </summary>
+	/// <param name="traceRecorder">Накопитель рыночного следа ответа; null — вызовы не записываются.</param>
 	/// <returns>Список из трёх функций инструментов.</returns>
-	public IReadOnlyList<AIFunction> CreateTools() =>
+	public IReadOnlyList<AIFunction> CreateTools(ConsultationMarketTraceRecorder? traceRecorder = null) =>
 	[
 		AIFunctionFactory.Create(
 			ReadRuleCardAsync,
-			new AIFunctionFactoryOptions { Name = ReadRuleCardToolName, Description = "Возвращает полный текст карточки правила корпуса по её id из индекса." }),
+			new AIFunctionFactoryOptions { Name = ReadRuleCardToolName, Description = "Возвращает полный текст карточки правила корпуса по её id из индекса.", ConfigureParameterBinding = TraceBinding(traceRecorder) }),
 		AIFunctionFactory.Create(
 			GetMarketSnapshotAsync,
-			new AIFunctionFactoryOptions { Name = GetMarketSnapshotToolName, Description = "Возвращает снимок фьючерсного рынка по базовому активу: марка, бид-аск, открытый интерес, ставка фандинга." }),
+			new AIFunctionFactoryOptions { Name = GetMarketSnapshotToolName, Description = "Возвращает снимок фьючерсного рынка по базовому активу: марка, бид-аск, открытый интерес, ставка фандинга.", ConfigureParameterBinding = TraceBinding(traceRecorder) }),
 		AIFunctionFactory.Create(
 			GetOptionBoardAsync,
-			new AIFunctionFactoryOptions { Name = GetOptionBoardToolName, Description = "Возвращает компактную проекцию доски опционов по базовому активу: страйки с IV, греками, открытым интересом и бид-аском." }),
+			new AIFunctionFactoryOptions { Name = GetOptionBoardToolName, Description = "Возвращает компактную проекцию доски опционов по базовому активу: страйки с IV, греками, открытым интересом и бид-аском.", ConfigureParameterBinding = TraceBinding(traceRecorder) }),
 	];
+
+	/// <summary>
+	/// Привязка накопителя следа к вызову тула: параметр — обвязка вызова, а не
+	/// аргумент модели, поэтому из схемы тула он исключён, а значение подставляется
+	/// замыканием в момент исполнения.
+	/// </summary>
+	private static Func<ParameterInfo, AIFunctionFactoryOptions.ParameterBindingOptions> TraceBinding(
+		ConsultationMarketTraceRecorder? traceRecorder) =>
+		parameter => parameter.ParameterType == typeof(ConsultationMarketTraceRecorder)
+			? new AIFunctionFactoryOptions.ParameterBindingOptions
+			{
+				BindParameter = (_, _) => traceRecorder,
+				ExcludeFromSchema = true,
+			}
+			: default;
+
+	/// <summary>Компактная сериализация аргументов вызова тула для рыночного следа.</summary>
+	private static string CompactArguments(object arguments) =>
+		JsonSerializer.Serialize(arguments, CompactJsonOptions);
 
 	/// <summary>
 	/// Читает полный текст карточки правила по id из индекса корпуса; карточки
@@ -78,10 +110,16 @@ public sealed class ConsultationTools
 	/// <returns>Полный текст карточки или сообщение об отсутствии.</returns>
 	public async Task<string> ReadRuleCardAsync(
 		[Description("Идентификатор карточки из индекса корпуса, например ac-01.")] string cardId,
+		ConsultationMarketTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(cardId);
 		var card = await _ruleCorpusReader.ReadCardAsync(cardId, cancellationToken).ConfigureAwait(false);
+
+		// Чтение карточки попадает в след без as-of: корпус правил — не рыночные данные.
+		// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+		traceRecorder?.Record(ReadRuleCardToolName, CompactArguments(new { cardId }), dataAsOf: null);
+
 		return card is null
 			? $"Карточка «{cardId}» в корпусе правил не найдена."
 			: card.Text;
@@ -99,10 +137,20 @@ public sealed class ConsultationTools
 	/// <returns>Markdown-снимок рынка.</returns>
 	public async Task<string> GetMarketSnapshotAsync(
 		[Description("Базовый актив, например BTC или ETH.")] string baseCoin,
+		ConsultationMarketTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
 		var snapshot = await _marketReader.ReadSnapshotAsync(baseCoin, cancellationToken).ConfigureAwait(false);
+
+		// As-of следа: живой снимок или кэшированная проекция дают as-of данных;
+		// без того и другого рыночных данных нет вовсе — след хранит null.
+		// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+		traceRecorder?.Record(
+			GetMarketSnapshotToolName,
+			CompactArguments(new { baseCoin }),
+			snapshot.IsAvailable || snapshot.MarkPrice is not null ? snapshot.AsOf : null);
+
 		var markdown = new StringBuilder();
 		if (snapshot.IsAvailable)
 		{
@@ -176,10 +224,20 @@ public sealed class ConsultationTools
 	/// <returns>Markdown-проекция доски опционов.</returns>
 	public async Task<string> GetOptionBoardAsync(
 		[Description("Базовый актив, например BTC или ETH.")] string baseCoin,
+		ConsultationMarketTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
 		var board = await _marketReader.ReadOptionBoardAsync(baseCoin, cancellationToken).ConfigureAwait(false);
+
+		// As-of следа тот же, что у снимка: живая доска или кэшированные марки
+		// дают as-of данных, пустой кэш при недоступной бирже — null.
+		// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+		traceRecorder?.Record(
+			GetOptionBoardToolName,
+			CompactArguments(new { baseCoin }),
+			board.IsAvailable || board.Quotes.Count > 0 ? board.AsOf : null);
+
 		if (board.IsAvailable == false)
 		{
 			return RenderUnavailableBoard(board);

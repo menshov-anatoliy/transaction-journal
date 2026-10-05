@@ -160,6 +160,67 @@ public sealed class ConsultationAgentTests
 		Assert.That(updates, Is.Not.Empty);
 	}
 
+	[TestMethod]
+	[Description("Тул-вызов агентного цикла записывается в рыночный след с as-of отданных данных")]
+	// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+	public async Task TryIfMarketToolInvoked_TraceRecordsInvocationWithAsOf()
+	{
+		// Arrange: сцена 1 — модель вызывает снимок рынка, сцена 2 — отвечает текстом;
+		// биржа отвечает маркой с фиксированным as-of.
+		var chatClient = new FakeChatClient();
+		chatClient.Script =
+		[
+			[() => ToolCallFrame("call-1", ConsultationTools.GetMarketSnapshotToolName, "BTC")],
+			[() => new ChatResponseUpdate(ChatRole.Assistant, "Марка 108975.4.")],
+		];
+		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		market
+			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConsultationMarketSnapshot
+			{
+				BaseCoin = "BTC",
+				AsOf = FixedNow,
+				IsAvailable = true,
+				Symbol = "BTCUSDT",
+				MarkPrice = 108975.4m,
+			});
+		var agent = CreateAgent(chatClient, market);
+		var traceRecorder = new ConsultationMarketTraceRecorder();
+
+		// Act: вопрос провоцирует модель обратиться к рыночному инструменту.
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?", traceRecorder));
+
+		// Assert: вызов записан в момент исполнения — имя, компактные аргументы
+		// и as-of данных, отданных инструментом.
+		var trace = traceRecorder.Build();
+		Assert.That(trace, Is.Not.Null);
+		Assert.That(trace!.Invocations, Has.Count.EqualTo(1));
+		Assert.That(trace.Invocations[0].ToolName, Is.EqualTo(ConsultationTools.GetMarketSnapshotToolName));
+		Assert.That(trace.Invocations[0].Arguments, Is.EqualTo("{\"baseCoin\":\"BTC\"}"));
+		Assert.That(trace.Invocations[0].DataAsOf, Is.EqualTo(FixedNow));
+	}
+
+	[TestMethod]
+	[Description("Ответ без инструментальных вызовов рыночного следа не создаёт")]
+	// След в сообщении появляется только у ответов, использовавших инструменты:
+	// у «чистого» ответа по журналу и корпусу рыночных данных нет.
+	// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+	public async Task TryIfAnswerWithoutTools_TraceStaysEmpty()
+	{
+		// Arrange: модель отвечает текстом без тул-вызовов.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по журналу.")]];
+		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var agent = CreateAgent(chatClient, market);
+		var traceRecorder = new ConsultationMarketTraceRecorder();
+
+		// Act
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", traceRecorder));
+
+		// Assert
+		Assert.That(traceRecorder.Build(), Is.Null);
+	}
+
 	/// <summary>Собирает стрим обновлений в список для проверок.</summary>
 	private static async Task<List<ChatResponseUpdate>> CollectAsync(IAsyncEnumerable<ChatResponseUpdate> stream)
 	{

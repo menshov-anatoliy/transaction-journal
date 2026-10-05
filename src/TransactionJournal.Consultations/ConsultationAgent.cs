@@ -57,18 +57,23 @@ public sealed class ConsultationAgent
 	/// Стримит ответ ассистента на вопрос владельца: инструкции задают
 	/// поведение, история диалога передаётся как есть, вопрос отправляется
 	/// вместе со снимком контекста; инструменты агентного цикла — ровно три
-	/// read-only функции реестра.
+	/// read-only функции реестра. Накопитель следа заполняется тул-вызовами
+	/// в момент их исполнения — по завершении стрима из него строится
+	/// рыночный след сообщения ассистента.
 	// Traceability: openspec:consultations/tools#requirement-tools-read-only-registry
+	// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
 	/// </summary>
 	/// <param name="context">Снимок контекста конструкции, собранный кодом без LLM.</param>
 	/// <param name="history">Предыдущие сообщения текущего диалога в порядке следования.</param>
 	/// <param name="question">Вопрос владельца.</param>
+	/// <param name="traceRecorder">Накопитель рыночного следа ответа; null — вызовы не записываются.</param>
 	/// <param name="cancellationToken">Токен отмены генерации.</param>
 	/// <returns>Поток обновлений ответа: текстовые чанки и tool-вызовы.</returns>
 	public async IAsyncEnumerable<ChatResponseUpdate> StreamAnswerAsync(
 		ConsultationContextSnapshot context,
 		IReadOnlyList<ConsultationMessage> history,
 		string question,
+		ConsultationMarketTraceRecorder? traceRecorder = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(context);
@@ -87,7 +92,7 @@ public sealed class ConsultationAgent
 		var options = new ChatOptions
 		{
 			// Реестр фиксирован контрактоном: три read-only инструмента, пишущих нет.
-			Tools = [.. _tools.CreateTools()],
+			Tools = [.. _tools.CreateTools(traceRecorder)],
 			ToolMode = ChatToolMode.Auto,
 		};
 

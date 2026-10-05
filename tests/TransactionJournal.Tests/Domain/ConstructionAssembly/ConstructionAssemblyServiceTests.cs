@@ -11,6 +11,8 @@ using TransactionJournal.Application.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Infrastructure.Consultations;
+using TransactionJournal.Consultations.Ports;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -36,11 +38,14 @@ public class ConstructionAssemblyServiceTests
 
 	private string _databasePath = null!;
 
+	private string _consultationsDirectory = null!;
+
 	[TestInitialize]
 	public void Initialize()
 	{
 		// Каждая проверка работает со своей пустой базой во временной папке.
 		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-assembly-tests-{Guid.NewGuid():N}.db");
+		_consultationsDirectory = Path.Combine(Path.GetTempPath(), $"journal-assembly-consultations-{Guid.NewGuid():N}");
 		using var db = new JournalDbContext(CreateOptions());
 		db.Database.Migrate();
 	}
@@ -59,6 +64,11 @@ public class ConstructionAssemblyServiceTests
 			{
 				File.Delete(file);
 			}
+		}
+
+		if (Directory.Exists(_consultationsDirectory))
+		{
+			Directory.Delete(_consultationsDirectory, recursive: true);
 		}
 	}
 
@@ -325,6 +335,7 @@ public class ConstructionAssemblyServiceTests
 			snapshotStore,
 			backup,
 			CreateOptions(),
+			CreateConsultationStore(),
 			new FixedTimeProvider(Now));
 
 		// Act: пересбор отклоняется исключением неудавшейся копии.
@@ -699,7 +710,7 @@ public class ConstructionAssemblyServiceTests
 	public void ThrowOnNullRawSnapshotStore()
 	{
 		// Arrange — Act — Assert
-		new ConstructionAssemblyService(null!, new StubJournalBackupService(), CreateOptions());
+		new ConstructionAssemblyService(null!, new StubJournalBackupService(), CreateOptions(), CreateConsultationStore());
 	}
 
 	[TestMethod]
@@ -708,7 +719,7 @@ public class ConstructionAssemblyServiceTests
 	public void ThrowOnNullBackupService()
 	{
 		// Arrange — Act — Assert
-		new ConstructionAssemblyService(new StubSnapshotStore(), null!, CreateOptions());
+		new ConstructionAssemblyService(new StubSnapshotStore(), null!, CreateOptions(), CreateConsultationStore());
 	}
 
 	[TestMethod]
@@ -717,7 +728,48 @@ public class ConstructionAssemblyServiceTests
 	public void ThrowOnNullDbContextOptions()
 	{
 		// Arrange — Act — Assert
-		new ConstructionAssemblyService(new StubSnapshotStore(), new StubJournalBackupService(), null!);
+		new ConstructionAssemblyService(new StubSnapshotStore(), new StubJournalBackupService(), null!, CreateConsultationStore());
+	}
+
+	[TestMethod]
+	[Description("Null-хранилище консультаций отклоняется конструктором")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public void ThrowOnNullConsultationStore()
+	{
+		// Arrange — Act — Assert
+		new ConstructionAssemblyService(new StubSnapshotStore(), new StubJournalBackupService(), CreateOptions(), null!);
+	}
+
+	// Traceability: openspec:consultations/history#scenario-history-rebuild-wipes
+	[TestMethod]
+	[Description("Пересбор конструкций стирает их консультации, не трогая чужие файлы хранилища")]
+	public async Task TryIfRebuildWipesConsultations()
+	{
+		// Arrange: первая сборка создаёт конструкции, владелец оставляет вопрос.
+		SeedRawStorage();
+		await CreateService().RebuildAsync();
+
+		var consultations = CreateConsultationStore();
+		var now = new DateTimeOffset(2026, 9, 26, 12, 0, 0, TimeSpan.Zero);
+		await consultations.AppendMessageAsync(1, null, new ConsultationMessageDraft
+		{
+			Role = ConsultationMessageRole.User,
+			Text = "Почему закрыт стреддл?",
+			AsOf = now,
+		});
+		await consultations.AppendMessageAsync(8, null, new ConsultationMessageDraft
+		{
+			Role = ConsultationMessageRole.User,
+			Text = "Чужой вопрос без конструкции",
+			AsOf = now,
+		});
+
+		// Act: пересбор с нуля заново создаёт конструкции под теми же ключами.
+		await CreateService().RebuildAsync();
+
+		// Assert: история первой конструкции стёрта, чужой файл цел.
+		Assert.That(await consultations.ListDialoguesAsync(1), Is.Empty, "Консультации конструкции стёрты пересбором");
+		Assert.That(await consultations.ListDialoguesAsync(8), Has.Count.EqualTo(1), "Чужие файлы хранилища не тронуты");
 	}
 
 	#region Помощники
@@ -727,6 +779,7 @@ public class ConstructionAssemblyServiceTests
 		new JournalSyncStore(CreateOptions()),
 		backupService ?? new StubJournalBackupService(),
 		CreateOptions(),
+		CreateConsultationStore(),
 		timeProvider ?? new FixedTimeProvider(Now));
 
 	/// <summary>Создаёт опции контекста журнала над временной SQLite-базой проверки.</summary>
@@ -734,6 +787,9 @@ public class ConstructionAssemblyServiceTests
 		new DbContextOptionsBuilder<JournalDbContext>()
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
+
+	/// <summary>Создаёт настоящее хранилище консультаций над временной папкой проверки.</summary>
+	private ConsultationStore CreateConsultationStore() => new(_consultationsDirectory);
 
 	/// <summary>Наполняет сырьё: справочник инструментов, стреддл, его закрытия и сделки робота.</summary>
 	private void SeedRawStorage()

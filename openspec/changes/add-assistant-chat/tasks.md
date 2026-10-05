@@ -21,7 +21,7 @@
 ## 4. Персистентность истории
 
 - [x] 4.1 `ConsultationStore` в Infrastructure по образцу `HintStore`: SQLite per construction, диалоги и сообщения (роль, текст, as-of); диалог создаётся первым сообщением, удаляется целиком; изоляция историй диалогов. Проверить: `requirement-history-dialogue-per-question` — сценарии `scenario-history-created-by-first-message`, `scenario-history-hard-delete-dialogue`, `scenario-history-dialogues-isolated`.
-- [ ] 4.2 Рыночный след ответа ассистента (вызванные инструменты + as-of) сохраняется в сообщении; пересбор конструкции стирает её консультации. Проверить: `requirement-history-message-composition` — `scenario-history-market-trace-persisted`; `requirement-history-environment-record` — `scenario-history-rebuild-wipes`.
+- [x] 4.2 Рыночный след ответа ассистента (вызванные инструменты + as-of) сохраняется в сообщении; пересбор конструкции стирает её консультации. Проверить: `requirement-history-message-composition` — `scenario-history-market-trace-persisted`; `requirement-history-environment-record` — `scenario-history-rebuild-wipes`.
 
 ## 5. Панель UI и сквозная приёмка
 

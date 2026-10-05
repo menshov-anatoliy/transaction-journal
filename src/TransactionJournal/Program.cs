@@ -182,7 +182,8 @@ builder.Services.AddSingleton<IJournalReparseService, JournalReparseService>();
 builder.Services.AddSingleton(sp => new ConstructionAssemblyService(
 	sp.GetRequiredService<IJournalRawSnapshotStore>(),
 	sp.GetRequiredService<IJournalBackupService>(),
-	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<IConsultationStore>()));
 builder.Services.AddSingleton<IConstructionAssemblyService>(sp => sp.GetRequiredService<ConstructionAssemblyService>());
 
 // Слой доменных операций: use-case сервисы над контекстом журнала; каждый вызов
