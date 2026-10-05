@@ -49,6 +49,14 @@ public class ConsultationInstructionsTests
 		Assert.That(flat, Does.Contain("markdown"));
 		Assert.That(flat, Does.Contain("пост-мортем").IgnoreCase);
 		Assert.That(flat, Does.Contain("работа над ошибками").IgnoreCase);
+
+		// Деградация рынка: дефолт инструкций обязывает модель помечать
+		// устаревший as-of недоступных рыночных данных и отказываться от
+		// рыночно-зависимых рекомендаций, отвечая по журналу и корпусу.
+		// Traceability: openspec:consultations/tools#scenario-tools-stale-asof-no-market-advice
+		Assert.That(flat, Does.Contain("as-of"));
+		Assert.That(flat, Does.Contain("недоступ").IgnoreCase);
+		Assert.That(flat, Does.Contain("рыночно-зависимых"));
 	}
 
 	[TestMethod]

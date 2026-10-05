@@ -90,7 +90,7 @@ public sealed class ConsultationTools
 	/// <summary>
 	/// Читает снимок фьючерсного рынка по базовому активу: одно чтение порта —
 	/// один биржевой запрос; недоступность биржи отдаётся структурированным
-	/// «недоступно» с причиной вместо исключения.
+	/// «недоступно» с причиной и последней кэшированной маркой с её as-of.
 	// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
 	// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
 	/// </summary>
@@ -131,12 +131,31 @@ public sealed class ConsultationTools
 		}
 		else
 		{
-			// Недоступность биржи — структурированный ответ с причиной: ассистент
-			// обязан пометить данные и не давать рыночно-зависимых рекомендаций.
-			// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
-			markdown.AppendLine($"# Снимок фьючерсного рынка {snapshot.BaseCoin} — биржа недоступна {AsOfTag(snapshot.AsOf)}");
-			markdown.AppendLine();
-			markdown.AppendLine($"Причина: {snapshot.UnavailableReason ?? "неизвестна"}");
+			// Недоступность биржи — структурированный ответ с причиной и последней
+			// кэшированной маркой с её as-of: ассистент обязан пометить устаревшие
+			// данные и не давать рыночно-зависимых рекомендаций, отвечая по журналу
+			// и корпусу.
+			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			if (snapshot.MarkPrice is { } cachedMark)
+			{
+				markdown.AppendLine($"# Снимок фьючерсного рынка {snapshot.BaseCoin} — биржа недоступна");
+				markdown.AppendLine();
+				markdown.AppendLine($"Причина: {snapshot.UnavailableReason ?? "неизвестна"}");
+				markdown.AppendLine();
+				markdown.AppendLine($"Последняя кэшированная марка {AsOfTag(snapshot.AsOf)}:");
+				markdown.AppendLine(snapshot.Symbol is { } symbol
+					? $"- Инструмент: {symbol}"
+					: $"- Инструмент {snapshot.BaseCoin}USDT");
+				markdown.AppendLine($"- Марка: {Num(cachedMark)} USDT");
+			}
+			else
+			{
+				markdown.AppendLine($"# Снимок фьючерсного рынка {snapshot.BaseCoin} — биржа недоступна {AsOfTag(snapshot.AsOf)}");
+				markdown.AppendLine();
+				markdown.AppendLine($"Причина: {snapshot.UnavailableReason ?? "неизвестна"}");
+				markdown.AppendLine();
+				markdown.AppendLine($"Кэшированной марки {snapshot.BaseCoin}USDT в кэше марок нет.");
+			}
 		}
 
 		return markdown.ToString();
@@ -147,8 +166,10 @@ public sealed class ConsultationTools
 	/// строка на страйк с колонками колла и пута — IV, греки, открытый интерес,
 	/// бид-аск. Окно проекции — страйки в пределах ±20% от марки базового
 	/// актива, максимум 21 ближайший страйк на экспирацию; отсечённые страйки
-	/// объявляются в шапке, сырые данные биржи не отдаются.
+	/// объявляются в шапке, сырые данные биржи не отдаются. Недоступность биржи
+	/// деградирует в последнюю кэшированную проекцию марок с её as-of.
 	// Traceability: openspec:consultations/tools#scenario-tools-option-board-projection
+	// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
 	/// </summary>
 	/// <param name="baseCoin">Базовый актив, например BTC или ETH.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
@@ -161,12 +182,7 @@ public sealed class ConsultationTools
 		var board = await _marketReader.ReadOptionBoardAsync(baseCoin, cancellationToken).ConfigureAwait(false);
 		if (board.IsAvailable == false)
 		{
-			// Недоступность биржи — структурированный ответ с причиной: ассистент
-			// обязан пометить данные и не давать рыночно-зависимых рекомендаций.
-			// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
-			return
-				$"# Доска опционов {board.BaseCoin} — биржа недоступна {AsOfTag(board.AsOf)}\n\n" +
-				$"Причина: {board.UnavailableReason ?? "неизвестна"}\n";
+			return RenderUnavailableBoard(board);
 		}
 
 		var markdown = new StringBuilder();
@@ -191,6 +207,83 @@ public sealed class ConsultationTools
 
 		return markdown.ToString();
 	}
+
+	#region Деградация в кэш марок
+
+	/// <summary>
+	/// Рендерит недоступную доску: причина сбоя биржи и последняя кэшированная
+	/// проекция марок с её as-of — кэш хранит только последние известные цены
+	/// опционов, поэтому таблица деградации показывает страйк и марки колла/пута,
+	/// без IV, греков и бид-аска; ассистент обязан пометить устаревший as-of и
+	/// не давать рыночно-зависимых рекомендаций.
+	// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+	/// </summary>
+	/// <param name="board">Недоступная доска с кэшированными марками актива.</param>
+	/// <returns>Markdown-ответ инструмента при недоступности биржи.</returns>
+	private static string RenderUnavailableBoard(ConsultationOptionBoard board)
+	{
+		var markdown = new StringBuilder();
+		markdown.AppendLine($"# Доска опционов {board.BaseCoin} — биржа недоступна");
+		markdown.AppendLine();
+		markdown.AppendLine($"Причина: {board.UnavailableReason ?? "неизвестна"}");
+		markdown.AppendLine();
+		if (board.Quotes.Count == 0)
+		{
+			markdown.AppendLine($"Кэшированных марок опционов {board.BaseCoin} в кэше марок нет {AsOfTag(board.AsOf)}.");
+			return markdown.ToString();
+		}
+
+		markdown.AppendLine($"Последняя кэшированная проекция марок {AsOfTag(board.AsOf)}:");
+		markdown.AppendLine();
+		var anchor = board.UnderlyingPrice;
+		markdown.AppendLine(anchor is { } anchorPrice
+			? $"- Окно проекции: страйки ±20% от последней кэшированной марки базового актива {Num(anchorPrice)} USDT, максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию"
+			: $"- Окно проекции: страйки вокруг медианы доски (марка базового актива в кэше отсутствует), максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию");
+		markdown.AppendLine($"- Котировок в кэше: {board.Quotes.Count}");
+		markdown.AppendLine();
+		foreach (var expiryGroup in board.Quotes.GroupBy(quote => quote.Expiry).OrderBy(group => group.Key))
+		{
+			AppendCachedExpirySection(markdown, expiryGroup.Key, expiryGroup, anchor);
+		}
+
+		return markdown.ToString();
+	}
+
+	/// <summary>Таблица кэшированных марок одной экспирации: строка на страйк, только марки колла и пута.</summary>
+	private static void AppendCachedExpirySection(
+		StringBuilder markdown,
+		DateOnly expiry,
+		IEnumerable<ConsultationOptionQuote> quotes,
+		decimal? boardAnchor)
+	{
+		var byStrike = quotes.ToLookup(quote => quote.Strike);
+		var strikes = byStrike.Select(group => group.Key).ToArray();
+
+		// Якорь окна тот же, что у живой доски: кэшированная марка перпа, без неё —
+		// медиана страйков экспирации.
+		var anchor = boardAnchor ?? MedianStrike(strikes);
+		var selected = SelectWindowStrikes(strikes, anchor);
+
+		markdown.AppendLine($"## Экспирация {expiry:yyyy-MM-dd}");
+		markdown.AppendLine();
+		if (selected.Count < strikes.Length)
+		{
+			markdown.AppendLine($"Показаны {selected.Count} из {strikes.Length} страйков экспирации — ближайшие к якорю окна.");
+		}
+
+		markdown.AppendLine("| Страйк | Колл марка | Пут марка |");
+		markdown.AppendLine("|---|---|---|");
+		foreach (var strike in selected)
+		{
+			var call = byStrike[strike].FirstOrDefault(quote => quote.Type == OptionType.Call);
+			var put = byStrike[strike].FirstOrDefault(quote => quote.Type == OptionType.Put);
+			markdown.AppendLine($"| {Num(strike)} | {NumOpt(call?.MarkPrice)} | {NumOpt(put?.MarkPrice)} |");
+		}
+
+		markdown.AppendLine();
+	}
+
+	#endregion
 
 	#region Проекция одной экспирации
 

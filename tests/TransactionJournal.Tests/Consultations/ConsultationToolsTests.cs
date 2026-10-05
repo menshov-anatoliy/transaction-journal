@@ -13,7 +13,8 @@ namespace TransactionJournal.Tests.Consultations;
 /// Проверки реестра инструментов консультаций: реестр содержит ровно три
 /// read-only функции, карточка правила читается полным текстом только по id,
 /// доска опционов отдаётся компактной проекцией вместо сырых данных, а
-/// недоступность биржи отдаётся структурированным «недоступно».
+/// недоступность биржи отдаётся структурированным «недоступно» с последней
+/// кэшированной проекцией марок и её as-of.
 /// </summary>
 [TestClass]
 public sealed class ConsultationToolsTests
@@ -179,12 +180,118 @@ public sealed class ConsultationToolsTests
 		// Act: строим ответ инструмента.
 		var markdown = await tools.GetOptionBoardAsync("BTC");
 
-		// Assert: ответ помечен недоступностью с причиной — ассистент обязан
-		// пометить данные и не давать рыночно-зависимых рекомендаций.
+		// Assert: ответ помечен недоступностью с причиной; кэш пуст — таблицы
+		// проекции нет, инструмент объявляет отсутствие кэшированных марок.
 		// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
 		Assert.That(markdown, Does.Contain("биржа недоступна"));
 		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
+		Assert.That(markdown, Does.Contain("Кэшированных марок опционов BTC в кэше марок нет"));
 		Assert.That(markdown, Does.Not.Contain("Страйк"));
+	}
+
+	[TestMethod]
+	[Description("Недоступность биржи с кэшем деградирует снимок в последнюю кэшированную марку с её as-of")]
+	public async Task GetMarketSnapshotAsync_UnavailableWithCache_RendersCachedMarkWithItsAsOf()
+	{
+		// Arrange: порт отвечает недоступностью с последней кэшированной маркой
+		// перпа и as-of момента её получения из кэша марок.
+		var cachedAt = new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero);
+		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		market
+			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConsultationMarketSnapshot
+			{
+				BaseCoin = "BTC",
+				AsOf = cachedAt,
+				IsAvailable = false,
+				UnavailableReason = "Bybit API ответил ошибкой: retCode=10001.",
+				Symbol = "BTCUSDT",
+				MarkPrice = 106000m,
+			});
+		var tools = CreateTools(market.Object);
+
+		// Act: строим ответ инструмента.
+		var markdown = await tools.GetMarketSnapshotAsync("BTC");
+
+		// Assert: недоступность с причиной и последняя кэшированная марка с as-of
+		// кэша — ассистент обязан пометить устаревшие данные и не давать
+		// рыночно-зависимых рекомендаций.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(markdown, Does.Contain("Снимок фьючерсного рынка BTC — биржа недоступна"));
+		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
+		Assert.That(markdown, Does.Contain("Последняя кэшированная марка (as-of: 2029-12-31 10:00:00 UTC):"));
+		Assert.That(markdown, Does.Contain("Инструмент: BTCUSDT"));
+		Assert.That(markdown, Does.Contain("Марка: 106000 USDT"));
+	}
+
+	[TestMethod]
+	[Description("Недоступность биржи без кэшированной марки отвечает «кэш пуст» вместо проекции")]
+	public async Task GetMarketSnapshotAsync_UnavailableWithoutCache_SaysNoCachedMark()
+	{
+		// Arrange: порт отвечает недоступностью без марки — кэш провайдера пуст.
+		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		market
+			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConsultationMarketSnapshot
+			{
+				BaseCoin = "BTC",
+				AsOf = FixedNow,
+				IsAvailable = false,
+				UnavailableReason = "Bybit API ответил ошибкой: retCode=10001.",
+			});
+		var tools = CreateTools(market.Object);
+
+		// Act: строим ответ инструмента.
+		var markdown = await tools.GetMarketSnapshotAsync("BTC");
+
+		// Assert: деградировать нечем — инструмент объявляет отсутствие кэшированной марки.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(markdown, Does.Contain("биржа недоступна"));
+		Assert.That(markdown, Does.Contain("Кэшированной марки BTCUSDT в кэше марок нет"));
+	}
+
+	[TestMethod]
+	[Description("Недоступность биржи с кэшем деградирует доску в таблицу кэшированных марок с её as-of")]
+	public async Task GetOptionBoardAsync_UnavailableWithCache_RendersCachedMarksTableWithItsAsOf()
+	{
+		// Arrange: порт отвечает недоступностью с кэшированными марками двух
+		// опционов и якорем из кэшированной марки перпа.
+		var cachedAt = new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero);
+		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		market
+			.Setup(reader => reader.ReadOptionBoardAsync("BTC", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ConsultationOptionBoard
+			{
+				BaseCoin = "BTC",
+				AsOf = cachedAt,
+				IsAvailable = false,
+				UnavailableReason = "Bybit API ответил ошибкой: retCode=10001.",
+				UnderlyingPrice = 106000m,
+				TotalTickerCount = 2,
+				Quotes =
+				[
+					Quote("BTC-26DEC25-95000-C", new DateOnly(2025, 12, 26), 95000m, OptionType.Call, mark: 5160.25m),
+					Quote("BTC-26DEC25-95000-P", new DateOnly(2025, 12, 26), 95000m, OptionType.Put, mark: 626.10m),
+				],
+			});
+		var tools = CreateTools(market.Object);
+
+		// Act: строим ответ инструмента.
+		var markdown = await tools.GetOptionBoardAsync("BTC");
+
+		// Assert: недоступность с причиной и кэшированная проекция марок с as-of
+		// кэша; кэш хранит только марки — таблица деградации без IV, греков и
+		// бид-аска; сырых данных биржи в ответе нет.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(markdown, Does.Contain("Доска опционов BTC — биржа недоступна"));
+		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
+		Assert.That(markdown, Does.Contain("Последняя кэшированная проекция марок (as-of: 2029-12-31 10:00:00 UTC):"));
+		Assert.That(markdown, Does.Contain("Окно проекции: страйки ±20% от последней кэшированной марки базового актива 106000 USDT"));
+		Assert.That(markdown, Does.Contain("Котировок в кэше: 2"));
+		Assert.That(markdown, Does.Contain("| Страйк | Колл марка | Пут марка |"));
+		Assert.That(markdown, Does.Contain("| 95000 | 5160.25 | 626.1 |"));
+		Assert.That(markdown, Does.Contain("Экспирация 2025-12-26"));
+		Assert.That(markdown, Does.Not.Contain("Колл IV"));
 	}
 
 	[TestMethod]

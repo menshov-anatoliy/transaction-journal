@@ -16,7 +16,7 @@
 - [x] 3.1 Расширить DTO `BybitTicker` опциональными полями (греки/IV/OI/бид-аск/фандинг) тем же эндпоинтом; убедиться, что поведение провайдера марок и PnL не изменилось (существующие тесты зелёные). Проверить: регресс существующих потребителей `BybitTickersClient`.
 - [x] 3.2 Реализовать три read-only инструмента `read_rule_card`, `get_market_snapshot`, `get_option_board` через один `BybitTickersClient`: один вызов = один HTTP-запрос, доска — компактная проекция. Проверить: `requirement-tools-read-only-registry`, `requirement-tools-single-request-per-call` — сценарии `scenario-tools-card-by-id`, `scenario-tools-option-board-projection`, `scenario-tools-no-write-tools`, `scenario-tools-iteration-cap`.
 - [x] 3.3 Агентный цикл на keyed `IChatClient` с `UseFunctionInvocation`, `MaximumIterationsPerRequest = 6`; конфигурация модели отдельной секцией (дефолт z.ai GLM-5.3), регистрация в composition root. Проверить: `requirement-tools-chat-model-configurable` — сценарий `scenario-tools-model-switch-config`.
-- [ ] 3.4 Деградация при недоступности Bybit: тул возвращает «недоступно + кэшированная проекция с as-of» из кэша `InstrumentMarkProvider`; агент продолжает ответ по журналу и корпусу. Проверить: `requirement-tools-degradation-cached-asof` — сценарии `scenario-tools-market-down-cached-projection`, `scenario-tools-stale-asof-no-market-advice`.
+- [x] 3.4 Деградация при недоступности Bybit: тул возвращает «недоступно + кэшированная проекция с as-of» из кэша `InstrumentMarkProvider`; агент продолжает ответ по журналу и корпусу. Проверить: `requirement-tools-degradation-cached-asof` — сценарии `scenario-tools-market-down-cached-projection`, `scenario-tools-stale-asof-no-market-advice`.
 
 ## 4. Персистентность истории
 

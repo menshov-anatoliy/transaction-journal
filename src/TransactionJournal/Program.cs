@@ -337,9 +337,14 @@ var chatModelOptions = ConsultationChatModelOptions.Resolve(
 // ключ доступа не мешает остальному журналу работать.
 builder.Services.AddKeyedChatClient(ConsultationAgent.ChatClientServiceKey, _ => CreateConsultationChatClient(chatModelOptions));
 // Агентный цикл: инструменты реестра и keyed клиент соединяются здесь;
-// рыночные данные агента читаются из Bybit через адаптер Infrastructure.
+// рыночные данные агента читаются из Bybit через адаптер Infrastructure, а при
+// сбое биржи адаптер деградирует в кэш марок провайдера с явным as-of — чат
+// продолжается по журналу и корпусу.
 // Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
-builder.Services.AddSingleton<IConsultationMarketReader, BybitConsultationMarketReader>();
+// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
+builder.Services.AddSingleton<IConsultationMarketReader>(sp => new BybitConsultationMarketReader(
+	sp.GetRequiredService<BybitTickersClient>(),
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton<ConsultationTools>();
 builder.Services.AddSingleton<ConsultationAgent>();
 

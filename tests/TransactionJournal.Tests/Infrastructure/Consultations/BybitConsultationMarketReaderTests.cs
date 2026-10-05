@@ -1,8 +1,11 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Bybit;
 using TransactionJournal.Infrastructure.Consultations;
+using TransactionJournal.Infrastructure.Data;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 using OptionType = TransactionJournal.Domain.Materialization.OptionType;
@@ -15,8 +18,9 @@ using TransactionJournal.Tests.Infrastructure.Bybit;
 /// Проверки Bybit-адаптера рыночных данных консультаций против зафиксированных
 /// HTTP-ответов: каждое чтение порта выполняет ровно один запрос к публичному
 /// эндпоинту тикеров, снимок — линейным запросом по символу перпа, доска —
-/// опционным запросом с фильтром baseCoin, а ошибка биржи превращается в
-/// недоступную запись с причиной вместо исключения.
+/// опционным запросом с фильтром baseCoin, ошибка биржи превращается в
+/// недоступную запись с причиной вместо исключения, а недоступность деградирует
+/// в кэш марок провайдера — последняя известная проекция с её as-of.
 /// </summary>
 [TestClass]
 public sealed class BybitConsultationMarketReaderTests
@@ -26,6 +30,39 @@ public sealed class BybitConsultationMarketReaderTests
 
 	/// <summary>Фиксированный момент as-of для детерминированных проверок времени.</summary>
 	private static readonly DateTimeOffset FixedNow = new(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+	/// <summary>Момент получения кэшированных марок для проверок деградации.</summary>
+	private static readonly DateTimeOffset CachedAt = new(2029, 12, 31, 10, 0, 0, TimeSpan.Zero);
+
+	private string _databasePath = null!;
+
+	[TestInitialize]
+	public void Initialize()
+	{
+		// Каждая проверка работает со своей пустой базой кэша марок во временной папке.
+		_databasePath = Path.Combine(Path.GetTempPath(), $"consultation-market-reader-tests-{Guid.NewGuid():N}.db");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate();
+		}
+	}
+
+	[TestCleanup]
+	public void Cleanup()
+	{
+		// Пул соединений SQLite держит файл базы открытым — сбрасываем его перед удалением.
+		Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+		// Временная база и соседние WAL/SHM-файлы удаляются после каждой проверки.
+		foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
+		{
+			var file = _databasePath + suffix;
+			if (File.Exists(file))
+			{
+				File.Delete(file);
+			}
+		}
+	}
 
 	[TestMethod]
 	[Description("Снимок рынка читается одним линейным запросом и проецируется в поля порта")]
@@ -137,17 +174,153 @@ public sealed class BybitConsultationMarketReaderTests
 		Assert.That(snapshot.UnavailableReason, Does.Contain("params error"));
 	}
 
-	/// <summary>Создаёт адаптер над клиентом тикеров с фиктивным транспортом и фиксированным временем.</summary>
-	private static BybitConsultationMarketReader CreateReader(ScriptedHttpMessageHandler handler)
+	[TestMethod]
+	[Description("Сбой биржи деградирует снимок в кэш: последняя марка перпа с моментом её получения в роли as-of")]
+	public async Task ReadSnapshotAsync_BybitApiError_ReturnsCachedPerpMarkWithItsAsOf()
+	{
+		// Arrange: кэш марок уже знает последнюю марку перпа BTCUSDT, биржа
+		// отвечает ошибкой конверта retCode.
+		SeedCache(("BTCUSDT", 106000m, CachedAt));
+		var handler = new ScriptedHttpMessageHandler();
+		handler.EnqueueJson("""{"retCode":10001,"retMsg":"params error","result":{"category":"linear","list":[]},"retExt":{},"time":1}""");
+
+		var reader = CreateReader(handler);
+
+		// Act: читаем снимок вопреки сбою биржи.
+		var snapshot = await reader.ReadSnapshotAsync("BTC");
+
+		// Assert: недоступность + последняя кэшированная марка с as-of кэша;
+		// биржевой запрос по-прежнему ровно один.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(handler.Requests.Count, Is.EqualTo(1));
+		Assert.That(snapshot.IsAvailable, Is.False);
+		Assert.That(snapshot.UnavailableReason, Does.Contain("params error"));
+		Assert.That(snapshot.Symbol, Is.EqualTo("BTCUSDT"));
+		Assert.That(snapshot.MarkPrice, Is.EqualTo(106000m));
+		Assert.That(snapshot.AsOf, Is.EqualTo(CachedAt));
+	}
+
+	[TestMethod]
+	[Description("Сбой биржи без кэшированной марки перпа отдаёт недоступность без марки, as-of — момент сбоя")]
+	public async Task ReadSnapshotAsync_BybitApiErrorWithoutCache_ReturnsUnavailableWithoutMark()
+	{
+		// Arrange: кэш марок пуст, биржа отвечает ошибкой.
+		var handler = new ScriptedHttpMessageHandler();
+		handler.EnqueueJson("""{"retCode":10001,"retMsg":"params error","result":{"category":"linear","list":[]},"retExt":{},"time":1}""");
+
+		var reader = CreateReader(handler);
+
+		// Act: читаем снимок вопреки сбою биржи.
+		var snapshot = await reader.ReadSnapshotAsync("BTC");
+
+		// Assert: деградировать нечем — марки нет, as-of совпадает с моментом сбоя.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(snapshot.IsAvailable, Is.False);
+		Assert.That(snapshot.Symbol, Is.Null);
+		Assert.That(snapshot.MarkPrice, Is.Null);
+		Assert.That(snapshot.AsOf, Is.EqualTo(FixedNow));
+	}
+
+	[TestMethod]
+	[Description("Сбой биржи деградирует доску в кэш: марки опционов актива с as-of самой старой марки, чужие и нечитаемые символы отброшены")]
+	public async Task ReadOptionBoardAsync_BybitApiError_ReturnsCachedOptionMarksWithTheirAsOf()
+	{
+		// Arrange: кэш несёт марку перпа-якоря, две опционные марки BTC и шум —
+		// опцион чужого актива и нечитаемый символ с префиксом BTC-.
+		SeedCache(
+			("BTCUSDT", 106000m, new DateTimeOffset(2029, 12, 31, 10, 30, 0, TimeSpan.Zero)),
+			("BTC-26DEC25-95000-C", 5160.25m, new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero)),
+			("BTC-26DEC25-95000-P", 626.10m, new DateTimeOffset(2029, 12, 31, 9, 30, 0, TimeSpan.Zero)),
+			("ETH-26DEC25-4000-C", 180m, new DateTimeOffset(2029, 12, 31, 9, 0, 0, TimeSpan.Zero)),
+			("BTC-NOTANOPTION", 1m, new DateTimeOffset(2029, 12, 31, 8, 0, 0, TimeSpan.Zero)));
+		var handler = new ScriptedHttpMessageHandler();
+		handler.EnqueueJson("""{"retCode":10001,"retMsg":"params error","result":{"category":"option","list":[]},"retExt":{},"time":1}""");
+
+		var reader = CreateReader(handler);
+
+		// Act: читаем доску вопреки сбою биржи.
+		var board = await reader.ReadOptionBoardAsync("BTC");
+
+		// Assert: недоступность + кэшированные марки только опционов BTC; as-of —
+		// момент получения самой старой марки проекции; IV, греки и бид-аск кэш
+		// не хранит; биржевой запрос по-прежнему ровно один.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(handler.Requests.Count, Is.EqualTo(1));
+		Assert.That(board.IsAvailable, Is.False);
+		Assert.That(board.UnavailableReason, Does.Contain("params error"));
+		Assert.That(board.UnderlyingPrice, Is.EqualTo(106000m));
+		Assert.That(board.AsOf, Is.EqualTo(new DateTimeOffset(2029, 12, 31, 9, 30, 0, TimeSpan.Zero)));
+		Assert.That(board.TotalTickerCount, Is.EqualTo(2));
+		Assert.That(board.Quotes, Has.Count.EqualTo(2));
+
+		var call = board.Quotes.Single(quote => quote.Type == OptionType.Call);
+		Assert.That(call.Symbol, Is.EqualTo("BTC-26DEC25-95000-C"));
+		Assert.That(call.Expiry, Is.EqualTo(new DateOnly(2025, 12, 26)));
+		Assert.That(call.Strike, Is.EqualTo(95000m));
+		Assert.That(call.MarkPrice, Is.EqualTo(5160.25m));
+		Assert.That(call.MarkIv, Is.Null);
+		Assert.That(call.Delta, Is.Null);
+		Assert.That(call.OpenInterest, Is.Null);
+		Assert.That(call.Bid1Price, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Сбой биржи без кэшированных марок опционов отдаёт недоступность с пустой доской")]
+	public async Task ReadOptionBoardAsync_BybitApiErrorWithoutCache_ReturnsUnavailableEmptyBoard()
+	{
+		// Arrange: кэш марок пуст, биржа отвечает ошибкой.
+		var handler = new ScriptedHttpMessageHandler();
+		handler.EnqueueJson("""{"retCode":10001,"retMsg":"params error","result":{"category":"option","list":[]},"retExt":{},"time":1}""");
+
+		var reader = CreateReader(handler);
+
+		// Act: читаем доску вопреки сбою биржи.
+		var board = await reader.ReadOptionBoardAsync("BTC");
+
+		// Assert: деградировать нечем — проекция пуста, as-of совпадает с моментом сбоя.
+		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		Assert.That(board.IsAvailable, Is.False);
+		Assert.That(board.UnderlyingPrice, Is.Null);
+		Assert.That(board.TotalTickerCount, Is.EqualTo(0));
+		Assert.That(board.Quotes, Is.Empty);
+		Assert.That(board.AsOf, Is.EqualTo(FixedNow));
+	}
+
+	/// <summary>Создаёт адаптер над клиентом тикеров с фиктивным транспортом, кэшем марок и фиксированным временем.</summary>
+	private BybitConsultationMarketReader CreateReader(ScriptedHttpMessageHandler handler)
 	{
 		var tickersClient = new BybitTickersClient(
 			new HttpClient(handler) { BaseAddress = new Uri(TestBaseUrl) },
 			new BybitClientOptions { BaseUrl = TestBaseUrl });
-		return new BybitConsultationMarketReader(tickersClient, new FixedTimeProvider(FixedNow));
+		return new BybitConsultationMarketReader(tickersClient, CreateOptions(), new FixedTimeProvider(FixedNow));
 	}
 
 	#region Помощники
 
+	/// <summary>Опции контекста журнала над временной базой кэша марок.</summary>
+	private DbContextOptions<JournalDbContext> CreateOptions() =>
+		new DbContextOptionsBuilder<JournalDbContext>()
+			.UseSqlite($"Data Source={_databasePath}")
+			.Options;
+
+	/// <summary>Складывает марки в кэш провайдера: символ, цена, момент получения.</summary>
+	private void SeedCache(params (string Symbol, decimal Price, DateTimeOffset ReceivedAt)[] marks)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		foreach (var mark in marks)
+		{
+			db.InstrumentMarks.Add(new InstrumentMark
+			{
+				Symbol = mark.Symbol,
+				MarkPrice = mark.Price,
+				ReceivedAt = mark.ReceivedAt,
+			});
+		}
+
+		db.SaveChanges();
+	}
+
+	/// <summary>Читает зафиксированный ответ биржи рядом с тестовой сборкой.</summary>
 	private static string LoadFixture(string relativePath)
 	{
 		// Зафиксированные ответы лежат рядом с тестовой сборкой: доски консультаций —

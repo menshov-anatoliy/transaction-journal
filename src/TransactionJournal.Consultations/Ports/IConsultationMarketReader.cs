@@ -37,7 +37,7 @@ public sealed record ConsultationMarketSnapshot
 	/// <summary>Базовый актив снимка.</summary>
 	public required string BaseCoin { get; init; }
 
-	/// <summary>Отметка as-of момента ответа источника.</summary>
+	/// <summary>Отметка as-of данных снимка: момент ответа биржи, а при деградации — момент получения кэшированной марки.</summary>
 	public required DateTimeOffset AsOf { get; init; }
 
 	/// <summary>Источник доступен и снимку можно доверять как рыночным данным.</summary>
@@ -83,7 +83,7 @@ public sealed record ConsultationOptionBoard
 	/// <summary>Базовый актив доски.</summary>
 	public required string BaseCoin { get; init; }
 
-	/// <summary>Отметка as-of момента ответа источника.</summary>
+	/// <summary>Отметка as-of данных доски: момент ответа биржи, а при деградации — момент получения самой старой кэшированной марки.</summary>
 	public required DateTimeOffset AsOf { get; init; }
 
 	/// <summary>Источник доступен и доске можно доверять как рыночным данным.</summary>
