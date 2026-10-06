@@ -36,14 +36,26 @@ public class ConstructionDetailReadModelTests
 	private const string CallSymbol = "BTC-29DEC23-45000-C";
 	private const string LinearSymbol = "BTCUSDT";
 
-	// Инструменты сценария сортировки: дальние серии 2030 года, чей статус
-	// ног определяется только сделками, а не прошедшей экспирацией.
-	private const string OptCallA = "AAA-01JAN30-100-C";
-	private const string OptCallB = "BBB-01JAN30-100-C-USDT";
-	private const string OptPutA = "AAA-01JAN30-100-P";
-	private const string OptPutB = "BBB-01JAN30-100-P-USDT";
-	private const string OptCallClosed = "AAA-01FEB30-100-C";
-	private const string OptPutClosed = "AAA-01FEB30-100-P";
+	// Открытые ноги сценария сортировки — дальняя доска 2030 года: её экспирация
+	// ещё не наступила на любых часах, поэтому статус ног определяется сделками.
+	private const string OpenCallHigh = "ETH-01JAN30-2500-C";
+	private const string OpenPutHigh = "ETH-01JAN30-2500-P";
+	private const string OpenCallLow = "ETH-01JAN30-2000-C";
+
+	// Закрытые ноги сценария — эталонный пример спеки: доски 25DEC26, 25SEP26
+	// и 29MAY26 с фьючерсом; каждая нога прикрыта встречной сделкой до поставки,
+	// поэтому прошедшие экспирации не меняют её статус на любых часах.
+	private const string DecCall2200 = "ETH-25DEC26-2200-C";
+	private const string DecPut2200 = "ETH-25DEC26-2200-P";
+	private const string DecCall1900 = "ETH-25DEC26-1900-C";
+	private const string DecPut1900 = "ETH-25DEC26-1900-P";
+	private const string SepCall2200 = "ETH-25SEP26-2200-C";
+	private const string SepPut2200 = "ETH-25SEP26-2200-P";
+	private const string SepCall1900 = "ETH-25SEP26-1900-C";
+	private const string SepCall1800 = "ETH-25SEP26-1800-C";
+	private const string SepPut1800 = "ETH-25SEP26-1800-P";
+	private const string MayCall1900 = "ETH-29MAY26-1900-C";
+	private const string MayPut1900 = "ETH-29MAY26-1900-P";
 
 	// Инструменты сценариев автоматической сборки: затухающий стреддл доски
 	// 25SEP26 с фьючерсом ETHUSDT и живой стреддл доски 25DEC27.
@@ -237,8 +249,8 @@ public class ConstructionDetailReadModelTests
 
 		// Assert: позиция несёт картину своих записей — средние цены входа и
 		// закрытия, общий P&L, комиссии и времена —
-		// с комментарием позиции; сделки перечислены хронологически с атрибутами
-		// биржевой записи и комментарием своей сделки.
+		// с комментарием позиции; сделки перечислены от новых к старым
+		// с атрибутами биржевой записи и комментарием своей сделки.
 		// Требование: строка позиции показывает вход, выход и итог.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
 		var position = data.Positions.Single();
@@ -253,19 +265,49 @@ public class ConstructionDetailReadModelTests
 		Assert.That(position.IsOpen, Is.True);
 		Assert.That(position.Comment, Is.EqualTo("частичный выход"));
 
-		Assert.That(data.Trades.Select(trade => trade.ExecId).ToArray(), Is.EqualTo(new[] { "exec-buy", "exec-sell" }));
-		var first = data.Trades[0];
-		Assert.That(first.Symbol, Is.EqualTo(LinearSymbol));
-		Assert.That(first.IsBuy, Is.True);
-		Assert.That(first.Quantity, Is.EqualTo(0.1m));
-		Assert.That(first.Price, Is.EqualTo(42000m));
-		Assert.That(first.AmountUsdt, Is.EqualTo(4200m));
-		Assert.That(first.Fee, Is.EqualTo(1m));
-		Assert.That(first.Comment, Is.EqualTo("вход в календарь"));
-		var second = data.Trades[1];
-		Assert.That(second.IsBuy, Is.False);
-		Assert.That(second.AmountUsdt, Is.EqualTo(1700m));
-		Assert.That(second.Comment, Is.Null);
+		// Требование: таблица сделок деталей начинается с самой поздней сделки.
+		// Traceability: openspec:ui/screens#scenario-detail-trades-newest-first
+		Assert.That(data.Trades.Select(trade => trade.ExecId).ToArray(), Is.EqualTo(new[] { "exec-sell", "exec-buy" }));
+		var newest = data.Trades[0];
+		Assert.That(newest.Symbol, Is.EqualTo(LinearSymbol));
+		Assert.That(newest.IsBuy, Is.False);
+		Assert.That(newest.AmountUsdt, Is.EqualTo(1700m));
+		Assert.That(newest.Comment, Is.Null);
+		var oldest = data.Trades[1];
+		Assert.That(oldest.IsBuy, Is.True);
+		Assert.That(oldest.Quantity, Is.EqualTo(0.1m));
+		Assert.That(oldest.Price, Is.EqualTo(42000m));
+		Assert.That(oldest.AmountUsdt, Is.EqualTo(4200m));
+		Assert.That(oldest.Fee, Is.EqualTo(1m));
+		Assert.That(oldest.Comment, Is.EqualTo("вход в календарь"));
+	}
+
+	[TestMethod]
+	[Description("Таблица сделок начинается с самой поздней сделки и детерминирована при равном времени")]
+	public async Task TryIfTradeRowsNewestFirstAndDeterministicOnEqualTime()
+	{
+		// Arrange: три привязанные сделки — ранняя и две с равным временем
+		// исполнения, вставленные в порядке, обратном ожидаемому списку.
+		// Требование: таблица сделок начинается с самой поздней по времени
+		// исполнения сделки; при равном времени порядок строк детерминирован
+		// тай-брейком execId по убыванию и не меняется между перечитываниями.
+		// Traceability: openspec:ui/screens#scenario-detail-trades-newest-first
+		var construction = await _constructionService.CreateAsync("Хронология сделок", 1000m);
+		await AddLinearTradeAsync("exec-late-z", "Buy", "0.01", "42000", "0", ExecMs(2023, 12, 28, 11, 0));
+		await AddLinearTradeAsync("exec-early", "Buy", "0.01", "41000", "0", ExecMs(2023, 12, 28, 10, 0));
+		await AddLinearTradeAsync("exec-late-a", "Buy", "0.01", "43000", "0", ExecMs(2023, 12, 28, 11, 0));
+		await _bindingService.BindBatchAsync(construction.Id, new[] { "exec-late-z", "exec-early", "exec-late-a" });
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+
+		// Act: дважды читаем данные экрана деталей.
+		var firstRead = await readModel.ReadAsync(construction.Id);
+		var secondRead = await readModel.ReadAsync(construction.Id);
+
+		// Assert: самая поздняя сделка в начале; при равном времени выше строка
+		// с большим execId, порядок стабилен между перечитываниями.
+		var expectedOrder = new[] { "exec-late-z", "exec-late-a", "exec-early" };
+		Assert.That(firstRead.Trades.Select(trade => trade.ExecId).ToArray(), Is.EqualTo(expectedOrder));
+		Assert.That(secondRead.Trades.Select(trade => trade.ExecId).ToArray(), Is.EqualTo(expectedOrder));
 	}
 
 	[TestMethod]
@@ -338,50 +380,76 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
-	[Description("Строки позиций упорядочены статусом, типом, тикером и экспирацией")]
-	public async Task TryIfPositionRowsOrderedByStatusTypeTickerAndExpiry()
+	[Description("Строки позиций упорядочены: открытые раньше закрытых, далее экспирация, страйк и тип")]
+	public async Task TryIfPositionRowsOrderedByStatusExpiryStrikeAndType()
 	{
-		// Arrange: одна конструкция с шестью открытыми ногами — CALL и PUT
-		// тикеров AAA/BBB и линейными BTC/ETH — и двумя закрытыми ногами
-		// AAA (CALL и PUT), закрытыми встречной продажей; серии далекие,
-		// экспирация не влияет на статус ног.
-		// Требование: порядок строк — открытые раньше закрытых, внутри CALL,
-		// PUT, прочие, затем тикер и экспирация по возрастанию.
+		// Arrange: открытые ноги дальней доски 2030 года и закрытые ноги эталонного
+		// примера спеки — доски 25DEC26, 25SEP26 и 29MAY26 с фьючерсом ETHUSDT.
+		// Требование: порядок строк — открытые раньше закрытых; внутри группы выше
+		// стоит опцион дальней экспирации, при равной экспирации — большего страйка,
+		// при равном страйке — CALL раньше PUT; фьючерс идёт в конце группы.
 		// Traceability: openspec:ui/screens#scenario-detail-positions-ordered-by-status-and-type
 		SeedOrderingInstruments();
 		var construction = await _constructionService.CreateAsync("Сортировка ног", 1000m);
-		await AddRawExecutionAsync("o1", OptCallA, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
-		await AddRawExecutionAsync("o2", OptCallB, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
-		await AddRawExecutionAsync("o3", OptPutA, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
-		await AddRawExecutionAsync("o4", OptPutB, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
-		await AddRawExecutionAsync("o5", LinearSymbol, "linear", "Buy", "1", "100", ExecMs(2029, 12, 20, 11, 0), "USDT");
-		await AddRawExecutionAsync("o6", EthPerpSymbol, "linear", "Buy", "1", "100", ExecMs(2029, 12, 20, 11, 0), "USDT");
-		await AddRawExecutionAsync("c1", OptCallClosed, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
-		await AddRawExecutionAsync("c2", OptCallClosed, "option", "Sell", "1", "150", ExecMs(2029, 12, 21, 10, 0), "USDC");
-		await AddRawExecutionAsync("c3", OptPutClosed, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
-		await AddRawExecutionAsync("c4", OptPutClosed, "option", "Sell", "1", "150", ExecMs(2029, 12, 21, 10, 0), "USDC");
-		await _bindingService.BindBatchAsync(construction.Id, new[] { "o1", "o2", "o3", "o4", "o5", "o6", "c1", "c2", "c3", "c4" });
+		await AddRawExecutionAsync("o1", OpenCallHigh, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
+		await AddRawExecutionAsync("o2", OpenPutHigh, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
+		await AddRawExecutionAsync("o3", OpenCallLow, "option", "Buy", "1", "100", ExecMs(2029, 12, 20, 10, 0), "USDC");
+
+		// Закрытая нога — покупка и встречная продажа до поставки: нулевой остаток
+		// исключает автозакрытие прошедших экспираций и делает набор детерминированным.
+		async Task<string[]> CloseLegAsync(string prefix, string symbol, string category, string feeCurrency)
+		{
+			var buyExecId = $"{prefix}-buy";
+			var sellExecId = $"{prefix}-sell";
+			await AddRawExecutionAsync(buyExecId, symbol, category, "Buy", "1", "100", ExecMs(2026, 5, 20, 10, 0), feeCurrency);
+			await AddRawExecutionAsync(sellExecId, symbol, category, "Sell", "1", "100", ExecMs(2026, 5, 21, 10, 0), feeCurrency);
+			return new[] { buyExecId, sellExecId };
+		}
+
+		var execIds = new List<string> { "o1", "o2", "o3" };
+		execIds.AddRange(await CloseLegAsync("dec2200c", DecCall2200, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("dec2200p", DecPut2200, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("dec1900c", DecCall1900, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("dec1900p", DecPut1900, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("sep2200c", SepCall2200, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("sep2200p", SepPut2200, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("sep1900c", SepCall1900, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("sep1800c", SepCall1800, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("sep1800p", SepPut1800, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("may1900c", MayCall1900, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("may1900p", MayPut1900, "option", "USDC"));
+		execIds.AddRange(await CloseLegAsync("perp", EthPerpSymbol, "linear", "USDT"));
+		await _bindingService.BindBatchAsync(construction.Id, execIds);
 		var readModel = CreateDetailReadModel(new StubFreshMarkSource(200m, FetchedAt));
 
 		// Act: читаем таблицу позиций конструкции.
 		var data = await readModel.ReadAsync(construction.Id);
 
-		// Assert: открытые CALL AAA→BBB, открытые PUT AAA→BBB, открытые
-		// линейные BTC→ETH, затем закрытые CALL и PUT тикера AAA.
+		// Assert: открытые ноги — при равной экспирации выше страйк 2500, CALL
+		// раньше PUT; закрытые ноги повторяют эталонный пример спеки: 25DEC26
+		// выше 25SEP26, серия 25SEP26 выше 29MAY26, внутри серии большие страйки
+		// и CALL раньше PUT, фьючурс ниже всех опционов.
 		Assert.That(data.Positions.Select(position => position.Symbol).ToArray(), Is.EqualTo(new[]
 		{
-			OptCallA,
-			OptCallB,
-			OptPutA,
-			OptPutB,
-			LinearSymbol,
+			OpenCallHigh,
+			OpenPutHigh,
+			OpenCallLow,
+			DecCall2200,
+			DecPut2200,
+			DecCall1900,
+			DecPut1900,
+			SepCall2200,
+			SepPut2200,
+			SepCall1900,
+			SepCall1800,
+			SepPut1800,
+			MayCall1900,
+			MayPut1900,
 			EthPerpSymbol,
-			OptCallClosed,
-			OptPutClosed,
 		}));
-		// Первые шесть строк открыты, две последние закрыты.
-		Assert.That(data.Positions.Take(6).Select(position => position.IsOpen), Is.All.True);
-		Assert.That(data.Positions.Skip(6).Select(position => position.IsOpen), Is.All.False);
+		// Первые три строки открыты, остальные закрыты.
+		Assert.That(data.Positions.Take(3).Select(position => position.IsOpen), Is.All.True);
+		Assert.That(data.Positions.Skip(3).Select(position => position.IsOpen), Is.All.False);
 	}
 
 	[TestMethod]
@@ -848,19 +916,27 @@ public class ConstructionDetailReadModelTests
 		db.SaveChanges();
 	}
 
-	/// <summary>Справочник сценариев сортировки: доски ETH 25SEP26 и 25DEC27, пут BTC 27DEC24 и перп ETHUSDT.</summary>
-	// Требование: сценарий сортировки задаёт дальние серии, поэтому статус
-	// каждой ноги определяется сделками, а не прошедшей экспирацией.
+	/// <summary>Справочник сценария сортировки: доски 01JAN30, 25DEC26, 25SEP26, 29MAY26 и перп ETHUSDT.</summary>
+	// Требование: сценарий сортировки опирается на эталонный пример спеки; дальняя
+	// доска 2030 года держит открытые ноги, не полагаясь на прошедшие экспирации.
 	// Traceability: openspec:ui/screens#scenario-detail-positions-ordered-by-status-and-type
 	private void SeedOrderingInstruments()
 	{
 		using var db = new JournalDbContext(CreateOptions());
-		db.RawInstruments.Add(OptionInstrument(OptCallA, "Call", ExecMs(2030, 1, 1, 8, 0)));
-		db.RawInstruments.Add(OptionInstrument(OptCallB, "Call", ExecMs(2030, 1, 1, 8, 0)));
-		db.RawInstruments.Add(OptionInstrument(OptPutA, "Put", ExecMs(2030, 1, 1, 8, 0)));
-		db.RawInstruments.Add(OptionInstrument(OptPutB, "Put", ExecMs(2030, 1, 1, 8, 0)));
-		db.RawInstruments.Add(OptionInstrument(OptCallClosed, "Call", ExecMs(2030, 2, 1, 8, 0)));
-		db.RawInstruments.Add(OptionInstrument(OptPutClosed, "Put", ExecMs(2030, 2, 1, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(OpenCallHigh, "Call", ExecMs(2030, 1, 1, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(OpenPutHigh, "Put", ExecMs(2030, 1, 1, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(OpenCallLow, "Call", ExecMs(2030, 1, 1, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(DecCall2200, "Call", ExecMs(2026, 12, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(DecPut2200, "Put", ExecMs(2026, 12, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(DecCall1900, "Call", ExecMs(2026, 12, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(DecPut1900, "Put", ExecMs(2026, 12, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(SepCall2200, "Call", ExecMs(2026, 9, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(SepPut2200, "Put", ExecMs(2026, 9, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(SepCall1900, "Call", ExecMs(2026, 9, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(SepCall1800, "Call", ExecMs(2026, 9, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(SepPut1800, "Put", ExecMs(2026, 9, 25, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(MayCall1900, "Call", ExecMs(2026, 5, 29, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(MayPut1900, "Put", ExecMs(2026, 5, 29, 8, 0)));
 		db.RawInstruments.Add(new RawInstrument
 		{
 			Symbol = EthPerpSymbol,

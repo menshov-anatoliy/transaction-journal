@@ -119,6 +119,9 @@ public class InboxScreenTests
 		// цену, сумму и комиссию; заголовок перечисляет столбцы биржевой записи.
 		// Требование: таблица показывает непривязанные сделки с атрибутами биржевой записи.
 		// Traceability: openspec:ui/screens#requirement-inbox-screen
+		// Требование: сделки перечислены от новых к старым — продажа 11:30
+		// выше покупки 10:00.
+		// Traceability: openspec:ui/screens#scenario-inbox-trades-newest-first
 		cut.WaitForAssertion(() =>
 		{
 			Assert.That(cut.Find("thead").TextContent, Does.Contain("Время")
@@ -133,15 +136,7 @@ public class InboxScreenTests
 
 			var rows = cut.FindAll("tbody tr");
 			Assert.That(rows, Has.Count.EqualTo(2));
-			Assert.That(rows[0].TextContent, Does.Contain(ExecText(buyAt))
-				.And.Contain("exec-buy")
-				.And.Contain("BTCUSDT")
-				.And.Contain("покупка")
-				.And.Contain("+0.01")
-				.And.Contain("45000")
-				.And.Contain("450")
-				.And.Contain("+0.5 USDT"));
-			Assert.That(rows[1].TextContent, Does.Contain(ExecText(sellAt))
+			Assert.That(rows[0].TextContent, Does.Contain(ExecText(sellAt))
 				.And.Contain("exec-sell")
 				.And.Contain("ETHUSDT")
 				.And.Contain("продажа")
@@ -149,6 +144,14 @@ public class InboxScreenTests
 				.And.Contain("2400.5")
 				.And.Contain("1200.25")
 				.And.Contain("-0.01 USDT"));
+			Assert.That(rows[1].TextContent, Does.Contain(ExecText(buyAt))
+				.And.Contain("exec-buy")
+				.And.Contain("BTCUSDT")
+				.And.Contain("покупка")
+				.And.Contain("+0.01")
+				.And.Contain("45000")
+				.And.Contain("450")
+				.And.Contain("+0.5 USDT"));
 		});
 	}
 

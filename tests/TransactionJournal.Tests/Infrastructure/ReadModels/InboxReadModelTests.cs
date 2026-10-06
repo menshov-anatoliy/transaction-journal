@@ -115,10 +115,43 @@ public class InboxReadModelTests
 		Assert.That(linear.FeeCurrency, Is.EqualTo("BTC"));
 		Assert.That(linear.Option, Is.Null);
 
-		// Assert: порядок «Входящих» хронологический — сделка раньше по времени
+		// Assert: порядок «Входящих» от новых к старым — сделка позже по времени
 		// стоит первой независимо от порядка вставки.
+		// Требование: строки «Входящих» упорядочены по времени исполнения по убыванию.
+		// Traceability: openspec:ui/screens#scenario-inbox-trades-newest-first
 		Assert.That(inbox.Select(trade => trade.ExecId).ToArray(),
-			Is.EqualTo(new[] { "exec-opt-buy", "exec-linear-sell" }));
+			Is.EqualTo(new[] { "exec-linear-sell", "exec-opt-buy" }));
+	}
+
+	[TestMethod]
+	[Description("«Входящие» начинаются с самой поздней непривязанной сделки")]
+	public async Task TryIfInboxListsNewestTradesFirst()
+	{
+		// Arrange: три непривязанные сделки — ранняя и две с равным временем
+		// исполнения; порядок вставки обратен ожидаемому списку.
+		// Требование: «Входящие» начинаются с самой поздней по времени исполнения
+		// сделки; при равном времени порядок детерминирован тай-брейком execId
+		// по убыванию и не меняется между перечитываниями.
+		// Traceability: openspec:ui/screens#scenario-inbox-trades-newest-first
+		var earlyMs = ExecMs(2023, 12, 28, 10, 0);
+		var lateMs = ExecMs(2023, 12, 28, 11, 0);
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawExecutions.Add(RawOption("exec-late-z", "Buy", lateMs));
+			db.RawExecutions.Add(RawOption("exec-early", "Buy", earlyMs));
+			db.RawExecutions.Add(RawOption("exec-late-a", "Sell", lateMs));
+			await db.SaveChangesAsync();
+		}
+
+		// Act: дважды читаем «Входящие».
+		var firstRead = await _readModel.ListAsync();
+		var secondRead = await _readModel.ListAsync();
+
+		// Assert: самая поздняя сделка в начале; при равном времени выше строка
+		// с большим execId, порядок стабилен между перечитываниями.
+		var expectedOrder = new[] { "exec-late-z", "exec-late-a", "exec-early" };
+		Assert.That(firstRead.Select(trade => trade.ExecId).ToArray(), Is.EqualTo(expectedOrder));
+		Assert.That(secondRead.Select(trade => trade.ExecId).ToArray(), Is.EqualTo(expectedOrder));
 	}
 
 	[TestMethod]
@@ -193,8 +226,11 @@ public class InboxReadModelTests
 		// Assert: сделка вернулась во «Входящие» вместе со своей строкой данных.
 		// Требование: возврат во «Входящие» делает сделку снова доступной для привязки.
 		// Traceability: openspec:domain/constructions#scenario-return-to-inbox
+		// Требование: вернувшиеся сделки встают по убыванию времени исполнения —
+		// более поздняя «exec-second» выше «exec-first».
+		// Traceability: openspec:ui/screens#scenario-inbox-trades-newest-first
 		Assert.That(inboxAfterUnbind.Select(trade => trade.ExecId).ToArray(),
-			Is.EqualTo(new[] { "exec-first", "exec-second" }));
+			Is.EqualTo(new[] { "exec-second", "exec-first" }));
 	}
 
 	[TestMethod]
@@ -223,9 +259,10 @@ public class InboxReadModelTests
 		var inbox = await _readModel.ListAsync();
 
 		// Assert: сделка отложенного символа во «Входящих» не появилась, остальные
-		// сделки выведены в полном составе.
+		// сделки выведены в полном составе и упорядочены от новых к старым.
+		// Traceability: openspec:ui/screens#scenario-inbox-trades-newest-first
 		Assert.That(inbox.Select(trade => trade.ExecId).ToList(),
-			Is.EqualTo(new[] { "exec-opt-buy", "exec-linear-sell" }));
+			Is.EqualTo(new[] { "exec-linear-sell", "exec-opt-buy" }));
 	}
 
 	[TestMethod]

@@ -141,16 +141,18 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			? null
 			: pnl.Value / allocatedCapitalUsdt.Value * 100m;
 
-		// Порядок строк: открытые позиции раньше закрытых, затем CALL, PUT и прочие
-		// инструменты, затем тикер по кодам символов и экспирация по возрастанию —
-		// ближайшие серии опционов выше дальних.
-		// Traceability: openspec:ui/screens#requirement-construction-detail-screen
+		// Порядок строк: открытые позиции раньше закрытых; внутри группы опционы
+		// дальних дат экспирации, при равной экспирации больших страйков, при равном
+		// страйке CALL раньше PUT; фьючерсы и прочие неопционные инструменты — в
+		// конце группы. Тикер по кодам символов — детерминирующий тай-брейк.
+		// Traceability: openspec:ui/screens#scenario-detail-positions-ordered-by-status-and-type
 		return metrics.Positions
 			.Where(position => position.ConstructionId == constructionId)
 			.OrderBy(position => position.Residual == 0m)
+			.ThenByDescending(position => InstrumentExpiry(position.Symbol))
+			.ThenByDescending(position => InstrumentStrike(position.Symbol))
 			.ThenBy(position => InstrumentTypeRank(position.Symbol))
 			.ThenBy(position => position.Symbol, StringComparer.Ordinal)
-			.ThenBy(position => InstrumentExpiry(position.Symbol))
 			.Select(position => new ConstructionPositionRow(
 				position.Symbol,
 				position.Residual,
@@ -178,19 +180,29 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 
 	/// <summary>
 	/// Ранг типа инструмента для сортировки: CALL раньше PUT, неразобранные
-	/// линейные и иные символы идут после опционов.
+	/// линейные и иные символы закрепляются рангом 2 после опционов группы.
 	/// </summary>
 	private static int InstrumentTypeRank(string symbol) => OptionSymbolParser.TryParse(symbol, out var parts)
 		? parts!.Type == OptionType.Call ? 0 : 1
 		: 2;
 
 	/// <summary>
-	/// Дата экспирации для сортировки опционов; символ вне формата опциона
-	/// уходит в конец экспирационной сортировки внутри своего ранга типа.
+	/// Дата экспирации для сортировки опционов по убыванию — дальние серии выше
+	/// ближних; символ вне формата опциона получает сентинелл наименьшей даты и
+	/// в убывающем ключе уходит в конец группы.
 	/// </summary>
 	private static DateTime InstrumentExpiry(string symbol) => OptionSymbolParser.TryParse(symbol, out var parts)
 		? parts!.ExpiryDate
-		: DateTime.MaxValue;
+		: DateTime.MinValue;
+
+	/// <summary>
+	/// Страйк для сортировки опционов по убыванию — большие страйки выше малых;
+	/// символ вне формата опциона получает сентинелл наименьшего значения и
+	/// в убывающем ключе уходит в конец группы.
+	/// </summary>
+	private static decimal InstrumentStrike(string symbol) => OptionSymbolParser.TryParse(symbol, out var parts)
+		? parts!.Strike
+		: decimal.MinValue;
 
 	/// <summary>
 	/// Строки таблицы сделок: сделки материализуются проекцией синхронизации
@@ -223,10 +235,14 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			.ConfigureAwait(false);
 
 		var materializer = new TradeMaterializer(new InstrumentResolver(new InstrumentCatalog(rawInstruments)));
+		// Порядок строк сделок — по времени исполнения от новых к старым; при равном
+		// времени строки детерминированы тай-брейком execId по убыванию и не меняются
+		// между перечитываниями.
+		// Traceability: openspec:ui/screens#scenario-detail-trades-newest-first
 		return materializer.Materialize(rawExecutions).Trades
 			.Where(trade => boundExecIds.Contains(trade.ExecId))
-			.OrderBy(trade => trade.ExecutedAt)
-			.ThenBy(trade => trade.ExecId, StringComparer.Ordinal)
+			.OrderByDescending(trade => trade.ExecutedAt)
+			.ThenByDescending(trade => trade.ExecId, StringComparer.Ordinal)
 			.Select(trade => new ConstructionTradeRow(
 				trade.ExecId,
 				trade.Symbol,
