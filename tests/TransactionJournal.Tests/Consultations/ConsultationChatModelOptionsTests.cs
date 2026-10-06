@@ -7,57 +7,59 @@ using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
 /// <summary>
-/// Проверки конфигурации модели чата консультаций: секция
-/// Consultations:ChatModel задаёт провайдера, модель, OpenAI-совместимый
-/// эндпоинт и ключ; отсутствие секции оставляет дефолт z.ai GLM-5.3, смена
-/// провайдера или модели выполняется правкой конфигурации без правки кода, у
-/// стороннего провайдера явный эндпоинт обязателен.
+/// Проверки модели чата консультаций: рабочая модель задаётся подсекцией
+/// Llm:Chat общей секции провайдера, отсутствие или пустота подсекции
+/// оставляет дефолт GLM-5.3, смена модели выполняется правкой конфигурации
+/// без правки кода; общие параметры провайдера приходят уже разрешёнными из
+/// LlmProviderSettings composition root.
 /// </summary>
 [TestClass]
 public sealed class ConsultationChatModelOptionsTests
 {
 	[TestMethod]
-	[Description("Без секции Consultations:ChatModel модель чата работает на дефолтах z.ai GLM-5.3")]
-	public void TryIfSectionAbsentDefaultsToZaiGlm()
+	[Description("Без подсекции Llm:Chat модель чата работает на дефолте GLM-5.3")]
+	public void TryIfSubsectionAbsentDefaultsToGlm()
 	{
-		// Act: разрешаем опции для полностью отсутствующей секции конфигурации.
-		var options = ConsultationChatModelOptions.Resolve(null, null, null, null);
+		// Arrange: общие параметры провайдера, уже разрешённые composition root.
+		var provider = "zai";
+		var baseUrl = "https://api.z.ai/api/paas/v4/";
+		var apiKey = "key-1";
 
-		// Assert: дефолт — провайдер z.ai, модель GLM-5.3, эндпоинт z.ai, ключ пуст.
+		// Act: разрешаем опции без подсекции модели.
+		var options = ConsultationChatModelOptions.Resolve(provider, baseUrl, apiKey, null);
+
+		// Assert: модель — дефолт GLM-5.3, общие параметры перенесены как есть.
 		// Traceability: openspec:consultations/tools#requirement-tools-chat-model-configurable
-		Assert.That(options.Provider, Is.EqualTo("zai"));
 		Assert.That(options.Model, Is.EqualTo(ConsultationChatModelOptions.DefaultModel));
-		Assert.That(options.BaseUrl, Is.EqualTo(ConsultationChatModelOptions.ZaiBaseUrl));
-		Assert.That(options.ApiKey, Is.Empty);
+		Assert.That(options.Provider, Is.EqualTo("zai"));
+		Assert.That(options.BaseUrl, Is.EqualTo("https://api.z.ai/api/paas/v4/"));
+		Assert.That(options.ApiKey, Is.EqualTo("key-1"));
 	}
 
 	[TestMethod]
-	[DataRow("openai", " gpt-5.2 ", " https://api.openai.com/v1/ ", " key-1 ")]
-	[Description("Смена провайдера и модели выполняется правкой конфигурации без правки кода")]
-	public void TryIfConfigNamesOtherProviderThenResolved(string provider, string model, string baseUrl, string apiKey)
+	[Description("Смена модели конфигурацией Llm:Chat:Model выполняется без правки кода")]
+	public void TryIfConfigSetsOtherModelThenResolved()
 	{
-		// Act: разрешаем опции с явной секцией стороннего провайдера.
-		var options = ConsultationChatModelOptions.Resolve(provider, model, baseUrl, apiKey);
+		// Act: разрешаем опции с моделью из подсекции в окружении пробелов.
+		var options = ConsultationChatModelOptions.Resolve("zai", "https://api.z.ai/api/paas/v4/", "key-1", " glm-5.2 ");
 
-		// Assert: значения берутся из конфигурации, окружающие пробелы триммируются.
-		// Traceability: openspec:consultations/tools#scenario-tools-model-switch-config
-		Assert.That(options.Provider, Is.EqualTo("openai"));
-		Assert.That(options.Model, Is.EqualTo("gpt-5.2"));
-		Assert.That(options.BaseUrl, Is.EqualTo("https://api.openai.com/v1/"));
-		Assert.That(options.ApiKey, Is.EqualTo("key-1"));
+		// Assert: модель взята из конфигурации, пробелы сняты.
+		// Traceability: openspec:config/llm-provider#scenario-llm-models-chat-switch
+		Assert.That(options.Model, Is.EqualTo("glm-5.2"));
 	}
 
 	[TestMethod]
 	[DataRow(null)]
 	[DataRow("   ")]
-	[ExpectedException(typeof(InvalidOperationException))]
-	[Description("Сторонний провайдер без явного эндпоинта отклоняется вместо тихого отката на z.ai")]
-	public void ThrowOnOtherProviderWithoutBaseUrl(string? baseUrl)
+	[Description("Пустая подсекция Llm:Chat даёт дефолт модели GLM-5.3")]
+	public void TryIfBlankSubsectionThenDefaultModel(string? model)
 	{
-		// Act: сторонний провайдер, эндпоинт не задан — Resolve обязан отказаться,
-		// тихий откат на адрес z.ai замаскировал бы ошибку настройки и уводил бы
-		// запросы к чужому сервису.
-		// Traceability: openspec:consultations/tools#scenario-tools-model-switch-config
-		ConsultationChatModelOptions.Resolve("openai", "gpt-5.2", baseUrl, "key-1");
+		// Act: разрешаем опции с пустым значением модели подсекции.
+		var options = ConsultationChatModelOptions.Resolve("zai", "https://api.z.ai/api/paas/v4/", "key-1", model);
+
+		// Assert: пустая подсекция откатывается к дефолту GLM-5.3.
+		// Traceability: openspec:config/llm-provider#scenario-llm-models-blank-defaults
+		Assert.That(options.Model, Is.EqualTo(ConsultationChatModelOptions.DefaultModel));
 	}
 }
+

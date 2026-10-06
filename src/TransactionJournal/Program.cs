@@ -331,16 +331,35 @@ builder.Services.AddSingleton(_ => new ConsultationInstructions(
 	builder.Configuration["Consultations:InstructionsPath"]
 	?? Path.Combine(AppContext.BaseDirectory, ConsultationInstructions.DefaultFileName)));
 
-// Модель чата консультаций: секция Consultations:ChatModel задаёт провайдера,
-// модель и OpenAI-совместимый эндпоинт (дефолт — z.ai GLM-5.3); смена
-// провайдера или модели выполняется правкой конфигурации без правки кода,
-// без секции чат работает на дефолтах кода.
+// Общие параметры LLM-провайдера: секция Llm задаёт провайдера,
+// OpenAI-совместимый эндпоинт и ключ доступа для всех потребителей журнала;
+// провайдер, отличный от z.ai, обязан указать явный эндпоинт, эндпоинт
+// нормализуется со слэшем.
+// Traceability: openspec:config/llm-provider#requirement-llm-provider-shared-section
+var llmSettings = LlmProviderSettings.Resolve(
+	builder.Configuration["Llm:Provider"],
+	builder.Configuration["Llm:BaseUrl"],
+	builder.Configuration["Llm:ApiKey"]);
+// Модель чата консультаций: подсекция Llm:Chat задаёт рабочую модель
+// (дефолт — GLM-5.3); смена провайдера или модели выполняется правкой
+// конфигурации без правки кода.
 // Traceability: openspec:consultations/tools#requirement-tools-chat-model-configurable
+// Traceability: openspec:config/llm-provider#requirement-llm-model-subsections
 var chatModelOptions = ConsultationChatModelOptions.Resolve(
-	builder.Configuration["Consultations:ChatModel:Provider"],
-	builder.Configuration["Consultations:ChatModel:Model"],
-	builder.Configuration["Consultations:ChatModel:BaseUrl"],
-	builder.Configuration["Consultations:ChatModel:ApiKey"] ?? builder.Configuration["Llm:ApiKey"]);
+	llmSettings.Provider,
+	llmSettings.BaseUrl,
+	llmSettings.ApiKey,
+	builder.Configuration["Llm:Chat:Model"]);
+// Изложение сводок подсказок: подсекция Llm:Hint задаёт рабочую модель
+// (дефолт — glm-5.3-flash); зависимость регистрируется сразу, потребитель —
+// изложение сводок — появится в change add-summary-channels и внедрит её без
+// правки конфигурации или резолва.
+// Traceability: openspec:config/llm-provider#requirement-llm-model-subsections
+builder.Services.AddSingleton(HintChatModelOptions.Resolve(
+	llmSettings.Provider,
+	llmSettings.BaseUrl,
+	llmSettings.ApiKey,
+	builder.Configuration["Llm:Hint:Model"]));
 // Клиент строится лениво при первом обращении к агентному циклу: незастроенный
 // ключ доступа не мешает остальному журналу работать.
 builder.Services.AddKeyedChatClient(ConsultationAgent.ChatClientServiceKey, _ => CreateConsultationChatClient(chatModelOptions));
@@ -389,11 +408,13 @@ app.Run();
 // него запрос к модели невозможен, ошибка сообщается в момент первого вопроса.
 static IChatClient CreateConsultationChatClient(ConsultationChatModelOptions options)
 {
+	// Незастроенный ключ обнаруживается лениво, в момент обращения к модели:
+	// остальной журнал продолжает работать без ключа LLM-провайдера.
+	// Traceability: openspec:config/llm-provider#scenario-llm-provider-missing-key-lazy
 	if (string.IsNullOrWhiteSpace(options.ApiKey))
 	{
 		throw new InvalidOperationException(
-			"Ключ модели чата консультаций не задан: заполните Consultations:ChatModel:ApiKey " +
-			"(или запасной Llm:ApiKey) в appsettings.Local.json.");
+			"Ключ модели чата консультаций не задан: заполните Llm:ApiKey в appsettings.Local.json.");
 	}
 
 	return new OpenAIClient(new ApiKeyCredential(options.ApiKey), new OpenAIClientOptions { Endpoint = new Uri(options.BaseUrl) })
