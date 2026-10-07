@@ -9,7 +9,7 @@
 
 ## 2. HTTP API-слой .NET
 
-- [ ] 2.1 Каркас API: единая точка входа JSON с версией в маршруте, автоматическое OpenAPI-описание, SSE-инфраструктура (соединение, события начала/токена/завершения/ошибки); интеграция с composition root без изменения доменных правил. Проверить: `requirement-http-api-single-entry` — `scenario-spa-served-through-single-api`, `scenario-api-version-in-route`; `requirement-http-api-openapi-description` — `scenario-openapi-schema-published`; `requirement-http-api-sse-chat-streaming` — `scenario-chat-tokens-stream-over-sse`, `scenario-chat-error-delivered-as-sse-event`.
+- [x] 2.1 Каркас API: единая точка входа JSON с версией в маршруте, автоматическое OpenAPI-описание, SSE-инфраструктура (соединение, события начала/токена/завершения/ошибки); интеграция с composition root без изменения доменных правил. Проверить: `requirement-http-api-single-entry` — `scenario-spa-served-through-single-api`, `scenario-api-version-in-route`; `requirement-http-api-openapi-description` — `scenario-openapi-schema-published`; `requirement-http-api-sse-chat-streaming` — `scenario-chat-tokens-stream-over-sse`, `scenario-chat-error-delivered-as-sse-event`.
 
 ## 3. Общие UI-инструменты (после 1)
 
