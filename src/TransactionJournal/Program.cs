@@ -3,6 +3,7 @@ using Microsoft.Extensions.AI;
 using OpenAI;
 using System.ClientModel;
 using TransactionJournal;
+using TransactionJournal.Api;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Bybit;
@@ -43,6 +44,11 @@ builder.Configuration.AddJsonFile(
 
 builder.Services.AddRazorComponents()
 	.AddInteractiveServerComponents();
+
+// Каркас HTTP API нового SPA: единая версионированная JSON-точка входа,
+// OpenAPI-описание и SSE-примитивы чата; состав эндпоинтов разделов
+// фиксируется задачами 5.x поверх того же префикса /api/v1.
+builder.Services.AddApiSkeleton();
 
 // База журнала — SQLite в режиме WAL: единственное хранилище, параллельные
 // читатели не блокируют пишущее веб-приложение (ADR-0003).
@@ -402,6 +408,10 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();
 
+// Единая точка входа JSON API нового SPA с версией в маршруте и публикуемым
+// OpenAPI-описанием; Blazor-UI работает без изменений до паритета переносов.
+app.MapApiSkeleton();
+
 app.Run();
 
 // Адаптер OpenAI-совместимого провайдера модели чата: ключ обязателен — без
@@ -421,4 +431,12 @@ static IChatClient CreateConsultationChatClient(ConsultationChatModelOptions opt
 		.GetChatClient(options.Model)
 		.AsIChatClient();
 }
+
+// Маркер точки входа для WebApplicationFactory в интеграционных тестах API:
+// top-level statements порождают внутренний класс Program, а фабрике нужен
+// доступный извне тип точки входа.
+public partial class Program
+{
+}
+
 
