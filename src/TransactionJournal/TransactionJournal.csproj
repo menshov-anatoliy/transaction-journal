@@ -38,4 +38,13 @@
     <None Include="..\..\consultation-prompt.md" CopyToOutputDirectory="PreserveNewest" Link="consultation-prompt.md" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Собранная статика SPA (frontend/dist) деплоится рядом с exe в frontend/dist
+         и раздаётся .NET-хостом по префиксу /spa. Сборка SPA выполняется отдельно
+         (npm run build в frontend/), поэтому при отсутствии dist решение собирается
+         и хост работает без SPA, не затрагивая Blazor-UI. -->
+    <!-- Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения -->
+    <Content Include="..\..\frontend\dist\**\*.*" LinkBase="frontend\dist" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\frontend\dist')" />
+  </ItemGroup>
+
 </Project>
