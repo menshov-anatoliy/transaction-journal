@@ -1,0 +1,1118 @@
+<!doctype html>
+<!--
+  ПРОТОТИП (выбросить после утверждения): интерактивный HTML-макет нового UI журнала сделок.
+  Вопрос прототипа: «Держится ли утверждённая концепция интерфейса на живых экранах (desktop + mobile)?»
+
+  Источники смысла:
+    - тикет карты #50: Prototype «Интерактивный HTML-макет нового UI» (№55);
+    - концепция интерфейса: .wf-research/ui-concept/concept.md (§1–§12);
+    - дизайн-референс: светлый воздушный agents-space (описание в Notes карты #50).
+
+  Как смотреть: открыть двойным кликом (сборки нет). Навигация — плавающая панель снизу
+  или клавиши ←/→. Кнопка «Mobile» включает представление 390px ключевых экранов.
+  Состояния шарятся через hash: #s=constructions&sel=1, #s=card&chats=1, #s=agent&chat=1, #s=rules&rule=12, #s=sync&m=1.
+-->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Журнал Bybit — макет нового UI (прототип)</title>
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --line:#e6e8ec; --line-soft:#eef0f3;
+  --text:#1a1f28; --muted:#697180; --faint:#9aa1ac;
+  --accent:#4f46e5; --accent-soft:#eef0fe; --accent-line:#c9cdfb;
+  --green:#15803d; --green-bg:#e9f7ee; --red:#b91c1c; --red-bg:#fdeeed;
+  --amber:#92400e; --amber-bg:#fdf3e3; --violet:#6d28d9; --violet-bg:#f1ebfd;
+  --radius:12px; --shadow:0 1px 2px rgba(16,24,40,.05), 0 1px 3px rgba(16,24,40,.04);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.55 "Inter","Segoe UI",system-ui,-apple-system,sans-serif}
+button{font:inherit;cursor:pointer}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.muted{color:var(--muted)} .faint{color:var(--faint)} .num{font-variant-numeric:tabular-nums}
+.pos{color:var(--green)} .neg{color:var(--red)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:1px 9px;border-radius:99px;font-size:12px;font-weight:500;line-height:20px;white-space:nowrap}
+.pill.open{background:var(--green-bg);color:var(--green)} .pill.closed{background:var(--line-soft);color:var(--muted)}
+.pill.arch{background:var(--amber-bg);color:var(--amber)}
+.pill.hint{background:var(--amber-bg);color:var(--amber)} .pill.hint-crit{background:var(--red-bg);color:var(--red)}
+.pill.applied{background:var(--green-bg);color:var(--green)} .pill.rejected{background:var(--line-soft);color:var(--muted)}
+.pill.model{background:var(--violet-bg);color:var(--violet)} .pill.src{background:var(--accent-soft);color:var(--accent);font-weight:400}
+.pill.brk{background:var(--green-bg);color:var(--green)}
+
+/* ===== каркас ===== */
+.app{display:grid;grid-template:"top top" 52px "side main" 1fr / 236px minmax(0,1fr);min-height:100vh}
+.topbar{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+.topbar .brand{font-weight:650;font-size:15px;letter-spacing:.1px}
+.topbar .brand small{display:block;font-weight:400;font-size:11px;color:var(--faint);letter-spacing:.2px}
+.hamburger{display:none;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 9px;font-size:15px;line-height:1}
+.sidebar{grid-area:side;background:var(--surface);border-right:1px solid var(--line);padding:14px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:52px;height:calc(100vh - 52px)}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;color:var(--muted);font-weight:500;border:1px solid transparent;background:none;text-align:left;width:100%}
+.nav-item .ic{width:20px;text-align:center;font-size:15px;flex:none}
+.nav-item:hover{background:var(--bg);text-decoration:none}
+.nav-item.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}
+.nav-item .badge{margin-left:auto;background:var(--red);color:#fff;border-radius:99px;font-size:11px;font-weight:600;padding:0 6px;line-height:17px}
+.nav-item .oos{margin-left:auto;font-size:10px;color:var(--faint);border:1px dotted var(--faint);border-radius:6px;padding:0 5px;line-height:16px}
+.side-collapse{margin-top:auto;align-self:stretch;border:1px solid var(--line);background:var(--surface);border-radius:8px;color:var(--muted);padding:5px}
+.main{grid-area:main;padding:24px 28px 90px;min-width:0}
+.app.side-min{grid-template-columns:64px minmax(0,1fr)}
+.app.side-min .sidebar{padding:14px 8px}
+.app.side-min .nav-item span.lbl,.app.side-min .nav-item .badge,.app.side-min .nav-item .oos,.app.side-min .side-collapse span.lbl{display:none}
+.app.side-min .nav-item{justify-content:center}
+.app.side-min .side-collapse{padding:5px 0}
+.screen{display:none}
+.screen.active{display:block}
+.screen-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 18px;margin-bottom:18px}
+.screen-head h1{font-size:20px;font-weight:650;margin:0}
+.subtabs{display:flex;gap:6px;margin:0 0 4px}
+.subtab{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 14px;color:var(--muted);font-weight:500}
+.subtab.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.subtab[disabled]{opacity:.55;cursor:not-allowed}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card .card-h{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 16px;border-bottom:1px solid var(--line-soft)}
+.card .card-h h3{margin:0;font-size:14px;font-weight:600}
+.card .card-b{padding:14px 16px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:6px 13px;font-weight:500;color:var(--text)}
+.btn:hover{background:var(--bg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#4338ca}
+.btn.danger{background:var(--surface);border-color:#f3c1c1;color:var(--red)}
+.btn.danger:hover{background:var(--red-bg)}
+.btn.sm{padding:3px 9px;font-size:12.5px;border-radius:7px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{background:var(--bg)}
+.btn[disabled]{opacity:.6;cursor:default}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--accent-line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toolbar-sp{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+/* ===== Конструкции ===== */
+.total-line{font-size:22px;font-weight:650;letter-spacing:.1px}
+.total-line small{font-size:13px;font-weight:400;color:var(--muted);margin-left:8px}
+.layout-with-right{display:grid;grid-template-columns:minmax(0,1fr) 376px;gap:20px;align-items:start}
+.table-wrap{overflow-x:auto}
+table.grid{border-collapse:collapse;width:100%;font-size:13px;min-width:1080px}
+table.grid th{position:sticky;top:0;background:var(--surface);text-align:left;font-weight:600;color:var(--muted);font-size:12px;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
+table.grid td{padding:9px 10px;border-bottom:1px solid var(--line-soft);white-space:nowrap;vertical-align:middle}
+table.grid tbody tr{cursor:pointer}
+table.grid tbody tr:hover{background:var(--bg)}
+table.grid tbody tr.sel{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent)}
+td.r,th.r{text-align:right}
+.c-name{font-weight:550}
+.c-name .ext{color:var(--faint);font-weight:400;margin-left:6px}
+.hintbadge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600}
+.hintbadge.crit{color:var(--red)} .hintbadge.warn{color:var(--amber)} .hintbadge.none{color:var(--line)}
+
+/* индикатор финрезультата */
+.fp{position:relative;height:10px;border-radius:6px;background:var(--line-soft);overflow:hidden}
+.fp .zr{position:absolute;left:0;top:0;bottom:0;background:rgba(220,38,38,.10)}
+.fp .zp{position:absolute;right:0;top:0;bottom:0;background:rgba(21,128,61,.10)}
+.fp .fill{position:absolute;top:0;bottom:0;background:var(--green);opacity:.6}
+.fp .fill.neg{background:var(--red)}
+.fp .pale{position:absolute;top:0;bottom:0;background:var(--green);opacity:.22}
+.fp .pale.neg{background:var(--red)}
+.fp .tick{position:absolute;top:-1px;bottom:-1px;width:2px;background:#3c4450}
+.fp .mark{position:absolute;top:-2px;bottom:-2px;width:3px;border-radius:2px;background:var(--accent)}
+.fp-s{height:6px;border-radius:4px;margin-top:5px;width:96px}
+.fp-full .fp{height:14px}
+.fp-axis{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:5px}
+.fp-note{font-size:12px;color:var(--muted);margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.fp-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+/* правая контекстная область */
+.right-area{position:sticky;top:76px;display:flex;flex-direction:column;gap:16px;max-height:calc(100vh - 100px);overflow:auto;padding-right:2px}
+.hint-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.hint-card .t{display:flex;gap:8px;align-items:center;font-weight:600;font-size:13px}
+.hint-card .d{font-size:12.5px;color:var(--muted);margin-top:4px}
+.hint-group{margin-bottom:10px}
+.hint-group>.gt{font-size:12px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.4px;margin:0 0 6px}
+details.hist{border-top:1px dashed var(--line);padding-top:8px}
+details.hist summary{color:var(--muted);font-size:12.5px;cursor:pointer;outline:none}
+.kv{display:flex;flex-wrap:wrap;gap:6px 22px}
+.kv div{min-width:90px}
+.kv dt{font-size:11.5px;color:var(--faint);margin:0 0 2px}
+.kv dd{margin:0;font-weight:600;font-size:13.5px}
+
+/* ===== Карточка конструкции ===== */
+.crumb{font-size:13px;color:var(--muted);margin-bottom:10px;display:inline-block}
+.crumb:hover{color:var(--accent)}
+.card-layout{display:grid;grid-template-columns:minmax(0,1fr) 396px;gap:20px;align-items:start}
+.card-layout.no-chats{grid-template-columns:minmax(0,1fr)}
+.chats-panel{position:sticky;top:76px;max-height:calc(100vh - 100px);display:flex;flex-direction:column}
+.chats-toggle{position:sticky;top:76px;float:right;margin-left:14px}
+.kstrip{display:flex;flex-wrap:wrap;gap:10px 26px;padding:12px 16px}
+.kstrip .k{min-width:86px}
+.kstrip .k dt{font-size:11.5px;color:var(--faint);margin-bottom:2px}
+.kstrip .k dd{margin:0;font-weight:650;font-size:15px}
+.md-body{font-size:13.5px}
+.md-body p{margin:0 0 8px} .md-body ul{margin:4px 0 8px;padding-left:20px}
+.md-body code{background:var(--line-soft);border-radius:5px;padding:1px 5px;font-size:12.5px}
+.pencil{border:none;background:none;color:var(--faint);padding:2px 5px;border-radius:6px}
+.pencil:hover{background:var(--bg);color:var(--accent)}
+table.sub{min-width:760px}
+table.sub tbody tr{cursor:default}
+table.sub tbody tr:hover{background:var(--bg)}
+.warn-row td{background:var(--amber-bg)}
+.chip-act{display:inline-flex;gap:6px}
+
+/* ===== Агент ===== */
+.agent-layout{display:grid;grid-template-columns:292px minmax(0,1fr);gap:20px;align-items:start}
+.agent-list{position:sticky;top:76px;max-height:calc(100vh - 100px);overflow:auto}
+.sess{display:block;width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:10px;padding:9px 11px}
+.sess:hover{background:var(--bg)}
+.sess.active{background:var(--accent-soft);border-color:var(--accent-line)}
+.sess .st{font-weight:600;font-size:13px;line-height:1.35}
+.sess .sm{font-size:11.5px;color:var(--muted);margin-top:3px;display:flex;gap:5px;flex-wrap:wrap}
+.chat-area{display:flex;flex-direction:column;min-height:560px}
+.chat-scroll{flex:1;overflow:auto;padding:18px 22px;display:flex;flex-direction:column;gap:16px}
+.msg{max-width:78%;border-radius:14px;padding:10px 14px;font-size:13.5px;box-shadow:var(--shadow)}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.msg.ai{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg .meta{font-size:11px;color:var(--faint);margin-top:6px}
+.msg.ai .meta a{color:var(--accent)}
+.toolstatus{align-self:flex-start;font-size:12px;color:var(--muted);background:var(--line-soft);border-radius:9px;padding:5px 11px;display:flex;gap:7px;align-items:center}
+.caret{display:inline-block;width:7px;height:14px;background:var(--accent);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.composer{border-top:1px solid var(--line);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.composer textarea{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px 12px;font:inherit;resize:vertical;min-height:66px;background:var(--surface)}
+.composer textarea:focus{outline:2px solid var(--accent-line);border-color:var(--accent)}
+.composer .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.composer .row .sp{margin-left:auto;display:flex;gap:8px}
+.select{border:1px solid var(--line);border-radius:9px;background:var(--surface);padding:5px 9px;font:inherit;font-size:13px;color:var(--text)}
+.suggest-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;padding:22px 6px}
+.suggest{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:16px;text-align:left;box-shadow:var(--shadow)}
+.suggest:hover{border-color:var(--accent-line);background:var(--accent-soft)}
+.suggest .si{font-size:19px}
+.suggest .st{font-weight:600;margin:8px 0 4px}
+.suggest .sd{font-size:12.5px;color:var(--muted)}
+.newchat-params{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.param{display:flex;gap:7px;align-items:center;font-size:13px}
+.param label{color:var(--muted)}
+.check{display:inline-flex;gap:5px;align-items:center;font-size:13px;color:var(--text)}
+
+/* источники/правила: попап при наведении */
+.rule-ref{position:relative;color:var(--accent);cursor:help;border-bottom:1px dotted var(--accent-line)}
+.rule-pop{display:none;position:absolute;left:0;top:calc(100% + 7px);z-index:50;width:300px;background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 24px rgba(16,24,40,.12);padding:11px 13px;font-size:12.5px;text-align:left}
+.rule-ref:hover .rule-pop{display:block}
+.rule-pop .pt{font-weight:650;font-size:13px}
+.rule-pop .pm{color:var(--muted);margin-top:5px}
+.rule-pop .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+
+/* ===== Правила (каталог) ===== */
+.rules-layout{display:grid;grid-template-columns:minmax(0,1fr) 388px;gap:20px;align-items:start}
+.filters{display:flex;gap:10px;flex-wrap:wrap;padding:12px 16px;align-items:center}
+.rules-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.rule-card{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:14px 16px;cursor:pointer;box-shadow:var(--shadow)}
+.rule-card:hover{border-color:var(--accent-line)}
+.rule-card.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.rule-card .rt{font-weight:600;font-size:13.5px}
+.rule-card .rid{font-size:11.5px;color:var(--faint);font-weight:500}
+.rule-card .tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.rule-detail{position:sticky;top:76px}
+.fld{margin-bottom:10px}
+.fld .fl{font-size:11.5px;color:var(--faint);margin-bottom:2px}
+.fld .fv{font-size:13.5px}
+
+/* ===== Синхронизация ===== */
+.sync-col{max-width:880px;display:flex;flex-direction:column;gap:18px}
+.danger{border-color:#f3c1c1}
+.danger .card-h{border-bottom-color:#fbe3e3}
+.danger .card-h h3{color:var(--red)}
+.kvtable{border-collapse:collapse;font-size:13px;width:100%}
+.kvtable td{padding:6px 10px;border-bottom:1px solid var(--line-soft)}
+.kvtable tr:last-child td{border-bottom:none}
+.alert{border:1px solid #f3c1c1;background:var(--red-bg);color:var(--red);border-radius:10px;padding:9px 13px;font-size:13px}
+.notice{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 13px;font-size:13px;color:var(--muted)}
+.switch{display:inline-flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
+.switch input{appearance:none;width:34px;height:20px;border-radius:99px;background:var(--line);position:relative;cursor:pointer;margin:0;transition:background .15s}
+.switch input:checked{background:var(--accent)}
+.switch input::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch input:checked::after{left:16px}
+.runlog td.ok{color:var(--green)} .runlog td.fail{color:var(--red)}
+
+/* ===== MD-модальный редактор ===== */
+.modal-ov{position:fixed;inset:0;background:rgba(15,18,24,.45);z-index:90;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-ov.open{display:flex}
+.modal{width:min(920px,96vw);height:min(620px,90vh);background:var(--surface);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px rgba(16,24,40,.3)}
+.modal .mh{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.modal .mh h3{margin:0;font-size:15px}
+.md-split{flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:0}
+.md-edit{display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0}
+.md-toolbar{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line-soft)}
+.md-toolbar button{border:none;background:none;border-radius:7px;padding:4px 9px;font-size:13px}
+.md-toolbar button:hover{background:var(--bg)}
+.md-edit textarea{flex:1;border:none;resize:none;padding:14px 16px;font:13px/1.6 "Cascadia Code",Consolas,monospace;outline:none}
+.md-prev{overflow:auto;padding:14px 18px;background:var(--bg)}
+.modal .mf{display:flex;gap:8px;justify-content:flex-end;padding:11px 18px;border-top:1px solid var(--line)}
+.md-prev .md-body{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+
+/* ===== mobile (класс body.mobile; ключевые экраны) ===== */
+.m-only{display:none}
+body.mobile .app{grid-template:"top" 52px "main" 1fr / 1fr;max-width:392px;margin:0 auto;border-left:1px solid var(--line);border-right:1px solid var(--line);min-height:100vh;box-shadow:0 0 40px rgba(16,24,40,.08)}
+body.mobile .sidebar{position:fixed;top:0;bottom:0;left:0;width:264px;z-index:80;transform:translateX(-104%);transition:transform .2s;height:auto;border-radius:0 14px 14px 0}
+body.mobile .sidebar.open{transform:none;box-shadow:0 12px 40px rgba(16,24,40,.25)}
+body.mobile .hamburger{display:inline-block}
+body.mobile .side-collapse{display:none}
+body.mobile .scrim{position:fixed;inset:0;background:rgba(15,18,24,.4);z-index:75;display:none}
+body.mobile .scrim.show{display:block}
+body.mobile .main{padding:16px 14px 110px}
+body.mobile .layout-with-right,body.mobile .card-layout,body.mobile .rules-layout{grid-template-columns:minmax(0,1fr)}
+body.mobile .table-wrap.d-only{display:none}
+body.mobile .m-only{display:block}
+.m-card{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:12px 14px;margin-bottom:10px}
+.m-card .mh1{display:flex;gap:8px;align-items:center;justify-content:space-between;font-weight:600}
+.m-card .mkv{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:7px;font-size:12.5px;color:var(--muted)}
+.m-card .mkv b{color:var(--text);font-weight:600}
+body.mobile .fp-s{width:130px}
+body.mobile .right-area{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:70;max-height:72vh;overflow:auto;background:var(--surface);border-radius:16px 16px 0 0;box-shadow:0 -10px 40px rgba(16,24,40,.2);padding:14px 16px 20px;transform:translateY(105%);transition:transform .2s}
+body.mobile .right-area.open{transform:none}
+.sheet-grip{display:none;width:44px;height:4px;border-radius:3px;background:var(--line);margin:0 auto 10px}
+body.mobile .sheet-grip{display:block}
+body.mobile .chats-panel{position:fixed;inset:0 0 0 0;z-index:85;max-height:none;border-radius:0}
+body.mobile .chats-toggle{position:static;float:none;margin:0 0 10px}
+body.mobile .agent-layout{grid-template-columns:minmax(0,1fr)}
+body.mobile .agent-list{position:fixed;top:52px;left:0;right:0;z-index:70;max-height:none;overflow:auto;transform:translateY(-120%);transition:transform .2s;border-radius:0 0 14px 14px}
+body.mobile .agent-list.open{transform:none}
+body.mobile .msg{max-width:92%}
+body.mobile .md-split{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+body.mobile .md-edit{border-right:none;border-bottom:1px solid var(--line)}
+body.mobile .agent-sess-btn{display:inline-flex}
+.agent-sess-btn{display:none}
+
+/* ===== плавающая панель прототипа ===== */
+.pbar{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:100;display:flex;align-items:center;gap:6px;background:#111827;color:#e5e7eb;border-radius:99px;padding:7px 10px;box-shadow:0 10px 30px rgba(16,24,40,.35);font-size:13px;white-space:nowrap}
+.pbar button{background:#1f2937;color:#e5e7eb;border:none;border-radius:99px;padding:4px 11px}
+.pbar button:hover{background:#374151}
+.pbar .lbl{padding:0 8px;font-weight:550;min-width:190px;text-align:center}
+.pbar .sep{width:1px;height:16px;background:#374151}
+</style>
+</head>
+<body>
+
+<div class="scrim" id="scrim" onclick="closeDrawers()"></div>
+
+<div class="app" id="app">
+  <!-- тонкий топбар: только бренд; итог живёт в шапке «Конструкций» -->
+  <header class="topbar">
+    <button class="hamburger" onclick="openDrawer('sidedrawer')">☰</button>
+    <div class="brand">Журнал Bybit<small>макет нового UI · прототип</small></div>
+  </header>
+
+  <!-- левая сворачиваемая панель -->
+  <nav class="sidebar" id="sidedrawer">
+    <button class="nav-item active" data-nav="constructions" onclick="setScreen('constructions')"><span class="ic">▦</span><span class="lbl">Конструкции</span></button>
+    <button class="nav-item" onclick="oos('«Входящие» — вне этого макета, см. концепцию §5')"><span class="ic">⇄</span><span class="lbl">Входящие</span><span class="badge">12</span></button>
+    <button class="nav-item" onclick="oos('«Подсказки» — вне этого макета, см. концепцию §6')"><span class="ic">✦</span><span class="lbl">Подсказки</span><span class="oos">макет —</span></button>
+    <button class="nav-item" data-nav="agent" onclick="setScreen('agent')"><span class="ic">✳</span><span class="lbl">Агент</span></button>
+    <button class="nav-item" data-nav="sync" onclick="setScreen('sync')"><span class="ic">⟳</span><span class="lbl">Синхронизация</span></button>
+    <button class="side-collapse" onclick="app.classList.toggle('side-min')" title="Свернуть панель до иконок">≪ <span class="lbl">Свернуть</span></button>
+  </nav>
+
+  <main class="main">
+
+    <!-- ======================= ЭКРАН: КОНСТРУКЦИИ ======================= -->
+    <section class="screen active" id="scr-constructions">
+      <div class="screen-head">
+        <h1>Конструкции</h1>
+        <div class="toolbar-sp">
+          <button class="btn" id="syncbtn" onclick="runSync()"><span id="syncbtn-i">⟳</span> Синхронизировать</button>
+        </div>
+      </div>
+
+      <!-- итог журнала: единственное место постоянного показа -->
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-b" style="display:flex;flex-wrap:wrap;gap:8px 26px;align-items:baseline">
+          <div class="total-line num">итог <span class="pos">+193.39 USDT</span>
+            <small class="num muted">реализов. <span class="pos">+95.09</span> / нереализов. <span class="pos">+10.90</span></small>
+          </div>
+          <div class="muted num" style="font-size:13px">котировки на 07.10.2026 14:32</div>
+          <div class="muted num" style="font-size:13px;margin-left:auto">конструкций 6 <span id="plural-open">(3 открыто)</span></div>
+        </div>
+      </div>
+
+      <div class="layout-with-right">
+        <div>
+          <!-- desktop: таблица 13 колонок -->
+          <div class="card table-wrap d-only">
+            <table class="grid" id="ctable">
+              <thead><tr>
+                <th>Имя</th><th title="живые подсказки">Подск.</th><th>Статус</th>
+                <th class="r">Капитал</th><th class="r">Стоимость</th><th class="r">Реализов.</th><th class="r">Нереализов.</th><th class="r">Коррект.</th>
+                <th class="r">Итог · индикатор</th><th class="r">% капитала</th><th class="r">Занято %</th><th>Открыта</th><th>Закрыта</th>
+              </tr></thead>
+              <tbody id="ctbody"></tbody>
+            </table>
+            <div class="card-b muted" id="cempty" hidden>конструкций нет</div>
+          </div>
+          <!-- mobile: карточки -->
+          <div id="cmcards" class="m-only"></div>
+
+          <details style="margin-top:14px">
+            <summary class="muted" style="cursor:pointer;font-size:13px">См. также: состояния индикатора финрезультата (6 шт., концепция §9)</summary>
+            <div class="card" style="margin-top:10px"><div class="card-b" id="fp-gallery"></div></div>
+          </details>
+        </div>
+
+        <!-- правая контекстно-зависимая область -->
+        <aside class="right-area" id="right-area">
+          <div class="sheet-grip"></div>
+          <div id="ra-hints">
+            <div class="card">
+              <div class="card-h"><h3>Подсказки журнала</h3>
+                <div class="toolbar-sp"><button class="btn primary sm" id="runhints" onclick="runHints()">Запустить проход подсказок</button></div>
+              </div>
+              <div class="card-b" id="ra-hints-body">
+                <div class="hint-group">
+                  <p class="gt">Риск / профит</p>
+                  <div class="hint-card" style="margin-bottom:8px">
+                    <div class="t">RiskProfitHint <span class="pill applied">применено</span></div>
+                    <div class="d">«Диапазон SOL»: итог +64.10 выше границы профита +50 — зафиксируйте план.</div>
+                  </div>
+                  <div class="hint-card">
+                    <div class="t">RiskProfitHint <span class="pill rejected">отклонено</span></div>
+                    <div class="d">«Контртренд ETH…»: нереализованные −58.20 в зоне риска (−150…0) — наблюдение.</div>
+                  </div>
+                </div>
+                <div class="hint-group">
+                  <p class="gt">Гигиена журнала</p>
+                  <div class="hint-card">
+                    <div class="t">EmptyCommentHint <span class="pill hint">живая</span></div>
+                    <div class="d">У «Календарный спред ETH 26/27» нет комментария-плана.</div>
+                  </div>
+                </div>
+                <details class="hist">
+                  <summary>История проходов (свёрнута) — 7 записей</summary>
+                  <div class="muted" style="font-size:12.5px;margin-top:6px">06.10 09:00 · применено 1 / отклонено 2 · авто<br>05.10 09:00 · применено 0 / отклонено 3 · авто<br>04.10 21:14 · ручной запуск · CorpusInvalid: правило R-19 без субъекта…</div>
+                </details>
+              </div>
+            </div>
+          </div>
+          <div id="ra-preview" hidden>
+            <div class="card"><div class="card-b" id="ra-preview-body"></div></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ==================== ЭКРАН: КАРТОЧКА КОНСТРУКЦИИ ==================== -->
+    <section class="screen" id="scr-card">
+      <a class="crumb" href="#" onclick="setScreen('constructions');return false">← Конструкции</a>
+
+      <div class="screen-head" style="margin-bottom:14px">
+        <h1 id="card-title">Контртренд ETH под прикрытием путов</h1>
+        <span class="pill open" id="card-status">открыта</span>
+        <div class="toolbar-sp">
+          <button class="btn sm" onclick="toast('Переименование — прототип')">Переименовать</button>
+          <button class="btn sm" onclick="toast('Закрытие конструкции — прототип')">Закрыть</button>
+          <button class="btn sm" onclick="toast('Архивация — прототип')">В архив</button>
+          <button class="btn sm danger" onclick="toast('Удаление пустой конструкции (подтверждение + бэкап) — прототип')">Удалить</button>
+          <button class="btn sm ghost" title="Открыть карточку в новом окне" onclick="window.open(location.pathname+'#s=card','_blank')">↗ В новом окне</button>
+          <button class="btn sm" id="chats-toggle-btn" onclick="toggleChats()">💬 Чаты</button>
+        </div>
+      </div>
+
+      <div class="card-layout no-chats" id="card-layout">
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+
+          <div class="card">
+            <!-- kstrip: сводка метрик -->
+            <dl class="kstrip kv" id="card-kstrip"></dl>
+            <div class="card-b" style="border-top:1px solid var(--line-soft)">
+              <div class="fp-full" id="card-fp"></div>
+            </div>
+            <div class="card-b" style="border-top:1px solid var(--line-soft);display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center">
+              <span class="muted" style="font-size:12.5px">Капитал: <b class="num">3 000</b> USDT
+                <button class="pencil" title="Изменить капитал" onclick="toast('Капитал: пустое сохранение убирает; 0 легитимен — прототип')">✎</button></span>
+              <span class="muted" style="font-size:12.5px">Риск: <b class="num">150 (5%)</b>
+                <button class="pencil" title="Изменить риск (эхо-пересчёт профита)" onclick="toast('Риск/профит — одна единица, эхо-пересчёт второй — прототип')">✎</button></span>
+              <span class="muted" style="font-size:12.5px">Профит: <b class="num">450 (15%)</b></span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h3>Комментарий конструкции</h3>
+              <div class="toolbar-sp"><button class="pencil" title="Редактировать (MD)" onclick="openMd()">✎ Редактировать</button></div>
+            </div>
+            <div class="card-b md-body" id="card-comment"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h3>Подсказки конструкции</h3></div>
+            <div class="card-b">
+              <div class="hint-card">
+                <div class="t">PositionCommentHint <span class="pill hint">живая</span></div>
+                <div class="d">Позиция «PUT ETH 2800 26.06 ×2» без комментария: назначение страховки не зафиксировано.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4 таблицы: позиции / сделки / закрывающие / корректировки -->
+          <div class="card table-wrap d-only">
+            <div class="card-h"><h3>Позиции</h3><span class="faint" style="font-size:12px">15 колонок · 4</span></div>
+            <table class="grid sub">
+              <thead><tr><th>Инструмент</th><th>Напр.</th><th class="r">Кол-во</th><th class="r">Вход</th><th class="r">Тек.</th><th class="r">PnL</th><th>% итога</th><th>Открыта</th><th>Комментарий</th><th></th></tr></thead>
+              <tbody>
+                <tr><td class="c-name">ETH-USD перп</td><td>short</td><td class="r num">1.2</td><td class="r num">3 412.5</td><td class="r num">3 388.1</td><td class="r num pos">+29.3</td><td class="num">32%</td><td class="num">12.05.26</td><td><span class="faint" title="inline-комментарий">«ядро» ✎</span></td><td class="chip-act"><button class="btn sm" onclick="toast('Закрыть пометкой… (пикеры, дефолты) — прототип')">Закрыть пометкой…</button></td></tr>
+                <tr><td class="c-name">PUT ETH 2800 26.06</td><td>long</td><td class="r num">2</td><td class="r num">18.4</td><td class="r num">15.9</td><td class="r num neg">−5.0</td><td class="num">−6%</td><td class="num">13.05.26</td><td><span class="faint">— ✎</span></td><td class="chip-act"><button class="btn sm" onclick="toast('Закрыть пометкой… — прототип')">Закрыть пометкой…</button></td></tr>
+                <tr><td class="c-name">ETH-USD перп (хедж)</td><td>long</td><td class="r num">0.4</td><td class="r num">3 395.0</td><td class="r num">3 388.1</td><td class="r num pos">+2.8</td><td class="num">3%</td><td class="num">12.05.26</td><td><span class="faint">«дельта-хедж» ✎</span></td><td class="chip-act"><button class="btn sm" onclick="toast('Закрыть пометкой… — прототип')">Закрыть пометкой…</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="m-only">
+            <div class="m-card"><div class="mh1"><span>ETH-USD перп · short 1.2</span><span class="pos num">+29.3</span></div><div class="mkv"><span>вход <b>3 412.5</b></span><span>тек. <b>3 388.1</b></span><span>«ядро» ✎</span></div></div>
+            <div class="m-card"><div class="mh1"><span>PUT ETH 2800 26.06 · long 2</span><span class="neg num">−5.0</span></div><div class="mkv"><span>вход <b>18.4</b></span><span>тек. <b>15.9</b></span><span>— ✎</span></div></div>
+          </div>
+
+          <div class="card table-wrap d-only">
+            <div class="card-h"><h3>Сделки</h3><span class="faint" style="font-size:12px">10 колонок · 37</span></div>
+            <table class="grid sub">
+              <thead><tr><th>Время</th><th>Инструмент</th><th>Напр.</th><th class="r">Кол-во</th><th class="r">Цена</th><th class="r">Комиссия</th><th>Конструкция</th><th>Комментарий</th><th></th></tr></thead>
+              <tbody>
+                <tr><td class="num">06.10 14:02</td><td>ETHUSDT</td><td>buy</td><td class="r num">0.5</td><td class="r num">3 390.2</td><td class="r num">0.17</td><td>эта</td><td><span class="faint">— ✎</span></td><td class="chip-act"><button class="btn sm" onclick="toast('Возврат во «Входящие» — прототип')">Во «Входящие»</button><button class="btn sm" onclick="toast('Перенос в другую конструкцию — прототип')">Перенести…</button></td></tr>
+                <tr><td class="num">05.10 09:31</td><td>ETHUSDT</td><td>sell</td><td class="r num">0.3</td><td class="r num">3 402.8</td><td class="r num">0.10</td><td>эта</td><td><span class="faint">— ✎</span></td><td class="chip-act"><button class="btn sm" onclick="toast('Возврат во «Входящие» — прототип')">Во «Входящие»</button><button class="btn sm" onclick="toast('Перенос — прототип')">Перенести…</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card table-wrap d-only">
+            <div class="card-h"><h3>Закрывающие записи</h3><span class="faint" style="font-size:12px">6 колонок · 2</span>
+              <div class="toolbar-sp"><span class="pill hint" title="предупреждение об избыточной записи">⚠ 1 избыточная</span></div>
+            </div>
+            <table class="grid sub">
+              <thead><tr><th>Время</th><th>Позиция</th><th>Тип</th><th class="r">PnL</th><th>Комментарий</th><th></th></tr></thead>
+              <tbody>
+                <tr><td class="num">21.06 18:40</td><td>PUT ETH 2900 26.06</td><td>экспирация</td><td class="r num pos">+41.2</td><td><span class="faint">авто</span></td><td></td></tr>
+                <tr class="warn-row"><td class="num">28.06 11:05</td><td>ETH-USD перп</td><td>ручная пометка</td><td class="r num pos">+12.0</td><td><span class="faint">«частичный выход»</span></td><td class="chip-act"><button class="btn sm" onclick="toast('Правка пометки — прототип')">✎</button><button class="btn sm" onclick="toast('Удаление пометки — прототип')">✕</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card table-wrap d-only">
+            <div class="card-h"><h3>Корректировки PnL</h3><span class="faint" style="font-size:12px">5 колонок · 2</span>
+              <div class="toolbar-sp"><button class="btn sm primary" onclick="toast('Добавить корректировку (пикеры, дефолты) — прототип')">+ Добавить</button></div>
+            </div>
+            <table class="grid sub">
+              <thead><tr><th>Время</th><th class="r">Величина</th><th>Причина</th><th>Комментарий</th><th></th></tr></thead>
+              <tbody>
+                <tr><td class="num">30.09 12:00</td><td class="r num pos">+87.40</td><td>перенос комиссии</td><td><span class="faint">финансирование за сентябрь</span></td><td class="chip-act"><button class="btn sm" onclick="toast('Правка — прототип')">✎</button><button class="btn sm" onclick="toast('Удаление — прототип')">✕</button></td></tr>
+                <tr><td class="num">15.08 10:22</td><td class="r num neg">−12.00</td><td>прочее</td><td><span class="faint">пересчёт ставки</span></td><td class="chip-act"><button class="btn sm" onclick="toast('Правка — прототип')">✎</button><button class="btn sm" onclick="toast('Удаление — прототип')">✕</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- правая скрываемая область чатов (привязка — автопривязка к этой конструкции) -->
+        <aside class="card chats-panel" id="chats-panel" hidden>
+          <div class="card-h"><h3>Чаты конструкции</h3><span class="pill src">автопривязка</span>
+            <div class="toolbar-sp"><button class="btn sm primary" onclick="toast('Новый чат — привяжется к этой конструкции — прототип')">+ Новый чат</button>
+            <button class="btn sm ghost" onclick="toggleChats()" title="Скрыть">✕</button></div>
+          </div>
+          <div class="card-b" style="border-bottom:1px solid var(--line-soft)">
+            <div class="sess active"><span class="st">Оценка хеджа путами</span><span class="sm"><span class="pill model">GLM-5.3</span>· 2 сообщения</span></div>
+            <div class="sess"><span class="st muted">Пост-мортем (после закрытия)</span><span class="sm">завершён</span></div>
+          </div>
+          <div class="chat-scroll" style="min-height:220px">
+            <div class="msg user">Не перевешивает ли пут дельта-хедж? Посмотри журнал.</div>
+            <div class="toolstatus"><span class="spin"></span>журнал: позиции «Контртренд ETH…» as-of 07.10 14:00</div>
+            <div class="msg ai md-body">
+              <p>По текущим позициям:</p>
+              <ul>
+                <li>нетто-дельта <b>−0.34</b> — хедж <em>недобирает</em>;</li>
+                <li>гамма на 26.06 умеренная, риск перед экспирацией <code>±8%</code>.</li>
+              </ul>
+              <p>Источники: <span class="rule-ref">журнал (as-of 07.10 14:00)<span class="rule-pop"><div class="pt">Журнал сделок</div><div class="pm">позиции и PnL конструкции на момент ответа</div></span></span>, <span class="rule-ref">R-07<span class="rule-pop"><div class="pt">R-07 · Закрывать голые опционы за N дней до экспирации</div><div class="pm">предписание · чёткая · позиция</div><div class="tags"><span class="pill src">опционы</span><span class="pill src">экспирация</span></div></span></span>.</p>
+              <div class="meta">GLM-5.3 · 07.10 14:05 · <a href="#" onclick="setScreen('rules');return false">открыть каталог правил</a></div>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="row">
+              <select class="select"><option>GLM-5.3</option><option>GLM-4.7</option></select>
+              <span class="pill src">журнал</span><span class="pill src">корпус правил</span><span class="pill src">рынок Bybit</span>
+              <div class="sp"><button class="btn primary sm" onclick="toast('Отправка — прототип')">Отправить</button></div>
+            </div>
+            <textarea placeholder="Спросить про эту конструкцию…"></textarea>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= ЭКРАН: АГЕНТ ======================= -->
+    <section class="screen" id="scr-agent">
+      <div class="screen-head">
+        <div class="subtabs">
+          <button class="subtab active" onclick="toast('Подтаб «Чаты»')">Чаты</button>
+          <button class="subtab" onclick="setScreen('rules')">Правила</button>
+          <button class="subtab" disabled title="появится с change add-summary-channels" onclick="return false">Сводки <span class="faint">(резерв)</span></button>
+        </div>
+        <button class="btn sm agent-sess-btn" onclick="openDrawer('agentlist')">☰ Сессии</button>
+      </div>
+
+      <div class="agent-layout">
+        <!-- список сессий по референсу -->
+        <aside class="card agent-list" id="agentlist">
+          <div class="card-b" style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn primary" onclick="agentView(0)" style="width:100%">+ Новый чат</button>
+            <div class="hint-group" style="margin:6px 0 0">
+              <p class="gt">Активные</p>
+              <button class="sess active" onclick="agentView(1)"><span class="st">Стреддл BTC — оценка риска</span><span class="sm"><span class="pill model">GLM-5.3</span><span class="pill src">журнал</span><span class="pill src">Bybit</span></span></button>
+              <button class="sess" onclick="agentView(2)"><span class="st">Фильтр сделок для grid-ETH</span><span class="sm"><span class="pill model">GLM-4.7</span><span class="pill src">правила</span></span></button>
+            </div>
+            <div class="hint-group" style="margin:10px 0 0">
+              <p class="gt">Завершённые</p>
+              <button class="sess" onclick="agentView(3)"><span class="st muted">Пост-мортем: коллы BTC</span><span class="sm">конструкция «Пропущенный рост…» · 04.10</span></button>
+              <button class="sess" onclick="agentView(3)"><span class="st muted">SOL диапазон — вход?</span><span class="sm">21.09</span></button>
+            </div>
+          </div>
+        </aside>
+
+        <div class="card chat-area">
+          <!-- вид: пустое состояние / новый чат -->
+          <div id="agent-empty">
+            <div class="suggest-grid">
+              <button class="suggest" onclick="agentView(1)"><span class="si">📊</span><div class="st">Какие конструкции в зоне риска?</div><div class="sd">по данным журнала: нереализованный PnL против границ риска</div></button>
+              <button class="suggest" onclick="agentView(1)"><span class="si">⚖️</span><div class="st">Проверить идею по корпусу правил</div><div class="sd">опишите замысел — ассистент сверит с правилами</div></button>
+              <button class="suggest" onclick="setScreen('card');toggleChats(true);return false"><span class="si">🧾</span><div class="st">Пост-мортем закрытой конструкции</div><div class="sd">разбор в карточке: чат привяжется к конструкции</div></button>
+            </div>
+            <div class="composer">
+              <div class="newchat-params" style="padding:0 2px 4px">
+                <span class="param"><label>Модель</label>
+                  <select class="select"><option selected>GLM-5.3</option><option>GLM-4.7</option></select></span>
+                <span class="param"><label>Конструкция</label>
+                  <select class="select"><option selected>— не привязывать —</option><option>Контртренд ETH под прикрытием путов</option><option>Диапазон SOL</option><option>Стреддл BTC на 6 июня (закрыта)</option></select></span>
+                <span class="param"><label>Источники</label>
+                  <label class="check"><input type="checkbox" checked> журнал</label>
+                  <label class="check"><input type="checkbox" checked> корпус правил</label>
+                  <label class="check"><input type="checkbox" checked> рынок Bybit</label></span>
+              </div>
+              <textarea placeholder="Чат создаётся первым сообщением…"></textarea>
+              <div class="row">
+                <span class="faint" style="font-size:12px">↵ отправить · Shift+↵ перенос</span>
+                <div class="sp"><button class="btn" onclick="toast('Подключение источников — прототип')">🔌 Источники</button>
+                <button class="btn primary" onclick="agentView(1)">Отправить</button></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- вид: активный чат -->
+          <div id="agent-chat" hidden>
+            <div class="card-h">
+              <h3 id="agent-chat-title">Стреддл BTC — оценка риска</h3>
+              <span class="pill model" title="смена модели на лету — новые сообщения пойдут выбранной">GLM-5.3 ▾</span>
+              <span class="pill src">журнал</span><span class="pill src">Bybit</span>
+              <div class="toolbar-sp">
+                <button class="btn sm" onclick="toast('Продолжение вернёт чат в активные — прототип')">Продолжить</button>
+                <button class="btn sm" onclick="toast('Завершение — скрыть в завершённые — прототип')">Завершить</button>
+                <button class="btn sm danger" onclick="toast('Удаление чата целиком (подтверждение) — прототип')">Удалить</button>
+              </div>
+            </div>
+            <div class="chat-scroll">
+              <div class="msg user">Держу стреддл BTC 6 июня. Оцени риск выхода в пятницу.</div>
+              <div class="toolstatus"><span class="spin"></span>корпус правил: поиск «стреддл», «экспирация»…</div>
+              <div class="toolstatus"><span class="spin"></span>Bybit: BTCUSDT · IV · открытый интерес</div>
+              <div class="msg ai md-body">
+                <p>Коротко: риск <b>умеренный</b>, но пятница — узкое место.</p>
+                <ul>
+                  <li>IV снизилась на <code>6 п.</code> с входа — вега против вас;</li>
+                  <li>открытый интерес в страйке 100k вырос — рынок собирается в той же точке;</li>
+                  <li>по <span class="rule-ref">R-19<span class="rule-pop"><div class="pt">R-19 · Не удерживать шорт волатильности в цикл новостей</div><div class="pm">запрет · мягкая · сделка</div><div class="tags"><span class="pill src">волатильность</span><span class="pill src">новости</span></div></span></span> — до пятницы цикл статистики США.</li>
+                </ul>
+                <p>След источников:</p>
+                <p><span class="pill src">журнал · as-of 07.10 13:58</span> <span class="pill src">Bybit · тикеры 13:58</span> <span class="rule-ref">R-19 · попап при наведении<span class="rule-pop"><div class="pt">R-19 · Не удерживать шорт волатильности в цикл новостей</div><div class="pm">запрет · мягкая · сделка</div><div class="tags"><span class="pill src">волатильность</span><span class="pill src">новости</span></div></span></span></p>
+                <div class="meta">GLM-5.3 · 07.10 13:59</div>
+              </div>
+              <div class="msg ai md-body">
+                <p>Рекомендация: рассмотреть частичное перекладывание в календарь<span class="caret"></span></p>
+                <div class="meta" style="display:flex;gap:8px;align-items:center"><button class="btn sm danger" onclick="toast('Отмена генерации — прототип')">■ Остановить</button><span>стрим…</span></div>
+              </div>
+            </div>
+            <div class="composer">
+              <div class="row">
+                <select class="select" title="смена модели на лету"><option selected>GLM-5.3</option><option>GLM-4.7</option></select>
+                <span class="pill src">журнал</span><span class="pill src">Bybit</span>
+                <div class="sp"><button class="btn" onclick="toast('Источники — прототип')">🔌</button><button class="btn primary" onclick="toast('Отправка — прототип')">Отправить</button></div>
+              </div>
+              <textarea placeholder="Продолжить чат…"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= ЭКРАН: ПРАВИЛА ======================= -->
+    <section class="screen" id="scr-rules">
+      <div class="screen-head">
+        <div class="subtabs">
+          <button class="subtab" onclick="setScreen('agent')">Чаты</button>
+          <button class="subtab active">Правила</button>
+          <button class="subtab" disabled title="появится с change add-summary-channels" onclick="return false">Сводки <span class="faint">(резерв)</span></button>
+        </div>
+      </div>
+
+      <div class="rules-layout">
+        <div class="card">
+          <div class="filters">
+            <input class="select" style="min-width:200px" placeholder="Поиск по тексту…" onkeydown="if(event.key==='Enter')toast('Поиск — прототип')">
+            <select class="select"><option>Характер: все</option><option>предписание</option><option>ограничение</option><option>запрет</option></select>
+            <select class="select"><option>Чёткость: любая</option><option>чёткая</option><option>мягкая</option></select>
+            <select class="select"><option>Субъект: все</option><option>сделка</option><option>позиция</option><option>конструкция</option></select>
+            <span class="muted" style="font-size:12.5px;margin-left:auto">корпус — файлы <code>rules/</code> · только чтение</span>
+          </div>
+          <div class="card-b rules-grid" id="rules-grid"></div>
+        </div>
+
+        <aside class="card rule-detail" id="rule-detail" hidden>
+          <div class="card-h"><h3 id="rd-title"></h3>
+            <div class="toolbar-sp"><button class="btn sm ghost" title="Открыть каталог с этой карточкой в новом окне" onclick="window.open(location.pathname+'#s=rules&rule=12','_blank')">↗</button></div>
+          </div>
+          <div class="card-b">
+            <div class="fld"><div class="fl">Идентификатор</div><div class="fv num" id="rd-id"></div></div>
+            <div class="fld"><div class="fl">Характер действия</div><div class="fv" id="rd-char"></div></div>
+            <div class="fld"><div class="fl">Чёткость</div><div class="fv" id="rd-clear"></div></div>
+            <div class="fld"><div class="fl">Субъект</div><div class="fv" id="rd-subj"></div></div>
+            <div class="fld"><div class="fl">Формулировка</div><div class="fv md-body" id="rd-text"></div></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= ЭКРАН: СИНХРОНИЗАЦИЯ ======================= -->
+    <section class="screen" id="scr-sync">
+      <div class="screen-head"><h1>Синхронизация</h1></div>
+      <div class="sync-col">
+        <div class="card">
+          <div class="card-h"><h3>Подключение Bybit</h3><span class="pill applied" style="margin-left:8px">подключено</span></div>
+          <div class="card-b">
+            <table class="kvtable">
+              <tr><td class="muted">Ключ API</td><td class="num">AK***9F2 <span class="faint">(маска; секрет не возвращается ответом)</span></td></tr>
+              <tr><td class="muted">Аккаунт</td><td>основной (Unified)</td></tr>
+              <tr><td class="muted">Хранение секрета</td><td><code>appsettings.Local.json</code></td></tr>
+            </table>
+            <div class="notice" style="margin-top:10px">Ключ не настроен? Добавьте секцию Bybit в <code>appsettings.Local.json</code> (инструкция №29) и перезапустите приложение.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h3>Синхронизация</h3>
+            <div class="toolbar-sp">
+              <label class="switch" title="персистентный, дефолт включён"><input type="checkbox" checked> резервная копия перед синхронизацией</label>
+              <button class="btn primary" onclick="runSync()">Синхронизировать сейчас</button>
+            </div>
+          </div>
+          <div class="card-b">
+            <div class="kv" style="margin-bottom:12px">
+              <div><dt>Последний запуск</dt><dd class="num">07.10.2026 14:02</dd></div>
+              <div><dt>Режим</dt><dd>полный</dd></div>
+              <div><dt>Сделок</dt><dd class="num">+214</dd></div>
+              <div><dt>Позиций</dt><dd class="num">+38</dd></div>
+              <div><dt>Экспираций</dt><dd class="num">+6</dd></div>
+              <div><dt>Прерываний</dt><dd class="pos">нет</dd></div>
+            </div>
+            <table class="grid sub runlog" style="min-width:0">
+              <thead><tr><th>Когда</th><th>Режим</th><th class="r">Сделок</th><th class="r">Позиций</th><th>Бэкап</th><th>Итог</th></tr></thead>
+              <tbody>
+                <tr><td class="num">07.10 14:02</td><td>полный</td><td class="r num">214</td><td class="r num">38</td><td>✓</td><td class="ok">ок</td></tr>
+                <tr><td class="num">06.10 09:00</td><td>инкремент</td><td class="r num">51</td><td class="r num">6</td><td>✓</td><td class="ok">ок</td></tr>
+                <tr><td class="num">05.10 09:00</td><td>инкремент</td><td class="r num">43</td><td class="r num">4</td><td>✓</td><td class="fail">прервано: лимит Bybit (retry 14:05 — ок)</td></tr>
+              </tbody>
+            </table>
+            <div class="notice" style="margin-top:12px">⚠ Сверка экспираций: расхождение 1 запись за 03.10 (закрытие outside window).<br>Заметки: пропущены трансферы (область не синхронизируется); 2 неразрешённых инструмента; 1 непокрытый базовый актив.</div>
+            <div class="alert" style="margin-top:10px">Ошибка проекции при последнем запуске: сделка 8f2… не спроецировалась (дубликат ключа). Журнал сохранён, повторите синхронизацию после правки.</div>
+          </div>
+        </div>
+
+        <div class="card danger">
+          <div class="card-h"><h3>⚠ Опасная зона</h3></div>
+          <div class="card-b" style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+              <div style="flex:1;min-width:260px"><b>Собрать конструкции</b> (полный пересбор)<div class="muted" style="font-size:12.5px">Безвозвратно удаляются: привязанные чаты конструкций. Ручные пометки, корректировки и комментарии сохраняются. Автобэкап будет создан.</div></div>
+              <button class="btn danger" onclick="toast('Подтверждение с перечнем потерь — прототип')">Собрать конструкции…</button>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-top:1px dashed #fbe3e3;padding-top:10px">
+              <div style="flex:1;min-width:260px"><b>Сброс состояния категории</b> (linear / option)<div class="muted" style="font-size:12.5px">Курсоры инкрементальной синхронизации обнулятся.</div></div>
+              <button class="btn danger" onclick="toast('Подтверждение — прототип')">Сбросить…</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ===== MD-модальный редактор: split-view, тулбар + live-превью ===== -->
+<div class="modal-ov" id="md-modal">
+  <div class="modal">
+    <div class="mh"><h3>Комментарий конструкции — Markdown</h3>
+      <span class="muted" style="font-size:12.5px">split-view · без WYSIWYG · Ctrl+Enter — сохранить</span>
+      <div class="toolbar-sp"><button class="btn sm ghost" onclick="closeMd()">✕</button></div>
+    </div>
+    <div class="md-split">
+      <div class="md-edit">
+        <div class="md-toolbar">
+          <button onclick="mdIns('**','жирный**')" title="Жирный">Ж</button>
+          <button onclick="mdIns('*','курсив*')" title="Курсив">К</button>
+          <button onclick="mdIns('`','код`')" title="Код">⟨⟩</button>
+          <button onclick="mdIns('[','текст](url)')" title="Ссылка">🔗</button>
+          <button onclick="mdIns('- ',' пункт')" title="Список">•</button>
+          <button onclick="mdTable()" title="Таблица">▦</button>
+        </div>
+        <textarea id="md-src" oninput="mdPreview()" spellcheck="false"></textarea>
+      </div>
+      <div class="md-prev"><div class="md-body" id="md-out"></div></div>
+    </div>
+    <div class="mf"><button class="btn" onclick="closeMd()">Отмена</button><button class="btn primary" onclick="saveMd()">Сохранить</button></div>
+  </div>
+</div>
+
+<!-- ===== плавающая панель прототипа ===== -->
+<div class="pbar">
+  <button onclick="step(-1)" title="Предыдущий экран (←)">←</button>
+  <span class="lbl" id="pb-label">Конструкции</span>
+  <button onclick="step(1)" title="Следующий экран (→)">→</button>
+  <span class="sep"></span>
+  <button id="pb-mob" onclick="toggleMobile()">📱 Mobile</button>
+</div>
+
+<script>
+/* ---------- данные (правдоподобные значения; статус-кейсы покрывают §9) ---------- */
+var CONSTRUCTIONS = [
+  {id:1, name:"Контртренд ETH под прикрытием путов", status:"открыта", capital:3000, value:2941.80, realized:214.32, unrealized:-58.20, adj:87.40, risk:150, profit:450, opened:"12.05.2026", closed:null, hints:2, hintCls:"warn", busy:29.4, pos:4, deals:37, adjs:2},
+  {id:4, name:"Диапазон SOL", status:"открыта", capital:1000, value:1023.40, realized:0, unrealized:64.10, adj:0, risk:80, profit:50, opened:"21.09.2026", closed:null, hints:1, hintCls:"crit", busy:41.0, pos:2, deals:9, adjs:0},
+  {id:6, name:"Календарный спред ETH 26/27", status:"открыта", capital:2500, value:2461.00, realized:12.00, unrealized:null, adj:0, risk:null, profit:null, opened:"03.10.2026", closed:null, quotesErr:true, hints:0, busy:12.1, pos:2, deals:6, adjs:0},
+  {id:2, name:"Стреддл BTC на 6 июня", status:"закрыта", capital:2000, value:0, realized:143.63, unrealized:0, adj:0, risk:100, profit:300, opened:"01.05.2026", closed:"06.06.2026", hints:0, busy:0, pos:0, deals:22, adjs:0},
+  {id:3, name:"Пропущенный рост — коллы BTC", status:"закрыта", capital:1500, value:0, realized:-313.01, unrealized:0, adj:0, risk:200, profit:null, opened:"28.03.2026", closed:"18.04.2026", hints:0, busy:0, pos:0, deals:11, adjs:0},
+  {id:5, name:"Песочница робота grid-ETH", status:"архив", capital:500, value:0, realized:38.15, unrealized:0, adj:0, risk:40, profit:60, opened:"02.06.2026", closed:"30.06.2026", hints:0, busy:0, pos:0, deals:48, adjs:0}
+];
+
+var RULES = [
+  {id:3,  t:"Не добавлять в убыточную позицию без нового решения", ch:"ограничение", cl:"мягкая",   s:"позиция",     tags:["усреднение","дисциплина"], text:"Доливка в убыточную позицию допускается только как **новое решение** с собственной записью в комментарии позиции."},
+  {id:7,  t:"Закрывать голые опционы за N дней до экспирации",    ch:"предписание", cl:"чёткая",   s:"позиция",     tags:["опционы","экспирация"],     text:"Голые опционы закрываются не позднее `N=5` торговых дней до экспирации, если не оформлена страховка."},
+  {id:12, t:"Риск конструкции фиксируется при открытии",           ch:"предписание", cl:"чёткая",   s:"конструкция", tags:["риск"],                     text:"Риск (в USDT и % капитала) фиксируется в шапке конструкции **при открытии** и не меняется без записи в комментарии."},
+  {id:19, t:"Не удерживать шорт волатильности в цикл новостей",    ch:"запрет",      cl:"мягкая",   s:"сделка",      tags:["волатильность","новости"],  text:"Шорт волатильности не удерживается через цикл макростатистики: закрывается или хеджируется до релиза."},
+  {id:24, t:"Каждая конструкция имеет комментарий-план",           ch:"предписание", cl:"чёткая",   s:"конструкция", tags:["гигиена"],                  text:"Комментарий конструкции содержит замысел, точки выхода и критерий ошибки — до первой сделки."}
+];
+
+var SCREENS = [
+  {k:"constructions", n:"Конструкции"},
+  {k:"card",          n:"Карточка конструкции"},
+  {k:"agent",         n:"Агент · Чаты"},
+  {k:"rules",         n:"Агент · Правила"},
+  {k:"sync",          n:"Синхронизация"}
+];
+
+var state = {s:"constructions", sel:0, chats:0, chat:0, rule:0, m:0};
+
+/* ---------- утилиты ---------- */
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function fmt(v, sign){ if(v==null) return "—"; var s=Math.abs(v).toLocaleString("en-US").replace(/,/g," "); return (sign? (v>0?"+":v<0?"−":"") : v<0?"−":"") + s; }
+function pnl(v){ return v==null? "—" : '<span class="'+(v>0?"pos":v<0?"neg":"")+'">'+fmt(v,true)+'</span>'; }
+function pct(v){ return v==null? "—" : (v>0?"+":"")+v.toFixed(1)+"%"; }
+function plural(n, f){ var n10=n%10, n100=n%100; return f[(n10==1&&n100!=11)?0:(n10>=2&&n10<=4&&(n100<12||n100>14))?1:2]; }
+function toast(msg){ alert(msg); }
+
+/* ---------- индикатор финрезультата (§9) ---------- */
+function fpModel(c){
+  var unrl = c.quotesErr ? null : c.unrealized;            // «неполный»: нереализованная скрыта
+  var total = c.realized + (unrl||0) + (c.adj||0);
+  var hasZ = c.risk!=null || c.profit!=null;
+  var lo = c.risk!=null ? -c.risk : 0, hi = c.profit!=null ? c.profit : 0;
+  if(!hasZ){ var m=Math.max(Math.abs(c.realized),Math.abs(total),1)*1.15; lo=-m; hi=m; }
+  if(hi===lo) hi=lo+1;
+  var W = hi-lo;
+  var clipR=false, clipL=false;
+  var pt = c.profit!=null && total>hi;  if(pt) clipR=true;
+  var cl2 = c.risk!=null && total<lo;   if(cl2) clipL=true;
+  var p0 = (0-lo)/W*100;
+  var pR = Math.min(100,Math.max(0,(c.realized-lo)/W*100));
+  var pT = Math.min(100,Math.max(0,(total-lo)/W*100));
+  return {total:total, unrl:unrl, lo:lo, hi:hi, hasZ:hasZ, p0:p0, pR:pR, pT:pT, clipR:clipR, clipL:clipL, neg: total<0,
+          noRemainder: (unrl==null || unrl===0), partial: !!c.quotesErr && c.unrealized!=null};
+}
+function fpHtml(c, mode){
+  var f = fpModel(c);
+  var a = f.p0, b = f.pT, left = Math.min(a,b), w = Math.abs(b-a);
+  var fillClr = f.neg ? "neg" : "";
+  var h = '<div class="fp'+(mode==="full"?"":" fp-s")+'">';
+  if(f.hasZ){
+    if(c.risk!=null)   h += '<div class="zr" style="left:0;width:'+(f.p0)+'%"></div>';
+    if(c.profit!=null) h += '<div class="zp" style="left:'+(f.p0)+'%;right:0"></div>';
+  }
+  h += '<div class="fill '+fillClr+'" style="left:'+left+'%;width:'+w+'%"></div>';
+  var pa=Math.min(f.pR,f.pT), pw=Math.abs(f.pT-f.pR);
+  if(pw>0.4 && !f.partial) h += '<div class="pale '+fillClr+'" style="left:'+pa+'%;width:'+pw+'%"></div>';
+  h += '<div class="tick" style="left:'+f.pR+'%"></div>';
+  h += '<div class="mark" style="left:'+f.pT+'%"></div>';
+  h += '</div>';
+  if(mode!=="full") return h;
+
+  var L = [];
+  L.push('<div class="fp-axis"><span>'+ (c.risk!=null? "−Риск "+fmt(c.risk)+(c.capital? " ("+(c.risk/c.capital*100).toFixed(0)+"%)":"") : "") +'</span><span>0</span><span>'+ (c.profit!=null? "+Профит "+fmt(c.profit)+(c.capital? " ("+(c.profit/c.capital*100).toFixed(0)+"%)":"") : "") +'</span></div>');
+  var notes=[];
+  notes.push('<span class="fp-legend"><i style="background:var(--accent)"></i>итог <b>'+fmt(f.total,true)+'</b></span>');
+  notes.push('<span class="fp-legend"><i style="background:#3c4450"></i>граница реализов. <b>'+fmt(c.realized,true)+'</b></span>');
+  if(f.clipR) notes.push('<span class="pill brk">пробой профита ▸ '+fmt(f.total,true)+'</span>');
+  if(f.clipL) notes.push('<span class="pill hint-crit">пробой риска ◂ '+fmt(f.total,true)+'</span>');
+  if(f.noRemainder && !f.partial && !c.quotesErr) notes.push('<span class="muted">открытых остатков нет — маркер итога на realized</span>');
+  if(f.partial || c.quotesErr) notes.push('<span class="pill hint">неполный (сбой котировок) — нереализованная скрыта</span>');
+  if(c.status==="закрыта") notes.push('<span class="muted">закрыта — только реализованная</span>');
+  if(!f.hasZ) notes.push('<span class="muted">риск/профит не заданы — нейтральная шкала</span>');
+  if(c.risk!=null && c.profit==null) notes.push('<span class="muted">задан только риск — единственная зона</span>');
+  L.push('<div class="fp-note">'+notes.join("")+'</div>');
+  return h + L.join("");
+}
+
+/* ---------- таблица «Конструкций» ---------- */
+function rowHtml(c){
+  var total = c.realized + (c.quotesErr?0:(c.unrealized||0)) + (c.adj||0);
+  var hint = c.hints>0 ? '<span class="hintbadge '+c.hintCls+'">✦ '+c.hints+'</span>' : '<span class="hintbadge none">—</span>';
+  return '<tr class="'+(state.sel===c.id?"sel":"")+'" onclick="selectC('+c.id+')" ondblclick="openCard('+c.id+')">'
+    +'<td class="c-name">'+esc(c.name)+'</td>'
+    +'<td>'+hint+'</td>'
+    +'<td><span class="pill '+pillCls(c.status)+'">'+c.status+'</span></td>'
+    +'<td class="r num">'+fmt(c.capital)+'</td>'
+    +'<td class="r num">'+fmt(c.value)+'</td>'
+    +'<td class="r num">'+pnl(c.realized)+'</td>'
+    +'<td class="r num">'+(c.quotesErr?'<span class="pill hint">неполный</span>':pnl(c.unrealized))+'</td>'
+    +'<td class="r num">'+(c.adj?pnl(c.adj):'<span class="faint">—</span>')+'</td>'
+    +'<td class="r"><span class="num" style="font-weight:600">'+pnl(total)+'</span>'+fpHtml(c,"compact")+'</td>'
+    +'<td class="r num">'+pct(c.capital? total/c.capital*100 : null)+'</td>'
+    +'<td class="r num">'+(c.busy? c.busy.toFixed(1)+"%":'<span class="faint">—</span>')+'</td>'
+    +'<td class="num">'+c.opened+'</td>'
+    +'<td class="num">'+(c.closed||'<span class="faint">—</span>')+'</td></tr>';
+}
+function pillCls(st){ return st==="открыта"?"open":st==="закрыта"?"closed":"arch"; }
+function renderTable(){
+  var rows="", cards="";
+  CONSTRUCTIONS.forEach(function(c){
+    rows += rowHtml(c);
+    var total = c.realized + (c.quotesErr?0:(c.unrealized||0)) + (c.adj||0);
+    cards += '<div class="m-card" onclick="selectC('+c.id+')">'
+      +'<div class="mh1"><span>'+esc(c.name)+' <span class="pill '+pillCls(c.status)+'">'+c.status+'</span></span><span class="num">'+pnl(total)+'</span></div>'
+      +'<div class="mkv"><span>капитал <b>'+fmt(c.capital)+'</b></span><span>реализов. <b>'+fmt(c.realized,true)+'</b></span>'
+      +(c.quotesErr?'<span>нереализов. <b class="muted">неполный</b></span>':'<span>нереализов. <b>'+fmt(c.unrealized||0,true)+'</b></span>')
+      +'<span>открыта <b>'+c.opened+'</b></span></div>'
+      +fpHtml(c,"compact")+'</div>';
+  });
+  $("ctbody").innerHTML = rows;
+  $("cmcards").innerHTML = cards;
+}
+
+/* ---------- правая контекстная область ---------- */
+function selectC(id){
+  state.sel = id;
+  renderTable();
+  var c = CONSTRUCTIONS.filter(function(x){return x.id===id})[0];
+  if(!c){ $("ra-preview").hidden = true; $("ra-hints").hidden = false; syncHash(); return; }
+  var total = c.realized + (c.quotesErr?0:(c.unrealized||0)) + (c.adj||0);
+  $("ra-preview-body").innerHTML =
+     '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><b>'+esc(c.name)+'</b><span class="pill '+pillCls(c.status)+'">'+c.status+'</span></div>'
+    +'<dl class="kv" style="margin-bottom:12px">'
+    +'<div><dt>Итог</dt><dd class="num">'+pnl(total)+'</dd></div>'
+    +'<div><dt>% капитала</dt><dd class="num">'+pct(c.capital?total/c.capital*100:null)+'</dd></div>'
+    +'<div><dt>Стоимость</dt><dd class="num">'+fmt(c.value)+'</dd></div>'
+    +'<div><dt>Занятость</dt><dd class="num">'+(c.busy?c.busy.toFixed(1)+"%":"—")+'</dd></div>'
+    +'<div><dt>Реализов.</dt><dd class="num">'+pnl(c.realized)+'</dd></div>'
+    +'<div><dt>Нереализов.</dt><dd class="num">'+(c.quotesErr?'<span class="pill hint">неполный</span>':pnl(c.unrealized))+'</dd></div>'
+    +'<div><dt>Коррект.</dt><dd class="num">'+(c.adj?pnl(c.adj):"—")+'</dd></div>'
+    +'<div><dt>Котировки на</dt><dd class="num">07.10.2026 14:32</dd></div>'
+    +'</dl>'
+    +fpHtml(c,"full")
+    +'<div class="muted num" style="font-size:12.5px;margin:10px 0 4px">период: с '+c.opened+(c.closed?' по '+c.closed:' · 148 дней')+'</div>'
+    +'<div class="muted num" style="font-size:12.5px;margin-bottom:12px">позиций '+c.pos+' · сделок '+c.deals+' · корректировок '+c.adjs+'</div>'
+    +(c.hints? '<div class="hint-card" style="margin-bottom:12px"><div class="t">Живые подсказки <span class="pill '+(c.hintCls==="crit"?"hint-crit":"hint")+'">'+c.hints+'</span></div><div class="d">'+(c.id===4?'итог выше границы профита — зафиксируйте план':'наблюдение по нереализованным')+'</div></div>' : '')
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="btn primary sm" onclick="openCard('+c.id+')">Открыть карточку</button>'
+    +'<button class="btn sm" onclick="window.open(location.pathname+\'#s=card\',\'_blank\')">↗ В новом окне</button>'
+    +'<button class="btn sm ghost" onclick="state.sel=0;renderTable();selectC(0)">Снять выделение</button>'
+    +'</div>';
+  $("ra-hints").hidden = true;
+  $("ra-preview").hidden = false;
+  if(document.body.classList.contains("mobile")) $("right-area").classList.add("open");
+  syncHash();
+}
+function openCard(id){
+  setScreen("card");
+}
+
+/* ---------- галерея состояний индикатора ---------- */
+function renderGallery(){
+  var cases = [
+    {t:"риск/профит не заданы → нейтральная", c:{realized:12, unrealized:5, adj:0, risk:null, profit:null, capital:2500, quotesErr:false, status:"открыта"}},
+    {t:"задан только риск → единственная зона", c:{realized:-313.01, unrealized:0, adj:0, risk:200, profit:null, capital:1500, quotesErr:false, status:"закрыта"}},
+    {t:"итог за пределами +Профит → клип + число", c:{realized:0, unrealized:64.1, adj:0, risk:80, profit:50, capital:1000, quotesErr:false, status:"открыта"}},
+    {t:"нет открытых остатков → маркер на realized", c:{realized:143.63, unrealized:0, adj:0, risk:100, profit:300, capital:2000, quotesErr:false, status:"закрыта"}},
+    {t:"сбой котировок → «неполный», нереализов. скрыта", c:{realized:12, unrealized:5, adj:0, risk:null, profit:null, capital:2500, quotesErr:true, status:"открыта"}},
+    {t:"базовый: обе зоны, насечка realized, маркер итога", c:{realized:214.32, unrealized:-58.2, adj:87.4, risk:150, profit:450, capital:3000, quotesErr:false, status:"открыта"}}
+  ];
+  $("fp-gallery").innerHTML = cases.map(function(k){
+    return '<div style="margin-bottom:14px"><div class="muted" style="font-size:12.5px;margin-bottom:4px">'+k.t+'</div>'+fpHtml(k.c,"full")+'</div>';
+  }).join("");
+}
+
+/* ---------- карточка конструкции ---------- */
+function renderCard(){
+  var c = CONSTRUCTIONS[0];
+  var total = c.realized + c.unrealized + c.adj;
+  $("card-kstrip").innerHTML =
+     '<div class="k"><dt>Общий P&L</dt><dd class="num">'+pnl(total)+'</dd></div>'
+    +'<div class="k"><dt>% капитала</dt><dd class="num">'+pct(total/c.capital*100)+'</dd></div>'
+    +'<div class="k"><dt>Стоимость</dt><dd class="num">'+fmt(c.value)+'</dd></div>'
+    +'<div class="k"><dt>Занятость</dt><dd class="num">'+c.busy.toFixed(1)+'%</dd></div>'
+    +'<div class="k"><dt>Реализов.</dt><dd class="num">'+pnl(c.realized)+'</dd></div>'
+    +'<div class="k"><dt>Нереализов.</dt><dd class="num">'+pnl(c.unrealized)+'</dd></div>'
+    +'<div class="k"><dt>Корректировки</dt><dd class="num">'+pnl(c.adj)+'</dd></div>'
+    +'<div class="k"><dt>Котировки на</dt><dd class="num" style="font-size:13px">07.10.14:32</dd></div>'
+    +'<div class="k"><dt>Период</dt><dd class="num" style="font-size:13px">с 12.05.26 · 148 дней</dd></div>';
+  $("card-fp").innerHTML = fpHtml(c,"full");
+  $("card-comment").innerHTML = mdRender(MD_SAMPLE);
+  $("md-src").value = MD_SAMPLE;
+}
+
+/* ---------- MD: мини-рендер и модальный редактор ---------- */
+var MD_SAMPLE = "**План:** короткая дельта с страховкой путами.\n\n- ядро: перп `short 1.2`\n- страховка: `PUT 2800 26.06 ×2`\n- выход: тейк 60% премии / стоп по дельте\n\n> Пересматривать при IV > 70%.";
+function mdRender(s){
+  var h = esc(s);
+  h = h.replace(/^### (.*)$/gm,"<h4>$1</h4>").replace(/^## (.*)$/gm,"<h3>$1</h3>").replace(/^# (.*)$/gm,"<h3>$1</h3>");
+  h = h.replace(/^&gt; (.*)$/gm,"<blockquote>$1</blockquote>");
+  h = h.replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>").replace(/\*([^*]+)\*/g,"<em>$1</em>");
+  h = h.replace(/`([^`]+)`/g,"<code>$1</code>");
+  h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="#">$1</a>');
+  h = h.replace(/^- (.*)$/gm,"<li>$1</li>");
+  h = h.replace(/(<li>.*<\/li>)(?![\s\S]*<li>)/, "<ul>$1</ul>");
+  h = h.split(/\n{2,}/).map(function(p){ p=p.trim(); if(/^<(h|u|b|d)/.test(p)||p==="") return p; return "<p>"+p.replace(/\n/g,"<br>")+"</p>"; }).join("");
+  return h;
+}
+function mdPreview(){ $("md-out").innerHTML = mdRender($("md-src").value); }
+function mdIns(pre, post){ var t=$("md-src"); t.focus(); document.execCommand("insertText", false, pre); }
+function mdTable(){ var t=$("md-src"); t.focus(); document.execCommand("insertText", false, "\n| кол | значение |\n|---|---|\n| a | 1 |"); }
+function openMd(){ $("md-modal").classList.add("open"); mdPreview(); $("md-src").focus(); }
+function closeMd(){ $("md-modal").classList.remove("open"); }
+function saveMd(){ $("card-comment").innerHTML = mdRender($("md-src").value); closeMd(); toast("Сохранено (прототип)"); }
+
+/* ---------- агент ---------- */
+var CHAT_TITLES = {1:"Стреддл BTC — оценка риска", 2:"Фильтр сделок для grid-ETH", 3:"Пост-мортем: коллы BTC"};
+function agentView(i){
+  state.chat = i;
+  $("agent-empty").hidden = i!==0;
+  $("agent-chat").hidden = i===0;
+  if(i) $("agent-chat-title").textContent = CHAT_TITLES[i] || "Чат";
+  syncHash();
+}
+function openDrawer(which){
+  closeDrawers();
+  if(which==="sidedrawer") $("sidedrawer").classList.add("open");
+  if(which==="agentlist") $("agentlist").classList.add("open");
+  $("scrim").classList.add("show");
+}
+function closeDrawers(){
+  $("sidedrawer").classList.remove("open");
+  $("agentlist").classList.remove("open");
+  $("scrim").classList.remove("show");
+  $("right-area").classList.remove("open");
+}
+
+/* ---------- правила ---------- */
+function renderRules(){
+  $("rules-grid").innerHTML = RULES.map(function(r){
+    return '<div class="rule-card'+(state.rule===r.id?" active":"")+'" onclick="openRule('+r.id+')">'
+      +'<div class="rid num">R-'+(r.id<10?"0":"")+r.id+'</div>'
+      +'<div class="rt">'+esc(r.t)+'</div>'
+      +'<div class="tags"><span class="pill src">'+r.ch+'</span><span class="pill src">'+r.cl+'</span><span class="pill src">'+r.s+'</span></div></div>';
+  }).join("");
+}
+function openRule(id){
+  state.rule = id;
+  renderRules();
+  var r = RULES.filter(function(x){return x.id===id})[0];
+  $("rd-title").textContent = "R-"+(r.id<10?"0":"")+r.id+" · "+r.t;
+  $("rd-id").textContent = "R-"+(r.id<10?"0":"")+r.id;
+  $("rd-char").textContent = r.ch;
+  $("rd-clear").textContent = r.cl;
+  $("rd-subj").textContent = r.s;
+  $("rd-text").innerHTML = mdRender(r.text);
+  $("rule-detail").hidden = false;
+  syncHash();
+}
+
+/* ---------- навигация / каркас ---------- */
+function setScreen(k){
+  state.s = k;
+  document.querySelectorAll(".screen").forEach(function(el){ el.classList.remove("active"); });
+  var el = $("scr-"+k); if(el) el.classList.add("active");
+  document.querySelectorAll(".nav-item").forEach(function(b){
+    b.classList.toggle("active", b.getAttribute("data-nav")===k);
+  });
+  if(k==="agent" && !state.chat) agentView(0);
+  updateBar();
+  syncHash();
+  window.scrollTo(0,0);
+  closeDrawers();
+}
+function step(d){
+  var i = SCREENS.findIndex(function(s){return s.k===state.s});
+  i = (i + d + SCREENS.length) % SCREENS.length;
+  setScreen(SCREENS[i].k);
+}
+function updateBar(){
+  var sc = SCREENS.filter(function(s){return s.k===state.s})[0] || SCREENS[0];
+  $("pb-label").textContent = sc.n + (state.m? " · mobile":" · desktop");
+}
+function toggleMobile(){
+  state.m = state.m?0:1;
+  document.body.classList.toggle("mobile", !!state.m);
+  $("pb-mob").textContent = state.m? "🖥 Desktop":"📱 Mobile";
+  if(!state.m){ closeDrawers(); $("right-area").classList.remove("open"); }
+  updateBar(); syncHash();
+}
+function toggleChats(force){
+  state.chats = (force===true)?1:(state.chats?0:1);
+  $("chats-panel").hidden = !state.chats;
+  $("card-layout").classList.toggle("no-chats", !state.chats);
+  syncHash();
+}
+function oos(msg){ toast(msg); }
+function runSync(){
+  var b=$("syncbtn"); b.disabled=true; $("syncbtn-i").innerHTML='<span class="spin"></span>';
+  setTimeout(function(){ b.disabled=false; $("syncbtn-i").textContent="✓"; toast("Синхронизация выполнена (прототип)"); setTimeout(function(){$("syncbtn-i").textContent="⟳"},2500); }, 1200);
+}
+function runHints(){
+  var b=$("runhints"); b.disabled=true; b.textContent="Выполняется…";
+  setTimeout(function(){ b.disabled=false; b.textContent="Запустить проход подсказок"; toast("Готово: применено 1 / отклонено 1 (прототип)"); }, 1200);
+}
+function syncHash(){
+  var p = [];
+  if(state.s!=="constructions") p.push("s="+state.s);
+  if(state.sel && state.s==="constructions") p.push("sel="+state.sel);
+  if(state.chats && state.s==="card") p.push("chats=1");
+  if(state.chat && state.s==="agent") p.push("chat="+state.chat);
+  if(state.rule && state.s==="rules") p.push("rule="+state.rule);
+  if(state.m) p.push("m=1");
+  history.replaceState(null,"", location.pathname + (p.length? "#"+p.join("&") : ""));
+}
+function initFromHash(){
+  var q = new URLSearchParams(location.hash.replace(/^#/,""));
+  if(q.get("m")==="1") toggleMobile();
+  if(q.get("sel")) selectC(+q.get("sel"));
+  if(q.get("chats")==="1") toggleChats(true);
+  if(q.get("chat")) agentView(+q.get("chat"));
+  var s = q.get("s") || "constructions";
+  setScreen(s);
+  if(s==="rules" && q.get("rule")) openRule(+q.get("rule"));
+}
+document.addEventListener("keydown", function(e){
+  var tag = (e.target.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="textarea"||tag==="select"||e.target.isContentEditable) return;
+  if($("md-modal").classList.contains("open")) return;
+  if(e.key==="ArrowLeft") step(-1);
+  if(e.key==="ArrowRight") step(1);
+  if(e.key==="Escape"){ closeMd(); closeDrawers(); }
+});
+
+/* ---------- старт ---------- */
+renderTable(); renderGallery(); renderCard(); renderRules(); updateBar(); initFromHash();
+</script>
+</body>
+</html>
