@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.FileProviders;
 using OpenAI;
 using System.ClientModel;
 using TransactionJournal;
@@ -402,6 +403,24 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Новый SPA журнала (React) раздаётся тем же .NET-хостом из сборки frontend/dist
+// (ADR-0010). Пока Blazor-UI продолжает работать в корне, SPA смонтирован в
+// префиксе /spa: статика из dist и SPA-fallback ниже не пересекаются с
+// маршрутами Blazor; переезд SPA в корень — задача 7.2 переключения журнала.
+// Если dist не собран, хост штатно работает без SPA.
+// Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
+// Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
+var spaRootPath = FindSpaRootPath(app.Environment);
+if (spaRootPath != null)
+{
+	app.UseStaticFiles(new StaticFileOptions
+	{
+		FileProvider = new PhysicalFileProvider(spaRootPath),
+		RequestPath = "/spa",
+	});
+}
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();
@@ -412,7 +431,31 @@ app.MapRazorComponents<App>()
 // OpenAPI-описанием; Blazor-UI работает без изменений до паритета переносов.
 app.MapApiSkeleton();
 
+if (spaRootPath != null)
+{
+	// SPA-fallback: клиентские маршруты разделов (/spa/inbox и другие) получают
+	// index.html, а файлы бандла с хешами в имени раздаются статикой выше.
+	app.MapGet("/spa/{**path:nonfile}", (HttpContext http) =>
+	{
+		http.Response.ContentType = "text/html; charset=utf-8";
+		return http.Response.SendFileAsync(Path.Combine(spaRootPath, "index.html"));
+	});
+}
+
 app.Run();
+
+// Каталог сборки SPA: при запуске из исходников — frontend/dist репозитория,
+// при запуске опубликованного приложения — копия frontend/dist рядом с exe.
+static string? FindSpaRootPath(IWebHostEnvironment environment)
+{
+	string[] candidates =
+	[
+		Path.Combine(environment.ContentRootPath, "frontend", "dist"),
+		Path.Combine(AppContext.BaseDirectory, "frontend", "dist"),
+		Path.Combine(environment.ContentRootPath, "..", "..", "frontend", "dist"),
+	];
+	return candidates.FirstOrDefault(candidate => File.Exists(Path.Combine(candidate, "index.html")));
+}
 
 // Адаптер OpenAI-совместимого провайдера модели чата: ключ обязателен — без
 // него запрос к модели невозможен, ошибка сообщается в момент первого вопроса.
