@@ -12,6 +12,17 @@ import { defineConfig } from "vite";
 export default defineConfig({
 	plugins: [react(), tailwindcss()],
 	base: "/spa/",
+	// Dev-сервер сохраняет относительные API-запросы SPA и передаёт их .NET-хосту.
+	// Порт фиксирован: занятый адрес должен приводить к ошибке, а не смене URL.
+	// Traceability: doc:frontend/README.md#запуск-в-rider
+	server: {
+		host: "localhost",
+		port: 5173,
+		strictPort: true,
+		proxy: {
+			"^/api(?:/|$)": "http://localhost:5019",
+		},
+	},
 	resolve: {
 		alias: {
 			"@": path.resolve(import.meta.dirname, "src"),

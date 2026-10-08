@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Transaction Journal (API + React)" type="CompoundRunConfigurationType">
+    <toRun name="Backend API" type="LaunchSettings" />
+    <toRun name="Frontend React" type="js.build_tools.npm" />
+    <method v="2">
+      <option name="Build" />
+    </method>
+  </configuration>
+</component>
