@@ -1,43 +1,77 @@
 @import "tailwindcss";
 
 /*
-	Светлая «воздушная» тема журнала — единственная по концепции интерфейса:
-	почти белый фон, сдержанный индиго-акцент, мягкие границы и крупные
-	радиусы. Тёмная тема в плане отсутствует (до паритета и позже).
-	Токены в формате shadcn/ui (Tailwind CSS 4, oklch).
+	Светлая тема журнала по дизайн-системе design.pen: тёплый серый фон,
+	белые поверхности, зелёный акцент и семантические пары risk/neg/info.
+	Токен-слой — цвета hex 1:1 из дизайн-макета (без конверсии цветовых
+	пространств, design.md D1), семантические слоты shadcn разрешаются в токены; шрифт Inter подключается
+	отдельным шагом (design.md D4). Тёмная тема в плане отсутствует
+	(до паритета и позже).
 */
 
 :root {
-	--radius: 0.75rem;
-	--background: oklch(0.985 0.002 286);
-	--foreground: oklch(0.24 0.012 286);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.24 0.012 286);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.24 0.012 286);
-	--primary: oklch(0.52 0.1 263);
-	--primary-foreground: oklch(0.985 0.002 286);
-	--secondary: oklch(0.955 0.005 286);
-	--secondary-foreground: oklch(0.31 0.012 286);
-	--muted: oklch(0.96 0.004 286);
-	--muted-foreground: oklch(0.52 0.016 286);
-	--accent: oklch(0.945 0.018 263);
-	--accent-foreground: oklch(0.35 0.06 263);
-	--destructive: oklch(0.577 0.245 27.325);
-	--destructive-foreground: oklch(0.985 0.002 286);
-	--border: oklch(0.912 0.006 286);
-	--input: oklch(0.912 0.006 286);
-	--ring: oklch(0.62 0.09 263);
+	/* Цветовые токены design.pen, hex 1:1 из design-extract.json;
+		значения не конвертируются в другие цветовые пространства (design.md D1). */
+	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
+	--bg: #F3F3EF;
+	--surface: #FFFFFF;
+	--surface-2: #EFEFEA;
+	--divider: #EBEBE5;
+	--text-primary: #17171E;
+	--text-secondary: #66666E;
+	--text-muted: #9B9BA1;
+	--accent-strong: #167853;
+	--accent-soft: #E2F4EB;
+	--accent-softer: #EFF9F4;
+	--mint: #A7E2C4;
+	--risk: #DFA23B;
+	--risk-soft: #F9EFD9;
+	--neg: #D14B41;
+	--neg-soft: #FBEAE7;
+	--info: #4A7FB5;
+	--info-soft: #E9F1F8;
+	--risk-zone: #EFB6AE;
+	--profit-zone: #B9E7CC;
+	--super-zone: #F3D68C;
+	/* Токены accent (#1FA36B) и border (#E5E5DF) не дублируются: их значения
+		живут напрямую в одноимённых смыслу слотах shadcn --primary и --border. */
 
-	/* Палитра индикатора финрезультата — 1:1 из дизайн-макета (design.pen,
-		переменные riskZone/profitZone/superZone/accent/neg/mint). */
-	--fin-risk-zone: #efb6ae;
-	--fin-profit-zone: #b9e7cc;
-	--fin-super-zone: #f3d68c;
-	--fin-positive: #1fa36b;
-	--fin-positive-strong: #167853;
-	--fin-negative: #d14b41;
-	--fin-unreal-positive: #a7e2c4;
+	/* Семантические слоты shadcn перенаправлены на дизайн-токены:
+		--primary → accent, --destructive → neg, фон/карточки → bg/surface/surface2. */
+	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
+	--radius: 0.75rem;
+	--primary: #1FA36B;
+	--primary-foreground: var(--surface);
+	--background: var(--bg);
+	--foreground: var(--text-primary);
+	--card: var(--surface);
+	--card-foreground: var(--text-primary);
+	--popover: var(--surface);
+	--popover-foreground: var(--text-primary);
+	--secondary: var(--surface-2);
+	--secondary-foreground: var(--text-primary);
+	--muted: var(--surface-2);
+	--muted-foreground: var(--text-secondary);
+	--accent: var(--accent-soft);
+	--accent-foreground: var(--accent-strong);
+	--destructive: var(--neg);
+	--destructive-foreground: var(--surface);
+	--border: #E5E5DF;
+	--input: var(--border);
+	--ring: var(--primary);
+
+	/* Палитра индикатора финрезультата наследует токены design.pen
+		(riskZone/profitZone/superZone/accent/neg/mint) вместо собственных hex. */
+	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
+	--fin-risk-zone: var(--risk-zone);
+	--fin-profit-zone: var(--profit-zone);
+	--fin-super-zone: var(--super-zone);
+	--fin-positive: var(--primary);
+	--fin-positive-strong: var(--accent-strong);
+	--fin-negative: var(--neg);
+	--fin-unreal-positive: var(--mint);
+	/* Нереализованный убыток: токена в design.pen нет (кандидат — riskZone),
+		замена запланирована чисткой таска 8.1 change reconcile-frontend-with-design. */
 	--fin-unreal-negative: #f6cbc7;
 }
 
@@ -61,6 +95,27 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
+	/* Прямые токены доступны как утилиты Tailwind (bg-risk, text-info-soft и т.д.). */
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-divider: var(--divider);
+	--color-text-primary: var(--text-primary);
+	--color-text-secondary: var(--text-secondary);
+	--color-text-muted: var(--text-muted);
+	--color-accent-strong: var(--accent-strong);
+	--color-accent-soft: var(--accent-soft);
+	--color-accent-softer: var(--accent-softer);
+	--color-mint: var(--mint);
+	--color-risk: var(--risk);
+	--color-risk-soft: var(--risk-soft);
+	--color-neg: var(--neg);
+	--color-neg-soft: var(--neg-soft);
+	--color-info: var(--info);
+	--color-info-soft: var(--info-soft);
+	--color-risk-zone: var(--risk-zone);
+	--color-profit-zone: var(--profit-zone);
+	--color-super-zone: var(--super-zone);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
