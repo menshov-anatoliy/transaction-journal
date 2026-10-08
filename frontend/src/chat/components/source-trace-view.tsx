@@ -4,6 +4,12 @@ import { formatMoment } from "@/lib/format/display-time";
 export interface SourceTraceViewProps {
 	/** След источников ответа ИИ-помощника: инструменты и ссылки с as-of. */
 	trace: SourceTrace;
+	/** Наведение на ссылку карточки правила в следе источников. */
+	onRuleHover?: (ruleId: string) => void;
+	/** Уход курсора со ссылки карточки правила. */
+	onRuleLeave?: () => void;
+	/** Открытие карточки правила в правой панели или новом окне. */
+	onRuleOpen?: (ruleId: string) => void;
 }
 
 const referenceKindLabels: Record<SourceReference["kind"], string> = {
@@ -19,7 +25,7 @@ const referenceKindLabels: Record<SourceReference["kind"], string> = {
  */
 // Traceability: change:add-agent-chat/proposal#what-changes
 // Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
-export function SourceTraceView({ trace }: SourceTraceViewProps) {
+export function SourceTraceView({ trace, onRuleHover, onRuleLeave, onRuleOpen }: SourceTraceViewProps) {
 	const hasTools = trace.toolCalls.length > 0;
 	const hasReferences = trace.references.length > 0;
 
@@ -55,9 +61,21 @@ export function SourceTraceView({ trace }: SourceTraceViewProps) {
 				<ul className="flex flex-col gap-1" aria-label="Ссылки на источники">
 					{trace.references.map((reference) => (
 						<li key={`${reference.kind}:${reference.id}`} className="flex flex-wrap gap-1">
-							<span className="rounded-md bg-card px-2 py-1">
-								{referenceKindLabels[reference.kind]}: {reference.title}
-							</span>
+							{reference.kind === "rule-card" ? (
+								<button
+									type="button"
+									className="cursor-pointer rounded-md bg-card px-2 py-1 text-left underline-offset-2 hover:underline"
+									onMouseEnter={() => onRuleHover?.(reference.id)}
+									onMouseLeave={() => onRuleLeave?.()}
+									onClick={() => onRuleOpen?.(reference.id)}
+								>
+									{referenceKindLabels[reference.kind]}: {reference.title}
+								</button>
+							) : (
+								<span className="rounded-md bg-card px-2 py-1">
+									{referenceKindLabels[reference.kind]}: {reference.title}
+								</span>
+							)}
 							<span>as-of {formatMoment(reference.asOf)}</span>
 						</li>
 					))}
