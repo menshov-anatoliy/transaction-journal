@@ -417,6 +417,50 @@ public sealed class ConstructionCardApiTests
 			Assert.That(targets[0]!["constructionId"]!.GetValue<long>(), Is.EqualTo(8L));
 			Assert.That(targets[0]!["name"]!.GetValue<string>(), Is.EqualTo("BTC-240531-60000C"));
 		}
+
+		[TestMethod]
+		[Description("Возврат сделки во «Входящие» и перенос выполняются командами")]
+		// Действия строки сделки (№8): возврат во «Входящие» снимает привязку,
+		// сохраняя комментарий; перенос назначает целевую конструкцию — команды
+		// меняют только принадлежность, производные пересчитываются при чтении.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		public async Task TryIfTradeReturnAndMoveRunBindingCommands()
+		{
+			// Arrange: записывающий сервис привязок.
+			var bindings = new RecordingTradeBindingService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceTradeBindingService(bindings));
+			using var client = factory.CreateClient();
+
+			// Act: возврат во «Входящие» и перенос в конструкцию 8.
+			var returned = await client.PostAsync("/api/v1/trades/exec-1/return-to-inbox", content: null);
+			var moved = await client.PostAsJsonAsync("/api/v1/trades/exec-2/move", new { constructionId = 8L });
+
+			// Assert: команды приняты и дошли сервису домена.
+			Assert.That(returned.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(moved.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(bindings.Unbound, Is.EqualTo(new[] { "exec-1" }));
+			Assert.That(bindings.Moved, Is.EqualTo(new[] { (8L, "exec-2") }));
+		}
+
+		[TestMethod]
+		[Description("Перенос с пустым ключом сделки или целью отвечает 400")]
+		// Ключ сделки и целевая конструкция обязательны: пустые значения — ошибка
+		// контракта, привязка не меняется.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		public async Task ThrowOnTradeActionValidationReturns400()
+		{
+			// Arrange: записывающий сервис привязок.
+			var bindings = new RecordingTradeBindingService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceTradeBindingService(bindings));
+			using var client = factory.CreateClient();
+
+			// Act: перенос с пустым ключом сделки.
+			var response = await client.PostAsJsonAsync("/api/v1/trades/%20/move", new { constructionId = 8L });
+
+			// Assert: эндпоинт отвечает 400.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+		}
 }
 
 /// <summary>Записывающий сервис конструкций: фиксирует команды карточки.</summary>
@@ -616,6 +660,52 @@ internal sealed class RecordingCommentService : ICommentService
 	private static void EnsureKey(string key)
 	{
 		if (key.Trim().Length == 0)
+		{
+			throw new ArgumentException("ключ пуст");
+		}
+	}
+}
+
+/// <summary>Записывающий сервис привязки сделок: фиксирует команды карточки.</summary>
+internal sealed class RecordingTradeBindingService : ITradeBindingService
+{
+	/// <summary>Возвращённые во «Входящие» сделки по execId.</summary>
+	public IReadOnlyList<string> Unbound => _unbound;
+
+	/// <summary>Переносы сделок: целевая конструкция и execId.</summary>
+	public IReadOnlyList<(long ConstructionId, string ExecId)> Moved => _moved;
+
+	private readonly List<string> _unbound = [];
+
+	private readonly List<(long, string)> _moved = [];
+
+	public Task BindAsync(long constructionId, string execId, CancellationToken cancellationToken = default)
+	{
+		EnsureExecId(execId);
+		_moved.Add((constructionId, execId));
+		return Task.CompletedTask;
+	}
+
+	public Task BindBatchAsync(long constructionId, IEnumerable<string> execIds, CancellationToken cancellationToken = default)
+	{
+		foreach (var execId in execIds)
+		{
+			BindAsync(constructionId, execId, cancellationToken);
+		}
+
+		return Task.CompletedTask;
+	}
+
+	public Task UnbindAsync(string execId, CancellationToken cancellationToken = default)
+	{
+		EnsureExecId(execId);
+		_unbound.Add(execId);
+		return Task.CompletedTask;
+	}
+
+	private static void EnsureExecId(string execId)
+	{
+		if (execId.Trim().Length == 0)
 		{
 			throw new ArgumentException("ключ пуст");
 		}

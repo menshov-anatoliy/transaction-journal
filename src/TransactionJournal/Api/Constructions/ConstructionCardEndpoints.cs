@@ -1,6 +1,7 @@
 namespace TransactionJournal.Api.Constructions;
 
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Mvc;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Materialization;
 using TransactionJournal.Domain;
@@ -341,7 +342,68 @@ public static class ConstructionCardEndpoints
 					errorPrefix: "Комментарий сделки не сохранён");
 			});
 
+			// Возврат сделки во «Входящие»: привязка снимается, комментарий сделки
+			// сохраняется; действие обратимо повторной привязкой.
+			// Действия принадлежности сделок идут через единый версионированный API.
+			// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			trades.MapPost("/{execId}/return-to-inbox", async (
+				string execId,
+				[FromServices] ITradeBindingService bindings,
+				CancellationToken cancellationToken) =>
+			{
+				if (string.IsNullOrWhiteSpace(execId))
+				{
+					return Results.Json(new ConstructionCardErrorResponse("Ключ сделки не задан."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				return await RunBindingCommand(
+					() => bindings.UnbindAsync(execId, cancellationToken),
+					errorPrefix: "Возврат во «Входящие» не выполнен");
+			});
+
+			// Перенос сделки в целевую конструкцию: целевая привязка заменяет
+			// прежнюю, производные пересчитываются при очередном чтении.
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			trades.MapPost("/{execId}/move", async (
+				string execId,
+				MoveTradeRequest request,
+				[FromServices] ITradeBindingService bindings,
+				CancellationToken cancellationToken) =>
+			{
+				if (string.IsNullOrWhiteSpace(execId))
+				{
+					return Results.Json(new ConstructionCardErrorResponse("Ключ сделки не задан."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				return await RunBindingCommand(
+					() => bindings.BindAsync(request.ConstructionId, execId, cancellationToken),
+					errorPrefix: "Перенос сделки не выполнен");
+			});
+
 			return api;
+	}
+
+	/// <summary>
+	/// Выполняет команду привязки сделки с единой обработкой отказов: ошибка
+	/// ключа или ввода — 400, прочие сбои — 500 с текстом причины.
+	/// </summary>
+	private static async Task<IResult> RunBindingCommand(Func<Task> action, string errorPrefix)
+	{
+			try
+			{
+				await action();
+			}
+			catch (ArgumentException)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+			}
+			catch (Exception exception)
+			{
+				return Results.Json(new ConstructionCardErrorResponse($"{errorPrefix}: {exception.Message}"), statusCode: StatusCodes.Status500InternalServerError);
+			}
+
+			return Results.NoContent();
 	}
 
 	/// <summary>
@@ -788,3 +850,7 @@ public sealed record ConstructionMoveTargetResponse(long ConstructionId, string 
 /// <summary>Список целей переноса сделки из текущей конструкции.</summary>
 /// <param name="Targets">Активные конструкции без текущей.</param>
 public sealed record ConstructionMoveTargetsResponse(IReadOnlyList<ConstructionMoveTargetResponse> Targets);
+
+/// <summary>Запрос переноса сделки в целевую конструкцию.</summary>
+/// <param name="ConstructionId">Целевая конструкция — новая владелица сделки.</param>
+public sealed record MoveTradeRequest(long ConstructionId);
