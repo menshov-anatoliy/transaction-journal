@@ -13,10 +13,12 @@ import { cn } from "@/lib/utils";
 	  neutral → «закрыта», «Субъект: стратегия»   (surface2/textSecondary, EIqx3)
 	  muted   → «архив»                           (surface2/textMuted, dAcLW)
 	  neg     → «Отклонено»                       (negSoft/neg, Body #6: rdODt/AutfO)
+	  risk    → «Мягкое»                           (riskSoft/risk, Body #7: nrPzY/E3YiR)
 	Тон neg добавлен по инстансам карточек подсказок Body #6 макета:
-	чип статуса «Отклонено» перекрашивается в пару $negSoft/$neg.
-	Вариант risk в дизайн-нодах для статусов не используется — расширение
-	только с появлением дизайн-узла.
+	чип статуса «Отклонено» перекрашивается в пару $negSoft/$neg. Тон
+	risk добавлен по инстансам карточек правил Body #7 (нода nrPzY
+	«Мягкое», пара $riskSoft/$risk) — дизайн-узел появился, расширение
+	разрешено исходным комментарием примитива.
 */
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 // Traceability: change:reconcile-frontend-with-design/design#D2
@@ -31,6 +33,7 @@ const statusChipVariants = cva(
 				neutral: "bg-surface-2 text-text-secondary",
 				muted: "bg-surface-2 text-text-muted",
 				neg: "bg-neg-soft text-neg",
+				risk: "bg-risk-soft text-risk",
 			},
 		},
 		defaultVariants: {

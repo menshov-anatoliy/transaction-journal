@@ -38,6 +38,8 @@ describe("StatusChip: тон статусной пилюли по дизайн-�
 		["muted", "bg-surface-2 text-text-muted"],
 		// Инстансы Body #6 (rdODt/AutfO): чип «Отклонено» — negSoft/neg.
 		["neg", "bg-neg-soft text-neg"],
+		// Инстанс Body #7 (nrPzY/E3YiR «Мягкое»): riskSoft/risk.
+		["risk", "bg-risk-soft text-risk"],
 	] as const)("тон %s разрешается в токены дизайн-системы", (tone, expected) => {
 		// Act + Assert: cva-маппинг тон→классы без рендера.
 		expect(statusChipVariants({ tone })).toContain(expected);

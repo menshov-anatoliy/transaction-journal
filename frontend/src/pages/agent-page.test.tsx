@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPage } from "./agent-page";
@@ -20,6 +20,7 @@ const chatsApi = vi.hoisted(() => ({
 
 const rulesApi = vi.hoisted(() => ({
 	listRules: vi.fn(),
+	readRule: vi.fn(),
 }));
 
 vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
@@ -34,6 +35,7 @@ vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 
 vi.mock("@/lib/api/agent-rules", () => ({
 	listRules: rulesApi.listRules,
+	readRule: rulesApi.readRule,
 }));
 
 function renderPage() {
@@ -85,6 +87,23 @@ beforeEach(() => {
 		],
 		total: 1,
 	});
+
+	// Полная карточка правила (GET /rules/{id}) для тела карточек каталога,
+	// правой панели и краткого попапа из чата.
+	rulesApi.readRule.mockImplementation(async (ruleId: string) => ({
+		id: ruleId,
+		title: "Лимиты риска на период",
+		character: "risk-mode",
+		clarity: "crisp",
+		subject: "construction",
+		status: "active",
+		scope: "open-constructions",
+		technique: null,
+		triggerDescription: "Убыток недели приближается к лимиту периода 1% капитала.",
+		actionDescription: "Остановить наращивание риска до конца периода.",
+		thresholds: [{ name: "weeklyRiskLimit", value: "1", unit: "percent" }],
+		sources: [{ tag: "ПИ", file: "vanna.md", quotes: ["лимит недели"] }],
+	}));
 });
 
 describe("страница агента", () => {
@@ -251,7 +270,9 @@ describe("страница агента", () => {
 		renderPage();
 		await user.click(await screen.findByRole("button", { name: /правила/i }));
 
-		await user.selectOptions(await screen.findByLabelText(/характер действия/i), "risk-mode");
+		// Act: выбор характера чипом-пилюлей мастера (фильтры Body #7 —
+		// группы чипов viuZI вместо нативных select).
+		await user.click(await screen.findByRole("button", { name: "лимиты и режим риска" }));
 		await user.type(screen.getByLabelText(/поиск правил/i), "лимит");
 
 		await waitFor(() => {
@@ -260,5 +281,173 @@ describe("страница агента", () => {
 				expect.anything(),
 			);
 		});
+	});
+
+	/*
+		Вкладка «Правила» оформлена по мастеру Body #7 (R3kdzS) design.pen
+		(§3.8 аудита): табы — сегмент-контейнер z5Fqgz ($surface, r9, [3],
+		gap 4) с активным табом accentSoft/accentStrong r7 [6,14] 12.5/600
+		и счётчиком «корпус · N … · только чтение» (Cnt zYZRw); поиск —
+		Q7Ur0 ($surface, r10, [10,14], иконка search 15 $textMuted, плейс-
+		холдер 13); фильтры — группы чипов viuZI (метка 11.5 $textMuted +
+		пилюли 999 [4,10] 11.5: выбранный accentSoft/accentStrong 600,
+		невыбранный $surface/$border $textSecondary); каталог — сетка cRRlh
+		рядами по 2 с гэпом 12; карточка — «Карточка правила/Полная» Zes7z.
+	*/
+	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+	// Traceability: change:reconcile-frontend-with-design/design#D2
+	it("оформляет вкладку правил по мастеру Body #7: табы, счётчик, поиск, фильтры-чипы", async () => {
+		// Arrange: в каталоге одно правило (total 1) — счётчик в единственном
+		// числе «1 правило».
+		const user = userEvent.setup();
+		renderPage();
+		await user.click(await screen.findByRole("button", { name: /правила/i }));
+
+		// Assert: активный таб «Правила» — заливка accentSoft секции мастера.
+		const rulesTab = screen.getByRole("button", { name: "Правила" });
+		expect(rulesTab.className).toContain("bg-accent-soft");
+		expect(rulesTab.className).toContain("text-accent-strong");
+		expect(rulesTab.className).toContain("font-semibold");
+		expect(rulesTab.className).toContain("rounded-[7px]");
+
+		// Assert: неактивный таб погашен до $textSecondary.
+		const chatsTab = screen.getByRole("button", { name: "Чаты" });
+		expect(chatsTab.className).toContain("text-text-secondary");
+		expect(chatsTab.className).not.toContain("bg-accent-soft");
+
+		// Assert: счётчик корпуса (нода Cnt zYZRw): 12/normal $textMuted.
+		const counter = await screen.findByText(/корпус · 1 правило · только чтение/i);
+		expect(counter.className).toContain("text-text-muted");
+		expect(counter.className).toContain("text-xs");
+
+		// Assert: поиск — поле мастера Q7Ur0: r10, [10,14], иконка search
+		// 15×15 $textMuted, плейсхолдер 13 $textMuted.
+		const searchField = screen.getByLabelText(/поиск правил/i);
+		expect(searchField.className).toContain("text-[13px]");
+		expect(searchField.getAttribute("placeholder")).toBe("Поиск по корпусу правил…");
+		const searchIcon = searchField.parentElement?.querySelector("svg");
+		expect(searchIcon?.getAttribute("class")).toContain("text-text-muted");
+
+		// Assert: фильтры — пилюли 999 [4,10] 11.5; выбранные «Все» (по
+		// одному в каждой группе) несут accentSoft/accentStrong — секции
+		// accentSoft мастера.
+		const allChips = screen.getAllByRole("button", { name: /^Все$/ });
+		expect(allChips.length).toBe(3);
+		for (const chip of allChips) {
+			expect(chip.getAttribute("aria-pressed")).toBe("true");
+			expect(chip.className).toContain("rounded-full");
+			expect(chip.className).toContain("bg-accent-soft");
+			expect(chip.className).toContain("text-accent-strong");
+		}
+
+		// Assert: невыбранный чип характера — $surface/$border $textSecondary.
+		const characterChip = screen.getByRole("button", { name: "лимиты и режим риска" });
+		expect(characterChip.getAttribute("aria-pressed")).toBe("false");
+		expect(characterChip.className).toContain("bg-card");
+		expect(characterChip.className).toContain("text-text-secondary");
+	});
+
+	it("рендерит карточки каталога правил по ноде Zes7z: пилюли-атрибуты 999, тело, футер", async () => {
+		const user = userEvent.setup();
+		renderPage();
+		await user.click(await screen.findByRole("button", { name: /правила/i }));
+
+		// Assert: карточка «Карточка правила/Полная» (Zes7z): $surface,
+		// кайма $border, r12, паддинги 18, гэп 12.
+		const card = await screen.findByText(/Лимиты риска на период/i, { selector: "button" });
+		const article = card.closest("article");
+		expect(article).not.toBeNull();
+		expect(article?.className).toContain("rounded-lg");
+		expect(article?.className).toContain("border");
+		expect(article?.className).toContain("bg-card");
+		expect(article?.className).toContain("p-[18px]");
+		expect(article?.className).toContain("gap-3");
+
+		// Assert: идентификатор правила — 11/normal $textMuted (нода Id NLBwE).
+		expect(within(article!).getByText("ac-01").className).toContain("text-text-muted");
+
+		// Assert: пилюли-атрибуты — примитив «Чип/Статус» (aa6cK, r999
+		// [4,10] 11.5/500): характер — пара $riskSoft/$risk (инстанс
+		// nrPzY «Мягкое» Body #7), чёткость — $infoSoft/$info (U6mVZ),
+		// субъект — surface2/$textSecondary (u9Vm0h).
+		const characterPill = within(article!).getByText("лимиты и режим риска");
+		expect(characterPill.className).toContain("rounded-full");
+		expect(characterPill.className).toContain("bg-risk-soft");
+		expect(characterPill.className).toContain("text-risk");
+		const clarityPill = within(article!).getByText("Однозначное");
+		expect(clarityPill.className).toContain("bg-info-soft");
+		expect(clarityPill.className).toContain("text-info");
+		const subjectPill = within(article!).getByText("Субъект: конструкция");
+		expect(subjectPill.className).toContain("bg-surface-2");
+		expect(subjectPill.className).toContain("text-text-secondary");
+
+		// Assert: тело карточки (нода Body GjcwT: 13/normal $textSecondary,
+		// межстрочный 1.55) приходит полной карточкой GET /rules/{id}.
+		const body = await within(article!).findByText(/Остановить наращивание риска до конца периода/i);
+		expect(body.className).toContain("text-[13px]");
+		expect(body.className).toContain("leading-[1.55]");
+		expect(body.className).toContain("text-text-secondary");
+
+		// Assert: футер (p4Ot2): иконка external-link 12 $accentStrong и
+		// ссылка «Открыть в каталоге в новом окне» 12 $accentStrong.
+		const footer = article!.querySelector("footer");
+		const openLink = within(footer as HTMLElement).getByRole("link", { name: /открыть в каталоге в новом окне/i });
+		expect(openLink.className).toContain("text-accent-strong");
+		expect(openLink.className).toContain("text-xs");
+		expect(footer?.querySelector("svg")?.getAttribute("class")).toContain("text-accent-strong");
+
+		// Act: клик по заголовку открывает правило в правой панели
+		// (поведение сохранено).
+		await user.click(card);
+
+		// Assert: правая панель несёт полную карточку с порогами.
+		await waitFor(() => {
+			expect(rulesApi.readRule).toHaveBeenCalledWith("ac-01", expect.anything());
+		});
+	});
+
+	it("показывает краткий попап правила по ноде Lpcap при наведении в следе источников (§3.5:7)", async () => {
+		// Arrange: активный чат с ответом ассистента, ссылающимся на
+		// карточку правила в следе источников.
+		chatsApi.listChatMessages.mockResolvedValue([
+			{
+				id: "m2",
+				role: "assistant",
+				text: "Ответ по лимитам риска",
+				asOf: "2026-10-08T09:01:00Z",
+				sourceTrace: {
+					toolCalls: [],
+					references: [{ kind: "rule-card", id: "ac-01", title: "Лимиты риска на период", asOf: "2026-10-08T09:00:00Z" }],
+				},
+			},
+		]);
+		const user = userEvent.setup();
+		renderPage();
+
+		// Act: наведение на ссылку карточки правила в следе источников.
+		const ruleRef = await screen.findByRole("button", { name: /Лимиты риска на период/ });
+		await user.hover(ruleRef);
+
+		// Assert: попап «Попап правила/Краткий» (Lpcap): ширина 280, r10,
+		// тень мастера 0 8 24 #17171E20, паддинги 12, гэп 7.
+		const popup = await screen.findByLabelText(/карточка правила \(hover из чата\)/i);
+		expect(popup.className).toContain("w-[280px]");
+		expect(popup.className).toContain("rounded-[10px]");
+		expect(popup.className).toContain("shadow-[0_8px_24px_#17171E20]");
+		expect(popup.className).toContain("p-3");
+		expect(popup.className).toContain("gap-[7px]");
+
+		// Assert: заголовок 12.5/600 $textPrimary, мета 11 $textMuted,
+		// суть 12/1.45 $textSecondary (ноды oYr9W/rlwtL/lidNU).
+		const popupTitle = screen.getByText("Лимиты риска на период", { selector: "p" });
+		expect(popupTitle.className).toContain("text-[12.5px]");
+		expect(popupTitle.className).toContain("font-semibold");
+		const metaLine = screen.getByText(/лимиты и режим риска · Однозначное · конструкция · ac-01/i);
+		expect(metaLine.className).toContain("text-[11px]");
+		expect(metaLine.className).toContain("text-text-muted");
+		const gist = screen.getByText(/Остановить наращивание риска/i);
+		expect(gist.className).toContain("text-xs");
+		expect(gist.className).toContain("leading-[1.45]");
 	});
 });
