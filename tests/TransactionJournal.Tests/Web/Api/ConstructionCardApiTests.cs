@@ -324,6 +324,99 @@ public sealed class ConstructionCardApiTests
 			// Assert: эндпоинт отвечает 400.
 			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 		}
+
+		[TestMethod]
+		[Description("Ручная пометка закрытия ставится, правится и удаляется командами")]
+		// Ручные пометки закрытия — из строки открытой позиции, с пикерами даты-времени
+		// и дефолтом последней марки (№7): домен не проверяет остаток, избыточная
+		// пометка станет предупреждением при чтении.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		public async Task TryIfManualCloseMarksAreAddedEditedAndDeleted()
+		{
+			// Arrange: записывающий сервис пометок.
+			var marks = new RecordingCloseMarkService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceCloseMarkService(marks));
+			using var client = factory.CreateClient();
+
+			// Act: постановка пометки с ценой и без, правка и удаление.
+			var add = await client.PostAsJsonAsync("/api/v1/constructions/7/close-marks", new
+			{
+				symbol = "ETH-28JUN24-3200-C",
+				markedAt = new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero),
+				price = (decimal?)30.5m,
+			});
+			var addWithoutPrice = await client.PostAsJsonAsync("/api/v1/constructions/7/close-marks", new
+			{
+				symbol = "ETHUSDT",
+				markedAt = new DateTimeOffset(2026, 6, 21, 11, 0, 0, TimeSpan.Zero),
+				price = (decimal?)null,
+			});
+			var edit = await client.PutAsJsonAsync("/api/v1/close-marks/21", new
+			{
+				symbol = "ETH-28JUN24-3200-C",
+				markedAt = new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero),
+				price = (decimal?)31m,
+			});
+			var delete = await client.DeleteAsync("/api/v1/close-marks/21");
+
+			// Assert: команды приняты и дошли сервису домена.
+			Assert.That(add.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(addWithoutPrice.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(edit.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(delete.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(marks.Added, Has.Count.EqualTo(2));
+			Assert.That(marks.Added[0], Is.EqualTo((7L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero), 30.5m)));
+			Assert.That(marks.Added[1].Price, Is.Null);
+			Assert.That(marks.Edited, Is.EqualTo(new[] { (21L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero), 31m) }));
+			Assert.That(marks.DeletedIds, Is.EqualTo(new[] { 21L }));
+		}
+
+		[TestMethod]
+		[Description("Последняя марка инструмента отдаётся для предзаполнения формы пометки")]
+		// Форма пометки закрытия открывается с дефолтом последней известной марки
+		// инструмента: предзаполнение спрашивает API, а не хранит marcas в SPA.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		public async Task TryIfLastMarkServesFormPrefill()
+		{
+			// Arrange: источник марок со стабильной величиной.
+			await using var factory = new SectionApiFactory(services => services.ReplaceInstrumentMarkSource(new StubInstrumentMarkSource(30.5m)));
+			using var client = factory.CreateClient();
+
+			// Act: запрос последней марки инструмента.
+			var response = await client.GetAsync("/api/v1/constructions/7/positions/ETH-28JUN24-3200-C/last-mark");
+
+			// Assert: марка приходит формой предзаполнения.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+			var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+			Assert.That(payload!["mark"]!.GetValue<decimal>(), Is.EqualTo(30.5m));
+		}
+
+		[TestMethod]
+		[Description("Цели переноса сделки перечисляют активные конструкции без текущей")]
+		// Форма «Перенести…» строки сделки выбирает целевую конструкцию из активных
+		// без текущей (№8): архивные скрыты, самому себе переносить нечего.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		public async Task TryIfMoveTargetsListActiveConstructionsWithoutCurrent()
+		{
+			// Arrange: сервис конструкций с активным списком из двух записей.
+			var constructions = RecordingConstructionService.WithActiveList(
+				(7L, "ETH-240628-3200C+P", ConstructionStatus.Open),
+				(8L, "BTC-240531-60000C", ConstructionStatus.Closed));
+			await using var factory = new SectionApiFactory(services => services.ReplaceConstructionService(constructions));
+			using var client = factory.CreateClient();
+
+			// Act: запрос целей переноса из конструкции 7.
+			var response = await client.GetAsync("/api/v1/constructions/7/move-targets");
+
+			// Assert: единственная цель — закрытая конструкция 8 без метрик.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+			var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+			var targets = payload!["targets"]!.AsArray();
+			Assert.That(targets, Has.Count.EqualTo(1));
+			Assert.That(targets[0]!["constructionId"]!.GetValue<long>(), Is.EqualTo(8L));
+			Assert.That(targets[0]!["name"]!.GetValue<string>(), Is.EqualTo("BTC-240531-60000C"));
+		}
 }
 
 /// <summary>Записывающий сервис конструкций: фиксирует команды карточки.</summary>
@@ -361,19 +454,26 @@ internal sealed class RecordingConstructionService : IConstructionService
 
 	private readonly bool _refuseDelete;
 
-	private RecordingConstructionService(bool refuseDelete)
+	private readonly IReadOnlyList<Construction> _active;
+
+	private RecordingConstructionService(bool refuseDelete, IReadOnlyList<Construction> active)
 	{
 		_refuseDelete = refuseDelete;
+		_active = active;
 	}
 
-	/// <summary>Обычная запись команд.</summary>
+	/// <summary>Обычная запись команд без активного списка.</summary>
 	public RecordingConstructionService()
-		: this(refuseDelete: false)
+		: this(refuseDelete: false, active: [])
 	{
 	}
 
+	/// <summary>Вариант с активным списком конструкций для целей переноса.</summary>
+	public static RecordingConstructionService WithActiveList(params (long Id, string Name, ConstructionStatus Status)[] constructions) =>
+		new(refuseDelete: false, active: constructions.Select(item => new Construction { Id = item.Id, Name = item.Name, Status = item.Status }).ToArray());
+
 	/// <summary>Вариант с отказом удаления: у конструкции есть блокирующие записи.</summary>
-	public static RecordingConstructionService RefusingDelete() => new(refuseDelete: true);
+	public static RecordingConstructionService RefusingDelete() => new(refuseDelete: true, active: []);
 
 	public Task<Construction> CreateAsync(string name, decimal? allocatedCapitalUsdt, string? comment = null, CancellationToken cancellationToken = default) =>
 		throw new NotSupportedException();
@@ -434,7 +534,7 @@ internal sealed class RecordingConstructionService : IConstructionService
 	}
 
 	public Task<IReadOnlyList<Construction>> ListActiveAsync(CancellationToken cancellationToken = default) =>
-		Task.FromResult<IReadOnlyList<Construction>>([]);
+		Task.FromResult(_active);
 
 	public Task<IReadOnlyList<Construction>> ListAllAsync(CancellationToken cancellationToken = default) =>
 		Task.FromResult<IReadOnlyList<Construction>>([]);
@@ -520,6 +620,53 @@ internal sealed class RecordingCommentService : ICommentService
 			throw new ArgumentException("ключ пуст");
 		}
 	}
+}
+
+/// <summary>Записывающий сервис ручных пометок закрытия: фиксирует команды карточки.</summary>
+internal sealed class RecordingCloseMarkService : IManualCloseMarkService
+{
+	/// <summary>Поставленные пометки: конструкция, инструмент, время и цена.</summary>
+	public IReadOnlyList<(long ConstructionId, string Symbol, DateTimeOffset MarkedAt, decimal? Price)> Added => _added;
+
+	/// <summary>Правки пометок: ключ, инструмент, время и цена.</summary>
+	public IReadOnlyList<(long MarkId, string Symbol, DateTimeOffset MarkedAt, decimal? Price)> Edited => _edited;
+
+	/// <summary>Удалённые пометки.</summary>
+	public IReadOnlyList<long> DeletedIds => _deletedIds;
+
+	private readonly List<(long, string, DateTimeOffset, decimal?)> _added = [];
+
+	private readonly List<(long, string, DateTimeOffset, decimal?)> _edited = [];
+
+	private readonly List<long> _deletedIds = [];
+
+	public Task<ManualCloseMark> AddAsync(long constructionId, string symbol, DateTimeOffset markedAt, decimal? price = null, CancellationToken cancellationToken = default)
+	{
+		_added.Add((constructionId, symbol, markedAt, price));
+		return Task.FromResult(new ManualCloseMark { ConstructionId = constructionId, Symbol = symbol, Price = price, MarkedAt = markedAt });
+	}
+
+	public Task EditAsync(long markId, string symbol, DateTimeOffset markedAt, decimal? price, CancellationToken cancellationToken = default)
+	{
+		_edited.Add((markId, symbol, markedAt, price));
+		return Task.CompletedTask;
+	}
+
+	public Task DeleteAsync(long markId, CancellationToken cancellationToken = default)
+	{
+		_deletedIds.Add(markId);
+		return Task.CompletedTask;
+	}
+
+	public Task<IReadOnlyList<ManualCloseMark>> ListAsync(long constructionId, CancellationToken cancellationToken = default) =>
+		Task.FromResult<IReadOnlyList<ManualCloseMark>>([]);
+}
+
+/// <summary>Стабильный источник марок: одна известная марка инструмента.</summary>
+internal sealed class StubInstrumentMarkSource(decimal? mark) : IInstrumentMarkSource
+{
+	public Task<decimal?> GetLastMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
+		Task.FromResult(mark);
 }
 
 /// <summary>Помощники подмены сервисов карточки стабильными заглушками.</summary>

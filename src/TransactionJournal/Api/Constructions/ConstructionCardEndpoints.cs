@@ -188,7 +188,98 @@ public static class ConstructionCardEndpoints
 					errorPrefix: "Удаление не выполнено");
 			});
 
-			// Комментарий конструкции: MD-текст правится модальным split-редактором
+			// Последняя известная марка инструмента — предзаполнение формы пометки
+		// закрытия: SPA спрашивает величину при открытии формы, пустая марка
+		// оставляет цену домену.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		group.MapGet("/{constructionId:long}/positions/{symbol}/last-mark", async (
+			long constructionId,
+			string symbol,
+			IInstrumentMarkSource markSource,
+			CancellationToken cancellationToken) =>
+		{
+			try
+			{
+				var mark = await markSource.GetLastMarkAsync(symbol, cancellationToken);
+				return Results.Json(new LastInstrumentMarkResponse(mark));
+			}
+			catch (Exception exception) when (exception is ArgumentException)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Инструмент позиции не задан."), statusCode: StatusCodes.Status400BadRequest);
+			}
+		});
+
+		// Постановка ручной пометки закрытия из строки открытой позиции:
+		// домен не проверяет остаток — избыточная пометка станет
+		// предупреждением при чтении.
+		// Ручные пометки идут командами через единый версионированный API.
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		group.MapPost("/{constructionId:long}/close-marks", async (
+			long constructionId,
+			AddManualCloseMarkRequest request,
+			IManualCloseMarkService marks,
+			CancellationToken cancellationToken) =>
+		{
+			return await RunMarkCommand(
+				() => marks.AddAsync(constructionId, request.Symbol, request.MarkedAt, request.Price, cancellationToken),
+				errorPrefix: "Пометка закрытия не поставлена");
+		});
+
+		// Правка ручной пометки из таблицы закрывающих записей: инструмент,
+		// время и цена правятся свободно, пустая цена возвращает пометку
+		// к последней марке при чтении.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		api.MapPut("/close-marks/{markId:long}", async (
+			long markId,
+			EditManualCloseMarkRequest request,
+			IManualCloseMarkService marks,
+			CancellationToken cancellationToken) =>
+		{
+			return await RunMarkCommand(
+				() => marks.EditAsync(markId, request.Symbol, request.MarkedAt, request.Price, cancellationToken),
+				errorPrefix: "Правка пометки не выполнена");
+		});
+
+		// Удаление ручной пометки — позиция возвращается в открытое состояние
+		// ближайшим чтением.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		api.MapDelete("/close-marks/{markId:long}", async (
+			long markId,
+			IManualCloseMarkService marks,
+			CancellationToken cancellationToken) =>
+		{
+			return await RunMarkCommand(
+				() => marks.DeleteAsync(markId, cancellationToken),
+				errorPrefix: "Удаление пометки не выполнено");
+		});
+
+		// Цели переноса сделки: активные конструкции без текущей — лёгкий
+		// список для формы «Перенести…» без метрик.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		group.MapGet("/{constructionId:long}/move-targets", async (
+			long constructionId,
+			IConstructionService constructions,
+			CancellationToken cancellationToken) =>
+		{
+			IReadOnlyList<Construction> active;
+			try
+			{
+				active = await constructions.ListActiveAsync(cancellationToken);
+			}
+			catch (Exception exception)
+			{
+				return Results.Json(new ConstructionCardErrorResponse($"Список конструкций недоступен: {exception.Message}"), statusCode: StatusCodes.Status503ServiceUnavailable);
+			}
+
+			var targets = active
+				.Where(candidate => candidate.Id != constructionId)
+				.Select(candidate => new ConstructionMoveTargetResponse(candidate.Id, candidate.Name))
+				.ToArray();
+			return Results.Json(new ConstructionMoveTargetsResponse(targets));
+		});
+
+		// Комментарий конструкции: MD-текст правится модальным split-редактором
 			// карточки; null или пробелы снимают комментарий.
 			// Комментарии всех трёх уровней идут командами через единый API.
 			// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
@@ -281,6 +372,28 @@ public static class ConstructionCardEndpoints
 
 	/// <summary>Пробельный текст комментария превращается в снятие комментария.</summary>
 	private static string? NormalizeComment(string? text) => string.IsNullOrWhiteSpace(text) ? null : text;
+
+	/// <summary>
+	/// Выполняет команду ручной пометки с единой обработкой отказов: ошибка
+	/// ввода — 400, прочие сбои — 500 с текстом причины.
+	/// </summary>
+	private static async Task<IResult> RunMarkCommand(Func<Task> action, string errorPrefix)
+	{
+		try
+		{
+			await action();
+		}
+		catch (ArgumentException)
+		{
+			return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+		}
+		catch (Exception exception)
+		{
+			return Results.Json(new ConstructionCardErrorResponse($"{errorPrefix}: {exception.Message}"), statusCode: StatusCodes.Status500InternalServerError);
+		}
+
+		return Results.NoContent();
+	}
 
 	/// <summary>
 	/// Выполняет команду конструкции с единой обработкой отказов: неизвестная
@@ -650,3 +763,28 @@ public sealed record DeleteConstructionRequest(bool MakeBackup = true);
 /// <summary>Запрос сохранения комментария любого уровня.</summary>
 /// <param name="Text">Текст комментария в Markdown; null или пробелы снимают комментарий.</param>
 public sealed record SetCommentRequest(string? Text);
+
+/// <summary>Последняя известная марка инструмента для предзаполнения формы пометки.</summary>
+/// <param name="Mark">Марка инструмента; null — марка неизвестна, цену задаст домен при чтении.</param>
+public sealed record LastInstrumentMarkResponse(decimal? Mark);
+
+/// <summary>Запрос постановки ручной пометки закрытия.</summary>
+/// <param name="Symbol">Инструмент закрываемой позиции.</param>
+/// <param name="MarkedAt">Время пометки — место записи в хронологии.</param>
+/// <param name="Price">Цена закрытия; null — последняя марка при чтении.</param>
+public sealed record AddManualCloseMarkRequest(string Symbol, DateTimeOffset MarkedAt, decimal? Price);
+
+/// <summary>Запрос правки ручной пометки закрытия.</summary>
+/// <param name="Symbol">Инструмент закрываемой позиции.</param>
+/// <param name="MarkedAt">Время пометки — место записи в хронологии.</param>
+/// <param name="Price">Цена закрытия; null — последняя марка при чтении.</param>
+public sealed record EditManualCloseMarkRequest(string Symbol, DateTimeOffset MarkedAt, decimal? Price);
+
+/// <summary>Цель переноса сделки: активная конструкция без текущей.</summary>
+/// <param name="ConstructionId">Идентификатор целевой конструкции.</param>
+/// <param name="Name">Имя целевой конструкции.</param>
+public sealed record ConstructionMoveTargetResponse(long ConstructionId, string Name);
+
+/// <summary>Список целей переноса сделки из текущей конструкции.</summary>
+/// <param name="Targets">Активные конструкции без текущей.</param>
+public sealed record ConstructionMoveTargetsResponse(IReadOnlyList<ConstructionMoveTargetResponse> Targets);
