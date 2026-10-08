@@ -18,7 +18,7 @@
 
 ## 4. Чат-инфраструктура (после 1, 2, 3.1)
 
-- [ ] 4.1 assistant-ui: ThreadList/Composer поверх ExternalStoreRuntime (TanStack Query); SSE-адаптер fetch + ReadableStream к API из 2.1; параметры чата — модель (дефолт GLM-5.3), опциональная конструкция, источники данных; след источников в ответах; завершение/продолжение чата. Домен и хранение — change `add-agent-chat`. Проверить: `change:add-agent-chat/proposal#what-changes`; `adr:docs/adr/0010-frontend-spa-react-stack.md`.
+- [x] 4.1 assistant-ui: ThreadList/Composer поверх ExternalStoreRuntime (TanStack Query); SSE-адаптер fetch + ReadableStream к API из 2.1; параметры чата — модель (дефолт GLM-5.3), опциональная конструкция, источники данных; след источников в ответах; завершение/продолжение чата. Домен и хранение — change `add-agent-chat`. Проверить: `change:add-agent-chat/proposal#what-changes`; `adr:docs/adr/0010-frontend-spa-react-stack.md`.
 
 ## 5. Разделы UI (после 2, 3; порядок внутри — сверху вниз)
 
