@@ -55,7 +55,7 @@ export function ConstructionCardPage() {
 	if (cardQuery.isPending) {
 		return (
 			<section className="flex flex-col gap-3 p-6">
-				<h1 className="text-2xl font-semibold tracking-tight">Карточка конструкции</h1>
+				<h1 className="page-title">Карточка конструкции</h1>
 				<p className="text-muted-foreground text-sm">чтение конструкции…</p>
 			</section>
 		);
@@ -67,7 +67,7 @@ export function ConstructionCardPage() {
 		const notFound = cardQuery.error instanceof ApiError && cardQuery.error.status === 404;
 		return (
 			<section className="flex flex-col gap-3 p-6">
-				<h1 className="text-2xl font-semibold tracking-tight">Карточка конструкции</h1>
+				<h1 className="page-title">Карточка конструкции</h1>
 				{notFound ? (
 					<p className="text-sm">
 						Конструкция не найдена — возможно, она удалена.{" "}
@@ -311,7 +311,7 @@ function ConstructionHeader({
 				</Link>
 			</Button>
 
-			<h1 className="flex flex-wrap items-center gap-3 text-2xl font-semibold tracking-tight">
+			<h1 className="page-title flex flex-wrap items-center gap-3">
 				{card.name}
 				<span className={card.status === "open" ? "text-primary text-base font-medium" : "text-muted-foreground text-base font-medium"}>
 					{statusText(card.status)}

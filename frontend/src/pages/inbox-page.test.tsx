@@ -94,6 +94,9 @@ describe("раздел «Входящие»", () => {
 	it("показывает непривязанные сделки и конструкции-цели", async () => {
 		renderPage();
 		expect(await screen.findByRole("heading", { name: "Входящие", level: 1 })).toBeInTheDocument();
+		// Титул раздела — Inter 21/600 дизайн-системы, не дефолтный text-2xl.
+		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+		expect(screen.getByRole("heading", { name: "Входящие", level: 1 }).className).toContain("page-title");
 		expect(await screen.findByText("exec-buy")).toBeInTheDocument();
 		expect(screen.getByText("Календарь ETH")).toBeInTheDocument();
 	});

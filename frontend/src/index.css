@@ -191,6 +191,17 @@
 	--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+@utility page-title {
+	/* Титулы разделов — H1 дизайн-экранов Body #1..#8 (напр. «Конструкции»):
+		Inter 21/600, без tracking (letter-spacing в макете не задан).
+		Кегль сведён к дизайн-токену вместо дефолтного text-2xl (24px). */
+	/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+	/* Traceability: change:reconcile-frontend-with-design/design#D2 */
+	font-size: 21px;
+	line-height: 28px;
+	font-weight: 600;
+}
+
 @layer base {
 	* {
 		@apply border-border outline-ring/50;

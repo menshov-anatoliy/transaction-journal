@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { RefreshCw } from "lucide-react";
+import { Link } from "react-router";
 import type { ConstructionsOverview } from "@/lib/api/constructions";
 import { fetchConstructionPreview, fetchConstructionsOverview } from "@/lib/api/constructions";
 import {
@@ -74,7 +75,26 @@ export function ConstructionsPage() {
 
 	return (
 		<section className="flex flex-col gap-4 p-6">
-			<h1 className="text-2xl font-semibold tracking-tight">Конструкции</h1>
+			{/* Тулбар раздела: титул и действия — разбор входящих и синхронизация
+			    журнала; по Body #1 (X2ic2p) действия живут в строке титула. */}
+			<div className="flex flex-wrap items-center gap-3">
+				{/* Титул раздела — Inter 21/600 дизайн-системы (H1 Body-экранов).
+				    Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
+				<h1 className="page-title">Конструкции</h1>
+				<div className="ml-auto flex flex-wrap items-center gap-2">
+					{/* Разбор входящих запускается из тулбара раздела: кнопка в
+					    варианте Secondary дизайн-системы (поверхность + бордер),
+					    ведёт в раздел «Входящие». */}
+					{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+					<Button variant="secondary" asChild>
+						<Link to="/inbox">Разобрать входящие</Link>
+					</Button>
+					<Button size="sm" variant="outline" disabled={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
+						<RefreshCw aria-hidden className={syncMutation.isPending ? "animate-spin" : undefined} />
+						Синхронизировать
+					</Button>
+				</div>
+			</div>
 			<ConstructionsHeader overview={overviewQuery.data} syncMutation={syncMutation} />
 			{/* На мобильном правая контекстная область живёт в drawer:
 			    мониторинг и лёгкие действия остаются доступны, тяжёлая двухпанельная
@@ -127,7 +147,7 @@ export function ConstructionsPage() {
 	);
 }
 
-/** Шапка раздела: итог журнала с разбивкой, котировки, счётчики и синхронизация. */
+/** Шапка раздела: итог журнала с разбивкой, котировки, счётчики и статусы синхронизации. */
 function ConstructionsHeader({
 	overview,
 	syncMutation,
@@ -136,45 +156,43 @@ function ConstructionsHeader({
 	syncMutation: ReturnType<typeof useMutation<SyncRunSummary, Error, void>>;
 }) {
 	const summary = overview?.summary;
+	const marksNote =
+		summary === undefined
+			? null
+			: summary.hasMarkFailure
+				? "котировки: сбой котировок"
+				: summary.marksAsOf === null
+					? "котировки: нет открытых остатков"
+					: null;
 
 	return (
-		<header className="flex flex-wrap items-center gap-x-6 gap-y-2">
+		<header className="flex flex-col gap-2">
 			{/* Итог журнала — единственное место постоянного показа: с разбивкой
 			    на реализованную и нереализованную части. */}
+			{/* Шапка итога повторяет дизайн-фрейм «Итог» (oYD4G): акцентное
+			    значение 18/600 $accentStrong, подпись разбивки и счётчики
+			    11/normal $textSecondary/$textMuted, паддинги [14,16], зазор 3;
+			    отметка котировок свёрнута в подпись разбивки через «·». */}
+			{/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
+			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
 			{summary === undefined ? (
-				<span className="text-muted-foreground text-sm">чтение журнала…</span>
+				<p className="text-muted-foreground text-sm">чтение журнала…</p>
 			) : (
-				<>
-					<p className="text-sm">
-						<span className="text-muted-foreground">итог </span>
-						<b className="text-base">
-							{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
-						</b>
+				<div data-slot="constructions-summary" className="flex flex-col gap-[3px] px-4 py-3.5">
+					<p className="text-[18px] font-semibold text-accent-strong">
+						{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
 						{summary.totalPnL === null && summary.hasMarkFailure ? " (неполный: сбой котировок)" : ""}
-						<span className="text-muted-foreground">
-							{" "}
-							(реализов. {formatSignedAmount(summary.realizedPnL)} / нереализов.{" "}
-							{summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)})
-						</span>
 					</p>
-					<p className="text-muted-foreground text-sm">
-						{summary.hasMarkFailure
-							? "котировки: сбой котировок"
-							: summary.marksAsOf === null
-								? "котировки: нет открытых остатков"
-								: `котировки на ${formatMoment(summary.marksAsOf)}`}
-					</p>
-					<p className="text-muted-foreground text-sm">
+					<p className="text-[11px] text-text-secondary">{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
+						summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
+					}${marksNote === null && summary.marksAsOf !== null ? ` · котировки на ${formatMoment(summary.marksAsOf)}` : ""}`}</p>
+					<p className="text-[11px] text-text-muted">
 						{formatCount(summary.constructionCount, { one: "конструкция", few: "конструкции", many: "конструкций" })} (
 						{summary.openCount} {pluralForm(summary.openCount, { one: "открыта", few: "открыты", many: "открыто" })})
 					</p>
-				</>
+				</div>
 			)}
-
-			<Button size="sm" variant="outline" className="ml-auto" disabled={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
-				<RefreshCw aria-hidden className={syncMutation.isPending ? "animate-spin" : undefined} />
-				Синхронизировать
-			</Button>
+			{marksNote !== null && <p className="text-[11px] text-text-secondary">{marksNote}</p>}
 
 			{/* Состояние и итог команды синхронизации; подробности — в разделе
 			    «Синхронизация», шапке достаточно строки статуса. */}

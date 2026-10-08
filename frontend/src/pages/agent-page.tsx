@@ -135,7 +135,7 @@ export function AgentPage() {
 
 	return (
 		<section className="flex min-h-0 flex-col gap-4 p-6">
-			<h1 className="text-2xl font-semibold tracking-tight">Агент</h1>
+			<h1 className="page-title">Агент</h1>
 
 			<div className="flex items-center gap-2">
 				<Button variant={tab === "chats" ? "default" : "outline"} onClick={() => setTab("chats")}>

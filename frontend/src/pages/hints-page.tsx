@@ -117,7 +117,7 @@ export function HintsPage() {
 
 	return (
 		<section className="flex flex-col gap-4 p-6">
-			<h1 className="text-2xl font-semibold tracking-tight">Подсказки</h1>
+			<h1 className="page-title">Подсказки</h1>
 
 			<div className="flex flex-wrap items-center gap-2">
 				<select

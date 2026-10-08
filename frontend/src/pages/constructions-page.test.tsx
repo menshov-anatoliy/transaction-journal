@@ -206,6 +206,65 @@ beforeEach(() => {
 });
 
 describe("раздел «Конструкции»", () => {
+	it("оформляет титул раздела по дизайн-системе: Inter 21/600", async () => {
+		// Титул раздела — H1 дизайн-экранов Body #1..#8 ($font 21/600),
+		// а не дефолтный text-2xl (24px): кегль сведён к дизайн-токену.
+		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+		// Act: открытие раздела.
+		renderPage();
+
+		// Assert: титул несёт утилиту page-title (Inter 21/600) дизайн-системы.
+		const heading = await screen.findByRole("heading", { name: "Конструкции", level: 1 });
+		expect(heading.className).toContain("page-title");
+		expect(heading.className).not.toContain("text-2xl");
+	});
+
+	it("шапка итога повторяет фрейм «Итог» oYD4G: 18/600 accentStrong, подписи 11, паддинги [14,16]", async () => {
+		// Шапка итога журнала сверена с дизайн-фреймом «Итог» (oYD4G):
+		// акцентное значение 18/600 $accentStrong, подписи разбивки и
+		// счётчиков 11/normal $textSecondary/$textMuted, паддинги [14,16],
+		// межстрочный зазор 3.
+		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+		// Traceability: change:reconcile-frontend-with-design/design#D2
+		// Act: открытие раздела.
+		renderPage();
+
+		// Assert: значение итога — 18/600 на акцентном токене.
+		const value = await screen.findByText("+100.5 USDT");
+		expect(value.className).toContain("text-[18px]");
+		expect(value.className).toContain("font-semibold");
+		expect(value.className).toContain("text-accent-strong");
+
+		// Блок итога: вертикальный стек с паддингами [14,16] и зазором 3.
+		const summary = value.closest('[data-slot="constructions-summary"]');
+		expect(summary).not.toBeNull();
+		expect(summary?.className).toContain("px-4");
+		expect(summary?.className).toContain("py-3.5");
+		expect(summary?.className).toContain("gap-[3px]");
+
+		// Подписи: разбивка и котировки 11/normal textSecondary, счётчики 11/normal textMuted.
+		const breakdown = screen.getByText(/реализов\. \+60\.25 \/ нереализов\. \+40\.25 · котировки на/i);
+		expect(breakdown.className).toContain("text-[11px]");
+		expect(breakdown.className).toContain("text-text-secondary");
+		const counters = screen.getByText("2 конструкции (1 открыта)");
+		expect(counters.className).toContain("text-[11px]");
+		expect(counters.className).toContain("text-text-muted");
+	});
+
+	it("в тулбаре — кнопка «Разобрать входящие» варианта Secondary, ведёт в раздел входящих", async () => {
+		// Разбор входящих доступен из тулбара раздела: кнопка в варианте
+		// Secondary дизайн-системы (поверхность + бордер) и ведёт в /inbox.
+		// Traceability: change:reconcile-frontend-with-design/design#D2
+		// Act: открытие раздела.
+		renderPage();
+
+		// Assert: Secondary-кнопка тулбара отправляет в раздел «Входящие».
+		const link = await screen.findByRole("link", { name: /разобрать входящие/i });
+		expect(link).toHaveAttribute("href", "/inbox");
+		expect(link.className).toContain("border");
+		expect(link.className).toContain("bg-card");
+	});
+
 	it("показывает шапку с итогом, разбивкой, котировками и счётчиками", async () => {
 		// Act: открытие раздела.
 		renderPage();

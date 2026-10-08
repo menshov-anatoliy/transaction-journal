@@ -77,6 +77,9 @@ describe("раздел «Подсказки»", () => {
 		renderPage();
 
 		expect(await screen.findByRole("heading", { level: 1, name: "Подсказки" })).toBeInTheDocument();
+		// Титул раздела — Inter 21/600 дизайн-системы, не дефолтный text-2xl.
+		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+		expect(screen.getByRole("heading", { level: 1, name: "Подсказки" }).className).toContain("page-title");
 		expect(await screen.findByText("Лимит риска недели достигнут")).toBeInTheDocument();
 		expect(screen.getByText("Снизить плечо фьючерсной ноги")).toBeInTheDocument();
 		expect(screen.getByRole("link", { name: "конструкция 7" })).toHaveAttribute("href", "/constructions/7");

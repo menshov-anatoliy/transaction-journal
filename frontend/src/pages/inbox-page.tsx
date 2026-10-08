@@ -244,7 +244,7 @@ export function InboxPage() {
 
 	return (
 		<section className="flex flex-col gap-6 p-6">
-			<h1 className="text-2xl font-semibold tracking-tight">Входящие</h1>
+			<h1 className="page-title">Входящие</h1>
 
 			<div className="grid grid-cols-1 gap-4 rounded-lg border p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
 				<div className="flex flex-col gap-4">

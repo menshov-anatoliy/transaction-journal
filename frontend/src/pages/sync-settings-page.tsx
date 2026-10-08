@@ -67,7 +67,7 @@ export function SyncSettingsPage() {
 
 	return (
 		<section className="flex flex-col gap-6 p-6">
-			<h1 className="text-2xl font-semibold tracking-tight">Синхронизация</h1>
+			<h1 className="page-title">Синхронизация</h1>
 
 			<section className="flex flex-col gap-3 rounded-lg border p-4">
 				<h2 className="text-lg font-semibold">Подключение Bybit</h2>

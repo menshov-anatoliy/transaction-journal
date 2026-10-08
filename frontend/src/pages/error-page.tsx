@@ -8,7 +8,7 @@ import { Link } from "react-router";
 export function ErrorPage() {
 	return (
 		<section className="flex flex-col gap-3 p-6">
-			<h1 className="text-2xl font-semibold tracking-tight">Ошибка журнала</h1>
+			<h1 className="page-title">Ошибка журнала</h1>
 			<p className="text-sm text-muted-foreground">
 				Новый интерфейс не смог открыть запрошенный экран. Обновите страницу или вернитесь к списку конструкций.
 			</p>

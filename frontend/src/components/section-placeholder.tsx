@@ -10,7 +10,7 @@ interface SectionPlaceholderProps {
 export function SectionPlaceholder({ title, description }: SectionPlaceholderProps) {
 	return (
 		<section className="p-8">
-			<h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+			<h1 className="page-title">{title}</h1>
 			<p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
 				{description}
 			</p>

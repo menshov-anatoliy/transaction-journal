@@ -93,6 +93,9 @@ describe("страница агента", () => {
 		renderPage();
 
 		expect(await screen.findByRole("heading", { name: "Агент" })).toBeInTheDocument();
+		// Титул раздела — Inter 21/600 дизайн-системы, не дефолтный text-2xl.
+		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+		expect(screen.getByRole("heading", { name: "Агент", level: 1 }).className).toContain("page-title");
 		expect(screen.getByLabelText(/модель/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/источники данных/i)).toBeInTheDocument();
 		expect(await screen.findByRole("heading", { name: /активные/i })).toBeInTheDocument();

@@ -176,6 +176,9 @@ describe("карточка конструкции", () => {
 
 		// Шапка: имя и ручной статус словами в одном заголовке.
 		expect(await screen.findByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i })).toBeInTheDocument();
+		// Титул карточки — Inter 21/600 дизайн-системы, не дефолтный text-2xl.
+		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+		expect(screen.getByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i }).className).toContain("page-title");
 
 		// Kstrip: итог с процентом капитала, разбивка, стоимость, занятость.
 		expect(screen.getByText("общий P&L")).toBeInTheDocument();

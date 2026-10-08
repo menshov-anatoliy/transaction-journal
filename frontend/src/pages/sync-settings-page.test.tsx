@@ -85,6 +85,9 @@ describe("раздел «Синхронизация»", () => {
 		renderPage();
 
 		expect(await screen.findByRole("heading", { name: "Синхронизация", level: 1 })).toBeInTheDocument();
+		// Титул раздела — Inter 21/600 дизайн-системы, не дефолтный text-2xl.
+		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+		expect(screen.getByRole("heading", { name: "Синхронизация", level: 1 }).className).toContain("page-title");
 		expect(await screen.findByText(/abcd······wxyz/i)).toBeInTheDocument();
 		expect(screen.getByLabelText(/делать резервную копию/i)).toBeChecked();
 		expect(await screen.findByText(/исполнений 5/i)).toBeInTheDocument();
