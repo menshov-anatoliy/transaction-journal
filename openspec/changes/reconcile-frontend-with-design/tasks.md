@@ -6,7 +6,7 @@
 
 - [x] 1.1 Перенести 24 дизайн-токена в `frontend/src/index.css` по design.md D1: hex-значения, семантические слоты shadcn перенаправлены на токены, прямые переменные `--risk`/`--info`/`*Soft`; убрать индиго-акцент и oklch-остатки основной темы; `--fin-*` наследует токены. Проверка: `npm run build` в `frontend/` проходит; греп `oklch` вне `--fin-*` и остаточных hue 263 пуст.
 - [x] 1.2 Подключить Inter и JetBrains Mono self-hosted (woff2 в `frontend/src/assets/fonts/`, `@font-face` в `index.css`) по D4. Проверка: computed `font-family` в браузере — Inter; `npm run build` проходит.
-- [ ] 1.3 Скриншот-сверка шва: пара «макет/страница» для «Каркаса» после смены темы; сохранить в `.wf-research/design-audit/screenshots/01-tokens/`.
+- [x] 1.3 Скриншот-сверка шва: пара «макет/страница» для «Каркаса» после смены темы; сохранить в `.wf-research/design-audit/screenshots/01-tokens/`.
 
 ## 2. Примитивы дизайн-системы (шов)
 
