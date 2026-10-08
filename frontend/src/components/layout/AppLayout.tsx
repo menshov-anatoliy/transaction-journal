@@ -1,8 +1,9 @@
 ﻿import { useState } from "react";
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, matchPath, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { NavItem } from "@/components/design";
 import { appSections } from "@/config/sections";
 import { cn } from "@/lib/utils";
 import { fetchInboxCount } from "@/lib/api/inbox";
@@ -13,6 +14,8 @@ import { useIsMobile } from "@/lib/use-mobile";
  * бренд «Журнал Bybit» в топбаре без итога журнала, навигация по пяти
  * разделам из единого конфига, панель сворачивается до иконок.
  * Мобильный drawer панели и бейдж «Входящих» — задачи 6.1 и 5.5.
+ * Слой дизайн-системы (задача 3.1): топбар и нав-пункты перенесены по
+ * мастер-нодам «Каркаса» g0z20, пункты панели рендерятся примитивом NavItem.
  *
  * Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
  * Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
@@ -21,54 +24,82 @@ export function AppLayout() {
 	const [collapsed, setCollapsed] = useState(false);
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 	const isMobile = useIsMobile();
+	const location = useLocation();
 	const inboxCount = useQuery({
 		queryKey: ["inbox-count"],
 		queryFn: fetchInboxCount,
 		refetchInterval: 30_000,
 	});
 
+	const collapsedDesktop = collapsed && isMobile == false;
+
 	const navigation = (
 		<nav
 			aria-label="Разделы журнала"
 			className={cn(
-				"flex flex-col gap-1 border-r bg-card p-3",
+				"flex flex-col gap-1 border-r border-divider bg-background px-3 py-4",
 				isMobile ? "h-full w-72 border-r" : collapsed ? "w-[4.25rem]" : "w-64",
 			)}
 		>
-			{appSections.map((section) => (
-				<NavLink
-					key={section.path}
-					to={section.path}
-					end={section.path === "/"}
-					aria-label={section.label}
-					onClick={() => setMobileMenuOpen(false)}
-					className={({ isActive }) =>
-						cn(
-							"flex h-10 items-center gap-3 rounded-lg px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-							isActive && "bg-accent font-medium text-accent-foreground",
-							collapsed && isMobile == false && "justify-center px-0",
-						)
-					}
-				>
-					<section.icon className="size-5 shrink-0" aria-hidden="true" />
-					{(collapsed && isMobile == false) == false && (
-						<div className="flex min-w-0 items-center gap-2">
-							<span className="truncate">{section.label}</span>
-							{section.path === "/inbox" && inboxCount.isError == false && (inboxCount.data ?? 0) > 0 && (
-								<span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary" aria-label={`входящих сделок: ${inboxCount.data}`}>
-									{inboxCount.data}
-								</span>
-							)}
-						</div>
-					)}
-				</NavLink>
-			))}
+			{appSections.map((section) => {
+				/*
+					Активный пункт вычисляется по текущему location теми же
+					правилами end-матчинга, что и у NavLink: активен точный «/»
+					и потомки остальных разделов; состояние стилизуется
+					примитивом NavItem по мастер-ноде Vx9C2.
+				*/
+				// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+				// Traceability: change:reconcile-frontend-with-design/design#D2
+				const isActive =
+					matchPath({ path: section.path, end: section.path === "/" }, location.pathname) != null;
+				/*
+					Бейдж «Входящие» — по мастер-ноде q35Tj9 «Каркаса» (инстанс
+					bKXol): pill 999, заливка $accent, белый текст 11/600,
+					паддинги [2,8]. Отклонение от текста задачи 3.1 «на паре
+					accentSoft/accentStrong»: прямое чтение g0z20 показывает, что
+					эта пара в «Каркасе» принадлежит логотипу топбара (srW2i),
+					а бейдж мастера залит акцентом; мастер — источник истины.
+				*/
+				const badgeVisible =
+					section.path === "/inbox" &&
+					inboxCount.isError == false &&
+					(inboxCount.data ?? 0) > 0 &&
+					collapsedDesktop == false;
+				return (
+					<NavItem
+						key={section.path}
+						asChild
+						icon={section.icon}
+						active={isActive}
+						badge={badgeVisible ? inboxCount.data : undefined}
+						className={cn(collapsedDesktop && "justify-center px-0")}
+					>
+						<NavLink
+							to={section.path}
+							end={section.path === "/"}
+							aria-label={section.label}
+							onClick={() => setMobileMenuOpen(false)}
+						>
+							{collapsedDesktop == false && section.label}
+						</NavLink>
+					</NavItem>
+				);
+			})}
 		</nav>
 	);
 
+	/*
+		Топбар по мастер-ноде jGvOM экрана «Каркас» g0z20: высота 54, паддинги
+		[0,24], заливка $surface, нижний разделитель $divider, зазор 10.
+		Отклонение от текста задачи 3.1 «52px»: высота 52 принадлежит другому
+		фрейму IdwN5, в «Каркасе» топбар — jGvOM высотой 54; сверка ведётся по
+		g0z20, поэтому берётся значение мастера.
+	*/
+	// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+	// Traceability: change:reconcile-frontend-with-design/design#D2
 	return (
 		<div className="flex h-svh flex-col">
-			<header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-4">
+			<header className="flex h-[54px] shrink-0 items-center gap-2.5 border-b border-divider bg-surface px-6">
 				<Button
 					variant="ghost"
 					size="icon"
@@ -84,7 +115,7 @@ export function AppLayout() {
 				>
 					{isMobile || collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
 				</Button>
-				<span className="text-base font-semibold tracking-tight">Журнал Bybit</span>
+				<span className="text-sm font-semibold">Журнал Bybit</span>
 			</header>
 			<div className="flex min-h-0 flex-1">
 				{isMobile == false && <div className="flex">{navigation}</div>}
@@ -106,3 +137,4 @@ export function AppLayout() {
 		</div>
 	);
 }
+

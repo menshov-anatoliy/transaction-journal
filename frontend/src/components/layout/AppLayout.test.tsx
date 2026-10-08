@@ -17,6 +17,12 @@ const inboxApi = vi.mocked(await import("@/lib/api/inbox"));
 // «Журнал Bybit» (итог журнала здесь не размещается), левая панель с пятью
 // разделами и сворачивание панели до иконок.
 // Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
+// Слой сверки с design.pen (задача 3.1): топбар, бренд и нав-пункты «Каркаса»
+// g0z20 перенесены по мастер-нодам jGvOM/WBYbU (54, [0,24], 14/600) и
+// примитиву NavItem (apcZH/Vx9C2/q35Tj9), бейдж — на акцентной паре мастера.
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+// Traceability: change:reconcile-frontend-with-design/design#D2
 
 function renderLayout() {
 	const queryClient = new QueryClient({
@@ -62,6 +68,67 @@ describe("раскладка каркаса приложения", () => {
 		expect(screen.getByText("Журнал Bybit")).toBeInTheDocument();
 	});
 
+	it("несёт геометрию топбара мастера g0z20: высота 54, паддинги [0,24], фон surface", () => {
+		inboxApi.fetchInboxCount.mockResolvedValue(0);
+		setViewport(1280);
+		renderLayout();
+
+		// Assert: топбар по мастер-ноде jGvOM «Каркаса» (высота 54, [0,24],
+		// заливка $surface, нижний разделитель $divider).
+		const header = screen.getByRole("banner");
+		expect(header.className).toContain("h-[54px]");
+		expect(header.className).toContain("px-6");
+		expect(header.className).toContain("bg-surface");
+		expect(header.className).toContain("border-divider");
+	});
+
+	it("показывает бренд типографикой мастера WBYbU: Inter 14/600", () => {
+		inboxApi.fetchInboxCount.mockResolvedValue(0);
+		setViewport(1280);
+		renderLayout();
+
+		// Assert: бренд 14/600 без приписного трекинга (text-sm = 14px).
+		const brand = screen.getByText("Журнал Bybit");
+		expect(brand.className).toContain("text-sm");
+		expect(brand.className).toContain("font-semibold");
+		expect(brand.className).not.toContain("tracking-tight");
+	});
+
+	it("рендерит пункты панели примитивом NavItem по мастер-ноде apcZH", () => {
+		inboxApi.fetchInboxCount.mockResolvedValue(0);
+		setViewport(1280);
+		renderLayout();
+
+		// Assert: каждая ссылка панели — инстанс примитива NavItem с геометрией
+		// мастера: радиус 8, паддинги [8,10], подпись 13/500.
+		const links = screen.getAllByRole("link");
+		expect(links).toHaveLength(appSections.length);
+		for (const link of links) {
+			expect(link.getAttribute("data-slot")).toBe("nav-item");
+			expect(link.className).toContain("rounded-sm");
+			expect(link.className).toContain("px-2.5");
+			expect(link.className).toContain("py-2");
+			expect(link.className).toContain("text-[13px]");
+		}
+	});
+
+	it("помечает текущий раздел активным состоянием мастера Vx9C2", () => {
+		inboxApi.fetchInboxCount.mockResolvedValue(0);
+		setViewport(1280);
+		renderLayout();
+
+		// Assert: на «/» активен раздел «Конструкции» — surface + бордер +
+		// accentStrong 13/600 и aria-current="page".
+		const active = screen.getByRole("link", { name: "Конструкции" });
+		expect(active.getAttribute("aria-current")).toBe("page");
+		expect(active.className).toContain("bg-card");
+		expect(active.className).toContain("font-semibold");
+		expect(active.className).toContain("text-accent-strong");
+		const idle = screen.getByRole("link", { name: "Подсказки" });
+		expect(idle.getAttribute("aria-current")).toBeNull();
+		expect(idle.className).toContain("text-text-secondary");
+	});
+
 	it.each(appSections)("выводит пункт панели «$label»", (section) => {
 		inboxApi.fetchInboxCount.mockResolvedValue(0);
 		setViewport(1280);
@@ -90,6 +157,25 @@ describe("раскладка каркаса приложения", () => {
 		renderLayout();
 
 		expect(await screen.findByText("3")).toBeInTheDocument();
+	});
+
+	it("рисует бейдж входящих примитивом NavItem по мастер-ноде q35Tj9", async () => {
+		inboxApi.fetchInboxCount.mockResolvedValue(7);
+		setViewport(1280);
+		renderLayout();
+
+		// Assert: бейдж — pill 999 на акцентной паре мастера (заливка $accent,
+		// белый текст 11/600, [2,8]); отклонение от текста задачи 3.1
+		// «accentSoft/accentStrong» зафиксировано прямым чтением ноды q35Tj9.
+		const badge = await screen.findByText("7");
+		expect(badge.getAttribute("data-slot")).toBe("nav-item-badge");
+		expect(badge.className).toContain("rounded-full");
+		expect(badge.className).toContain("bg-primary");
+		expect(badge.className).toContain("text-primary-foreground");
+		expect(badge.className).toContain("px-2");
+		expect(badge.className).toContain("py-0.5");
+		expect(badge.className).toContain("text-[11px]");
+		expect(badge.className).toContain("font-semibold");
 	});
 
 	it("в мобильном режиме открывает навигацию в drawer и закрывает после перехода", async () => {
