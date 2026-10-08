@@ -9,5 +9,7 @@
 
 export { Metric } from "./metric";
 export { NavItem, navItemVariants } from "./nav-item";
+export { SessionItem, sessionItemVariants } from "./session-item";
 export { SourceChip } from "./source-chip";
 export { StatusChip, statusChipVariants } from "./status-chip";
+export { ToolStatus } from "./tool-status";
