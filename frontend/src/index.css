@@ -28,6 +28,17 @@
 	--border: oklch(0.912 0.006 286);
 	--input: oklch(0.912 0.006 286);
 	--ring: oklch(0.62 0.09 263);
+
+	/* Палитра индикатора финрезультата — 1:1 из дизайн-макета (design.pen,
+		переменные riskZone/profitZone/superZone/accent/neg/mint). */
+	--fin-risk-zone: #efb6ae;
+	--fin-profit-zone: #b9e7cc;
+	--fin-super-zone: #f3d68c;
+	--fin-positive: #1fa36b;
+	--fin-positive-strong: #167853;
+	--fin-negative: #d14b41;
+	--fin-unreal-positive: #a7e2c4;
+	--fin-unreal-negative: #f6cbc7;
 }
 
 @theme inline {
