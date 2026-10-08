@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Markdig" Version="1.4.0" />
     <!-- Генерация OpenAPI-документа каркаса API нового SPA (Microsoft.AspNetCore.OpenApi). -->
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.12">
@@ -15,9 +14,6 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.12" />
-    <!-- Адаптер OpenAI-совместимых провайдеров модели чата консультаций
-         (z.ai по умолчанию); в Consultations остаётся только абстракция IChatClient. -->
-    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,9 +38,9 @@
 
   <ItemGroup>
     <!-- Собранная статика SPA (frontend/dist) деплоится рядом с exe в frontend/dist
-         и раздаётся .NET-хостом по префиксу /spa. Сборка SPA выполняется отдельно
-         (npm run build в frontend/), поэтому при отсутствии dist решение собирается
-         и хост работает без SPA, не затрагивая Blazor-UI. -->
+         и раздаётся .NET-хостом из корня с fallback клиентских маршрутов. Сборка
+         SPA выполняется отдельно (npm run build в frontend/), поэтому при
+         отсутствии dist решение собирается и API остаётся доступным. -->
     <!-- Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения -->
     <Content Include="..\..\frontend\dist\**\*.*" LinkBase="frontend\dist" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\frontend\dist')" />
   </ItemGroup>

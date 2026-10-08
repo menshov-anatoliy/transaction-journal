@@ -4,7 +4,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
 using TransactionJournal.Application.Analytics;
-using TransactionJournal.Components.Pages;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
