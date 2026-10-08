@@ -1,4 +1,4 @@
-import { apiFetch } from "./http";
+import { apiCommand, apiFetch } from "./http";
 
 // Контракты подсказок единого API: панель субъекта правой области, кнопка
 // ручного прохода агента и команды жизненного цикла карточек.
@@ -103,5 +103,6 @@ export function dismissHint(hintId: number): Promise<HintTransition> {
 
 /** Помечает первый показ подсказки; момент ставит сервер. */
 export function markHintSeen(hintId: number): Promise<void> {
-	return apiFetch<void>(`/hints/${hintId}/seen`, { method: "POST" });
+	// Команда отвечает 204 без тела: пустой ответ не разбирается как JSON.
+	return apiCommand(`/hints/${hintId}/seen`, { method: "POST" });
 }
