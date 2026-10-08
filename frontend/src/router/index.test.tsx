@@ -37,9 +37,9 @@ describe("роутер каркаса SPA", () => {
 		const routes = buildAppRoutes();
 
 		// Assert: корень один; маршрутов столько, сколько разделов конфига,
-		// плюс динамический маршрут карточки конструкции.
+		// плюс динамический маршрут карточки и fallback-маршрут /Error.
 		expect(routes).toHaveLength(1);
-		expect(routes[0]?.children).toHaveLength(appSections.length + 1);
+		expect(routes[0]?.children).toHaveLength(appSections.length + 2);
 		expect(routes[0]?.element).toBeDefined();
 	});
 
@@ -50,6 +50,17 @@ describe("роутер каркаса SPA", () => {
 		// Assert: страница карточки отвечает заголовком раздела.
 		expect(
 			screen.getByRole("heading", { level: 1, name: "Карточка конструкции" }),
+		).toBeInTheDocument();
+	});
+
+	it("открывает русифицированную страницу ошибки на маршруте /Error", () => {
+		// Карта переноса фиксирует паритет старого маршрута /Error в SPA:
+		// нужна явная страница ошибки вместо пустого экрана.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#12-карта-переноса-по-инвентаризации-129
+		renderAt("/Error");
+
+		expect(
+			screen.getByRole("heading", { level: 1, name: "Ошибка журнала" }),
 		).toBeInTheDocument();
 	});
 });
