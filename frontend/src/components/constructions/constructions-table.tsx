@@ -15,6 +15,7 @@ import { DASH, degrade } from "@/lib/format/degradation";
 import { formatDay } from "@/lib/format/display-time";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Таблица конструкций раздела по концепции §3: паритет 13 колонок, бейдж
 // живых подсказок в строке, компактный индикатор финрезультата в ячейке
@@ -72,6 +73,7 @@ function DegradedValue<T>({ value, format }: { value: T | null; format: (value: 
 }
 
 export function ConstructionsTable({ rows, selectedId, onSelect }: ConstructionsTableProps) {
+	const isMobile = useIsMobile();
 	const [sorting, setSorting] = React.useState<SortingState>([]);
 
 	const columns = React.useMemo<ColumnDef<ConstructionRow>[]>(
@@ -260,6 +262,44 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 		getCoreRowModel: getCoreRowModel(),
 		getSortedRowModel: getSortedRowModel(),
 	});
+
+	if (isMobile) {
+		// На узком экране таблица деградирует в карточки без потери колонок:
+		// ключевые значения сохраняются в компактной строковой форме.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
+		return (
+			<div className="flex flex-col gap-2 p-2">
+				{rows.length === 0 ? (
+					<p className="text-muted-foreground py-6 text-center text-sm">конструкций нет</p>
+				) : (
+					rows.map((row) => (
+						<button
+							key={row.constructionId}
+							type="button"
+							aria-selected={row.constructionId === selectedId}
+							onClick={() => onSelect(row.constructionId)}
+							className={cn("rounded-lg border p-3 text-left", row.constructionId === selectedId && "bg-accent")}
+						>
+							<div className="mb-1 flex items-start justify-between gap-2">
+								<p className="font-medium">{row.name}</p>
+								{row.liveHintCount > 0 && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">{row.liveHintCount}</span>}
+							</div>
+							<p className="text-muted-foreground text-xs">{statusText(row.status)} · капитал {row.allocatedCapitalUsdt === null ? DASH : formatAmount(row.allocatedCapitalUsdt)}</p>
+							<p className="mt-1 text-sm">
+								итог: {row.totalPnL === null ? "неполный" : formatSignedAmount(row.totalPnL)} ·
+								{" "}реализов. {formatSignedAmount(row.realizedPnL)} ·
+								{" "}нереализов. {row.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(row.unrealizedPnL)}
+							</p>
+							<p className="text-muted-foreground mt-1 text-xs">
+								занято {row.capitalUsagePercent === null ? DASH : formatSignedPercent(row.capitalUsagePercent)} · открыта{" "}
+								{row.openedAt === null ? DASH : formatDay(row.openedAt)}
+							</p>
+						</button>
+					))
+				)}
+			</div>
+		);
+	}
 
 	return (
 		<Table>

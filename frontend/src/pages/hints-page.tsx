@@ -10,6 +10,7 @@ import {
 	type HintStatus,
 } from "@/lib/api/hints";
 import { formatMoment } from "@/lib/format/display-time";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Раздел «Подсказки» показывает read-only журнал всех подсказок всех
 // субъектов: фильтры статус/группа/характер, отдельные состояния «записей нет»
@@ -68,6 +69,7 @@ const FALLBACK_CHARACTER_ORDER = [
 const DEFAULT_LIMIT = 200;
 
 export function HintsPage() {
+	const isMobile = useIsMobile();
 	const [status, setStatus] = React.useState<HintStatus | "">("");
 	const [groupId, setGroupId] = React.useState("");
 	const [character, setCharacter] = React.useState("");
@@ -185,7 +187,7 @@ export function HintsPage() {
 				<p className="text-muted-foreground text-sm">{hasActiveFilter ? "по фильтру записей нет" : "записей нет"}</p>
 			)}
 
-			{query.data !== undefined && query.data.items.length > 0 && (
+			{query.data !== undefined && query.data.items.length > 0 && isMobile == false && (
 				<div className="space-y-2">
 					<p className="text-muted-foreground text-sm">
 						Показано {query.data.items.length} из {query.data.total}
@@ -210,6 +212,27 @@ export function HintsPage() {
 							</TableBody>
 						</Table>
 					</div>
+				</div>
+			)}
+			{query.data !== undefined && query.data.items.length > 0 && isMobile && (
+				<div className="space-y-2">
+					{/* На мобильном журнал подсказок показывает те же данные карточками
+					    вместо широкой таблицы, чтобы сохранить читаемость без потери
+					    атрибутов записи и следов источников. */}
+					{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
+					<p className="text-muted-foreground text-sm">
+						Показано {query.data.items.length} из {query.data.total}
+					</p>
+					<ul className="flex flex-col gap-2">
+						{query.data.items.map((item) => (
+							<li key={item.id} className="rounded-md border p-3 text-sm">
+								<p className="mb-1 font-medium">{item.text}</p>
+								<p className="text-muted-foreground text-xs">{formatMoment(item.asOf)} · {statusLabel(item.status)}</p>
+								<p className="text-xs">субъект: {item.subject.kind === "journal" ? "журнал" : `конструкция ${item.subject.constructionId ?? ""}`}</p>
+								<p className="text-xs">группа: {item.group.title} · характер: {characterLabel(item.character)}</p>
+							</li>
+						))}
+					</ul>
 				</div>
 			)}
 		</section>
