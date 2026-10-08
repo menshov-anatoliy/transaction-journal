@@ -5,6 +5,9 @@ using OpenAI;
 using System.ClientModel;
 using TransactionJournal;
 using TransactionJournal.Api;
+using TransactionJournal.Api.Constructions;
+using TransactionJournal.Api.Hints;
+using TransactionJournal.Api.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Bybit;
@@ -429,7 +432,12 @@ app.MapRazorComponents<App>()
 
 // Единая точка входа JSON API нового SPA с версией в маршруте и публикуемым
 // OpenAPI-описанием; Blazor-UI работает без изменений до паритета переносов.
-app.MapApiSkeleton();
+var api = app.MapApiSkeleton();
+// Эндпоинты разделов подключаются к той же версионированной группе: задачи 5.x
+// фиксируют контракты поверх единого префикса /api/v1.
+api.MapConstructionsEndpoints();
+api.MapHintsEndpoints();
+api.MapSyncEndpoints();
 
 if (spaRootPath != null)
 {
