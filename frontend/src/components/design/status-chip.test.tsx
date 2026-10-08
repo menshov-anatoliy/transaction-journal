@@ -7,7 +7,8 @@ import { StatusChip, statusChipVariants } from "./status-chip";
 // и тональные варианты, извлечённые из инстансов дизайн-нод: pos —
 // accentSoft/accentStrong («открыта»), info — infoSoft/info («Однозначное»),
 // neutral — surface2/textSecondary («закрыта»), muted — surface2/textMuted
-// («архив»). Пиксельная сверка — парой скриншотов в
+// («архив»), neg — negSoft/neg («Отклонено», карточки Body #6). Пиксельная
+// сверка — парой скриншотов в
 // .wf-research/design-audit/screenshots/02-primitives/design-components/.
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 // Traceability: change:reconcile-frontend-with-design/design#D2
@@ -35,6 +36,8 @@ describe("StatusChip: тон статусной пилюли по дизайн-�
 		["info", "bg-info-soft text-info"],
 		["neutral", "bg-surface-2 text-text-secondary"],
 		["muted", "bg-surface-2 text-text-muted"],
+		// Инстансы Body #6 (rdODt/AutfO): чип «Отклонено» — negSoft/neg.
+		["neg", "bg-neg-soft text-neg"],
 	] as const)("тон %s разрешается в токены дизайн-системы", (tone, expected) => {
 		// Act + Assert: cva-маппинг тон→классы без рендера.
 		expect(statusChipVariants({ tone })).toContain(expected);

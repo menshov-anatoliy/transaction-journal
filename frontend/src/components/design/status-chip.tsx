@@ -12,8 +12,11 @@ import { cn } from "@/lib/utils";
 	  info    → «Однозначное»                     (infoSoft/info, нода U6mVZ)
 	  neutral → «закрыта», «Субъект: стратегия»   (surface2/textSecondary, EIqx3)
 	  muted   → «архив»                           (surface2/textMuted, dAcLW)
-	Варианты neg/risk в дизайн-нодах для статусов не используются, поэтому
-	в примитив не включены — расширение только с появлением дизайн-узла.
+	  neg     → «Отклонено»                       (negSoft/neg, Body #6: rdODt/AutfO)
+	Тон neg добавлен по инстансам карточек подсказок Body #6 макета:
+	чип статуса «Отклонено» перекрашивается в пару $negSoft/$neg.
+	Вариант risk в дизайн-нодах для статусов не используется — расширение
+	только с появлением дизайн-узла.
 */
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 // Traceability: change:reconcile-frontend-with-design/design#D2
@@ -27,6 +30,7 @@ const statusChipVariants = cva(
 				info: "bg-info-soft text-info",
 				neutral: "bg-surface-2 text-text-secondary",
 				muted: "bg-surface-2 text-text-muted",
+				neg: "bg-neg-soft text-neg",
 			},
 		},
 		defaultVariants: {
