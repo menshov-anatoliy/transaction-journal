@@ -56,8 +56,190 @@ public static class ConstructionCardEndpoints
 			return Results.Json(ToCardResponse(data));
 		});
 
-		return api;
+			// Переименование конструкции: свободная правка имени, остальные данные
+			// не затрагиваются; ручное имя фиксируется и не перезаписывается сборкой.
+			// Все команды карточки идут через единый версионированный API.
+			// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+			// Действия конструкции живут в шапке карточки — концепция §4 (паритет №5).
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			group.MapPost("/{constructionId:long}/rename", async (
+				long constructionId,
+				RenameConstructionRequest request,
+				IConstructionService constructions,
+				CancellationToken cancellationToken) =>
+			{
+				if (string.IsNullOrWhiteSpace(request.Name))
+				{
+					// Пустое имя — ошибка заполнения поля, команда в домен не прошла.
+					return Results.Json(new ConstructionCardErrorResponse("Имя конструкции не может быть пустым."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				return await RunConstructionCommand(
+					() => constructions.RenameAsync(constructionId, request.Name.Trim(), cancellationToken),
+					errorPrefix: "Переименование не выполнено");
+			});
+
+			// Смена ручного статуса: свободные переходы «открыта» ↔ «закрыта», архив
+			// и возврат из архива, восстанавливающий статус «закрыта».
+			// Все команды карточки идут через единый версионированный API.
+			// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+			// Возврат из архива — действие шапки карточки (паритет №28): статус до
+			// архивации журнал не хранит, восстановление отдаёт «закрыта».
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			group.MapPost("/{constructionId:long}/status", async (
+				long constructionId,
+				ChangeConstructionStatusRequest request,
+				IConstructionService constructions,
+				CancellationToken cancellationToken) =>
+			{
+				var status = DeserializeStatus(request.Status);
+				if (status is null)
+				{
+					return Results.Json(new ConstructionCardErrorResponse("Неизвестный статус конструкции."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				return await RunConstructionCommand(
+					() => constructions.ChangeStatusAsync(constructionId, status.Value, cancellationToken),
+					errorPrefix: "Смена статуса не выполнена");
+			});
+
+			// Выделенный капитал: значение в USDT; null убирает капитал у конструкции,
+			// ноль легитимен — правка меняет только процентные величины.
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			group.MapPost("/{constructionId:long}/capital", async (
+				long constructionId,
+				ChangeAllocatedCapitalRequest request,
+				IConstructionService constructions,
+				CancellationToken cancellationToken) =>
+			{
+				return await RunConstructionCommand(
+					() => constructions.UpdateAllocatedCapitalAsync(constructionId, request.AllocatedCapitalUsdt, cancellationToken),
+					errorPrefix: "Изменение капитала не выполнено");
+			});
+
+			// Риск плановой границы: значение и единица меняются парой; оба пустых
+			// равносильны удалению параметра.
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			group.MapPost("/{constructionId:long}/risk", async (
+				long constructionId,
+				ChangeTargetRequest request,
+				IConstructionService constructions,
+				CancellationToken cancellationToken) =>
+			{
+				var unit = DeserializeUnit(request.Unit);
+				if (request.Value is null && unit is not null || request.Value is not null && unit is null)
+				{
+					// Пара «значение + единица» либо задана целиком, либо отсутствует.
+					return Results.Json(new ConstructionCardErrorResponse("Значение и единица задаются парой."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				return await RunConstructionCommand(
+					() => constructions.UpdateRiskAsync(constructionId, request.Value, unit, cancellationToken),
+					errorPrefix: "Изменение риска не выполнено");
+			});
+
+			// Профит плановой границы: те же правила, что у риска, — пара
+			// «значение + единица» либо целиком, либо удалена.
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			group.MapPost("/{constructionId:long}/profit", async (
+				long constructionId,
+				ChangeTargetRequest request,
+				IConstructionService constructions,
+				CancellationToken cancellationToken) =>
+			{
+				var unit = DeserializeUnit(request.Unit);
+				if (request.Value is null && unit is not null || request.Value is not null && unit is null)
+				{
+					return Results.Json(new ConstructionCardErrorResponse("Значение и единица задаются парой."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				return await RunConstructionCommand(
+					() => constructions.UpdateProfitAsync(constructionId, request.Value, unit, cancellationToken),
+					errorPrefix: "Изменение профита не выполнено");
+			});
+
+			// Удаление пустой конструкции с опциональной резервной копией: копия
+			// предшествует команде домена, неудача копирования отменяет удаление.
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			group.MapPost("/{constructionId:long}/delete", async (
+				long constructionId,
+				DeleteConstructionRequest request,
+				IConstructionService constructions,
+				Application.Ops.IJournalBackupService backups,
+				CancellationToken cancellationToken) =>
+			{
+				if (request.MakeBackup)
+				{
+					try
+					{
+						await backups.CreateBackupAsync("delete-construction", cancellationToken);
+					}
+					catch (Exception exception) when (exception is IOException or InvalidOperationException)
+					{
+						// Копия не создана — удаление отменено, данные нетронуты.
+						return Results.Json(
+							new ConstructionCardErrorResponse($"Удаление отменено: резервная копия не создана — {exception.Message}"),
+							statusCode: StatusCodes.Status503ServiceUnavailable);
+					}
+				}
+
+				return await RunConstructionCommand(
+					() => constructions.DeleteAsync(constructionId, cancellationToken),
+					errorPrefix: "Удаление не выполнено");
+			});
+
+			return api;
 	}
+
+	/// <summary>
+	/// Выполняет команду конструкции с единой обработкой отказов: неизвестная
+	/// конструкция — 404, отказ удаления — 409 с причиной, ошибка ввода — 400,
+	/// прочие сбои — 500 с текстом причины.
+	/// </summary>
+	private static async Task<IResult> RunConstructionCommand(Func<Task> action, string errorPrefix)
+	{
+			try
+			{
+				await action();
+			}
+			catch (ConstructionNotFoundException)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Конструкция не найдена — возможно, удалена."), statusCode: StatusCodes.Status404NotFound);
+			}
+			catch (ConstructionDeletionRefusedException exception)
+			{
+				// Отказ удаления объясняет причину: блокирующие записи видны владельцу.
+				return Results.Json(new ConstructionCardErrorResponse(exception.Message), statusCode: StatusCodes.Status409Conflict);
+			}
+			catch (ArgumentException)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+			}
+			catch (Exception exception)
+			{
+				return Results.Json(new ConstructionCardErrorResponse($"{errorPrefix}: {exception.Message}"), statusCode: StatusCodes.Status500InternalServerError);
+			}
+
+			return Results.NoContent();
+	}
+
+	/// <summary>Разбирает строку статуса; null — неизвестное значение.</summary>
+	private static ConstructionStatus? DeserializeStatus(string? status) => status switch
+	{
+			"open" => ConstructionStatus.Open,
+			"closed" => ConstructionStatus.Closed,
+			"archived" => ConstructionStatus.Archived,
+			_ => null,
+	};
+
+	/// <summary>Разбирает строку единицы границы; null — параметр не задан.</summary>
+	private static TargetUnit? DeserializeUnit(string? unit) => unit switch
+	{
+			"percent" => TargetUnit.Percent,
+			"usdt" => TargetUnit.Usdt,
+			null => null,
+			_ => null,
+	};
 
 	/// <summary>Перевод доменного снимка деталей в контракт карточки.</summary>
 	private static ConstructionCardResponse ToCardResponse(ConstructionDetailData data) => new(
@@ -348,3 +530,28 @@ public sealed record ConstructionCardNotFoundResponse(long ConstructionId);
 /// <summary>Состояние недоступности карточки: журнал не прочитан, причина — в тексте.</summary>
 /// <param name="Error">Человекочитаемая причина недоступности.</param>
 public sealed record ConstructionCardUnavailableResponse(string Error);
+
+/// <summary>Ошибка команды карточки: причина, объясняющая отказ.</summary>
+/// <param name="Error">Человекочитаемая причина отказа команды.</param>
+public sealed record ConstructionCardErrorResponse(string Error);
+
+/// <summary>Запрос переименования конструкции.</summary>
+/// <param name="Name">Новое имя; пустое отклоняется как ошибка заполнения.</param>
+public sealed record RenameConstructionRequest(string Name);
+
+/// <summary>Запрос смены ручного статуса конструкции.</summary>
+/// <param name="Status">Целевой статус: open, closed или archived.</param>
+public sealed record ChangeConstructionStatusRequest(string Status);
+
+/// <summary>Запрос правки выделенного капитала.</summary>
+/// <param name="AllocatedCapitalUsdt">Капитал в USDT; null убирает капитал, ноль легитимен.</param>
+public sealed record ChangeAllocatedCapitalRequest(decimal? AllocatedCapitalUsdt);
+
+/// <summary>Запрос правки плановой границы (риск или профит).</summary>
+/// <param name="Value">Значение границы; null вместе с единицей удаляет параметр.</param>
+/// <param name="Unit">Единица ввода: percent или usdt; null вместе со значением.</param>
+public sealed record ChangeTargetRequest(decimal? Value, string? Unit);
+
+/// <summary>Запрос удаления пустой конструкции.</summary>
+/// <param name="MakeBackup">Создать резервную копию базы перед удалением; включён по умолчанию.</param>
+public sealed record DeleteConstructionRequest(bool MakeBackup = true);

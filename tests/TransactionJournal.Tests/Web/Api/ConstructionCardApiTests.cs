@@ -13,6 +13,7 @@ using NUnit.Framework;
 using TransactionJournal.Api;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Materialization;
+using TransactionJournal.Application.Ops;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.Data;
 using Assert = NUnit.Framework.Assert;
@@ -167,6 +168,318 @@ public sealed class ConstructionCardApiTests
 		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
 		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
 		Assert.That(payload!["error"]!.GetValue<string>(), Does.Contain("исполнени"));
+	}
+
+		[TestMethod]
+		[Description("Действия шапки выполняются командами и доходят сервису домена")]
+		// Действия конструкции живут в шапке карточки (паритет №5): переименование,
+		// смена ручного статуса с возвратом из архива (№28), капитал с пустым
+		// сохранением-удалением, риск/профит парой «значение + единица» и удаление
+		// пустой с опциональной резервной копией — команды идут через единый API.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		public async Task TryIfHeaderActionsRunDomainCommands()
+		{
+			// Arrange: записывающий сервис конструкций.
+			var constructions = new RecordingConstructionService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceConstructionService(constructions));
+			using var client = factory.CreateClient();
+
+			// Act: команды шапки по очереди.
+			var rename = await client.PostAsJsonAsync("/api/v1/constructions/7/rename", new { name = "новое имя" });
+			var status = await client.PostAsJsonAsync("/api/v1/constructions/7/status", new { status = "archived" });
+			var restore = await client.PostAsJsonAsync("/api/v1/constructions/7/status", new { status = "closed" });
+			var capital = await client.PostAsJsonAsync("/api/v1/constructions/7/capital", new { allocatedCapitalUsdt = (decimal?)null });
+			var risk = await client.PostAsJsonAsync("/api/v1/constructions/7/risk", new { value = (decimal?)3.5m, unit = "percent" });
+			var profit = await client.PostAsJsonAsync("/api/v1/constructions/7/profit", new { value = (decimal?)null, unit = (string?)null });
+			var delete = await client.PostAsJsonAsync("/api/v1/constructions/7/delete", new { makeBackup = true });
+
+			// Assert: команды приняты без тела и дошли сервису домена.
+			Assert.That(rename.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(status.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(restore.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(capital.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(risk.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(profit.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(delete.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(constructions.Renames, Is.EqualTo(new[] { (7L, "новое имя") }));
+			Assert.That(constructions.StatusChanges, Is.EqualTo(new[] { (7L, ConstructionStatus.Archived), (7L, ConstructionStatus.Closed) }));
+			Assert.That(constructions.Capitals, Is.EqualTo(new[] { (7L, (decimal?)null) }));
+			Assert.That(constructions.Risks, Is.EqualTo(new[] { (7L, 3.5m, (TargetUnit?)TargetUnit.Percent) }));
+			Assert.That(constructions.Profits, Is.EqualTo(new[] { (7L, (decimal?)null, (TargetUnit?)null) }));
+			Assert.That(constructions.DeletedIds, Is.EqualTo(new[] { 7L }));
+		}
+
+		[TestMethod]
+		[Description("Отказ удаления домена доходит причиной в 409")]
+		// Отказы домена — причиной у действия: непустая конструкция не удаляется,
+		// пользователь видит блокирующие записи, данные остаются неизменными.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		public async Task ThrowOnDeleteRefusalReturns409WithReason()
+		{
+			// Arrange: сервис, отказывающий удаление непустой конструкции.
+			var constructions = RecordingConstructionService.RefusingDelete();
+			await using var factory = new SectionApiFactory(services => services.ReplaceConstructionService(constructions));
+			using var client = factory.CreateClient();
+
+			// Act: команда удаления непустой конструкции.
+			var response = await client.PostAsJsonAsync("/api/v1/constructions/7/delete", new { makeBackup = false });
+
+			// Assert: отказ домена отвечает 409 с причиной.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+			var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+			Assert.That(payload!["error"]!.GetValue<string>(), Does.Contain("сделок"));
+		}
+
+		[TestMethod]
+		[Description("Неудача резервной копии отменяет удаление с причиной в 503")]
+		// Резервная копия предшествует команде домена: неудача копирования отменяет
+		// удаление без обращения к сервису — данные конструкции нетронуты.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		public async Task ThrowOnBackupFailureCancelsDeleteWith503()
+		{
+			// Arrange: сервисы с падающим бэкапом; сервис конструкций записывает вызовы.
+			var constructions = new RecordingConstructionService();
+			await using var factory = new SectionApiFactory(services => services
+				.ReplaceConstructionService(constructions)
+				.ReplaceBackupService(StubBackupService.Failing()));
+			using var client = factory.CreateClient();
+
+			// Act: команда удаления с флажком резервной копии.
+			var response = await client.PostAsJsonAsync("/api/v1/constructions/7/delete", new { makeBackup = true });
+
+			// Assert: удаление отменено причиной, домен не вызывался.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
+			var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+			Assert.That(payload!["error"]!.GetValue<string>(), Does.Contain("копия"));
+			Assert.That(constructions.DeletedIds, Is.Empty);
+		}
+
+		[TestMethod]
+		[Description("Действие неизвестной конструкции отвечает 404, пустое имя — 400")]
+		// Команды шапки проверяют существование конструкции и корректность ввода:
+		// исчезнувшая конструкция — 404, пустое имя — ошибка заполнения поля.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		public async Task ThrowOnHeaderActionValidationReturns404And400()
+		{
+			// Arrange: записывающий сервис конструкций.
+			var constructions = new RecordingConstructionService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceConstructionService(constructions));
+			using var client = factory.CreateClient();
+
+			// Act: команда по неизвестной конструкции и переименование в пустое имя.
+			var unknown = await client.PostAsJsonAsync("/api/v1/constructions/999/status", new { status = "closed" });
+			var empty = await client.PostAsJsonAsync("/api/v1/constructions/7/rename", new { name = "  " });
+
+			// Assert: неизвестная — 404, некорректный ввод — 400.
+			Assert.That(unknown.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+			Assert.That(empty.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+		}
+}
+
+/// <summary>Записывающий сервис конструкций: фиксирует команды карточки.</summary>
+internal sealed class RecordingConstructionService : IConstructionService
+{
+	/// <summary>Вызовы переименования: идентификатор и новое имя.</summary>
+	public IReadOnlyList<(long ConstructionId, string Name)> Renames => _renames;
+
+	/// <summary>Вызовы смены статуса: идентификатор и статус.</summary>
+	public IReadOnlyList<(long ConstructionId, ConstructionStatus Status)> StatusChanges => _statusChanges;
+
+	/// <summary>Вызовы правки капитала: идентификатор и значение (null — убрать).</summary>
+	public IReadOnlyList<(long ConstructionId, decimal? Capital)> Capitals => _capitals;
+
+	/// <summary>Вызовы правки риска: идентификатор, значение и единица.</summary>
+	public IReadOnlyList<(long ConstructionId, decimal? Value, TargetUnit? Unit)> Risks => _risks;
+
+	/// <summary>Вызовы правки профита: идентификатор, значение и единица.</summary>
+	public IReadOnlyList<(long ConstructionId, decimal? Value, TargetUnit? Unit)> Profits => _profits;
+
+	/// <summary>Идентификаторы удалённых конструкций.</summary>
+	public IReadOnlyList<long> DeletedIds => _deletedIds;
+
+	private readonly List<(long, string)> _renames = [];
+
+	private readonly List<(long, ConstructionStatus)> _statusChanges = [];
+
+	private readonly List<(long, decimal?)> _capitals = [];
+
+	private readonly List<(long, decimal?, TargetUnit?)> _risks = [];
+
+	private readonly List<(long, decimal?, TargetUnit?)> _profits = [];
+
+	private readonly List<long> _deletedIds = [];
+
+	private readonly bool _refuseDelete;
+
+	private RecordingConstructionService(bool refuseDelete)
+	{
+		_refuseDelete = refuseDelete;
+	}
+
+	/// <summary>Обычная запись команд.</summary>
+	public RecordingConstructionService()
+		: this(refuseDelete: false)
+	{
+	}
+
+	/// <summary>Вариант с отказом удаления: у конструкции есть блокирующие записи.</summary>
+	public static RecordingConstructionService RefusingDelete() => new(refuseDelete: true);
+
+	public Task<Construction> CreateAsync(string name, decimal? allocatedCapitalUsdt, string? comment = null, CancellationToken cancellationToken = default) =>
+		throw new NotSupportedException();
+
+	public Task RenameAsync(long constructionId, string newName, CancellationToken cancellationToken = default)
+	{
+		EnsureKnown(constructionId);
+		if (newName.Trim().Length == 0)
+		{
+			throw new ArgumentException("имя пусто", nameof(newName));
+		}
+
+		_renames.Add((constructionId, newName));
+		return Task.CompletedTask;
+	}
+
+	public Task UpdateAllocatedCapitalAsync(long constructionId, decimal? allocatedCapitalUsdt, CancellationToken cancellationToken = default)
+	{
+		EnsureKnown(constructionId);
+		_capitals.Add((constructionId, allocatedCapitalUsdt));
+		return Task.CompletedTask;
+	}
+
+	public Task UpdateRiskAsync(long constructionId, decimal? value, TargetUnit? unit, CancellationToken cancellationToken = default)
+	{
+		EnsureKnown(constructionId);
+		_risks.Add((constructionId, value, unit));
+		return Task.CompletedTask;
+	}
+
+	public Task UpdateProfitAsync(long constructionId, decimal? value, TargetUnit? unit, CancellationToken cancellationToken = default)
+	{
+		EnsureKnown(constructionId);
+		_profits.Add((constructionId, value, unit));
+		return Task.CompletedTask;
+	}
+
+	public Task ChangeStatusAsync(long constructionId, ConstructionStatus status, CancellationToken cancellationToken = default)
+	{
+		EnsureKnown(constructionId);
+		_statusChanges.Add((constructionId, status));
+		return Task.CompletedTask;
+	}
+
+	public Task ArchiveAsync(long constructionId, CancellationToken cancellationToken = default) =>
+		ChangeStatusAsync(constructionId, ConstructionStatus.Archived, cancellationToken);
+
+	public Task DeleteAsync(long constructionId, CancellationToken cancellationToken = default)
+	{
+		EnsureKnown(constructionId);
+		if (_refuseDelete)
+		{
+			throw new ConstructionDeletionRefusedException(boundTradeCount: 2, adjustmentCount: 0);
+		}
+
+		_deletedIds.Add(constructionId);
+		return Task.CompletedTask;
+	}
+
+	public Task<IReadOnlyList<Construction>> ListActiveAsync(CancellationToken cancellationToken = default) =>
+		Task.FromResult<IReadOnlyList<Construction>>([]);
+
+	public Task<IReadOnlyList<Construction>> ListAllAsync(CancellationToken cancellationToken = default) =>
+		Task.FromResult<IReadOnlyList<Construction>>([]);
+
+	private void EnsureKnown(long constructionId)
+	{
+		if (constructionId != 7L)
+		{
+			throw new ConstructionNotFoundException(constructionId);
+		}
+	}
+}
+
+/// <summary>Стабильная заглушка сервиса резервных копий: успех или неудача копии.</summary>
+internal sealed class StubBackupService : IJournalBackupService
+{
+	private readonly bool _failing;
+
+	private StubBackupService(bool failing)
+	{
+		_failing = failing;
+	}
+
+	/// <summary>Успешная копия с пустым результатом ротации.</summary>
+	public static StubBackupService Succeeding() => new(failing: false);
+
+	/// <summary>Неудача копии: IOException отменяет операцию вызывающего.</summary>
+	public static StubBackupService Failing() => new(failing: true);
+
+	public Task<JournalBackupResult> CreateBackupAsync(string reason, CancellationToken cancellationToken = default)
+	{
+		if (_failing)
+		{
+			throw new IOException("копия не создана");
+		}
+
+		return Task.FromResult(new JournalBackupResult { FileName = $"journal-{reason}.db", RotationWarnings = [] });
+	}
+}
+
+/// <summary>Помощники подмены сервисов карточки стабильными заглушками.</summary>
+internal static class CardApiServiceExtensions
+{
+	/// <summary>Заменяет регистрацию сервиса конструкций стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceConstructionService(this IServiceCollection services, IConstructionService constructionService)
+	{
+		return Replace(services, constructionService);
+	}
+
+	/// <summary>Заменяет регистрацию сервиса резервных копий стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceBackupService(this IServiceCollection services, IJournalBackupService backupService)
+	{
+		return Replace(services, backupService);
+	}
+
+	/// <summary>Заменяет регистрацию сервиса комментариев стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceCommentService(this IServiceCollection services, ICommentService commentService)
+	{
+		return Replace(services, commentService);
+	}
+
+	/// <summary>Заменяет регистрацию сервиса ручных пометок стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceCloseMarkService(this IServiceCollection services, IManualCloseMarkService markService)
+	{
+		return Replace(services, markService);
+	}
+
+	/// <summary>Заменяет регистрацию сервиса привязки сделок стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceTradeBindingService(this IServiceCollection services, ITradeBindingService bindingService)
+	{
+		return Replace(services, bindingService);
+	}
+
+	/// <summary>Заменяет регистрацию сервиса корректировок стабильной заглушкой.</summary>
+	public static IServiceCollection ReplacePnLAdjustmentService(this IServiceCollection services, IPnLAdjustmentService adjustmentService)
+	{
+		return Replace(services, adjustmentService);
+	}
+
+	/// <summary>Заменяет регистрацию источника марок стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceInstrumentMarkSource(this IServiceCollection services, IInstrumentMarkSource markSource)
+	{
+		return Replace(services, markSource);
+	}
+
+	private static IServiceCollection Replace<TService>(IServiceCollection services, TService replacement)
+	{
+		foreach (var existing in services.Where(service => service.ServiceType == typeof(TService)).ToArray())
+		{
+			services.Remove(existing);
+		}
+
+		services.Add(ServiceDescriptor.Singleton(typeof(TService), replacement));
+		return services;
 	}
 }
 
