@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 /*
 	Примитив «Чип/Статус» (нода aa6cK, фрейм «Примитивы» s0YfZ) перенесён
 	1:1 с макета design.pen: pill радиус 999, паддинги [4,10], Inter 11.5/500.
+	Интерлиньяж мастера — шрифтовой normal Inter, поэтому пилюля фиксирует
+	leading-normal и не растягивается line-height контекста (напр. титула).
 	Тональные варианты собраны из фактических инстансов дизайн-нод:
 	  pos     → «открыта», «Мягкое», «Применено»  (accentSoft/accentStrong, мастер)
 	  info    → «Однозначное»                     (infoSoft/info, нода U6mVZ)
@@ -17,7 +19,7 @@ import { cn } from "@/lib/utils";
 // Traceability: change:reconcile-frontend-with-design/design#D2
 
 const statusChipVariants = cva(
-	"inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-medium whitespace-nowrap",
+	"inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] leading-[normal] font-medium whitespace-nowrap",
 	{
 		variants: {
 			tone: {

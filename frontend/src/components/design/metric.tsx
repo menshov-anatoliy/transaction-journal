@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 	Примитив «Метрика» (нода jtDmV, фрейм «Примитивы» s0YfZ) перенесён 1:1
 	с макета design.pen: вертикальный блок с зазором 3, подпись Inter
 	11/normal textMuted с трекингом 0.3, значение Inter 15/600 textPrimary.
+	Интерлиньяж мастера — шрифтовой normal Inter (≈1.21), поэтому подпись и
+	значение фиксируют leading-normal и не наследуют line-height контекста.
 	Инстансы во фрейме «Карточки» (sUDDX: M1–M9) переопределяют размер
 	(14/16) и цвет (accentStrong) значения — поэтому значение принимает
 	любой контент и настраивается valueClassName. Применяется в карточке
@@ -31,7 +33,11 @@ function Metric({
 			className={cn("flex flex-col gap-[3px]", className)}
 			{...props}
 		>
-			<span className="text-[11px] tracking-[0.3px] text-text-muted">
+			{/* Подпись и значение держат собственный интерлиньяж (шрифтовой
+			    normal Inter ≈ 1.21 мастера), а не унаследованный от страницы;
+			    leading идёт последним в merge — tailwind-merge снимает его при
+			    конфликте с text-размером из valueClassName. */}
+			<span className="text-[11px] leading-[normal] tracking-[0.3px] text-text-muted">
 				{label}
 			</span>
 			<span
@@ -39,6 +45,7 @@ function Metric({
 				className={cn(
 					"text-[15px] font-semibold text-text-primary",
 					valueClassName,
+					"leading-[normal]",
 				)}
 			>
 				{children}

@@ -29,6 +29,16 @@ describe("Metric: подпись/значение по дизайн-нодам",
 		expect(value.className).not.toContain("text-text-muted");
 	});
 
+	it("фиксирует шрифтовой интерлиньяж мастера вместо унаследованного контекста", () => {
+		// Мастер jtDmV не задаёт lineHeight — шрифтовой normal Inter ≈1.21;
+		// без пина строка наследует 1.5 страницы и метрика растёт выше мастера.
+		render(<Metric label="Период">12 авг — 07 окт</Metric>);
+
+		// Assert: оба текста несут шрифтовой интерлиньяж.
+		expect(screen.getByText("Период").className).toContain("leading-[normal]");
+		expect(screen.getByText("12 авг — 07 окт").className).toContain("leading-[normal]");
+	});
+
 	it("выкладывает подпись над значением с зазором 3", () => {
 		// Act: рендер метрики.
 		render(

@@ -24,6 +24,9 @@ describe("StatusChip: тон статусной пилюли по дизайн-�
 		expect(chip.className).toContain("py-1");
 		expect(chip.className).toContain("text-[11.5px]");
 		expect(chip.className).toContain("font-medium");
+		// Интерлиньяж мастера — шрифтовой normal: пилюля не растягивается
+		// унаследованным line-height контекста (напр. титулом 21/28).
+		expect(chip.className).toContain("leading-[normal]");
 	});
 
 	it.each([

@@ -1,4 +1,5 @@
 import type { ConstructionCard } from "@/lib/api/construction-card";
+import { Metric } from "@/components/design";
 import { FullFinResultIndicator } from "@/components/finresult/fin-result-indicator";
 import { DASH } from "@/lib/format/degradation";
 import { formatDay, formatMoment } from "@/lib/format/display-time";
@@ -16,6 +17,10 @@ export interface ConstructionMetricStripProps {
 	/** Снимок карточки из API. */
 	readonly card: ConstructionCard;
 }
+
+/** Кегль значения показателя: итог — 16, разбивка — 14 (инстансы M1–M9). */
+const VALUE_TOTAL = "text-[16px]";
+const VALUE_PART = "text-[14px]";
 
 /** Тон величины: положительная — зелёная, отрицательная — красная. */
 function toneClass(value: number): string {
@@ -52,125 +57,117 @@ export function ConstructionMetricStrip({ card }: ConstructionMetricStripProps) 
 
 	return (
 		<section data-slot="construction-metric-strip" className="flex flex-col gap-4">
-			<dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 xl:grid-cols-5">
-				<div className="contents">
-					<dt className="text-muted-foreground">общий P&L</dt>
-					<dd>
-						{metrics.totalPnL === null ? (
-							// Итог без нереализованной части неполный — признак сбоя марок.
-							<span className="text-muted-foreground" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя котировок">
-								неполный (сбой котировок)
-							</span>
-						) : (
-							<b className={`tabular-nums ${toneClass(metrics.totalPnL)}`}>
-								{formatSignedAmount(metrics.totalPnL)} USDT
-							</b>
-						)}
-					</dd>
-				</div>
-				<div className="contents">
-					<dt className="text-muted-foreground">
-						% капитала{card.allocatedCapitalUsdt !== null ? ` (${formatAmount(card.allocatedCapitalUsdt)})` : ""}
-					</dt>
-					<dd>
-						{metrics.totalPnLPercent === null ? (
-							<span className="text-muted-foreground">{DASH}</span>
-						) : (
-							<span className={`tabular-nums font-semibold ${toneClass(metrics.totalPnLPercent)}`}>
-								{formatSignedPercent(metrics.totalPnLPercent)}
-							</span>
-						)}
-					</dd>
-				</div>
-				<div className="contents">
-					<dt className="text-muted-foreground">стоимость</dt>
-					<dd>
-						{card.hasOpenResidual === false ? (
-							<span className="text-muted-foreground" title="Открытых остатков нет — стоимости нет">
-								{DASH}
-							</span>
-						) : metrics.markValue === null ? (
-							<span className="text-muted-foreground" title="Провайдер котировок недоступен — стоимость не оценена">
-								сбой котировок
-							</span>
-						) : (
-							<span className={`tabular-nums ${toneClass(metrics.markValue)}`}>{formatSignedAmount(metrics.markValue)}</span>
-						)}
-					</dd>
-				</div>
-				<div className="contents">
-					<dt className="text-muted-foreground">занято капитала, %</dt>
-					<dd>
-						{metrics.capitalUsagePercent === null ? (
-							<span className="text-muted-foreground">{DASH}</span>
-						) : (
-							<span className={`tabular-nums ${toneClass(metrics.capitalUsagePercent)}`}>
-								{formatSignedPercent(metrics.capitalUsagePercent)}
-							</span>
-						)}
-					</dd>
-				</div>
-				<div className="contents">
-					<dt className="text-muted-foreground">реализ. P&L</dt>
-					<dd>
-						<span className={`tabular-nums ${toneClass(metrics.realizedPnL)}`}>{formatSignedAmount(metrics.realizedPnL)}</span>
-					</dd>
-				</div>
-				<div className="contents">
-					<dt className="text-muted-foreground">нереализ. P&L</dt>
-					<dd>
-						{card.hasMarkFailure ? (
-							<span className="text-muted-foreground" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
-								сбой котировок
-							</span>
-						) : (
-							<span className={`tabular-nums ${toneClass(metrics.unrealizedPnL ?? 0)}`}>
-								{formatSignedAmount(metrics.unrealizedPnL ?? 0)}
-							</span>
-						)}
-					</dd>
-				</div>
-				<div className="contents">
-					<dt className="text-muted-foreground">корректировки</dt>
-					<dd>
-						<span className={`tabular-nums ${toneClass(metrics.adjustmentsPnL)}`}>
-							{metrics.adjustmentsPnL === 0 ? DASH : formatSignedAmount(metrics.adjustmentsPnL)}
+			{/* Сводка показателей — примитив Метрика (нода jtDmV) в карточке мастера
+			    «Сводка метрик» (h69OG) Body #2: поверхность с каймой, радиус 12,
+			    паддинги [14,18], одна строка из девяти метрик с зазором 20; итог (M1)
+			    акцентируется кеглем 16, разбивка (M2–M9) — кегль 14. Цвет знака
+			    величин — доменная семантика финрезультата, в мастере не задан. */}
+			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+			<div
+				data-slot="construction-metrics-card"
+				className="flex flex-wrap gap-5 rounded-lg border bg-surface px-[18px] py-3.5"
+			>
+				<Metric
+					label="общий P&L"
+					valueClassName={`tabular-nums ${VALUE_TOTAL} ${toneClass(metrics.totalPnL ?? 0)}`}
+				>
+					{metrics.totalPnL === null ? (
+						// Итог без нереализованной части неполный — признак сбоя марок.
+						<span className="text-text-muted" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя котировок">
+							неполный (сбой котировок)
 						</span>
-					</dd>
-				</div>
-				<div className="contents">
-					<dt className="text-muted-foreground">котировки на</dt>
-					<dd>
-						{card.hasMarkFailure ? (
-							<span className="text-muted-foreground" title="Провайдер котировок недоступен — время получения котировок неизвестно">
-								сбой котировок
+					) : (
+						`${formatSignedAmount(metrics.totalPnL)} USDT`
+					)}
+				</Metric>
+				<Metric
+					label={`% капитала${card.allocatedCapitalUsdt !== null ? ` (${formatAmount(card.allocatedCapitalUsdt)})` : ""}`}
+					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.totalPnLPercent ?? 0)}`}
+				>
+					{metrics.totalPnLPercent === null ? (
+						<span className="text-text-muted">{DASH}</span>
+					) : (
+						formatSignedPercent(metrics.totalPnLPercent)
+					)}
+				</Metric>
+				<Metric
+					label="стоимость"
+					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.markValue ?? 0)}`}
+				>
+					{card.hasOpenResidual === false ? (
+						<span className="text-text-muted" title="Открытых остатков нет — стоимости нет">
+							{DASH}
+						</span>
+					) : metrics.markValue === null ? (
+						<span className="text-text-muted" title="Провайдер котировок недоступен — стоимость не оценена">
+							сбой котировок
+						</span>
+					) : (
+						formatSignedAmount(metrics.markValue)
+					)}
+				</Metric>
+				<Metric
+					label="занято капитала, %"
+					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.capitalUsagePercent ?? 0)}`}
+				>
+					{metrics.capitalUsagePercent === null ? (
+						<span className="text-text-muted">{DASH}</span>
+					) : (
+						formatSignedPercent(metrics.capitalUsagePercent)
+					)}
+				</Metric>
+				<Metric
+					label="реализ. P&L"
+					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.realizedPnL)}`}
+				>
+					{formatSignedAmount(metrics.realizedPnL)}
+				</Metric>
+				<Metric
+					label="нереализ. P&L"
+					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.unrealizedPnL ?? 0)}`}
+				>
+					{card.hasMarkFailure ? (
+						<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
+							сбой котировок
+						</span>
+					) : (
+						formatSignedAmount(metrics.unrealizedPnL ?? 0)
+					)}
+				</Metric>
+				<Metric
+					label="корректировки"
+					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.adjustmentsPnL)}`}
+				>
+					{metrics.adjustmentsPnL === 0 ? DASH : formatSignedAmount(metrics.adjustmentsPnL)}
+				</Metric>
+				<Metric label="котировки на" valueClassName={VALUE_PART}>
+					{card.hasMarkFailure ? (
+						<span className="text-text-muted" title="Провайдер котировок недоступен — время получения котировок неизвестно">
+							сбой котировок
+						</span>
+					) : card.hasOpenResidual === false ? (
+						<span className="text-text-muted" title="Открытых остатков нет — котировки оценке не нужны">
+							не нужны
+						</span>
+					) : (
+						(card.marksAsOf === null ? DASH : formatMoment(card.marksAsOf))
+					)}
+				</Metric>
+				<Metric label="период" valueClassName={VALUE_PART}>
+					{metrics.openedAt === null ? (
+						<span className="text-text-muted">{DASH}</span>
+					) : (
+						<span title="Период конструкции с длительностью">
+							{formatDay(metrics.openedAt)}
+							{metrics.closedAt !== null ? ` — ${formatDay(metrics.closedAt)}` : " — …"}{" "}
+							<span className="text-text-muted">
+								({metrics.durationSeconds === null ? "" : formatDuration(metrics.durationSeconds)})
 							</span>
-						) : card.hasOpenResidual === false ? (
-							<span className="text-muted-foreground" title="Открытых остатков нет — котировки оценке не нужны">
-								не нужны
-							</span>
-						) : (
-							<span>{card.marksAsOf === null ? DASH : formatMoment(card.marksAsOf)}</span>
-						)}
-					</dd>
-				</div>
-				<div className="contents">
-					<dt className="text-muted-foreground">период</dt>
-					<dd>
-						{metrics.openedAt === null ? (
-							<span className="text-muted-foreground">{DASH}</span>
-						) : (
-							<span title="Период конструкции с длительностью">
-								{formatDay(metrics.openedAt)}
-								{metrics.closedAt !== null ? ` — ${formatDay(metrics.closedAt)}` : " — …"}{" "}
-								<span className="text-muted-foreground">
-									({metrics.durationSeconds === null ? "" : formatDuration(metrics.durationSeconds)})
-								</span>
-							</span>
-						)}
-					</dd>
-				</div>
-			</dl>
+						</span>
+					)}
+				</Metric>
+			</div>
 
 			{/* Полный индикатор финансового результата: зоны планового риска и
 			    профита, границы реализованной прибыли и итога (§9). */}

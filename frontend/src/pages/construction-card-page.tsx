@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { fetchConstructionCard, type ConstructionStatus } from "@/lib/api/construction-card";
 import { applyHint, dismissHint, fetchConstructionHintsPanel, markHintSeen } from "@/lib/api/hints";
+import { StatusChip } from "@/components/design";
 import { useCardCommands } from "@/components/constructions/card/use-card-commands";
 import { ConstructionMetricStrip } from "@/components/constructions/card/metric-strip";
 import { PositionsTable } from "@/components/constructions/card/positions-table";
@@ -39,6 +40,22 @@ function statusText(status: ConstructionStatus): string {
 			return "закрыта";
 		case "archived":
 			return "архив";
+	}
+}
+
+// Тон статусной пилюли по инстансам дизайн-нод: «открыта» — pos (X7CR1q,
+// Body #2: accentSoft/accentStrong), «закрыта» — neutral (EIqx3:
+// surface2/textSecondary), «архив» — muted (dAcLW: surface2/textMuted).
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+// Traceability: change:reconcile-frontend-with-design/design#D2
+function statusTone(status: ConstructionStatus): "pos" | "neutral" | "muted" {
+	switch (status) {
+		case "open":
+			return "pos";
+		case "closed":
+			return "neutral";
+		case "archived":
+			return "muted";
 	}
 }
 
@@ -311,11 +328,13 @@ function ConstructionHeader({
 				</Link>
 			</Button>
 
-			<h1 className="page-title flex flex-wrap items-center gap-3">
+			{/* Титул с именем и статусом-пилюлей: строка TitleRow мастера Body #2
+			    (Uw04r) — имя 21/600 и чип статуса с зазором 10, выравнивание по
+			    центру строки. */}
+			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+			<h1 className="page-title flex flex-wrap items-center gap-2.5">
 				{card.name}
-				<span className={card.status === "open" ? "text-primary text-base font-medium" : "text-muted-foreground text-base font-medium"}>
-					{statusText(card.status)}
-				</span>
+				<StatusChip tone={statusTone(card.status)}>{statusText(card.status)}</StatusChip>
 			</h1>
 
 			{/* Действия конструкции в шапке: переименование, смена ручного

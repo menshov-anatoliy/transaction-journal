@@ -98,6 +98,37 @@ describe("превью конструкции", () => {
 		expect(screen.getByRole("link", { name: /открыть карточку/i })).toHaveAttribute("href", "/constructions/7");
 	});
 
+	it("рендерит сводку метрик примитивом Metric по мастеру превью N6abN", () => {
+		// Act: превью открытой конструкции.
+		renderPreview();
+
+		// Assert: восемь показателей — примитивы Метрика, dl-грида больше нет
+		// (мастер «Карточка конструкции/Превью», секция Metrics ноды N6abN).
+		// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+		const metrics = document.querySelectorAll('[data-slot="metric"]');
+		expect(metrics).toHaveLength(8);
+		expect(document.querySelector("dl")).toBeNull();
+
+		// Значения — базовая типографика примитива: 15/600 textPrimary
+		// (инстансы превью не переопределяют размер и цвет значения).
+		const total = screen.getByText("+105.5").closest('[data-slot="metric-value"]');
+		expect(total?.className).toContain("text-[15px]");
+		expect(total?.className).toContain("font-semibold");
+		expect(total?.className).toContain("text-text-primary");
+
+		// Сетка показателей — две колонки с зазорами мастера: 12 по горизонтали,
+		// 10 по вертикали (MRow1/MRow2, секция Metrics ноды N6abN).
+		const grid = metrics[0]?.parentElement;
+		expect(grid?.className).toContain("grid-cols-2");
+		expect(grid?.className).toContain("gap-x-3");
+		expect(grid?.className).toContain("gap-y-2.5");
+
+		// Подписи — Caption мастера: 11/normal textMuted с трекингом 0.3.
+		const caption = metrics[0]?.querySelector("span");
+		expect(caption?.className).toContain("text-[11px]");
+		expect(caption?.className).toContain("text-text-muted");
+	});
+
 	it("открывает «В новом окне» монтаж SPA карточки", async () => {
 		// Arrange: перехват открытия окна.
 		const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);

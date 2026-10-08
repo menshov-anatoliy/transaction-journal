@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConstructionCard } from "@/lib/api/construction-card";
@@ -232,5 +232,75 @@ describe("карточка конструкции", () => {
 		renderCardPage();
 
 		expect(await screen.findByText(/журнал недоступен/i)).toBeInTheDocument();
+	});
+});
+
+// Примитивы дизайн-системы в карточке (задача 7.2 change
+// reconcile-frontend-with-design): сводка метрик — примитив Метрика по
+// мастеру «Сводка метрик» (h69OG) Body #2, статус — примитив Чип/Статус.
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+// Traceability: change:reconcile-frontend-with-design/design#D2
+
+describe("карточка конструкции: примитивы дизайн-системы", () => {
+	it("рендерит все 9 показателей сводки примитивом Metric в карточке мастера h69OG", async () => {
+		// Act: карточка открытой конструкции с оценёнными марками.
+		renderCardPage();
+
+		// Assert: 9 инстансов Метрики — как M1–M9 мастера «Сводка метрик» (h69OG).
+		expect(await screen.findByText("общий P&L")).toBeInTheDocument();
+		const metrics = document.querySelectorAll('[data-slot="metric"]');
+		expect(metrics).toHaveLength(9);
+
+		// Контейнер сводки — surface-карточка радиуса 12 с каймой, паддинги
+		// [14,18], зазор между показателями 20 (нода h69OG).
+		const card = document.querySelector('[data-slot="construction-metrics-card"]');
+		expect(card?.className).toContain("rounded-lg");
+		expect(card?.className).toContain("border");
+		expect(card?.className).toContain("bg-surface");
+		expect(card?.className).toContain("px-[18px]");
+		expect(card?.className).toContain("py-3.5");
+		expect(card?.className).toContain("gap-5");
+
+		// Итог (M1) — значение 16/600: единственный акцентный кегль строки.
+		const first = metrics[0]?.querySelector('[data-slot="metric-value"]');
+		expect(first?.className).toContain("text-[16px]");
+		expect(first?.className).toContain("tabular-nums");
+
+		// Остальные показатели (M2–M9) — значение 14/600 поверх примитива.
+		const second = metrics[1]?.querySelector('[data-slot="metric-value"]');
+		expect(second?.className).toContain("text-[14px]");
+		expect(second?.className).not.toContain("text-[16px]");
+
+		// Подписи — Caption мастера: 11/normal textMuted с трекингом 0.3.
+		const caption = metrics[0]?.querySelector("span");
+		expect(caption?.className).toContain("text-[11px]");
+		expect(caption?.className).toContain("text-text-muted");
+		expect(caption?.className).toContain("tracking-[0.3px]");
+	});
+
+	it.each([
+		// Доменный статус → тон пилюли по инстансам дизайн-нод Body #2 и
+		// фрейма «Примитивы»: open → pos (X7CR1q), closed → neutral (EIqx3),
+		// archived → muted (dAcLW).
+		["open", "открыта", "bg-accent-soft", "text-accent-strong"],
+		["closed", "закрыта", "bg-surface-2", "text-text-secondary"],
+		["archived", "архив", "bg-surface-2", "text-text-muted"],
+	] as const)("статус %s рендерится StatusChip с тоном мастера", async (status, text, bg, fg) => {
+		// Arrange: снимок карточки с проверяемым ручным статусом.
+		cardApi.fetchConstructionCard.mockResolvedValue({ ...card, status });
+
+		// Act: карточка конструкции.
+		renderCardPage();
+
+		// Assert: статус — пилюля Чип/Статус в строке титула, тон по мастеру
+		// (текст статуса встречается и в таблице позиций — ищем сам примитив).
+		const chip = await waitFor(() => {
+			const el = document.querySelector('[data-slot="status-chip"]');
+			expect(el).not.toBeNull();
+			return el as HTMLElement;
+		});
+		expect(chip.textContent).toBe(text);
+		expect(chip.className).toContain(bg);
+		expect(chip.className).toContain(fg);
 	});
 });

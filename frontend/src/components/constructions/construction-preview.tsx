@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { ExternalLink } from "lucide-react";
 import type { ConstructionPreview } from "@/lib/api/constructions";
+import { Metric } from "@/components/design";
 import { FullFinResultIndicator } from "@/components/finresult/fin-result-indicator";
 import { Button } from "@/components/ui/button";
 import { DASH } from "@/lib/format/degradation";
@@ -50,32 +51,38 @@ export function ConstructionPreviewCard({ preview }: ConstructionPreviewCardProp
 				}}
 			/>
 
-			<dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-				<MetricRow label="итог">
-					<SignedValue value={preview.totalPnL} degraded={preview.hasMarkFailure} format={formatSignedAmount} bold />
-				</MetricRow>
-				<MetricRow label="реализов.">
+			{/* Сводка показателей — примитив Метрика (нода jtDmV) по мастеру
+			    «Карточка конструкции/Превью» (N6abN, секция Metrics): две колонки
+			    с зазорами 12/10, значения — базовая типографика примитива
+			    15/600 textPrimary; состав показателей остаётся доменным. */}
+			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+			<div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+				<Metric label="итог">
+					<SignedValue value={preview.totalPnL} degraded={preview.hasMarkFailure} format={formatSignedAmount} />
+				</Metric>
+				<Metric label="реализов.">
 					<span className="tabular-nums">{formatSignedAmount(preview.realizedPnL)}</span>
-				</MetricRow>
-				<MetricRow label="нереализов.">
+				</Metric>
+				<Metric label="нереализов.">
 					<NullableValue value={preview.unrealizedPnL} format={formatSignedAmount} />
-				</MetricRow>
-				<MetricRow label="коррект.">
+				</Metric>
+				<Metric label="коррект.">
 					<span className="tabular-nums">{formatSignedAmount(preview.adjustmentsPnL)}</span>
-				</MetricRow>
-				<MetricRow label="капитал">
+				</Metric>
+				<Metric label="капитал">
 					<NullableValue value={preview.allocatedCapitalUsdt} format={formatAmount} />
-				</MetricRow>
-				<MetricRow label="% капитала">
+				</Metric>
+				<Metric label="% капитала">
 					<NullableValue value={preview.totalPnLPercent} format={formatSignedPercent} />
-				</MetricRow>
-				<MetricRow label="стоимость">
+				</Metric>
+				<Metric label="стоимость">
 					<NullableValue value={preview.markValue} format={formatSignedAmount} />
-				</MetricRow>
-				<MetricRow label="занято %">
+				</Metric>
+				<Metric label="занято %">
 					<NullableValue value={preview.capitalUsagePercent} format={formatSignedPercent} />
-				</MetricRow>
-			</dl>
+				</Metric>
+			</div>
 
 			{/* Период конструкции: открытие и закрытие календарными днями. */}
 			<p className="text-muted-foreground text-xs">
@@ -103,32 +110,20 @@ export function ConstructionPreviewCard({ preview }: ConstructionPreviewCardProp
 	);
 }
 
-/** Строка метрики сводки: подпись и значение. */
-function MetricRow({ label, children }: { label: string; children: React.ReactNode }) {
-	return (
-		<div className="flex items-baseline justify-between gap-2">
-			<dt className="text-muted-foreground">{label}</dt>
-			<dd>{children}</dd>
-		</div>
-	);
-}
-
 /** Недоступная величина — прочерк; сбой котировок у итога — «неполный». */
 function SignedValue({
 	value,
 	degraded,
 	format,
-	bold = false,
 }: {
 	value: number | null;
 	degraded: boolean;
 	format: (value: number) => string;
-	bold?: boolean;
 }) {
 	if (value === null) {
 		return (
 			<span
-				className={bold ? "font-semibold text-muted-foreground" : "text-muted-foreground"}
+				className="text-text-muted"
 				title={degraded ? "Итог неполный: нереализованная часть не оценена из-за сбоя котировок" : undefined}
 			>
 				{degraded ? "неполный (сбой котировок)" : DASH}
@@ -136,10 +131,10 @@ function SignedValue({
 		);
 	}
 
-	return <span className={bold ? "font-semibold tabular-nums" : "tabular-nums"}>{format(value)}</span>;
+	return <span className="tabular-nums">{format(value)}</span>;
 }
 
 /** Величина без специальной семантики сбоя: null — прочерк. */
 function NullableValue({ value, format }: { value: number | null; format: (value: number) => string }) {
-	return value === null ? <span className="text-muted-foreground">{DASH}</span> : <span className="tabular-nums">{format(value)}</span>;
+	return value === null ? <span className="text-text-muted">{DASH}</span> : <span className="tabular-nums">{format(value)}</span>;
 }
