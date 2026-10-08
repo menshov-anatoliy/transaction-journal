@@ -347,6 +347,54 @@ public sealed class ConstructionsSectionApiTests
 	}
 
 	[TestMethod]
+	[Description("Журнал подсказок отдаёт записи всех субъектов с фильтрами и пагинацией")]
+	// Раздел «Подсказки» читает общий read-only журнал всех подсказок всех
+	// субъектов; фильтры статус/группа/характер и ограничение размера ответа
+	// применяются сервером в одном контракте.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#6-раздел-подсказки-маршрут-hints
+	// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+	public async Task TryIfHintsLogServesFilteredPagedRecords()
+	{
+		// Arrange: стабильная read-модель с журналом портфельной и конструкционной записи.
+		await using var factory = new SectionApiFactory(services => services.ReplaceHintDisplay(new StubHintDisplayReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос журнала с фильтром группы и лимитом страницы.
+		var response = await client.GetAsync("/api/v1/hints/log?group=futures-leg&limit=1&offset=0");
+
+		// Assert: ответ несёт страницу записей с субъектом, группой и источниками.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+		Assert.That(payload!["total"]!.GetValue<int>(), Is.EqualTo(1));
+		Assert.That(payload["limit"]!.GetValue<int>(), Is.EqualTo(1));
+		var item = payload["items"]!.AsArray().Single()!;
+		Assert.That(item["subject"]!["kind"]!.GetValue<string>(), Is.EqualTo("construction"));
+		Assert.That(item["subject"]!["constructionId"]!.GetValue<long>(), Is.EqualTo(7L));
+		Assert.That(item["group"]!["id"]!.GetValue<string>(), Is.EqualTo("futures-leg"));
+		Assert.That(item["character"]!.GetValue<string>(), Is.EqualTo("futures-leg"));
+	}
+
+	[TestMethod]
+	[Description("Журнал подсказок отвечает 400 на некорректный статус фильтра")]
+	// Некорректный статус фильтра — ошибка контракта запроса: endpoint не
+	// подставляет дефолт и сообщает причину 400.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#6-раздел-подсказки-маршрут-hints
+	public async Task ThrowOnHintsLogWithInvalidStatusReturns400()
+	{
+		// Arrange: стабильная read-модель подсказок.
+		await using var factory = new SectionApiFactory(services => services.ReplaceHintDisplay(new StubHintDisplayReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос с невалидным статусом фильтра.
+		var response = await client.GetAsync("/api/v1/hints/log?status=invalid");
+
+		// Assert: endpoint отвечает ошибкой контракта 400.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+		Assert.That(payload!["error"]!.GetValue<string>(), Does.Contain("Недопустимый статус"));
+	}
+
+	[TestMethod]
 	[Description("Кнопка синхронизации запускает запуск и возвращает его итог")]
 	// Компактная кнопка «Синхронизировать» шапки: команда идёт через единый API,
 	// итог закрытого запуска (режим, статус, счётчики новых записей) возвращается
@@ -411,6 +459,7 @@ public sealed class ConstructionsSectionApiTests
 		// Assert: пути раздела опубликованы под версионированным префиксом.
 		var paths = document!["paths"]!.AsObject().Select(path => path.Key).ToArray();
 		Assert.That(paths, Does.Contain("/api/v1/constructions"));
+		Assert.That(paths, Does.Contain("/api/v1/hints/log"));
 	}
 }
 
@@ -792,7 +841,38 @@ internal sealed class StubHintDisplayReadModel : IHintDisplayReadModel
 		return Task.FromResult<IReadOnlyDictionary<long, int>>(counts);
 	}
 
-	public Task<IReadOnlyList<HintRecord>> ReadLogAsync(HintLogFilter? filter = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+	public Task<IReadOnlyList<HintRecord>> ReadLogAsync(HintLogFilter? filter = null, CancellationToken cancellationToken = default)
+	{
+		var log = new List<HintRecord>
+		{
+			_journalLiveHint,
+			AppliedRecord(),
+			new()
+			{
+				Id = 13,
+				RuleId = "futures-bias",
+				Subject = HintSubject.ForConstruction(StubListReadModel.OpenConstructionId),
+				Character = "futures-leg",
+				Clarity = "crisp",
+				Sources = [new HintSourceTag { Tag = "ЛИЧ", File = "futures/discipline.md", Quotes = ["Держи нагрузку фьючерса в рамках"] }],
+				Text = "Снизить нагрузку фьючерсной ноги",
+				Facts = new Dictionary<string, string> { ["leverage"] = "x6" },
+				AsOf = new DateTimeOffset(2026, 6, 20, 16, 0, 0, TimeSpan.Zero),
+				Status = HintStatus.New,
+			},
+		};
+
+		var groupCharacters = filter?.GroupCharacters;
+		var filtered = log
+			.Where(record => filter?.Status is null || record.Status == filter.Status)
+			.Where(record => filter?.Character is null || record.Character == filter.Character)
+			.Where(record => groupCharacters is null || groupCharacters.Contains(record.Character, StringComparer.Ordinal))
+			.OrderByDescending(record => record.AsOf)
+			.ThenByDescending(record => record.Id)
+			.ToArray();
+
+		return Task.FromResult<IReadOnlyList<HintRecord>>(filtered);
+	}
 
 	public Task<bool> ApplyAsync(long hintId, CancellationToken cancellationToken = default)
 	{

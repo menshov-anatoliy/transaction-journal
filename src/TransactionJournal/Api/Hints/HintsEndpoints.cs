@@ -105,6 +105,70 @@ public static class HintsEndpoints
 			return Results.NoContent();
 		});
 
+		// Раздел «Подсказки» читает общий журнал всех подсказок всех субъектов:
+		// read-only список с фильтрами статус/группа/характер и ограничением
+		// размера ответа для экранной пагинации.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#6-раздел-подсказки-маршрут-hints
+		// Перенос №15 закрепляет отдельный маршрут журнала подсказок.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#12-карта-переноса-по-инвентаризации-129
+		// Контракт журнала SPA публикуется через единый версионированный API.
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		group.MapGet(
+			"/log",
+			async (string? status, string? group, string? character, int? limit, int? offset, IHintDisplayReadModel hintDisplays, CancellationToken cancellationToken) =>
+			{
+				HintStatus? parsedStatus = null;
+				if (status is not null)
+				{
+					if (TryParseStatus(status, out var value) == false)
+					{
+						return Results.Json(
+							new HintsLogBadRequestResponse("Недопустимый статус фильтра. Допустимо: new, applied, dismissed, expired."),
+							statusCode: StatusCodes.Status400BadRequest);
+					}
+
+					parsedStatus = value;
+				}
+
+				if (group is not null && HintSectionGroups.V1.Any(definition => definition.Id == group) == false)
+				{
+					return Results.Json(
+						new HintsLogBadRequestResponse("Недопустимая группа фильтра. Используйте идентификатор группы справочника v1."),
+						statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				if (limit is <= 0)
+				{
+					return Results.Json(new HintsLogBadRequestResponse("limit должен быть положительным числом."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				if (offset is < 0)
+				{
+					return Results.Json(new HintsLogBadRequestResponse("offset не может быть отрицательным."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				const int defaultLimit = 200;
+				const int maxLimit = 500;
+				var effectiveLimit = Math.Min(limit ?? defaultLimit, maxLimit);
+				var effectiveOffset = offset ?? 0;
+				var filter = parsedStatus is null && group is null && character is null
+					? null
+					: new HintLogFilter
+					{
+						Status = parsedStatus,
+						GroupId = group,
+						Character = character,
+					};
+
+				var allItems = await hintDisplays.ReadLogAsync(filter, cancellationToken);
+				var pageItems = allItems
+					.Skip(effectiveOffset)
+					.Take(effectiveLimit)
+					.Select(SerializeLogItem)
+					.ToArray();
+				return Results.Json(new HintsLogResponse(pageItems, allItems.Count, effectiveLimit, effectiveOffset));
+			});
+
 		return api;
 	}
 
@@ -112,6 +176,21 @@ public static class HintsEndpoints
 	private static HintRecordResponse SerializeHint(HintRecord hint) => new(
 		hint.Id,
 		hint.RuleId,
+		hint.Character,
+		hint.Clarity,
+		hint.Sources.Select(source => new HintSourceTagResponse(source.Tag, source.File, source.Quotes)).ToArray(),
+		hint.Text,
+		hint.Facts,
+		hint.AsOf,
+		SerializeStatus(hint.Status),
+		hint.FirstSeenAt);
+
+	/// <summary>Запись журнала подсказок в контракте API.</summary>
+	private static HintLogRecordResponse SerializeLogItem(HintRecord hint) => new(
+		hint.Id,
+		hint.RuleId,
+		new HintSubjectResponse(SerializeSubject(hint.Subject.Kind), hint.Subject.ConstructionId),
+		new HintGroupDefinitionResponse(HintSectionGroups.Resolve(hint.Character).Id, HintSectionGroups.Resolve(hint.Character).Title),
 		hint.Character,
 		hint.Clarity,
 		hint.Sources.Select(source => new HintSourceTagResponse(source.Tag, source.File, source.Quotes)).ToArray(),
@@ -147,6 +226,21 @@ public static class HintsEndpoints
 		HintPassOutcome.CorpusInvalid => "corpus-invalid",
 		_ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null),
 	};
+
+	/// <summary>Разбирает статус фильтра журнала из строкового контракта API.</summary>
+	private static bool TryParseStatus(string value, out HintStatus status)
+	{
+		status = value switch
+		{
+			"new" => HintStatus.New,
+			"applied" => HintStatus.Applied,
+			"dismissed" => HintStatus.Dismissed,
+			"expired" => HintStatus.Expired,
+			_ => default,
+		};
+
+		return value is "new" or "applied" or "dismissed" or "expired";
+	}
 }
 
 /// <summary>Панель подсказок субъекта правой области раздела.</summary>
@@ -226,3 +320,44 @@ public sealed record HintTransitionResponse(long HintId, bool Transitioned);
 
 /// <summary>Ответ 400 панели: субъект не задан или задан неверно.</summary>
 public sealed record HintsPanelBadRequestResponse(string Error = "Субъект панели обязателен: subject=journal или subject=construction&constructionId=N");
+
+/// <summary>Ответ общего журнала подсказок c фильтрами и пагинацией.</summary>
+/// <param name="Items">Страница записей журнала.</param>
+/// <param name="Total">Общее число записей после фильтрации до пагинации.</param>
+/// <param name="Limit">Применённый лимит страницы.</param>
+/// <param name="Offset">Применённое смещение страницы.</param>
+public sealed record HintsLogResponse(
+	IReadOnlyList<HintLogRecordResponse> Items,
+	int Total,
+	int Limit,
+	int Offset);
+
+/// <summary>Карточка записи общего журнала подсказок.</summary>
+/// <param name="Id">Идентификатор записи.</param>
+/// <param name="RuleId">Идентификатор правила корпуса.</param>
+/// <param name="Subject">Субъект подсказки: журнал или конструкция.</param>
+/// <param name="Group">Группа справочника v1, вычисленная из характера.</param>
+/// <param name="Character">Характер действия правила.</param>
+/// <param name="Clarity">Чёткость правила: crisp или fuzzy.</param>
+/// <param name="Sources">Теги источников с цитатами-доказательствами.</param>
+/// <param name="Text">Рендеренный текст подсказки.</param>
+/// <param name="Facts">Факты триггера — пары ключ-значение.</param>
+/// <param name="AsOf">Отметка as-of прохода генерации.</param>
+/// <param name="Status">Статус жизненного цикла записи.</param>
+/// <param name="FirstSeenAt">Момент первого показа; null, пока не показывалась.</param>
+public sealed record HintLogRecordResponse(
+	long Id,
+	string RuleId,
+	HintSubjectResponse Subject,
+	HintGroupDefinitionResponse Group,
+	string Character,
+	string Clarity,
+	IReadOnlyList<HintSourceTagResponse> Sources,
+	string Text,
+	IReadOnlyDictionary<string, string> Facts,
+	DateTimeOffset AsOf,
+	string Status,
+	DateTimeOffset? FirstSeenAt);
+
+/// <summary>Ответ 400 журнала подсказок: неверный параметр фильтра или пагинации.</summary>
+public sealed record HintsLogBadRequestResponse(string Error);

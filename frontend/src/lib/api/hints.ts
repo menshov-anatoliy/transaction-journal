@@ -16,6 +16,12 @@ export interface HintSubject {
 	readonly constructionId: number | null;
 }
 
+/** Группа справочника v1, вычисленная из характера подсказки. */
+export interface HintGroupDefinition {
+	readonly id: string;
+	readonly title: string;
+}
+
 /** Тег источника подсказки с цитатами-доказательствами. */
 export interface HintSourceTag {
 	readonly tag: string;
@@ -37,12 +43,6 @@ export interface HintRecord {
 	readonly firstSeenAt: string | null;
 }
 
-/** Определение группы справочника v1. */
-export interface HintGroupDefinition {
-	readonly id: string;
-	readonly title: string;
-}
-
 /** Группа живых подсказок панели. */
 export interface HintGroup {
 	readonly group: HintGroupDefinition;
@@ -55,6 +55,29 @@ export interface HintPanel {
 	readonly liveGroups: readonly HintGroup[];
 	readonly history: readonly HintRecord[];
 	readonly liveCount: number;
+}
+
+/** Строка журнала подсказок всех субъектов. */
+export interface HintLogRecord extends HintRecord {
+	readonly subject: HintSubject;
+	readonly group: HintGroupDefinition;
+}
+
+/** Ответ журнала подсказок с фильтрами и пагинацией. */
+export interface HintLogResponse {
+	readonly items: readonly HintLogRecord[];
+	readonly total: number;
+	readonly limit: number;
+	readonly offset: number;
+}
+
+/** Фильтр журнала подсказок раздела /hints. */
+export interface HintLogFilter {
+	readonly status?: HintStatus;
+	readonly group?: string;
+	readonly character?: string;
+	readonly limit?: number;
+	readonly offset?: number;
 }
 
 /** Исход ручного прохода агента подсказок. */
@@ -83,6 +106,33 @@ export function fetchConstructionHintsPanel(constructionId: number): Promise<Hin
 /** Запускает ручной проход агента подсказок. */
 export function runHintsPass(): Promise<HintPassResult> {
 	return apiFetch<HintPassResult>("/hints/pass", { method: "POST" });
+}
+
+/** Читает общий read-only журнал подсказок всех субъектов с фильтрами. */
+export function fetchHintsLog(filter: HintLogFilter = {}): Promise<HintLogResponse> {
+	const search = new URLSearchParams();
+	if (filter.status !== undefined) {
+		search.set("status", filter.status);
+	}
+
+	if (filter.group !== undefined && filter.group.length > 0) {
+		search.set("group", filter.group);
+	}
+
+	if (filter.character !== undefined && filter.character.length > 0) {
+		search.set("character", filter.character);
+	}
+
+	if (filter.limit !== undefined) {
+		search.set("limit", String(filter.limit));
+	}
+
+	if (filter.offset !== undefined) {
+		search.set("offset", String(filter.offset));
+	}
+
+	const query = search.toString();
+	return apiFetch<HintLogResponse>(query.length > 0 ? `/hints/log?${query}` : "/hints/log");
 }
 
 /** Результат команды перевода подсказки. */
