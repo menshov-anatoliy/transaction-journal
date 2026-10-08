@@ -1,9 +1,11 @@
 ﻿import { useState } from "react";
 import { NavLink, Outlet } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { appSections } from "@/config/sections";
 import { cn } from "@/lib/utils";
+import { fetchInboxCount } from "@/lib/api/inbox";
 
 /**
  * Каркас приложения «тонкий топбар + левая панель» по концепции §2:
@@ -15,6 +17,11 @@ import { cn } from "@/lib/utils";
  */
 export function AppLayout() {
 	const [collapsed, setCollapsed] = useState(false);
+	const inboxCount = useQuery({
+		queryKey: ["inbox-count"],
+		queryFn: fetchInboxCount,
+		refetchInterval: 30_000,
+	});
 
 	return (
 		<div className="flex h-svh flex-col">
@@ -56,7 +63,19 @@ export function AppLayout() {
 							}
 						>
 							<section.icon className="size-5 shrink-0" aria-hidden="true" />
-							{!collapsed && <span className="truncate">{section.label}</span>}
+							{!collapsed && (
+								<div className="flex min-w-0 items-center gap-2">
+									<span className="truncate">{section.label}</span>
+									{section.path === "/inbox" && inboxCount.isError == false && (inboxCount.data ?? 0) > 0 && (
+										<span
+											className="rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary"
+											aria-label={`????????????? ??????: ${inboxCount.data}`}
+										>
+											{inboxCount.data}
+										</span>
+									)}
+								</div>
+							)}
 						</NavLink>
 					))}
 				</nav>
