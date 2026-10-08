@@ -11,7 +11,7 @@
 ## 2. Примитивы дизайн-системы (шов)
 
 - [x] 2.1 Ретемизировать `ui/button.tsx`: радиус 8, шрифт 13/500, варианты Primary/Secondary/Ghost/Danger на токенах accent/neg (детали — `Get` по фрейму «Примитивы» s0YfZ). Проверка: скриншот-сверка кнопок всех вариантов; существующие тесты `npm test` проходят.
-- [ ] 2.2 Создать `frontend/src/components/design/`: `StatusChip`, `SourceChip` (pill 999), `Metric`, `NavItem` (включая активное состояние accentSoft/accentStrong). Проверка: скриншот-сверка с дизайн-нодами «Примитивы»/«Карточки»; экспорт из `design/` единый (index).
+- [x] 2.2 Создать `frontend/src/components/design/`: `StatusChip`, `SourceChip` (pill 999), `Metric`, `NavItem` (включая активное состояние accentSoft/accentStrong). Проверка: скриншот-сверка с дизайн-нодами «Примитивы»/«Карточки»; экспорт из `design/` единый (index).
 - [ ] 2.3 Создать `SessionItem` и `ToolStatus` (индикация выполнения tool-вызова; детали — узлы s9J3h/ix8ma через MCP pen). Проверка: скриншот-сверка компонентов; сборка проходит.
 
 ## 3. Каркас
