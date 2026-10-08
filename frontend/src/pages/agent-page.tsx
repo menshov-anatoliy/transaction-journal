@@ -1,3 +1,4 @@
+import { ChevronDown, Globe, Link } from "lucide-react";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgentChatThread } from "@/chat/components/agent-chat-thread";
@@ -7,7 +8,7 @@ import { chatKeys } from "@/chat/chat-queries";
 import { createChat, listChats } from "@/chat/api/chat-api";
 import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
 import type { ChatDataSource, ChatDto } from "@/chat/types";
-import { SessionItem } from "@/components/design";
+import { SessionItem, SourceChip } from "@/components/design";
 import { Button } from "@/components/ui/button";
 import { listRules, readRule, type AgentRuleCard } from "@/lib/api/agent-rules";
 import { formatMoment } from "@/lib/format/display-time";
@@ -148,52 +149,103 @@ export function AgentPage() {
 
 			{tab === "chats" ? (
 				<div className="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[22rem_minmax(0,1fr)_24rem]">
+					{/*
+						Форма нового чата собрана по мастеру Body #3 — композеру
+						«Композер/Агент» (Z14sH): поле модели — чип aF5vM
+						(surface2, радиус 8, паддинги [5,10], подпись 12/500 +
+						шеврон textMuted), поле привязки к конструкции — чип
+						bCLlQ (infoSoft, пилюля 999, иконка link 12 $info),
+						ввод сообщения — плейсхолдер dkwDP (13.5/normal
+						$textMuted). Нативные select/input/textarea остаются
+						управляемыми полями формы, но оформлены по этим
+						дизайн-нодам вместо сырых rounded-md-контролов.
+					*/}
+					{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+					{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+					{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
 					<section className="flex flex-col gap-3 rounded-lg border p-3">
 						<h2 className="text-base font-semibold">Новый чат</h2>
-						<label className="flex flex-col gap-1 text-sm">
-							<span>Модель</span>
-							<select aria-label="Модель" className="rounded-md border px-2 py-1.5" value={model} onChange={(event) => setModel(event.target.value)}>
-								<option value={DEFAULT_CHAT_MODEL}>{DEFAULT_CHAT_MODEL}</option>
-								<option value="glm-5.3-flash">glm-5.3-flash</option>
-							</select>
+						<label className="flex flex-col gap-1">
+							<span className="text-[12.5px] font-semibold text-foreground">Модель</span>
+							<span className="relative block">
+								<select
+									aria-label="Модель"
+									className="w-full cursor-pointer appearance-none rounded-sm bg-secondary px-2.5 py-[5px] pr-8 text-[12px] font-medium text-foreground outline-none"
+									value={model}
+									onChange={(event) => setModel(event.target.value)}
+								>
+									<option value={DEFAULT_CHAT_MODEL}>{DEFAULT_CHAT_MODEL}</option>
+									<option value="glm-5.3-flash">glm-5.3-flash</option>
+								</select>
+								<ChevronDown
+									aria-hidden="true"
+									className="pointer-events-none absolute right-2.5 top-1/2 size-3 -translate-y-1/2 text-text-muted"
+								/>
+							</span>
 						</label>
-						<label className="flex flex-col gap-1 text-sm">
-							<span>Опциональная конструкция</span>
-							<input
-								aria-label="Опциональная конструкция"
-								className="rounded-md border px-2 py-1.5"
-								placeholder="например, 7"
-								value={constructionIdDraft}
-								onChange={(event) => setConstructionIdDraft(event.target.value)}
-							/>
+						<label className="flex flex-col gap-1">
+							<span className="text-[12.5px] font-semibold text-foreground">Опциональная конструкция</span>
+							<span className="relative block">
+								<Link
+									aria-hidden="true"
+									className="pointer-events-none absolute left-2.5 top-1/2 size-3 -translate-y-1/2 text-info"
+								/>
+								<input
+									aria-label="Опциональная конструкция"
+									className="w-full rounded-full bg-info-soft py-[5px] pl-7 pr-2.5 text-[12px] text-text-secondary outline-none placeholder:text-text-muted"
+									placeholder="например, 7"
+									value={constructionIdDraft}
+									onChange={(event) => setConstructionIdDraft(event.target.value)}
+								/>
+							</span>
 						</label>
-						<fieldset className="flex flex-col gap-1 text-sm">
-							<legend className="pb-1 text-sm font-medium">Источники данных</legend>
-							<div aria-label="Источники данных" className="flex flex-col gap-1">
+						{/*
+							Источники данных — примитив «Чип/Источник» (fYadZ)
+							вместо чекбоксов-филдсета (§3.4:2 аудита): инстансы
+							композера Body #3 — «журнал» и «корпус правил» с
+							иконкой check, «рынок Bybit» — с globe. Клик по чипу
+							переключает выбор (toggle-кнопка с aria-pressed),
+							выбранный источник несёт вид мастера — иконка
+							accent; невыбранный приглушается до textMuted.
+							Пояснение источника — в подсказке title.
+						*/}
+						{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+						{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+						<div role="group" aria-label="Источники данных" className="flex flex-col gap-1.5">
+							<span aria-hidden="true" className="text-[12.5px] font-semibold text-foreground">
+								Источники данных
+							</span>
+							<div className="flex flex-wrap gap-1.5">
 								{CHAT_DATA_SOURCES.map((source) => (
-									<label key={source.id} className="flex cursor-pointer items-start gap-2 text-sm">
-										<input
-											type="checkbox"
-											checked={sourceSelections[source.id]}
-											onChange={(event) =>
-												setSourceSelections((current) => ({ ...current, [source.id]: event.target.checked }))
-											}
-										/>
-										<span>
-											<b>{source.label}</b>
-											<span className="text-muted-foreground block text-xs">{source.hint}</span>
-										</span>
-									</label>
+									<button
+										key={source.id}
+										type="button"
+										aria-pressed={sourceSelections[source.id]}
+										title={source.hint}
+										className="cursor-pointer rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+										onClick={() =>
+											setSourceSelections((current) => ({ ...current, [source.id]: current[source.id] == false }))
+										}
+									>
+										<SourceChip
+											icon={source.id === "market" ? Globe : undefined}
+											selected={sourceSelections[source.id]}
+										>
+											{/* Подписи инстансов мастера — со строчной первой буквы:
+												«журнал», «корпус правил», «рынок Bybit». */}
+											{source.label[0].toLowerCase() + source.label.slice(1)}
+										</SourceChip>
+									</button>
 								))}
 							</div>
-						</fieldset>
-						<label className="flex flex-col gap-1 text-sm">
-							<span>Первое сообщение</span>
+						</div>
+						<label className="flex flex-col gap-1">
+							<span className="text-[12.5px] font-semibold text-foreground">Первое сообщение</span>
 							<textarea
 								aria-label="Первое сообщение"
 								rows={4}
-								className="rounded-md border px-2 py-1.5"
-								placeholder="Сформулируйте первый вопрос для нового чата…"
+								className="rounded-sm border bg-card px-2.5 py-[7px] text-[13.5px] text-foreground outline-none placeholder:text-text-muted"
+								placeholder="Спросите агента о конструкции, правилах или рынке…"
 								value={firstMessage}
 								onChange={(event) => setFirstMessage(event.target.value)}
 							/>

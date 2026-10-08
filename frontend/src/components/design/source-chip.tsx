@@ -18,6 +18,7 @@ function SourceChip({
 	className,
 	icon: Icon = Check,
 	iconClassName,
+	selected = true,
 	children,
 	...props
 }: React.ComponentProps<"span"> & {
@@ -25,19 +26,31 @@ function SourceChip({
 	icon?: LucideIcon;
 	/** Переопределение цвета иконки (инстанс «GLM-5.3» — textSecondary). */
 	iconClassName?: string;
+	/** Признак выбранного источника; по мастеру все чипы «выбраны». */
+	selected?: boolean;
 }) {
 	return (
 		<span
 			data-slot="source-chip"
+			data-selected={selected}
 			className={cn(
-				"inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-[5px] text-[12px] text-text-secondary whitespace-nowrap",
+				"inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-[5px] text-[12px] whitespace-nowrap",
+				selected ? "text-text-secondary" : "text-text-muted",
 				className,
 			)}
 			{...props}
 		>
+			{/*
+				Состояние выбора для формы источников вкладки «Чаты» (§3.4:2
+				аудита): в мастере все инстансы чипа несут иконку accent, поэтому
+				выбранный чип — вид мастера; невыбранный приглушается до
+				textMuted и иконкой, и подписью (цвет снятия выбора в design.pen
+				отсутствует — по здравому смыслу).
+			*/}
+			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
 			<Icon
 				aria-hidden="true"
-				className={cn("size-3 shrink-0 text-primary", iconClassName)}
+				className={cn("size-3 shrink-0", selected ? "text-primary" : "text-text-muted", iconClassName)}
 			/>
 			{children}
 		</span>

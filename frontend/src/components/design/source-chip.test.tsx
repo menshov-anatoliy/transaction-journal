@@ -66,4 +66,36 @@ describe("SourceChip: пилюля источника по дизайн-нода
 		expect(icon?.getAttribute("class")).toContain("text-text-secondary");
 		expect(icon?.getAttribute("class")).not.toContain("text-primary");
 	});
+
+	/*
+		Состояние выбора для формы источников вкладки «Чаты» (§3.4:2 аудита,
+		задача 7.5): по мастеру чипы композера Body #3 всегда «выбраны»
+		(иконка accent), поэтому selected по умолчанию true и выглядит как
+		нода fYadZ; снятие выбора приглушает иконку и подпись до textMuted.
+	*/
+	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+	// Traceability: change:reconcile-frontend-with-design/design#D2
+	it("по умолчанию источник выбран и несёт вид мастера (accent-иконка)", () => {
+		// Act: рендер без пропса selected — инвариант использований 5.2.
+		render(<SourceChip>журнал</SourceChip>);
+
+		// Assert: признак выбора выставлен, подпись textSecondary мастера.
+		const chip = screen.getByText("журнал").closest('[data-slot="source-chip"]');
+		expect(chip?.getAttribute("data-selected")).toBe("true");
+		expect(chip?.className).toContain("text-text-secondary");
+	});
+
+	it("приглушает невыбранный источник: иконка и подпись textMuted", () => {
+		// Act: инстанс формы чатов со снятым выбором источника.
+		render(<SourceChip selected={false}>рынок Bybit</SourceChip>);
+
+		// Assert: чип погашен до textMuted, акцентные цвета сняты.
+		const chip = screen.getByText("рынок Bybit").closest('[data-slot="source-chip"]');
+		expect(chip?.getAttribute("data-selected")).toBe("false");
+		expect(chip?.className).toContain("text-text-muted");
+		expect(chip?.className).not.toContain("text-text-secondary");
+		const icon = chip?.querySelector("svg");
+		expect(icon?.getAttribute("class")).toContain("text-text-muted");
+		expect(icon?.getAttribute("class")).not.toContain("text-primary");
+	});
 });
