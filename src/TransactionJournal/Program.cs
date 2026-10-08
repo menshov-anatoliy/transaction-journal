@@ -436,6 +436,7 @@ var api = app.MapApiSkeleton();
 // Эндпоинты разделов подключаются к той же версионированной группе: задачи 5.x
 // фиксируют контракты поверх единого префикса /api/v1.
 api.MapConstructionsEndpoints();
+api.MapConstructionCardEndpoints();
 api.MapHintsEndpoints();
 api.MapSyncEndpoints();
 

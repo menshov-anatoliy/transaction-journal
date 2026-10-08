@@ -32,6 +32,22 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 	return (await response.json()) as T;
 }
 
+/**
+ * Выполняет команду единого API без тела ответа: 204 No Content — штатный
+ * исход команды, пустое тело не разбирается как JSON.
+ */
+// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+export async function apiCommand(path: string, init?: RequestInit): Promise<void> {
+	const response = await fetch(`${API_PREFIX}${path}`, {
+		...init,
+		headers: { Accept: "application/json", ...init?.headers },
+	});
+
+	if (!response.ok) {
+		throw await toApiError(response);
+	}
+}
+
 /** Строит ApiError из ошибочного ответа: причина — поле error тела, если есть. */
 async function toApiError(response: Response): Promise<ApiError> {
 	const fallback = `API ответил ошибкой ${response.status}`;
