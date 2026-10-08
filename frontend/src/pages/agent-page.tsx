@@ -10,6 +10,7 @@ import type { ChatDataSource, ChatDto } from "@/chat/types";
 import { Button } from "@/components/ui/button";
 import { listRules, readRule, type AgentRuleCard } from "@/lib/api/agent-rules";
 import { formatMoment } from "@/lib/format/display-time";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Раздел «Агент» маршрута /agent по концепции §7: форма нового чата с
 // параметрами, история active/completed, лента чата на инфраструктуре 4.1,
@@ -17,6 +18,8 @@ import { formatMoment } from "@/lib/format/display-time";
 // при наведении из следа источников.
 // Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
 // Traceability: doc:.wf-research/ui-concept/concept.md#12-карта-переноса-по-инвентаризации-129
+// На мобильном чат и история работают через drawer-компоновку.
+// Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
 // Текущий раздел интегрирован с доменным направлением add-agent-chat:
 // жизненный цикл active/completed и параметры чата (модель/источники/конструкция).
 // Traceability: change:add-agent-chat/proposal#what-changes
@@ -40,7 +43,9 @@ const initialRuleFilters: RuleFilters = {
 };
 
 export function AgentPage() {
+	const isMobile = useIsMobile();
 	const [tab, setTab] = React.useState<AgentTab>("chats");
+	const [mobileHistoryOpen, setMobileHistoryOpen] = React.useState(false);
 	const [selectedChatId, setSelectedChatId] = React.useState<string | null>(null);
 	const [hoveredRuleId, setHoveredRuleId] = React.useState<string | null>(null);
 	const [openedRuleId, setOpenedRuleId] = React.useState<string | null>(null);
@@ -238,6 +243,11 @@ export function AgentPage() {
 										)}
 									</div>
 								</header>
+								{isMobile && (
+									<Button variant="outline" size="sm" className="mb-2 self-start" onClick={() => setMobileHistoryOpen(true)}>
+										Открыть историю чатов
+									</Button>
+								)}
 								<div className="min-h-0 flex-1 overflow-hidden">
 									<ChatThreadPane
 										chat={selectedChat}
@@ -253,41 +263,84 @@ export function AgentPage() {
 						)}
 					</section>
 
-					<aside className="flex min-h-[30rem] flex-col gap-3 rounded-lg border p-3">
-						<h2 className="text-base font-semibold">История чатов</h2>
-						{activeQuery.isPending || completedQuery.isPending ? (
-							<p className="text-muted-foreground text-sm">чтение истории…</p>
-						) : (
-							<>
-								<ChatList
-									title="Активные"
-									chats={activeChats}
-									selectedChatId={selectedChat?.id ?? null}
-									onSelect={setSelectedChatId}
-									onToggle={(chatId) => completeMutation.mutate(chatId)}
-									actionLabel="Завершить чат"
-								/>
-								<ChatList
-									title="Завершённые"
-									chats={completedChats}
-									selectedChatId={selectedChat?.id ?? null}
-									onSelect={setSelectedChatId}
-									onToggle={(chatId) => resumeMutation.mutate(chatId)}
-									actionLabel="Продолжить чат"
-								/>
-							</>
-						)}
-						{activeQuery.isError && (
-							<p className="text-destructive text-sm" role="alert">
-								Активные чаты недоступны: {activeQuery.error.message}
-							</p>
-						)}
-						{completedQuery.isError && (
-							<p className="text-destructive text-sm" role="alert">
-								Завершённые чаты недоступны: {completedQuery.error.message}
-							</p>
-						)}
-					</aside>
+					{isMobile == false && (
+						<aside className="flex min-h-[30rem] flex-col gap-3 rounded-lg border p-3">
+							<h2 className="text-base font-semibold">История чатов</h2>
+							{activeQuery.isPending || completedQuery.isPending ? (
+								<p className="text-muted-foreground text-sm">чтение истории…</p>
+							) : (
+								<>
+									<ChatList
+										title="Активные"
+										chats={activeChats}
+										selectedChatId={selectedChat?.id ?? null}
+										onSelect={setSelectedChatId}
+										onToggle={(chatId) => completeMutation.mutate(chatId)}
+										actionLabel="Завершить чат"
+									/>
+									<ChatList
+										title="Завершённые"
+										chats={completedChats}
+										selectedChatId={selectedChat?.id ?? null}
+										onSelect={setSelectedChatId}
+										onToggle={(chatId) => resumeMutation.mutate(chatId)}
+										actionLabel="Продолжить чат"
+									/>
+								</>
+							)}
+							{activeQuery.isError && (
+								<p className="text-destructive text-sm" role="alert">
+									Активные чаты недоступны: {activeQuery.error.message}
+								</p>
+							)}
+							{completedQuery.isError && (
+								<p className="text-destructive text-sm" role="alert">
+									Завершённые чаты недоступны: {completedQuery.error.message}
+								</p>
+							)}
+						</aside>
+					)}
+					{isMobile && mobileHistoryOpen && (
+						<div className="fixed inset-0 z-40">
+							<button type="button" aria-label="Закрыть историю чатов" className="absolute inset-0 bg-black/40" onClick={() => setMobileHistoryOpen(false)} />
+							<aside className="bg-background absolute right-0 top-0 h-full w-[min(26rem,100vw)] overflow-y-auto border-l p-3">
+								<div className="mb-2 flex items-center justify-between">
+									<h2 className="text-base font-semibold">История чатов</h2>
+									<Button variant="outline" size="sm" onClick={() => setMobileHistoryOpen(false)}>
+										Закрыть
+									</Button>
+								</div>
+								{activeQuery.isPending || completedQuery.isPending ? (
+									<p className="text-muted-foreground text-sm">чтение истории…</p>
+								) : (
+									<>
+										<ChatList
+											title="Активные"
+											chats={activeChats}
+											selectedChatId={selectedChat?.id ?? null}
+											onSelect={(chatId) => {
+												setSelectedChatId(chatId);
+												setMobileHistoryOpen(false);
+											}}
+											onToggle={(chatId) => completeMutation.mutate(chatId)}
+											actionLabel="Завершить чат"
+										/>
+										<ChatList
+											title="Завершённые"
+											chats={completedChats}
+											selectedChatId={selectedChat?.id ?? null}
+											onSelect={(chatId) => {
+												setSelectedChatId(chatId);
+												setMobileHistoryOpen(false);
+											}}
+											onToggle={(chatId) => resumeMutation.mutate(chatId)}
+											actionLabel="Продолжить чат"
+										/>
+									</>
+								)}
+							</aside>
+						</div>
+					)}
 				</div>
 			) : (
 				<section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_26rem]">

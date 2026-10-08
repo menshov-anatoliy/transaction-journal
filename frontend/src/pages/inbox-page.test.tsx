@@ -42,6 +42,20 @@ function clickSelectAllInTable(user: ReturnType<typeof userEvent.setup>) {
 	return user.click(selectAll);
 }
 
+function setViewport(width: number) {
+	Object.defineProperty(window, "innerWidth", { value: width, writable: true, configurable: true });
+	window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+		matches: query.includes("max-width") ? width <= 1023 : false,
+		media: query,
+		onchange: null,
+		addEventListener: vi.fn(),
+		removeEventListener: vi.fn(),
+		addListener: vi.fn(),
+		removeListener: vi.fn(),
+		dispatchEvent: vi.fn(),
+	})) as typeof window.matchMedia;
+}
+
 beforeEach(() => {
 	vi.clearAllMocks();
 	api.fetchInboxOverview.mockResolvedValue({
@@ -118,5 +132,15 @@ describe("раздел «Входящие»", () => {
 		await user.click(screen.getByRole("button", { name: /Собрать из Входящих/i }));
 		await waitFor(() => expect(api.assembleInbox).toHaveBeenCalled());
 		expect(await screen.findByText(/создано конструкций 1/i)).toBeInTheDocument();
+	});
+
+	it("в мобильном режиме оставляет только просмотр без тяжёлых действий", async () => {
+		setViewport(390);
+		renderPage();
+
+		expect(await screen.findByText("exec-buy")).toBeInTheDocument();
+		expect(screen.getByText(/мобильный режим:/i)).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /Создать конструкцию из выбранного/i })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /Собрать из Входящих/i })).not.toBeInTheDocument();
 	});
 });

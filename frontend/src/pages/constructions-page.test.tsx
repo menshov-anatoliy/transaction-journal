@@ -137,6 +137,20 @@ function renderPage() {
 	);
 }
 
+function setViewport(width: number) {
+	Object.defineProperty(window, "innerWidth", { value: width, writable: true, configurable: true });
+	window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+		matches: query.includes("max-width") ? width <= 1023 : false,
+		media: query,
+		onchange: null,
+		addEventListener: vi.fn(),
+		removeEventListener: vi.fn(),
+		addListener: vi.fn(),
+		removeListener: vi.fn(),
+		dispatchEvent: vi.fn(),
+	})) as typeof window.matchMedia;
+}
+
 beforeEach(() => {
 	vi.clearAllMocks();
 	api.constructions.fetchConstructionsOverview.mockResolvedValue(overview);
@@ -283,5 +297,15 @@ describe("раздел «Конструкции»", () => {
 		// Assert: раздел показывает явное состояние недоступности.
 		expect(await screen.findByText(/журнал недоступен/i)).toBeInTheDocument();
 		expect(screen.queryByRole("table")).not.toBeInTheDocument();
+	});
+
+	it("в мобильном режиме открывает правую контекстную область в drawer", async () => {
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByText("+100.5 USDT");
+
+		await user.click(screen.getByRole("button", { name: /Открыть контекст раздела/i }));
+		expect(await screen.findByRole("button", { name: /Запустить проход подсказок/i })).toBeInTheDocument();
 	});
 });

@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatCount, pluralForm } from "@/lib/format/plural";
 import { formatSignedAmount } from "@/lib/format/quantity";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Раздел «Конструкции» — главный экран SPA по концепции §3: шапка с итогом
 // журнала, счётчиками и кнопкой синхронизации; таблица конструкций с
@@ -37,6 +38,8 @@ const previewKey = (constructionId: number) => ["construction-preview", construc
 
 export function ConstructionsPage() {
 	const [selectedId, setSelectedId] = React.useState<number | null>(null);
+	const [mobileContextOpen, setMobileContextOpen] = React.useState(false);
+	const isMobile = useIsMobile();
 	const queryClient = useQueryClient();
 
 	// Обзор раздела: сводка шапки и строки таблицы одним запросом.
@@ -73,17 +76,53 @@ export function ConstructionsPage() {
 		<section className="flex flex-col gap-4 p-6">
 			<h1 className="text-2xl font-semibold tracking-tight">Конструкции</h1>
 			<ConstructionsHeader overview={overviewQuery.data} syncMutation={syncMutation} />
+			{/* На мобильном правая контекстная область живёт в drawer:
+			    мониторинг и лёгкие действия остаются доступны, тяжёлая двухпанельная
+			    компоновка не ломает читаемость таблицы. */}
+			{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
+			{isMobile && (
+				<Button variant="outline" size="sm" className="self-start" onClick={() => setMobileContextOpen(true)}>
+					Открыть контекст раздела
+				</Button>
+			)}
 
 			<div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
 				<ConstructionsMain overviewQuery={overviewQuery} selectedId={selectedId} onSelect={setSelectedId} />
-				<aside className="flex flex-col gap-4">
-					{selectedId === null ? (
-						<JournalHintsArea passMutation={passMutation} onTransition={(request) => transitionMutation.mutate(request)} />
-					) : (
-						<ConstructionArea constructionId={selectedId} onTransition={(request) => transitionMutation.mutate(request)} />
-					)}
-				</aside>
+				{isMobile == false && (
+					<aside className="flex flex-col gap-4">
+						{selectedId === null ? (
+							<JournalHintsArea passMutation={passMutation} onTransition={(request) => transitionMutation.mutate(request)} />
+						) : (
+							<ConstructionArea constructionId={selectedId} onTransition={(request) => transitionMutation.mutate(request)} />
+						)}
+					</aside>
+				)}
 			</div>
+			{isMobile && mobileContextOpen && (
+				<div className="fixed inset-0 z-40">
+					<button
+						type="button"
+						aria-label="Закрыть контекст раздела"
+						className="absolute inset-0 bg-black/40"
+						onClick={() => setMobileContextOpen(false)}
+					/>
+					<aside className="bg-background absolute right-0 top-0 z-10 h-full w-[min(28rem,100vw)] overflow-y-auto border-l p-4">
+						<div className="mb-3 flex items-center justify-between">
+							<h2 className="text-base font-semibold">Контекст раздела</h2>
+							<Button variant="outline" size="sm" onClick={() => setMobileContextOpen(false)}>
+								Закрыть
+							</Button>
+						</div>
+						<div className="flex flex-col gap-4">
+							{selectedId === null ? (
+								<JournalHintsArea passMutation={passMutation} onTransition={(request) => transitionMutation.mutate(request)} />
+							) : (
+								<ConstructionArea constructionId={selectedId} onTransition={(request) => transitionMutation.mutate(request)} />
+							)}
+						</div>
+					</aside>
+				</div>
+			)}
 		</section>
 	);
 }

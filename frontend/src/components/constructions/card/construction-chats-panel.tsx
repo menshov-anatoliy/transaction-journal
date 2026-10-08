@@ -11,6 +11,7 @@ import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
 import { Button } from "@/components/ui/button";
 import { formatMoment } from "@/lib/format/display-time";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Правая скрываемая область чатов карточки по концепции §4: полный жизненный
 // цикл чатов, привязанных к конструкции, — создание нового чата с
@@ -20,6 +21,8 @@ import { cn } from "@/lib/utils";
 // по зафиксированному контракту chat-api, недоступность бэкенда деградирует
 // честным сообщением без пустой панели.
 // Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+// На мобильном чаты открываются в drawer-панели поверх карточки.
+// Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
 // Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
 
 /** Пропсы панели чатов конструкции. */
@@ -43,6 +46,7 @@ function ChatThreadView({ chat }: { chat: ChatDto }) {
 }
 
 export function ConstructionChatsPanel({ constructionId, isClosed }: ConstructionChatsPanelProps) {
+	const isMobile = useIsMobile();
 	const [open, setOpen] = React.useState(false);
 	const [selectedChatId, setSelectedChatId] = React.useState<string | null>(null);
 	const [draft, setDraft] = React.useState("");
@@ -92,7 +96,16 @@ export function ConstructionChatsPanel({ constructionId, isClosed }: Constructio
 			</Button>
 
 			{open && (
-				<div className="flex h-[32rem] w-80 flex-col gap-2 rounded-lg border bg-card p-2 shadow-sm xl:w-96">
+				<div className={cn(isMobile ? "fixed inset-0 z-40" : "flex h-[32rem] w-80 flex-col gap-2 rounded-lg border bg-card p-2 shadow-sm xl:w-96")}>
+					{isMobile && (
+						<button
+							type="button"
+							aria-label="Закрыть чаты конструкции"
+							className="absolute inset-0 bg-black/40"
+							onClick={() => setOpen(false)}
+						/>
+					)}
+					<div className={cn("flex flex-col gap-2 rounded-lg border bg-card p-2 shadow-sm", isMobile && "absolute right-0 top-0 h-full w-[min(30rem,100vw)] overflow-y-auto border-l")}>
 					{chatsUnavailable !== null ? (
 						<div className="text-muted-foreground flex flex-col gap-2 p-2 text-sm" role="status">
 							<p role="alert">Чаты агента недоступны: {chatsUnavailable}.</p>
@@ -187,6 +200,7 @@ export function ConstructionChatsPanel({ constructionId, isClosed }: Constructio
 							)}
 						</>
 					)}
+					</div>
 				</div>
 			)}
 		</aside>

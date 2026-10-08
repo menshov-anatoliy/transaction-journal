@@ -23,7 +23,13 @@ function renderLayout() {
 		defaultOptions: { queries: { retry: false } },
 	});
 	const router = createMemoryRouter(
-		[{ element: <AppLayout />, children: [{ index: true, element: <div /> }] }],
+		[{
+			element: <AppLayout />,
+			children: [
+				{ index: true, element: <div>главная</div> },
+				{ path: "hints", element: <h1>Подсказки</h1> },
+			],
+		}],
 		{ initialEntries: ["/"] },
 	);
 	return render(
@@ -33,9 +39,24 @@ function renderLayout() {
 	);
 }
 
+function setViewport(width: number) {
+	Object.defineProperty(window, "innerWidth", { value: width, writable: true, configurable: true });
+	window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+		matches: query.includes("max-width") ? width <= 1023 : false,
+		media: query,
+		onchange: null,
+		addEventListener: vi.fn(),
+		removeEventListener: vi.fn(),
+		addListener: vi.fn(),
+		removeListener: vi.fn(),
+		dispatchEvent: vi.fn(),
+	})) as typeof window.matchMedia;
+}
+
 describe("раскладка каркаса приложения", () => {
 	it("показывает бренд «Журнал Bybit» в тонком топбаре", () => {
 		inboxApi.fetchInboxCount.mockResolvedValue(0);
+		setViewport(1280);
 		renderLayout();
 
 		expect(screen.getByText("Журнал Bybit")).toBeInTheDocument();
@@ -43,6 +64,7 @@ describe("раскладка каркаса приложения", () => {
 
 	it.each(appSections)("выводит пункт панели «$label»", (section) => {
 		inboxApi.fetchInboxCount.mockResolvedValue(0);
+		setViewport(1280);
 		renderLayout();
 
 		expect(screen.getByRole("link", { name: section.label })).toBeInTheDocument();
@@ -50,6 +72,7 @@ describe("раскладка каркаса приложения", () => {
 
 	it("сворачивает панель навигации до иконок", async () => {
 		inboxApi.fetchInboxCount.mockResolvedValue(0);
+		setViewport(1280);
 		const user = userEvent.setup();
 		renderLayout();
 
@@ -63,8 +86,23 @@ describe("раскладка каркаса приложения", () => {
 
 	it("показывает бейдж входящих при ненулевом счётчике", async () => {
 		inboxApi.fetchInboxCount.mockResolvedValue(3);
+		setViewport(1280);
 		renderLayout();
 
 		expect(await screen.findByText("3")).toBeInTheDocument();
+	});
+
+	it("в мобильном режиме открывает навигацию в drawer и закрывает после перехода", async () => {
+		inboxApi.fetchInboxCount.mockResolvedValue(0);
+		setViewport(390);
+		const user = userEvent.setup();
+		renderLayout();
+
+		await user.click(screen.getByRole("button", { name: "Открыть меню" }));
+		expect(screen.getByRole("navigation", { name: "Разделы журнала" })).toBeInTheDocument();
+
+		await user.click(screen.getByRole("link", { name: "Подсказки" }));
+		expect(await screen.findByRole("heading", { name: "Подсказки" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Закрыть меню" })).not.toBeInTheDocument();
 	});
 });

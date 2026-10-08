@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatSignedAmount } from "@/lib/format/quantity";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Раздел «Входящие» по концепции §5: фильтры в URL, выбор непривязанных
 // сделок, список конструкций-целей и действия разбора — привязка кнопкой,
@@ -20,12 +21,16 @@ import { formatSignedAmount } from "@/lib/format/quantity";
 // Переносы №10/№12/№17: фильтры и разбор входящих, сборка из входящих,
 // бейдж счётчика в навигации обновляется этим разделом через инвалидaции.
 // Traceability: doc:.wf-research/ui-concept/concept.md#12-карта-переноса-по-инвентаризации-129
+// Мобильный режим ограничен просмотром и лёгкими действиями: тяжёлые
+// операции распределения остаются desktop-сценарием.
+// Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
 
 const inboxOverviewKey = ["inbox-overview"] as const;
 const inboxCountKey = ["inbox-count"] as const;
 const constructionsOverviewKey = ["constructions-overview"] as const;
 
 export function InboxPage() {
+	const isMobile = useIsMobile();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const queryClient = useQueryClient();
 	const [selectedExecIds, setSelectedExecIds] = React.useState<string[]>([]);
@@ -145,10 +150,18 @@ export function InboxPage() {
 		?? null;
 
 	const onToggleAll = (checked: boolean) => {
+		if (isMobile) {
+			return;
+		}
+
 		setSelectedExecIds(checked ? visibleTrades.map((trade) => trade.execId) : []);
 	};
 
 	const onToggleRow = (execId: string, checked: boolean) => {
+		if (isMobile) {
+			return;
+		}
+
 		setSelectedExecIds((current) => {
 			if (checked) {
 				return current.includes(execId) ? current : [...current, execId];
@@ -304,14 +317,16 @@ export function InboxPage() {
 								<thead className="bg-muted/40">
 									<tr>
 										<th className="px-2 py-2 text-left">
-											<label>
-												<input
-													type="checkbox"
-													checked={allVisibleSelected}
-													onChange={(event) => onToggleAll(event.currentTarget.checked)}
-												/>{" "}
-												Выбрать всё
-											</label>
+											{isMobile ? "Выбор" : (
+												<label>
+													<input
+														type="checkbox"
+														checked={allVisibleSelected}
+														onChange={(event) => onToggleAll(event.currentTarget.checked)}
+													/>{" "}
+													Выбрать всё
+												</label>
+											)}
 										</th>
 										<th className="px-2 py-2 text-left">Время</th>
 										<th className="px-2 py-2 text-left">execId</th>
@@ -327,16 +342,24 @@ export function InboxPage() {
 									{visibleTrades.map((trade) => (
 										<tr
 											key={trade.execId}
-											draggable
-											onDragStart={() => onDragStart(trade)}
+											draggable={isMobile == false}
+											onDragStart={() => {
+												if (isMobile == false) {
+													onDragStart(trade);
+												}
+											}}
 											className="border-t"
 										>
 											<td className="px-2 py-2">
-												<input
-													type="checkbox"
-													checked={selectedExecIds.includes(trade.execId)}
-													onChange={(event) => onToggleRow(trade.execId, event.currentTarget.checked)}
-												/>
+												{isMobile ? (
+													<span className="text-muted-foreground text-xs">—</span>
+												) : (
+													<input
+														type="checkbox"
+														checked={selectedExecIds.includes(trade.execId)}
+														onChange={(event) => onToggleRow(trade.execId, event.currentTarget.checked)}
+													/>
+												)}
 											</td>
 											<td className="px-2 py-2">{formatMoment(trade.executedAt)}</td>
 											<td className="px-2 py-2">{trade.execId}</td>
@@ -356,55 +379,73 @@ export function InboxPage() {
 
 				<aside className="flex flex-col gap-3">
 					<h2 className="text-base font-semibold">Конструкции-цели</h2>
-					{overviewQuery.data?.targets.map((target) => (
-						<button
-							key={target.constructionId}
-							type="button"
-							onClick={() => bindToTarget(target.constructionId, selectedExecIds)}
-							onDragOver={(event) => {
-								event.preventDefault();
-								setTargetHighlightId(target.constructionId);
-							}}
-							onDragLeave={() => setTargetHighlightId((current) => (current === target.constructionId ? null : current))}
-							onDrop={(event) => {
-								event.preventDefault();
-								onDropTarget(target.constructionId);
-							}}
-							disabled={selectedCount == 0 && dragExecIds.length == 0 || busy}
-							className={`rounded border p-3 text-left ${targetHighlightId === target.constructionId ? "border-primary bg-primary/5" : ""}`}
-						>
-							<div className="font-medium">{target.name}</div>
-							<div className="text-muted-foreground text-xs">{target.status} · итог {target.totalPnL ?? "—"}</div>
-							<div className="text-xs">Привязать {selectedCount > 0 ? selectedCount : dragExecIds.length}</div>
-						</button>
-					))}
+					{isMobile ? (
+						<>
+							<p className="text-muted-foreground text-sm">
+								мобильный режим: доступен только просмотр входящих; привязка, создание и сборка выполняются на desktop.
+							</p>
+							<ul className="flex flex-col gap-2">
+								{overviewQuery.data?.targets.map((target) => (
+									<li key={target.constructionId} className="rounded border p-3">
+										<div className="font-medium">{target.name}</div>
+										<div className="text-muted-foreground text-xs">{target.status} · итог {target.totalPnL ?? "—"}</div>
+									</li>
+								))}
+							</ul>
+						</>
+					) : (
+						<>
+							{overviewQuery.data?.targets.map((target) => (
+								<button
+									key={target.constructionId}
+									type="button"
+									onClick={() => bindToTarget(target.constructionId, selectedExecIds)}
+									onDragOver={(event) => {
+										event.preventDefault();
+										setTargetHighlightId(target.constructionId);
+									}}
+									onDragLeave={() => setTargetHighlightId((current) => (current === target.constructionId ? null : current))}
+									onDrop={(event) => {
+										event.preventDefault();
+										onDropTarget(target.constructionId);
+									}}
+									disabled={selectedCount == 0 && dragExecIds.length == 0 || busy}
+									className={`rounded border p-3 text-left ${targetHighlightId === target.constructionId ? "border-primary bg-primary/5" : ""}`}
+								>
+									<div className="font-medium">{target.name}</div>
+									<div className="text-muted-foreground text-xs">{target.status} · итог {target.totalPnL ?? "—"}</div>
+									<div className="text-xs">Привязать {selectedCount > 0 ? selectedCount : dragExecIds.length}</div>
+								</button>
+							))}
 
-					<div className="mt-2 flex flex-col gap-2 rounded border p-3">
-						<label className="text-sm">
-							Имя конструкции
-							<input
-								value={createName}
-								onChange={(event) => setCreateName(event.currentTarget.value)}
-								className="mt-1 w-full rounded border px-2 py-1"
-							/>
-						</label>
-						<label className="text-sm">
-							Капитал (USDT, опционально)
-							<input
-								value={createCapital}
-								onChange={(event) => setCreateCapital(event.currentTarget.value)}
-								className="mt-1 w-full rounded border px-2 py-1"
-							/>
-						</label>
-						<Button size="sm" onClick={onCreate} disabled={selectedCount == 0 || createName.trim().length == 0 || busy}>
-							Создать конструкцию из выбранного
-						</Button>
-					</div>
+							<div className="mt-2 flex flex-col gap-2 rounded border p-3">
+								<label className="text-sm">
+									Имя конструкции
+									<input
+										value={createName}
+										onChange={(event) => setCreateName(event.currentTarget.value)}
+										className="mt-1 w-full rounded border px-2 py-1"
+									/>
+								</label>
+								<label className="text-sm">
+									Капитал (USDT, опционально)
+									<input
+										value={createCapital}
+										onChange={(event) => setCreateCapital(event.currentTarget.value)}
+										className="mt-1 w-full rounded border px-2 py-1"
+									/>
+								</label>
+								<Button size="sm" onClick={onCreate} disabled={selectedCount == 0 || createName.trim().length == 0 || busy}>
+									Создать конструкцию из выбранного
+								</Button>
+							</div>
 
-					<Button size="sm" variant="outline" onClick={() => assembleMutation.mutate()} disabled={busy}>
-						{assembleMutation.isPending ? "Сборка выполняется…" : "Собрать из Входящих"}
-					</Button>
-					{assembleMutation.data !== undefined && <AssembleStatus result={assembleMutation.data} />}
+							<Button size="sm" variant="outline" onClick={() => assembleMutation.mutate()} disabled={busy}>
+								{assembleMutation.isPending ? "Сборка выполняется…" : "Собрать из Входящих"}
+							</Button>
+							{assembleMutation.data !== undefined && <AssembleStatus result={assembleMutation.data} />}
+						</>
+					)}
 				</aside>
 			</div>
 
