@@ -4,10 +4,66 @@
 	Светлая тема журнала по дизайн-системе design.pen: тёплый серый фон,
 	белые поверхности, зелёный акцент и семантические пары risk/neg/info.
 	Токен-слой — цвета hex 1:1 из дизайн-макета (без конверсии цветовых
-	пространств, design.md D1), семантические слоты shadcn разрешаются в токены; шрифт Inter подключается
-	отдельным шагом (design.md D4). Тёмная тема в плане отсутствует
-	(до паритета и позже).
+	пространств, design.md D1), семантические слоты shadcn разрешаются в
+	токены; шрифты Inter и JetBrains Mono подключены self-hosted (design.md D4).
+	Тёмная тема в плане отсутствует (до паритета и позже).
 */
+
+/*
+	Шрифты дизайн-системы подключаются self-hosted woff2-файлами, без внешних
+	CDN: журнал — локальный персональный инструмент, работа без сети — норма,
+	поэтому Google Fonts <link> отклонён (design.md D4). Inter — основной
+	шрифт интерфейса, JetBrains Mono — моноширинный контекст кода и
+	MD-редактора; оба семейства поддерживают кириллицу.
+*/
+
+/* Inter — вариативное семейство (веса 100–900, включая используемые дизайном
+	400/500/600) в двух начертаниях: прямом и курсиве. */
+/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+/* Traceability: change:reconcile-frontend-with-design/design#D4 */
+@font-face {
+	font-family: "Inter";
+	src: url("./assets/fonts/InterVariable.woff2") format("woff2-variations");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Inter";
+	src: url("./assets/fonts/InterVariable-Italic.woff2") format("woff2-variations");
+	font-weight: 100 900;
+	font-style: italic;
+	font-display: swap;
+}
+
+/* JetBrains Mono — статические начертания, фактически нужные моно-контексту:
+	обычное, курсив (курсивные вставки markdown) и жирное. */
+/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+/* Traceability: change:reconcile-frontend-with-design/design#D4 */
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("./assets/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("./assets/fonts/JetBrainsMono-Italic.woff2") format("woff2");
+	font-weight: 400;
+	font-style: italic;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("./assets/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
 
 :root {
 	/* Цветовые токены design.pen, hex 1:1 из design-extract.json;
@@ -120,6 +176,19 @@
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) + 4px);
+}
+
+@theme {
+	/* Семейства темы указывают на локальные self-hosted шрифты (design.md D4):
+		--font-sans через --default-font-family Tailwind становится шрифтом
+		документа (computed font-family у body — стек на Inter), --font-mono
+		питает утилиту font-mono и тематизацию MD-редактора (design.md D5).
+		Значения литеральные, поэтому переменные попадают в :root и доступны
+		для var() в CSS-переопределениях виджетов. */
+	/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+	/* Traceability: change:reconcile-frontend-with-design/design#D4 */
+	--font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+	--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 @layer base {
