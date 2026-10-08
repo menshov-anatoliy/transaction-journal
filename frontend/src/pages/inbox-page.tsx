@@ -10,6 +10,7 @@ import {
 	type InboxTrade,
 } from "@/lib/api/inbox";
 import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatSignedAmount } from "@/lib/format/quantity";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -313,10 +314,16 @@ export function InboxPage() {
 
 					{visibleTrades.length > 0 && (
 						<div className="overflow-x-auto rounded border">
-							<table className="min-w-full text-sm">
-								<thead className="bg-muted/40">
-									<tr>
-										<th className="px-2 py-2 text-left">
+							{/* Плотность Body #5 (TECU5) мастера: шапка и ячейки 8/10,
+							    ячейки Inter 12/normal, инструмент — 12.5/500. Таблица
+							    непривязанных сделок переведена с сырой HTML-разметки
+							    на общий слой таблиц дизайн-системы. */}
+							{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
+							{/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
+							<Table density="regular">
+								<TableHeader>
+									<TableRow>
+										<TableHead>
 											{isMobile ? "Выбор" : (
 												<label>
 													<input
@@ -327,20 +334,20 @@ export function InboxPage() {
 													Выбрать всё
 												</label>
 											)}
-										</th>
-										<th className="px-2 py-2 text-left">Время</th>
-										<th className="px-2 py-2 text-left">execId</th>
-										<th className="px-2 py-2 text-left">Инструмент</th>
-										<th className="px-2 py-2 text-left">Направление</th>
-										<th className="px-2 py-2 text-left">Количество</th>
-										<th className="px-2 py-2 text-left">Цена</th>
-										<th className="px-2 py-2 text-left">Сумма</th>
-										<th className="px-2 py-2 text-left">Комиссия</th>
-									</tr>
-								</thead>
-								<tbody>
+										</TableHead>
+										<TableHead>Время</TableHead>
+										<TableHead>execId</TableHead>
+										<TableHead>Инструмент</TableHead>
+										<TableHead>Направление</TableHead>
+										<TableHead>Количество</TableHead>
+										<TableHead>Цена</TableHead>
+										<TableHead>Сумма</TableHead>
+										<TableHead>Комиссия</TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
 									{visibleTrades.map((trade) => (
-										<tr
+										<TableRow
 											key={trade.execId}
 											draggable={isMobile == false}
 											onDragStart={() => {
@@ -348,9 +355,8 @@ export function InboxPage() {
 													onDragStart(trade);
 												}
 											}}
-											className="border-t"
 										>
-											<td className="px-2 py-2">
+											<TableCell>
 												{isMobile ? (
 													<span className="text-muted-foreground text-xs">—</span>
 												) : (
@@ -360,19 +366,22 @@ export function InboxPage() {
 														onChange={(event) => onToggleRow(trade.execId, event.currentTarget.checked)}
 													/>
 												)}
-											</td>
-											<td className="px-2 py-2">{formatMoment(trade.executedAt)}</td>
-											<td className="px-2 py-2">{trade.execId}</td>
-											<td className="px-2 py-2">{trade.symbol}</td>
-											<td className="px-2 py-2">{trade.isBuy ? "покупка" : "продажа"}</td>
-											<td className="px-2 py-2">{formatSignedAmount(trade.quantity)}</td>
-											<td className="px-2 py-2">{trade.price}</td>
-											<td className="px-2 py-2">{trade.amountUsdt}</td>
-											<td className="px-2 py-2">{formatSignedAmount(trade.fee)} {trade.feeCurrency ?? ""}</td>
-										</tr>
+											</TableCell>
+											<TableCell>{formatMoment(trade.executedAt)}</TableCell>
+											<TableCell>{trade.execId}</TableCell>
+											{/* Инструмент по мастеру Body #5 — Inter 12.5/500 на textPrimary. */}
+											<TableCell>
+												<span className="text-[12.5px] font-medium">{trade.symbol}</span>
+											</TableCell>
+											<TableCell>{trade.isBuy ? "покупка" : "продажа"}</TableCell>
+											<TableCell>{formatSignedAmount(trade.quantity)}</TableCell>
+											<TableCell>{trade.price}</TableCell>
+											<TableCell>{trade.amountUsdt}</TableCell>
+											<TableCell>{formatSignedAmount(trade.fee)} {trade.feeCurrency ?? ""}</TableCell>
+										</TableRow>
 									))}
-								</tbody>
-							</table>
+								</TableBody>
+							</Table>
 						</div>
 					)}
 				</div>
