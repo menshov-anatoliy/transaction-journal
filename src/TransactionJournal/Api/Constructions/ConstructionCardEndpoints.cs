@@ -188,8 +188,99 @@ public static class ConstructionCardEndpoints
 					errorPrefix: "Удаление не выполнено");
 			});
 
+			// Комментарий конструкции: MD-текст правится модальным split-редактором
+			// карточки; null или пробелы снимают комментарий.
+			// Комментарии всех трёх уровней идут командами через единый API.
+			// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+			// Комментарии конструкции, позиции и сделки — модальный split-редактор
+			// по месту отображения (паритет №6).
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			group.MapPut("/{constructionId:long}/comment", async (
+				long constructionId,
+				SetCommentRequest request,
+				ICommentService comments,
+				CancellationToken cancellationToken) =>
+			{
+				return await RunCommentCommand(
+					() => comments.SetConstructionCommentAsync(constructionId, NormalizeComment(request.Text), cancellationToken),
+					errorPrefix: "Комментарий конструкции не сохранён");
+			});
+
+			// Комментарий позиции по ключу «конструкция × инструмент»: правка по
+			// месту строки таблицы позиций, пробелы снимают текст.
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			group.MapPut("/{constructionId:long}/positions/{symbol}/comment", async (
+				long constructionId,
+				string symbol,
+				SetCommentRequest request,
+				ICommentService comments,
+				CancellationToken cancellationToken) =>
+			{
+				if (string.IsNullOrWhiteSpace(symbol))
+				{
+					return Results.Json(new ConstructionCardErrorResponse("Инструмент позиции не задан."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				return await RunCommentCommand(
+					() => comments.SetPositionCommentAsync(constructionId, symbol, NormalizeComment(request.Text), cancellationToken),
+					errorPrefix: "Комментарий позиции не сохранён");
+			});
+
+			// Команды строк сделок: комментарий и действия принадлежности. Ключ
+			// сделки — биржевой execId, общий для всех конструкций журнала.
+			var trades = api.MapGroup("/trades").WithTags("Карточка конструкции");
+
+			// Комментарий сделки: правка по месту строки таблицы сделок.
+			// Комментарии всех трёх уровней идут командами через единый API.
+			// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+			// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+			trades.MapPut("/{execId}/comment", async (
+				string execId,
+				SetCommentRequest request,
+				ICommentService comments,
+				CancellationToken cancellationToken) =>
+			{
+				if (string.IsNullOrWhiteSpace(execId))
+				{
+					return Results.Json(new ConstructionCardErrorResponse("Ключ сделки не задан."), statusCode: StatusCodes.Status400BadRequest);
+				}
+
+				return await RunCommentCommand(
+					() => comments.SetTradeCommentAsync(execId, NormalizeComment(request.Text), cancellationToken),
+					errorPrefix: "Комментарий сделки не сохранён");
+			});
+
 			return api;
 	}
+
+	/// <summary>
+	/// Выполняет команду комментария с единой обработкой отказов: ошибка
+	/// ключа или ввода — 400, неизвестная запись — 404, прочие сбои — 500.
+	/// </summary>
+	private static async Task<IResult> RunCommentCommand(Func<Task> action, string errorPrefix)
+	{
+			try
+			{
+				await action();
+			}
+			catch (ConstructionNotFoundException)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Конструкция не найдена — возможно, удалена."), statusCode: StatusCodes.Status404NotFound);
+			}
+			catch (ArgumentException)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+			}
+			catch (Exception exception)
+			{
+				return Results.Json(new ConstructionCardErrorResponse($"{errorPrefix}: {exception.Message}"), statusCode: StatusCodes.Status500InternalServerError);
+			}
+
+			return Results.NoContent();
+	}
+
+	/// <summary>Пробельный текст комментария превращается в снятие комментария.</summary>
+	private static string? NormalizeComment(string? text) => string.IsNullOrWhiteSpace(text) ? null : text;
 
 	/// <summary>
 	/// Выполняет команду конструкции с единой обработкой отказов: неизвестная
@@ -555,3 +646,7 @@ public sealed record ChangeTargetRequest(decimal? Value, string? Unit);
 /// <summary>Запрос удаления пустой конструкции.</summary>
 /// <param name="MakeBackup">Создать резервную копию базы перед удалением; включён по умолчанию.</param>
 public sealed record DeleteConstructionRequest(bool MakeBackup = true);
+
+/// <summary>Запрос сохранения комментария любого уровня.</summary>
+/// <param name="Text">Текст комментария в Markdown; null или пробелы снимают комментарий.</param>
+public sealed record SetCommentRequest(string? Text);

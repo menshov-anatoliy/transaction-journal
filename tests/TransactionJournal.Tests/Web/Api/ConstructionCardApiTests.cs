@@ -275,6 +275,55 @@ public sealed class ConstructionCardApiTests
 			Assert.That(unknown.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
 			Assert.That(empty.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 		}
+
+		[TestMethod]
+		[Description("Комментарии трёх уровней сохраняются командой и очищаются пустым текстом")]
+		// Комментарии всех трёх уровней — конструкции, позиции и сделки — правятся
+		// по месту отображения модальным split-редактором (№6): сохранение идёт
+		// командой через единый API, null или пробелы снимают комментарий.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		public async Task TryIfCommentsOfAllLevelsAreSetAndCleared()
+		{
+			// Arrange: записывающий сервис комментариев.
+			var comments = new RecordingCommentService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceCommentService(comments));
+			using var client = factory.CreateClient();
+
+			// Act: сохранение комментария конструкции, позиции и сделки; очистка пробелами.
+			var construction = await client.PutAsJsonAsync("/api/v1/constructions/7/comment", new { text = "итог **недели**" });
+			var position = await client.PutAsJsonAsync("/api/v1/constructions/7/positions/ETH-28JUN24-3200-C/comment", new { text = "ножка входа" });
+			var trade = await client.PutAsJsonAsync("/api/v1/trades/exec-1/comment", new { text = (string?)null });
+			var cleared = await client.PutAsJsonAsync("/api/v1/constructions/7/comment", new { text = "   " });
+
+			// Assert: команды приняты, сервис получил тексты; пустой текст очищает.
+			Assert.That(construction.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(position.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(trade.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(cleared.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(comments.ConstructionComments, Is.EqualTo(new[] { (7L, "итог **недели**"), (7L, (string?)null) }));
+			Assert.That(comments.PositionComments, Is.EqualTo(new[] { (7L, "ETH-28JUN24-3200-C", "ножка входа") }));
+			Assert.That(comments.TradeComments, Is.EqualTo(new[] { ("exec-1", (string?)null) }));
+		}
+
+		[TestMethod]
+		[Description("Комментарий с пустым ключом записи отвечает 400")]
+		// Ключ уровня обязателен: пустой инструмент или execId — ошибка контракта,
+		// команда в домен не проходит.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		public async Task ThrowOnEmptyCommentKeyReturns400()
+		{
+			// Arrange: записывающий сервис комментариев.
+			var comments = new RecordingCommentService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceCommentService(comments));
+			using var client = factory.CreateClient();
+
+			// Act: команда комментария сделки с пустым ключом.
+			var response = await client.PutAsJsonAsync("/api/v1/trades/%20/comment", new { text = "текст" });
+
+			// Assert: эндпоинт отвечает 400.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+		}
 }
 
 /// <summary>Записывающий сервис конструкций: фиксирует команды карточки.</summary>
@@ -423,6 +472,53 @@ internal sealed class StubBackupService : IJournalBackupService
 		}
 
 		return Task.FromResult(new JournalBackupResult { FileName = $"journal-{reason}.db", RotationWarnings = [] });
+	}
+}
+
+/// <summary>Записывающий сервис комментариев: фиксирует правки трёх уровней.</summary>
+internal sealed class RecordingCommentService : ICommentService
+{
+	/// <summary>Правки комментария конструкции: идентификатор и текст (null — снят).</summary>
+	public IReadOnlyList<(long ConstructionId, string? Comment)> ConstructionComments => _constructionComments;
+
+	/// <summary>Правки комментария позиции: конструкция, инструмент и текст.</summary>
+	public IReadOnlyList<(long ConstructionId, string Symbol, string? Text)> PositionComments => _positionComments;
+
+	/// <summary>Правки комментария сделки: execId и текст.</summary>
+	public IReadOnlyList<(string ExecId, string? Comment)> TradeComments => _tradeComments;
+
+	private readonly List<(long, string?)> _constructionComments = [];
+
+	private readonly List<(long, string, string?)> _positionComments = [];
+
+	private readonly List<(string, string?)> _tradeComments = [];
+
+	public Task SetTradeCommentAsync(string execId, string? comment, CancellationToken cancellationToken = default)
+	{
+		EnsureKey(execId);
+		_tradeComments.Add((execId, comment));
+		return Task.CompletedTask;
+	}
+
+	public Task SetPositionCommentAsync(long constructionId, string symbol, string? text, CancellationToken cancellationToken = default)
+	{
+		EnsureKey(symbol);
+		_positionComments.Add((constructionId, symbol, text));
+		return Task.CompletedTask;
+	}
+
+	public Task SetConstructionCommentAsync(long constructionId, string? comment, CancellationToken cancellationToken = default)
+	{
+		_constructionComments.Add((constructionId, comment));
+		return Task.CompletedTask;
+	}
+
+	private static void EnsureKey(string key)
+	{
+		if (key.Trim().Length == 0)
+		{
+			throw new ArgumentException("ключ пуст");
+		}
 	}
 }
 
