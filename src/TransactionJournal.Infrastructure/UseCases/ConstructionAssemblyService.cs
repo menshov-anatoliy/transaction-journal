@@ -13,7 +13,6 @@ using TransactionJournal.Application.Materialization;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Application.Sync;
 using TransactionJournal.Infrastructure.ReadModels;
-using TransactionJournal.Consultations.Ports;
 using TransactionJournal.Application;
 using TransactionJournal.Domain;
 
@@ -35,27 +34,23 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 	private readonly IJournalRawSnapshotStore _rawSnapshotStore;
 	private readonly IJournalBackupService _backupService;
 	private readonly DbContextOptions<JournalDbContext> _options;
-	private readonly IConsultationStore _consultationStore;
 	private readonly TimeProvider _timeProvider;
 
-	/// <summary>Создаёт команду пересбора над сырым хранилищем, сервисом резервных копий, опциями контекста журнала и хранилищем консультаций.</summary>
+	/// <summary>Создаёт команду пересбора над сырым хранилищем, сервисом резервных копий и опциями контекста журнала.</summary>
 	/// <param name="rawSnapshotStore">Источник полного снимка сырых записей журнала.</param>
 	/// <param name="backupService">Сервис резервных копий; пересбор обязан стартовать после успешной копии.</param>
 	/// <param name="options">Опции EF-контекста журнала; база развёрнута миграциями.</param>
-	/// <param name="consultationStore">Хранилище консультаций: пересбор стирает чат конструкций вместе со старой записью.</param>
 	/// <param name="timeProvider">Поставщик времени для границы OTM-закрывающих; по умолчанию системные часы.</param>
 	/// <exception cref="ArgumentNullException">Какая-либо обязательная зависимость не задана.</exception>
 	public ConstructionAssemblyService(
 		IJournalRawSnapshotStore rawSnapshotStore,
 		IJournalBackupService backupService,
 		DbContextOptions<JournalDbContext> options,
-		IConsultationStore consultationStore,
 		TimeProvider? timeProvider = null)
 	{
 		_rawSnapshotStore = rawSnapshotStore ?? throw new ArgumentNullException(nameof(rawSnapshotStore));
 		_backupService = backupService ?? throw new ArgumentNullException(nameof(backupService));
 		_options = options ?? throw new ArgumentNullException(nameof(options));
-		_consultationStore = consultationStore ?? throw new ArgumentNullException(nameof(consultationStore));
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
@@ -480,19 +475,9 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 		using var db = new JournalDbContext(_options);
 		await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-		// Консультации — запись окружения per construction: вместе со старой
-		// записью конструкций стираются и их базы чата. Стирание предшествует
-		// транзакции вычищения: новые конструкции получают те же ключи заново
-		// и не должны унаследовать чужие истории диалогов.
-		// Traceability: openspec:consultations/history#scenario-history-rebuild-wipes
-		var oldConstructionIds = await db.Constructions
-			.Select(construction => construction.Id)
-			.ToListAsync(cancellationToken)
-			.ConfigureAwait(false);
-		foreach (var constructionId in oldConstructionIds)
-		{
-			await _consultationStore.DeleteForConstructionAsync(constructionId, cancellationToken).ConfigureAwait(false);
-		}
+		// Пересбор больше не трогает legacy-консультации в отдельных SQLite-базах:
+		// поддержка per-construction хранилища выведена из боевого пути без миграции.
+		// Traceability: issue:#53
 
 		// Дочерние записи вычищаются перед конструкциями: внешние ключи привязок и
 		// корректировок запрещают тихое каскадное удаление, пересборка снимает их
@@ -647,4 +632,3 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 
 	#endregion
 }
-

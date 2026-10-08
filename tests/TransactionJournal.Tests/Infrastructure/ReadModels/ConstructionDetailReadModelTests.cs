@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Application.Analytics;
-using TransactionJournal.Components.Pages;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
@@ -15,7 +14,6 @@ using TransactionJournal.Application.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
-using TransactionJournal.Infrastructure.Consultations;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -76,7 +74,6 @@ public class ConstructionDetailReadModelTests
 	private static readonly long OptionDeliveryMs = OptionDelivery.ToUnixTimeMilliseconds();
 
 	private string _databasePath = null!;
-	private string _consultationsDirectory = null!;
 	private ConstructionService _constructionService = null!;
 	private TradeBindingService _bindingService = null!;
 	private CommentService _commentService = null!;
@@ -88,7 +85,6 @@ public class ConstructionDetailReadModelTests
 		// Каждая проверка работает со своей пустой базой во временной папке
 		// со справочником линейного перпа и опциона с delivery 29DEC23.
 		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-construction-detail-tests-{Guid.NewGuid():N}.db");
-		_consultationsDirectory = Path.Combine(Path.GetTempPath(), $"journal-construction-detail-consultations-{Guid.NewGuid():N}");
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			db.Database.Migrate();
@@ -117,10 +113,6 @@ public class ConstructionDetailReadModelTests
 			}
 		}
 
-		if (Directory.Exists(_consultationsDirectory))
-		{
-			Directory.Delete(_consultationsDirectory, recursive: true);
-		}
 	}
 
 	[TestMethod]
@@ -690,7 +682,6 @@ public class ConstructionDetailReadModelTests
 			new JournalSyncStore(CreateOptions()),
 			new StubJournalBackupService(),
 			CreateOptions(),
-			CreateConsultationStore(),
 			new FixedTimeProvider(AssemblyNow));
 		await assembly.RebuildAsync();
 
@@ -807,8 +798,6 @@ public class ConstructionDetailReadModelTests
 			.Options;
 
 	/// <summary>Создаёт настоящее хранилище консультаций над временной папкой проверки.</summary>
-	private ConsultationStore CreateConsultationStore() => new(_consultationsDirectory);
-
 	/// <summary>Собирает read-модель деталей над реальными метриками журнала и позициями.</summary>
 	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentMarkSource freshMarkSource) => new(
 		CreateOptions(),

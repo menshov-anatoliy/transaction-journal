@@ -89,20 +89,47 @@ public sealed class ApiSkeletonTests
 	}
 
 	[TestMethod]
-	[Description("Корневая страница Blazor продолжает отвечать после подключения каркаса API")]
-	// Регресс каркаса: до паритета переносов журнал работает одновременно
-	// в Blazor-UI и новом SPA — существующие страницы не ломаются.
-	public async Task TryIfBlazorRootPageStillServed()
+	[Description("Корень хоста отдаёт index.html SPA")]
+	// Финальный cutover: корневой маршрут журнала обслуживается SPA.
+	// Проверка закрепляет переключение root->SPA.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
+	public async Task TryIfRootServesSpaIndex()
 	{
-		// Arrange: реальный хост журнала на временной базе SQLite.
+		// Arrange: реальный хост журнала на временной базе SQLite и
+		// тестовый index.html SPA в frontend/dist рядом с приложением.
 		await using var factory = new JournalApiFactory();
 
-		// Act: запрос корневой страницы Blazor.
+		// Act: запрос корневого маршрута.
 		var response = await factory.CreateClient().GetAsync("/");
+		var body = await response.Content.ReadAsStringAsync();
 
-		// Assert: страница отвечает HTML.
+		// Assert: маршрут отвечает HTML индексом SPA.
 		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
 		Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo("text/html"));
+		Assert.That(body, Does.Contain(JournalApiFactory.SpaTestMarker));
+	}
+
+	[TestMethod]
+	[Description("Клиентские маршруты SPA возвращают index.html fallback")]
+	// Клиентские маршруты SPA (/constructions/{id}, /agent, /sync-settings)
+	// резолвятся тем же index.html без участия Blazor.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#12-карта-переноса-по-инвентаризации-129
+	public async Task TryIfSpaClientRoutesServeIndexFallback()
+	{
+		// Arrange
+		await using var factory = new JournalApiFactory();
+		var client = factory.CreateClient();
+		var routes = new[] { "/constructions/7", "/agent", "/sync-settings" };
+
+		// Act + Assert
+		foreach (var route in routes)
+		{
+			var response = await client.GetAsync(route);
+			var body = await response.Content.ReadAsStringAsync();
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK), route);
+			Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo("text/html"), route);
+			Assert.That(body, Does.Contain(JournalApiFactory.SpaTestMarker), route);
+		}
 	}
 }
 
@@ -114,9 +141,28 @@ public sealed class ApiSkeletonTests
 /// </summary>
 internal sealed class JournalApiFactory : WebApplicationFactory<Program>
 {
+	public const string SpaTestMarker = "journal-spa-fallback-index";
+
 	private readonly string _databasePath = Path.Combine(
 		Path.GetDirectoryName(typeof(ApiSkeletonTests).Assembly.Location)!,
 		$"journal-api-tests-{Guid.NewGuid():N}.db");
+	private readonly string _spaDistPath = Path.Combine(AppContext.BaseDirectory, "frontend", "dist");
+	private readonly string _spaIndexPath;
+
+	public JournalApiFactory()
+	{
+		_spaIndexPath = Path.Combine(_spaDistPath, "index.html");
+		Directory.CreateDirectory(_spaDistPath);
+		File.WriteAllText(
+			_spaIndexPath,
+			$"""
+			<!doctype html>
+			<html lang="ru">
+			<head><meta charset="utf-8" /><title>SPA test</title></head>
+			<body>{SpaTestMarker}</body>
+			</html>
+			""");
+	}
 
 	protected override void ConfigureWebHost(IWebHostBuilder builder)
 	{
@@ -146,6 +192,17 @@ internal sealed class JournalApiFactory : WebApplicationFactory<Program>
 			catch (IOException)
 			{
 			}
+		}
+
+		try
+		{
+			if (File.Exists(_spaIndexPath))
+			{
+				File.Delete(_spaIndexPath);
+			}
+		}
+		catch (IOException)
+		{
 		}
 	}
 }
