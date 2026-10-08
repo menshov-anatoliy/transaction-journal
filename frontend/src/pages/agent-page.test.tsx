@@ -101,6 +101,64 @@ describe("страница агента", () => {
 		expect(await screen.findByText(/Лимиты риска на период/i)).toBeInTheDocument();
 	});
 
+	it("рендерит сессии примитивом SessionItem, сохраняя выбор и завершение (§3.4:1)", async () => {
+		// Arrange: активный чат один; завершённый — с другой моделью, чтобы
+		// пункты списка различимы по доступному имени.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? [
+						{
+							id: "chat-1",
+							status: "active",
+							params: { model: "GLM-5.3", constructionId: null, sources: ["journal", "rules-corpus", "market"] },
+							createdAt: "2026-10-08T09:00:00Z",
+							lastMessageAt: "2026-10-08T09:01:00Z",
+						},
+					]
+				: [
+						{
+							id: "chat-2",
+							status: "completed",
+							params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-07T09:00:00Z",
+							lastMessageAt: "2026-10-07T09:30:00Z",
+						},
+					],
+		);
+		const user = userEvent.setup();
+		renderPage();
+
+		// Assert: активная сессия — пункт мастера s9J3h (инстанс Cur):
+		// заливка surface2 и доступная метка текущей сессии.
+		const activeItem = await screen.findByRole("button", { name: /GLM-5\.3/ });
+		expect(activeItem.getAttribute("aria-current")).toBe("true");
+		expect(activeItem.className).toContain("bg-surface-2");
+		expect(activeItem.className).toContain("rounded-md");
+
+		// Assert: время последнего сообщения видно в пункте (нода SqhBW).
+		expect(activeItem.textContent).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+
+		// Assert: завершённая сессия — тем же примитивом, без активной заливки.
+		const completedItem = screen.getByRole("button", { name: /glm-5\.3-flash/ });
+		expect(completedItem.className).not.toContain("bg-surface-2");
+
+		// Act: выбор завершённой сессии кликом по пункту.
+		await user.click(completedItem);
+
+		// Assert: выбранная сессия стала текущей (инстанс Cur).
+		await waitFor(() => {
+			expect(completedItem.getAttribute("aria-current")).toBe("true");
+		});
+
+		// Act: завершение активного чата кнопкой из списка.
+		await user.click(screen.getByRole("button", { name: /завершить чат/i }));
+
+		// Assert: команда завершения ушла выбранной сессии.
+		await waitFor(() => {
+			expect(chatsApi.completeChat).toHaveBeenCalledWith("chat-1");
+		});
+	});
+
 	it("создаёт чат первым сообщением через форму", async () => {
 		const user = userEvent.setup();
 		renderPage();

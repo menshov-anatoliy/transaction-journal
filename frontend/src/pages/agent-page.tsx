@@ -7,6 +7,7 @@ import { chatKeys } from "@/chat/chat-queries";
 import { createChat, listChats } from "@/chat/api/chat-api";
 import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
 import type { ChatDataSource, ChatDto } from "@/chat/types";
+import { SessionItem } from "@/components/design";
 import { Button } from "@/components/ui/button";
 import { listRules, readRule, type AgentRuleCard } from "@/lib/api/agent-rules";
 import { formatMoment } from "@/lib/format/display-time";
@@ -427,22 +428,35 @@ function ChatList({
 }) {
 	return (
 		<section className="flex flex-col gap-1">
-			<h3 className="text-sm font-semibold">{title}</h3>
+			{/*
+				Заголовок группы — капс мастера Body #3 (ноды Cap1 «АКТИВНЫЕ» /
+				Cap2 «ЗАВЕРШЁННЫЕ» фрейма dy6On «Список сессий»): 10/normal,
+				letter-spacing 0.5, $textMuted.
+			*/}
+			<h3 className="text-[10px] font-normal tracking-[0.5px] text-text-muted uppercase">{title}</h3>
 			{chats.length === 0 ? (
 				<p className="text-muted-foreground text-xs">пусто</p>
 			) : (
 				<ul className="flex flex-col gap-1">
 					{chats.map((chat) => (
-						<li key={chat.id} className="rounded-md border p-2 text-sm">
-							<button
-								type="button"
-								className={`w-full cursor-pointer text-left ${selectedChatId === chat.id ? "font-semibold" : ""}`}
+						<li key={chat.id}>
+							{/*
+								Пункт списка сессий — примитив «Сессия/пункт»
+								(мастер s9J3h, инстансы S1–S4 Body #3): заголовок —
+								модель чата, время — момент последнего сообщения;
+								превью ChatDto чат-слоя не несёт, активная сессия —
+								заливка surface2 по инстансу Cur. Выбор сессии —
+								кликом по пункту, поведение сохранено.
+							*/}
+							{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+							{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+							<SessionItem
+								active={selectedChatId === chat.id}
+								title={chat.params.model}
+								time={formatMoment(chat.lastMessageAt)}
 								onClick={() => onSelect(chat.id)}
-							>
-								<p>{chat.params.model}</p>
-								<p className="text-muted-foreground text-xs">{formatMoment(chat.lastMessageAt)}</p>
-							</button>
-							<Button variant="ghost" size="sm" className="mt-1 h-auto px-0 text-xs" onClick={() => onToggle(chat.id)}>
+							/>
+							<Button variant="ghost" size="sm" className="mt-0.5 h-auto justify-start px-0 text-xs" onClick={() => onToggle(chat.id)}>
 								{actionLabel}
 							</Button>
 						</li>

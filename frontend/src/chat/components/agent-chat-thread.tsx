@@ -10,6 +10,7 @@ import type { SourceTrace } from "@/chat/types";
 import type { AgentChatController } from "@/chat/runtime/use-agent-chat-runtime";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { Button } from "@/components/ui/button";
+import { ToolStatus } from "@/components/design";
 import { SourceTraceView } from "./source-trace-view";
 
 export interface AgentChatThreadProps {
@@ -72,6 +73,23 @@ export function AgentChatThread({ chat, onRuleHover, onRuleLeave, onRuleOpen }: 
 								)
 							}
 						</ThreadPrimitive.Messages>
+						{/*
+							Индикация выполнения tool-вызовов хода — мастер ix8ma
+							«Tool-статус» (инстанс Tool2/tMmi0 Body #4): в макете
+							пилюля стоит в потоке сообщений между вопросом владельца
+							и стримящимся ответом. Транспорт SSE (задача 2.3) событий
+							прогресса tool-вызовов не несёт — известных каналу данных
+							нет, поэтому пилюля показывается на весь ход генерации с
+							единым текстом источников; имя конкретного инструмента
+							появится здесь же с приходом live-событий tool-прогресса.
+						*/}
+						{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+						{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+						{chat.isRunning && (
+							<div className="mb-4" data-slot="tool-status-run">
+								<ToolStatus>источники — собираю данные для ответа…</ToolStatus>
+							</div>
+						)}
 					</ThreadPrimitive.Viewport>
 				</ThreadPrimitive.Root>
 

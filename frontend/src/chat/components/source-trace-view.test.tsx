@@ -7,9 +7,14 @@ import { SourceTraceView } from "./source-trace-view";
 // и ссылки на карточки правил и данные журнала с их отметками as-of —
 // рендер-примитив под ответом, поверх общего MD-рендера текста.
 // Traceability: change:add-agent-chat/proposal#what-changes
+// Слой сверки с design.pen (задача 5.2 change reconcile-frontend-with-design):
+// панель следа — мастер bUrOy «След источников» (контейнер/заголовок/строки),
+// инструменты — пилюли-источники fYadZ; классы проверяются как шов.
+// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 
 describe("след источников в ответе ИИ-помощника", () => {
-	it("показывает вызванные инструменты с аргументами и as-of", () => {
+	it("показывает вызванные инструменты пилюлями-источниками с аргументами и as-of", () => {
 		// Arrange: ответ использовал рыночный инструмент и чтение карточки.
 		const trace: SourceTrace = {
 			toolCalls: [
@@ -33,6 +38,13 @@ describe("след источников в ответе ИИ-помощника"
 		expect(screen.getByText(/read_rule_card/)).toBeInTheDocument();
 		expect(screen.getByText(/R-12/)).toBeInTheDocument();
 		expect(screen.getByText(/2026-10-08/)).toBeInTheDocument();
+
+		// Assert: вызов инструмента — пилюля-источник (мастер fYadZ,
+		// pill 999), а не прямоугольный чип rounded-md аудита §3.5:5.
+		const chip = screen.getByText(/get_market_snapshot/).closest('[data-slot="source-chip"]');
+		expect(chip).not.toBeNull();
+		expect(chip?.className).toContain("rounded-full");
+		expect(chip?.className).not.toContain("rounded-md");
 	});
 
 	it("показывает ссылки на карточки правил и данные журнала с as-of", () => {
@@ -58,12 +70,13 @@ describe("след источников в ответе ИИ-помощника"
 		// Act: след рендерится примитивом.
 		render(<SourceTraceView trace={trace} />);
 
-		// Assert: обе ссылки видны с названиями; карточка правила отличима
-		// от записи журнала подписью вида ссылки.
+		// Assert: обе ссылки видны с названиями и as-of; карточка правила
+		// отличима от записи журнала подписью вида ссылки мастера bUrOy.
 		expect(screen.getByText(/Роллирование коротких коллов/)).toBeInTheDocument();
 		expect(screen.getByText(/Конструкция №42/)).toBeInTheDocument();
-		expect(screen.getAllByText(/Карточка правила/).length).toBeGreaterThan(0);
-		expect(screen.getByText(/Данные журнала/)).toBeInTheDocument();
+		expect(screen.getAllByText(/Правило/).length).toBeGreaterThan(0);
+		expect(screen.getByText(/Журнал/)).toBeInTheDocument();
+		expect(screen.getAllByText(/2026-10-07/).length).toBe(2);
 	});
 
 	it("помечает рыночный след из кэша при недоступности биржи", () => {
@@ -97,5 +110,37 @@ describe("след источников в ответе ИИ-помощника"
 
 		// Assert: примитив не оставляет пустой разметки в ответе.
 		expect(container).toBeEmptyDOMElement();
+	});
+
+	it("несёт панель мастера bUrOy: мягкая зелёная заливка, радиус 10, капс-заголовок", () => {
+		// Arrange: след с одной ссылкой на карточку правила.
+		const trace: SourceTrace = {
+			toolCalls: [],
+			references: [
+				{ kind: "rule-card", id: "R-14", title: "Не удерживать голый стреддл до экспирации", asOf: "2026-10-07T13:40:00Z" },
+			],
+		};
+
+		// Act: след рендерится примитивом.
+		render(<SourceTraceView trace={trace} />);
+
+		// Assert: контейнер — панель $accentSofter со stroke $accentSoft,
+		// радиус 10 и паддинги [10,12] (замер мастера bUrOy через MCP pen);
+		// заголовок «ИСТОЧНИКИ ОТВЕТА» — капс 10/0.5 $textMuted (нода nFpGY).
+		const panel = screen.getByLabelText("След источников ответа");
+		expect(panel.className).toContain("bg-accent-softer");
+		expect(panel.className).toContain("border-accent-soft");
+		expect(panel.className).toContain("rounded-[10px]");
+		expect(panel.className).toContain("px-3");
+		expect(panel.className).toContain("py-2.5");
+		const title = screen.getByText("Источники ответа");
+		expect(title.className).toContain("text-[10px]");
+		expect(title.className).toContain("tracking-[0.5px]");
+		expect(title.className).toContain("uppercase");
+
+		// Assert: строка ссылки — цвет $accentStrong мастера (текст и иконка).
+		const ruleRow = screen.getByRole("button", { name: /Не удерживать голый стреддл/ });
+		expect(ruleRow.className).toContain("text-accent-strong");
+		expect(ruleRow.className).toContain("text-[12px]");
 	});
 });

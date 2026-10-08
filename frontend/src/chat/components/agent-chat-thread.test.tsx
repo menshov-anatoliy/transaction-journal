@@ -149,7 +149,7 @@ describe("базовая обёртка чата агента", () => {
 		expect(screen.getByRole("link", { name: /карточку/ })).toBeInTheDocument();
 		expect(screen.getByText(/get_market_snapshot/)).toBeInTheDocument();
 		expect(screen.getByText(/Роллирование/)).toBeInTheDocument();
-		expect(screen.getByText(/Карточка правила/)).toBeInTheDocument();
+		expect(screen.getByText(/Правило/)).toBeInTheDocument();
 	});
 
 	it("стилизует сообщения и композер по мастер-нодам Body #4 (§3.5: 1–3)", async () => {
@@ -196,6 +196,38 @@ describe("базовая обёртка чата агента", () => {
 		expect(composer?.className).toContain("rounded-[14px]");
 		expect(composer?.className).toContain("p-3.5");
 		expect(composer?.className).toContain("bg-surface");
+	});
+
+	it("показывает пилюлю ToolStatus на время хода и убирает её по завершении (§3.5:4)", async () => {
+		// Arrange: в чате есть история; новый ход идёт по каналу, который
+		// не завершается сам — ход «в процессе» длится до отмены.
+		mockChatApi({
+			historyByCall: [[userMessage("старый вопрос", "m1")]],
+			neverEndingStream: true,
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "новый вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: пилюля «выполняется» мастера ix8ma (инстанс Tool2 Body #4)
+		// видна в потоке ленты: pill 999 на surface2 с вращающейся иконкой.
+		const statusLabel = await screen.findByText(/источники — собираю данные/);
+		const pill = statusLabel.closest('[data-slot="tool-status"]');
+		expect(pill).not.toBeNull();
+		expect(pill?.className).toContain("rounded-full");
+		expect(pill?.className).toContain("bg-surface-2");
+
+		// Act: владелец останавливает генерацию.
+		await user.click(await screen.findByRole("button", { name: "Остановить" }));
+
+		// Assert: ход завершён — пилюля уходит вместе с состоянием хода.
+		await waitFor(() => {
+			expect(screen.queryByText(/источники — собираю данные/)).toBeNull();
+		});
 	});
 
 	it("отправляет сообщение и стримит ответ токенами до завершения", async () => {

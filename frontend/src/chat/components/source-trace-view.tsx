@@ -1,4 +1,6 @@
+import { BookOpen, Cog, Globe, Notebook, type LucideIcon } from "lucide-react";
 import type { SourceReference, SourceTrace, ToolCallTrace } from "@/chat/types";
+import { SourceChip } from "@/components/design";
 import { formatMoment } from "@/lib/format/display-time";
 
 export interface SourceTraceViewProps {
@@ -13,12 +15,17 @@ export interface SourceTraceViewProps {
 }
 
 const referenceKindLabels: Record<SourceReference["kind"], string> = {
-	"rule-card": "Карточка правила",
-	journal: "Данные журнала",
+	"rule-card": "Правило",
+	journal: "Журнал",
+};
+
+const referenceKindIcons: Record<SourceReference["kind"], LucideIcon> = {
+	"rule-card": BookOpen,
+	journal: Notebook,
 };
 
 /**
- * Рендер-примитив следа источников: список вызванных инструментов и ссылок
+ * Рендер-примитив следа источников: список вызванных инструментов и ссылки
  * на карточки правил и данные журнала с их отметками as-of. Живёт под
  * MD-текстом ответа и не заменяет его: текст рендерит MarkdownViewer,
  * след только поясняет, на чём ответ построен.
@@ -35,54 +42,102 @@ export function SourceTraceView({ trace, onRuleHover, onRuleLeave, onRuleOpen }:
 	return (
 		<aside
 			aria-label="След источников ответа"
-			className="mt-2 flex flex-col gap-1.5 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+			/*
+				Контейнер следа — мастер bUrOy «След источников» (инстанс Tr1
+				Body #4): мягкая зелёная панель $accentSofter #EFF9F4 со stroke
+				$accentSoft #E2F4EB, радиус 10, паддинги [10,12], зазор 5;
+				нейтральная плашка bg-muted/40 (аудит §3.5:5) убрана.
+			*/
+			// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+			className="mt-2 flex flex-col gap-[5px] rounded-[10px] border-accent-soft bg-accent-softer px-3 py-2.5"
 		>
+			{/* Заголовок панели — нода nFpGY «TraceTitle» мастера bUrOy:
+			    капс 10/normal, letter-spacing 0.5, $textMuted. */}
+			<p className="text-[10px] font-normal tracking-[0.5px] text-text-muted uppercase">
+				Источники ответа
+			</p>
 			{hasTools && (
-				<ul className="flex flex-wrap gap-1.5" aria-label="Использованные инструменты">
+				<ul className="flex flex-wrap gap-[7px]" aria-label="Использованные инструменты">
 					{trace.toolCalls.map((call, index) => (
-						<li key={toolCallKey(call, index)} className="rounded-md bg-card px-2 py-1">
-							<span className="font-mono">{call.tool}</span>
-							<span className="mx-1 text-border">·</span>
-							<span>{call.argument}</span>
-							{call.asOf && (
-								<span className="ml-1">as-of {formatMoment(call.asOf)}</span>
-							)}
-							{/* Рыночный след из кэша: биржа была недоступна, данные устарели. */}
-							{call.degraded === true && (
-								<span className="ml-1 rounded bg-amber-100 px-1 text-amber-800">
-									кэш
-								</span>
-							)}
+						<li key={toolCallKey(call, index)}>
+							{/*
+								Вызванные инструменты — пилюли-источники (примитив
+								«Чип/Источник» fYadZ, pill 999): у мастера bUrOy
+								статичного списка инструментов нет — в дизайне
+								инструменты живут состоянием Tool-статуса, поэтому
+								завершённые вызовы читаются чипом источника.
+							*/}
+							{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+							{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+							<SourceChip icon={toolIcon(call.tool)} iconClassName="text-accent-strong">
+								{call.tool} · {call.argument}
+								{call.asOf && (
+									<span className="text-text-muted">, as-of {formatMoment(call.asOf)}</span>
+								)}
+								{/* Рыночный след из кэша: биржа была недоступна, данные устарели. */}
+								{call.degraded === true && (
+									<span className="ml-1 rounded bg-amber-100 px-1 text-amber-800">
+										кэш
+									</span>
+								)}
+							</SourceChip>
 						</li>
 					))}
 				</ul>
 			)}
 			{hasReferences && (
-				<ul className="flex flex-col gap-1" aria-label="Ссылки на источники">
-					{trace.references.map((reference) => (
-						<li key={`${reference.kind}:${reference.id}`} className="flex flex-wrap gap-1">
-							{reference.kind === "rule-card" ? (
-								<button
-									type="button"
-									className="cursor-pointer rounded-md bg-card px-2 py-1 text-left underline-offset-2 hover:underline"
-									onMouseEnter={() => onRuleHover?.(reference.id)}
-									onMouseLeave={() => onRuleLeave?.()}
-									onClick={() => onRuleOpen?.(reference.id)}
-								>
-									{referenceKindLabels[reference.kind]}: {reference.title}
-								</button>
-							) : (
-								<span className="rounded-md bg-card px-2 py-1">
-									{referenceKindLabels[reference.kind]}: {reference.title}
-								</span>
-							)}
-							<span>as-of {formatMoment(reference.asOf)}</span>
-						</li>
-					))}
+				<ul className="flex flex-col gap-[5px]" aria-label="Ссылки на источники">
+					{trace.references.map((reference) => {
+						const Icon = referenceKindIcons[reference.kind];
+						// Строка ссылки мастера bUrOy: «Правило №14 · …» (нода
+						// H4mjmQ, book-open) и «Журнал · сделки …, as-of …»
+						// (нода RD9JT, journal) — иконка 12 и текст 12 цветом
+						// $accentStrong; отметка as-of — частью строки.
+						const rowContent = (
+							<>
+								<Icon aria-hidden="true" className="size-3 shrink-0" />
+								{referenceKindLabels[reference.kind]} · {reference.title}, as-of{" "}
+								{formatMoment(reference.asOf)}
+							</>
+						);
+						return (
+							<li
+								key={`${reference.kind}:${reference.id}`}
+								className="flex flex-wrap items-center gap-[7px]"
+							>
+								{reference.kind === "rule-card" ? (
+									// Ссылка на карточку правила — клик и наведение
+									// открывают карточку: поведение сохранено.
+									<button
+										type="button"
+										className="flex cursor-pointer items-center gap-[7px] text-left text-[12px] text-accent-strong underline-offset-2 hover:underline"
+										onMouseEnter={() => onRuleHover?.(reference.id)}
+										onMouseLeave={() => onRuleLeave?.()}
+										onClick={() => onRuleOpen?.(reference.id)}
+									>
+										{rowContent}
+									</button>
+								) : (
+									<span className="flex items-center gap-[7px] text-[12px] text-accent-strong">
+										{rowContent}
+									</span>
+								)}
+							</li>
+						);
+					})}
 				</ul>
 			)}
 		</aside>
 	);
+}
+
+/** Иконка вызванного инструмента: корпус правил — книга, рынок — глобус. */
+function toolIcon(tool: string): LucideIcon {
+	if (tool.includes("rule"))
+		return BookOpen;
+	if (tool.includes("market") || tool.includes("option"))
+		return Globe;
+	return Cog;
 }
 
 function toolCallKey(call: ToolCallTrace, index: number): string {
