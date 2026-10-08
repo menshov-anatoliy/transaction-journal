@@ -41,9 +41,29 @@ describe("кнопка: тема дизайн-примитива", () => {
 		["secondary", "border bg-card text-foreground"],
 		["ghost", "text-text-secondary"],
 		["destructive", "bg-neg-soft text-neg"],
+		["destructive-solid", "bg-neg text-destructive-foreground"],
 	] as const)("вариант %s разрешается в токены дизайн-системы", (variant, expected) => {
 		// Act + Assert: cva-маппинг вариант→классы без рендера.
 		expect(buttonVariants({ variant })).toContain(expected);
+	});
+
+	it("держит мягкий и плотный Danger раздельно по инстансам мастера", () => {
+		// Arrange: в design.pen базовая «Кнопка/Danger» (JRitT) мягкая —
+		// negSoft-заливка/neg-текст (инстанс Delete YMfP7 в попапе удаления),
+		// а инстансы опасной зоны Body #8 (jmklC/EK3Ob) переопределяют заливку
+		// на $neg с белым текстом — это отдельный вариант destructive-solid.
+		// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+		// Traceability: change:reconcile-frontend-with-design/design#D2
+
+		// Act + Assert: мягкий вариант остаётся negSoft/neg без светлого текста.
+		const soft = buttonVariants({ variant: "destructive" });
+		expect(soft).toContain("bg-neg-soft text-neg");
+		expect(soft).not.toContain("text-destructive-foreground");
+
+		// Act + Assert: плотный вариант — заливка neg и светлый текст.
+		const solid = buttonVariants({ variant: "destructive-solid" });
+		expect(solid).toContain("bg-neg text-destructive-foreground");
+		expect(solid).not.toContain("bg-neg-soft");
 	});
 
 	it("остаётся рабочей кнопкой: клик и disabled работают", async () => {

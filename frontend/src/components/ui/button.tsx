@@ -11,16 +11,19 @@ import { cn } from "@/lib/utils";
 	«Примитивы» (s0YfZ) макета design.pen: радиус 8 (шаг --radius-sm лестницы
 	--radius), шрифт Inter 13/500, паддинги 9/16, без теней. Соответствие
 	вариантов shadcn → дизайн-ноды:
-	  default     → Кнопка/Primary   (заливка accent #1FA36B, текст surface)
-	  outline     → Кнопка/Secondary (заливка surface, бордер border #E5E5DF,
-	                текст textPrimary)
-	  ghost       → Кнопка/Ghost     (без заливки, текст textSecondary,
-	                паддинг 9/12)
-	  destructive → Кнопка/Danger    (заливка negSoft #FBEAE7, текст neg #D14B41)
+	  default           → Кнопка/Primary   (заливка accent #1FA36B, текст surface)
+	  outline           → Кнопка/Secondary (заливка surface, бордер border #E5E5DF,
+	                      текст textPrimary)
+	  ghost             → Кнопка/Ghost     (без заливки, текст textSecondary,
+	                      паддинг 9/12)
+	  destructive       → Кнопка/Danger    (заливка negSoft #FBEAE7, текст neg #D14B41)
+	  destructive-solid → «Кнопка/Danger» с заливкой-переопределением $neg
+	                      и белым текстом — инстансы опасной зоны Body #8
+	                      (jmklC/EK3Ob: «Собрать конструкции»/«Сбросить»)
 	«secondary» — прямое имя дизайн-варианта Secondary, дублирует вид «outline»
 	(белая поверхность с бордером). Hover-состояний в макете нет: они выведены
 	из соседних токенов дизайн-системы (accentStrong — Primary, surface2 —
-	Secondary/Ghost, neg/15 — Danger).
+	Secondary/Ghost, neg/15 — Danger, neg затемнением — destructive-solid).
 */
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 // Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
@@ -34,6 +37,10 @@ const buttonVariants = cva(
 				default: "bg-primary text-primary-foreground hover:bg-accent-strong",
 				destructive:
 					"bg-neg-soft text-neg hover:bg-neg/15 focus-visible:ring-neg/20",
+				// Плотный Danger опасной зоны Body #8: инстансы примитива
+				// переопределяют заливку на $neg и делают текст белым.
+				"destructive-solid":
+					"bg-neg text-destructive-foreground hover:bg-neg/90 focus-visible:ring-neg/20",
 				outline:
 					"border bg-card text-foreground hover:bg-surface-2",
 				secondary:
