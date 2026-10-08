@@ -10,6 +10,10 @@ import { InboxPage } from "./inbox-page";
 // инкрементальная сборка из входящих.
 // Traceability: doc:.wf-research/ui-concept/concept.md#5-раздел-входящие-страница-разбора-маршрут-inbox
 // Traceability: doc:.wf-research/ui-concept/concept.md#12-карта-переноса-по-инвентаризации-129
+// Дизайн-слой задачи 7.3: фильтры на примитивах-полях, чекбоксы
+// дизайн-примитивов, панель целей и выделение строк по Body #5 (TECU5).
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+// Traceability: change:reconcile-frontend-with-design/design#D2
 
 vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/inbox")>()),
@@ -137,7 +141,88 @@ describe("раздел «Входящие»", () => {
 		expect(await screen.findByText(/создано конструкций 1/i)).toBeInTheDocument();
 	});
 
+	it("рендерит строку фильтров примитивами дизайн-системы", async () => {
+		renderPage();
+		await screen.findByText("exec-buy");
+
+		// Поля дат — примитивы-поля мастера Body #5: радиус 8, [7,10], Inter 12.
+		// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+		const from = screen.getByLabelText("Дата с");
+		expect(from).toHaveAttribute("data-slot", "input");
+		expect(from.className).toContain("rounded-sm");
+		expect(from.className).toContain("py-[7px]");
+		expect(from.className).toContain("text-xs");
+
+		// Чекбоксы направления — дизайн-примитив: 16×16, радиус 4.
+		const buy = screen.getByLabelText(/покупка/i);
+		expect(buy.closest("[data-slot='checkbox']")).not.toBeNull();
+		expect(buy.className).toContain("rounded-[4px]");
+		expect(buy.className).toContain("checked:bg-primary");
+
+		// Кнопка сброса — Ghost-инстанс мастера (b0ZLfV).
+		expect(screen.getByRole("button", { name: "Сбросить" })).toBeInTheDocument();
+	});
+
+	it("сбрасывает фильтры кнопкой «Сбросить»", async () => {
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByText("exec-buy");
+
+		// Arrange: снимаем инструмент BTCUSDT — сделка скрывается фильтром.
+		await user.click(screen.getByLabelText("BTCUSDT"));
+		expect(screen.queryByText("exec-buy")).not.toBeInTheDocument();
+
+		// Act: сброс фильтров к окну по умолчанию.
+		await user.click(screen.getByRole("button", { name: "Сбросить" }));
+
+		// Assert: фильтр инструментов снова «все», сделка видна.
+		expect(await screen.findByText("exec-buy")).toBeInTheDocument();
+	});
+
+	it("тонирование направления и выбор строки по мастеру Body #5", async () => {
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByText("exec-buy");
+
+		// Направление тонировано: покупка — $info, продажа — $risk.
+		// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+		expect(screen.getByText("покупка", { selector: "span" }).className).toContain("text-info");
+		expect(screen.getByText("продажа", { selector: "span" })).toHaveClass("text-risk");
+
+		// Act: выбор строки чекбоксом дизайн-примитива.
+		const row = screen.getByRole("row", { name: /exec-buy/i });
+		await user.click(within(row).getByRole("checkbox"));
+
+		// Assert: строка получает выделение $accentSofter (Row:1 мастера).
+		expect(row).toHaveAttribute("data-state", "selected");
+		expect(row.className).toContain("data-[state=selected]:bg-accent-softer");
+
+		// Блок выбранного мастера: счётчик 12/600 и объём 11 textMuted.
+		expect(screen.getByText("Выбрано: 1 сделка")).toBeInTheDocument();
+		expect(screen.getByText("+450 объём")).toBeInTheDocument();
+	});
+
+	it("оформляет панель целей по мастеру: подпись, пилюли радиуса 9, мета", async () => {
+		renderPage();
+		await screen.findByText("exec-buy");
+
+		// Заголовок-подпись (m9kwpl): Inter 10, letterSpacing 0.5, textMuted.
+		const caption = screen.getByRole("heading", { name: "КОНСТРУКЦИИ-ЦЕЛИ" });
+		expect(caption.className).toContain("tracking-[0.5px]");
+		expect(caption.className).toContain("text-text-muted");
+
+		// Пилюля-цель (VZPxZ): радиус 9, паддинги [9,11], имя 12.5/500.
+		const pill = screen.getByRole("button", { name: /Календарь ETH/i });
+		expect(pill.className).toContain("rounded-[9px]");
+		expect(pill.className).toContain("py-[9px]");
+		expect(pill.className).toContain("px-[11px]");
+		expect(within(pill).getByText("Календарь ETH").className).toContain("text-[12.5px]");
+		expect(within(pill).getByText(/открыта · итог \+100\.5/)).toBeInTheDocument();
+	});
+
 	it("в мобильном режиме оставляет только просмотр без тяжёлых действий", async () => {
+		// Мобильная вёрстка проверяется последней: setViewport подменяет
+		// window.matchMedia на 390px для всех последующих тестов файла.
 		setViewport(390);
 		renderPage();
 
