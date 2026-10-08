@@ -255,6 +255,59 @@ public static class ConstructionCardEndpoints
 				errorPrefix: "Удаление пометки не выполнено");
 		});
 
+		// Добавление внешней корректировки PnL: дата, источник «робот»/«ручная»,
+		// знаковая сумма и необязательное описание — форма с пикером даты.
+		// Корректировки идут командами через единый версионированный API.
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		group.MapPost("/{constructionId:long}/adjustments", async (
+			long constructionId,
+			SaveAdjustmentRequest request,
+			IPnLAdjustmentService adjustments,
+			CancellationToken cancellationToken) =>
+		{
+			var source = DeserializeAdjustmentSource(request.Source);
+			if (source is null)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Неизвестный источник корректировки."), statusCode: StatusCodes.Status400BadRequest);
+			}
+
+			return await RunAdjustmentCommand(
+				() => adjustments.AddAsync(constructionId, request.Date, source.Value, request.AmountUsdt, NormalizeComment(request.Description), cancellationToken),
+				errorPrefix: "Корректировка не добавлена");
+		});
+
+		// Правка корректировки из строки таблицы: все атрибуты правятся свободно.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		api.MapPut("/adjustments/{adjustmentId:long}", async (
+			long adjustmentId,
+			SaveAdjustmentRequest request,
+			IPnLAdjustmentService adjustments,
+			CancellationToken cancellationToken) =>
+		{
+			var source = DeserializeAdjustmentSource(request.Source);
+			if (source is null)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Неизвестный источник корректировки."), statusCode: StatusCodes.Status400BadRequest);
+			}
+
+			return await RunAdjustmentCommand(
+				() => adjustments.EditAsync(adjustmentId, request.Date, source.Value, request.AmountUsdt, NormalizeComment(request.Description), cancellationToken),
+				errorPrefix: "Правка корректировки не выполнена");
+		});
+
+		// Удаление корректировки — результат пересчитывается ближайшим чтением.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		api.MapDelete("/adjustments/{adjustmentId:long}", async (
+			long adjustmentId,
+			IPnLAdjustmentService adjustments,
+			CancellationToken cancellationToken) =>
+		{
+			return await RunAdjustmentCommand(
+				() => adjustments.DeleteAsync(adjustmentId, cancellationToken),
+				errorPrefix: "Удаление корректировки не выполнено");
+		});
+
 		// Цели переноса сделки: активные конструкции без текущей — лёгкий
 		// список для формы «Перенести…» без метрик.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
@@ -584,6 +637,36 @@ public static class ConstructionCardEndpoints
 			SerializeAdjustmentSource(adjustment.Source),
 			adjustment.AmountUsdt)).ToArray());
 
+	/// <summary>Разбирает строку источника корректировки; null — неизвестное значение.</summary>
+	private static PnLAdjustmentSource? DeserializeAdjustmentSource(string? source) => source switch
+	{
+		"robot" => PnLAdjustmentSource.Robot,
+		"manual" => PnLAdjustmentSource.Manual,
+		_ => null,
+	};
+
+	/// <summary>
+	/// Выполняет команду корректировки с единой обработкой отказов: ошибка
+	/// ввода — 400, прочие сбои — 500 с текстом причины.
+	/// </summary>
+	private static async Task<IResult> RunAdjustmentCommand(Func<Task> action, string errorPrefix)
+	{
+		try
+		{
+			await action();
+		}
+		catch (ArgumentException)
+		{
+			return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+		}
+		catch (Exception exception)
+		{
+			return Results.Json(new ConstructionCardErrorResponse($"{errorPrefix}: {exception.Message}"), statusCode: StatusCodes.Status500InternalServerError);
+		}
+
+		return Results.NoContent();
+	}
+
 	/// <summary>Стабильная строка статуса конструкции в контракте API.</summary>
 	private static string SerializeStatus(ConstructionStatus status) => status switch
 	{
@@ -854,3 +937,14 @@ public sealed record ConstructionMoveTargetsResponse(IReadOnlyList<ConstructionM
 /// <summary>Запрос переноса сделки в целевую конструкцию.</summary>
 /// <param name="ConstructionId">Целевая конструкция — новая владелица сделки.</param>
 public sealed record MoveTradeRequest(long ConstructionId);
+
+/// <summary>Запрос добавления или правки внешней корректировки PnL.</summary>
+/// <param name="Date">Дата корректировки.</param>
+/// <param name="Source">Источник: robot или manual.</param>
+/// <param name="AmountUsdt">Знаковая сумма корректировки в USDT.</param>
+/// <param name="Description">Описание; null или пробелы — описания нет.</param>
+public sealed record SaveAdjustmentRequest(
+	DateTimeOffset Date,
+	string Source,
+	decimal AmountUsdt,
+	string? Description);

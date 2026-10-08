@@ -461,6 +461,96 @@ public sealed class ConstructionCardApiTests
 			// Assert: эндпоинт отвечает 400.
 			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
 		}
+
+		[TestMethod]
+		[Description("Корректировки PnL добавляются, правятся и удаляются командами")]
+		// Корректировки PnL живут в карточке (№9): форма добавления с датой,
+		// источником и знаковой суммой, inline-правка и удаление — сводка
+		// пересчитывается ближайшим чтением.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		public async Task TryIfAdjustmentsAreAddedEditedAndDeleted()
+		{
+			// Arrange: записывающий сервис корректировок.
+			var adjustments = new RecordingAdjustmentService();
+			await using var factory = new SectionApiFactory(services => services.ReplacePnLAdjustmentService(adjustments));
+			using var client = factory.CreateClient();
+
+			// Act: добавление, правка и удаление корректировки.
+			var add = await client.PostAsJsonAsync("/api/v1/constructions/7/adjustments", new
+			{
+				date = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero),
+				source = "manual",
+				amountUsdt = -12.5m,
+				description = "перенос из робота",
+			});
+			var edit = await client.PutAsJsonAsync("/api/v1/adjustments/11", new
+			{
+				date = new DateTimeOffset(2026, 6, 22, 0, 0, 0, TimeSpan.Zero),
+				source = "robot",
+				amountUsdt = 87.4m,
+				description = (string?)null,
+			});
+			var delete = await client.DeleteAsync("/api/v1/adjustments/11");
+
+			// Assert: команды приняты и дошли сервису домена.
+			Assert.That(add.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(edit.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(delete.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(adjustments.Added, Is.EqualTo(new[] { (7L, new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero), PnLAdjustmentSource.Manual, -12.5m, "перенос из робота") }));
+			Assert.That(adjustments.Edited, Is.EqualTo(new[] { (11L, new DateTimeOffset(2026, 6, 22, 0, 0, 0, TimeSpan.Zero), PnLAdjustmentSource.Robot, 87.4m, (string?)null) }));
+			Assert.That(adjustments.DeletedIds, Is.EqualTo(new[] { 11L }));
+		}
+
+		[TestMethod]
+		[Description("Корректировка с неизвестным источником отвечает 400")]
+		// Источник корректировки — закрытый набор «робот»/«ручная»: постороннее
+		// значение — ошибка контракта, команда в домен не проходит.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		public async Task ThrowOnUnknownAdjustmentSourceReturns400()
+		{
+			// Arrange: записывающий сервис корректировок.
+			var adjustments = new RecordingAdjustmentService();
+			await using var factory = new SectionApiFactory(services => services.ReplacePnLAdjustmentService(adjustments));
+			using var client = factory.CreateClient();
+
+			// Act: добавление корректировки с неизвестным источником.
+			var response = await client.PostAsJsonAsync("/api/v1/constructions/7/adjustments", new
+			{
+				date = new DateTimeOffset(2026, 6, 21, 0, 0, 0, TimeSpan.Zero),
+				source = "external",
+				amountUsdt = 1m,
+				description = (string?)null,
+			});
+
+			// Assert: эндпоинт отвечает 400.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+		}
+
+		[TestMethod]
+		[Description("OpenAPI-документ содержит эндпоинты карточки конструкции")]
+		// Контракт карточки публикуется в OpenAPI: документ отражает фактические
+		// эндпоинты, пригоден для ревью контрактов и генерации клиента SPA.
+		// Traceability: openspec:http-api/transport#scenario-openapi-schema-published
+		public async Task TryIfOpenApiListsCardEndpoints()
+		{
+			// Arrange: хост карточки со стабильными read-моделями.
+			await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+			using var client = factory.CreateClient();
+
+			// Act: запрос OpenAPI-документа.
+			var document = await (await client.GetAsync("/openapi/v1.json")).Content.ReadFromJsonAsync<JsonNode>();
+
+			// Assert: пути карточки опубликованы под версионированным префиксом.
+			var paths = document!["paths"]!.AsObject().Select(path => path.Key).ToArray();
+			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}"));
+			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/rename"));
+			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/close-marks"));
+			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/move-targets"));
+			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/adjustments"));
+			Assert.That(paths, Does.Contain("/api/v1/trades/{execId}/return-to-inbox"));
+			Assert.That(paths, Does.Contain("/api/v1/adjustments/{adjustmentId}"));
+		}
 }
 
 /// <summary>Записывающий сервис конструкций: фиксирует команды карточки.</summary>
@@ -710,6 +800,46 @@ internal sealed class RecordingTradeBindingService : ITradeBindingService
 			throw new ArgumentException("ключ пуст");
 		}
 	}
+}
+
+/// <summary>Записывающий сервис корректировок PnL: фиксирует команды карточки.</summary>
+internal sealed class RecordingAdjustmentService : IPnLAdjustmentService
+{
+	/// <summary>Добавленные корректировки: конструкция, дата, источник, сумма и комментарий.</summary>
+	public IReadOnlyList<(long ConstructionId, DateTimeOffset Date, PnLAdjustmentSource Source, decimal Amount, string? Comment)> Added => _added;
+
+	/// <summary>Правки корректировок: ключ, дата, источник, сумма и комментарий.</summary>
+	public IReadOnlyList<(long AdjustmentId, DateTimeOffset Date, PnLAdjustmentSource Source, decimal Amount, string? Comment)> Edited => _edited;
+
+	/// <summary>Удалённые корректировки.</summary>
+	public IReadOnlyList<long> DeletedIds => _deletedIds;
+
+	private readonly List<(long, DateTimeOffset, PnLAdjustmentSource, decimal, string?)> _added = [];
+
+	private readonly List<(long, DateTimeOffset, PnLAdjustmentSource, decimal, string?)> _edited = [];
+
+	private readonly List<long> _deletedIds = [];
+
+	public Task<PnLAdjustment> AddAsync(long constructionId, DateTimeOffset date, PnLAdjustmentSource source, decimal amountUsdt, string? comment = null, CancellationToken cancellationToken = default)
+	{
+		_added.Add((constructionId, date, source, amountUsdt, comment));
+		return Task.FromResult(new PnLAdjustment { ConstructionId = constructionId, Date = date, Source = source, AmountUsdt = amountUsdt, Comment = comment });
+	}
+
+	public Task EditAsync(long adjustmentId, DateTimeOffset date, PnLAdjustmentSource source, decimal amountUsdt, string? comment, CancellationToken cancellationToken = default)
+	{
+		_edited.Add((adjustmentId, date, source, amountUsdt, comment));
+		return Task.CompletedTask;
+	}
+
+	public Task DeleteAsync(long adjustmentId, CancellationToken cancellationToken = default)
+	{
+		_deletedIds.Add(adjustmentId);
+		return Task.CompletedTask;
+	}
+
+	public Task<IReadOnlyList<PnLAdjustment>> ListAsync(long constructionId, CancellationToken cancellationToken = default) =>
+		Task.FromResult<IReadOnlyList<PnLAdjustment>>([]);
 }
 
 /// <summary>Записывающий сервис ручных пометок закрытия: фиксирует команды карточки.</summary>
