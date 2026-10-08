@@ -124,3 +124,76 @@ describe("MarkdownEditDialog", () => {
 		expect(screen.getByRole("textbox")).toHaveValue("исходный текст");
 	});
 });
+
+// Тематизация @uiw/react-md-editor по дизайн-фреймам «Стенд/MD-редактор
+// (split)» (Header nBfEb / Toolbar f1i0Gf / Split veYUd / Footer H5zNRM):
+// проверяются стабильные в jsdom швы — класс-хук CSS-темы на обёртке
+// редактора, состав тулбара и рендер footer-кнопок примитивами ui/button.
+// Визуальная часть (радиусы, шрифты, цвета) принимается скриншот-сверкой.
+// Traceability: change:reconcile-frontend-with-design/design#D5
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+describe("MarkdownEditDialog: тематизация дизайн-системы", () => {
+	it("оборачивает виджет редактора классом-хуком темы", () => {
+		// Act: открытие модального редактора.
+		renderDialog();
+
+		// Assert: корень виджета несёт класс journal-md-editor, на который
+		// опираются переопределения .w-md-editor-* в markdown-editor-theme.css.
+		expect(
+			document.body.querySelector(".journal-md-editor.w-md-editor"),
+		).not.toBeNull();
+	});
+
+	it("показывает тулбар дизайн-набора: 8 команд с иконками", () => {
+		// Act: открытие модального редактора с тулбаром.
+		renderDialog();
+
+		// Assert: ровно 8 кнопок тулбара — дизайн-набор фрейма Toolbar
+		// (f1i0Gf); стандартные команды @uiw (зачёркивание, цитата,
+		// картинка, справка…) не рендерятся.
+		const toolbarButtons =
+			document.body.querySelectorAll(".w-md-editor-toolbar li > button");
+		expect(toolbarButtons).toHaveLength(8);
+
+		// Каждая команда имеет русскую доступную подпись и иконку lucide
+		// (svg), цвет которой наследуется стилями кнопки.
+		const labels = [
+			"Полужный",
+			"Курсив",
+			"Заголовок 2",
+			"Список",
+			"Нумерованный список",
+			"Ссылка",
+			"Таблица",
+			"Код",
+		];
+		for (const label of labels) {
+			const button = document.body.querySelector(
+				`.w-md-editor-toolbar button[aria-label="${label}"]`,
+			);
+			expect(button, `нет кнопки «${label}»`).not.toBeNull();
+			expect(button?.querySelector("svg")).not.toBeNull();
+		}
+	});
+
+	it("footer: подсказка сочетания и компактные кнопки-примитивы", () => {
+		// Act: открытие модального редактора.
+		renderDialog();
+
+		// Assert: слева в футере подсказка из фрейма Footer (H5zNRM).
+		expect(
+			screen.getByText("Ctrl+Enter — сохранить · live-превью"),
+		).toBeInTheDocument();
+
+		// Кнопки футера — примитивы ui/button в компактном кегле 12
+		// (паддинги [7,14] инстансов Cancel/Save фрейма H5zNRM).
+		const cancel = screen.getByRole("button", { name: "Отмена" });
+		const save = screen.getByRole("button", { name: "Сохранить" });
+		for (const button of [cancel, save]) {
+			expect(button).toHaveAttribute("data-slot", "button");
+			expect(button.className).toContain("text-xs");
+		}
+		// Отмена — Secondary-инстанс (белая поверхность с бордером).
+		expect(cancel.className).toContain("bg-card");
+	});
+});
