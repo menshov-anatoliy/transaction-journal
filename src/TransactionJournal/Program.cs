@@ -9,6 +9,7 @@ using TransactionJournal.Api.Constructions;
 using TransactionJournal.Api.Hints;
 using TransactionJournal.Api.Agent;
 using TransactionJournal.Api.Sync;
+using TransactionJournal.Api.Inbox;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Bybit;
@@ -442,6 +443,7 @@ api.MapConstructionsEndpoints();
 api.MapConstructionCardEndpoints();
 api.MapHintsEndpoints();
 api.MapSyncEndpoints();
+api.MapInboxEndpoints();
 api.MapAgentEndpoints();
 
 if (spaRootPath != null)
