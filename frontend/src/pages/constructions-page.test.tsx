@@ -183,6 +183,11 @@ beforeEach(() => {
 		newExecutions: 5,
 		newDeliveries: 2,
 		newInstruments: 1,
+		projectionError: null,
+		reconciliationWarnings: [],
+		skippedAreas: [],
+		unresolvedInstruments: [],
+		uncoveredBaseCoins: [],
 	});
 });
 
