@@ -58,7 +58,7 @@ function toneClass(value: number): string {
 }
 
 /** Величина ячейки с деградацией: прочерк вместо null, признак сбоя в title. */
-function DegradedValue({ value, format }: { value: number | null; format: (value: number) => string }) {
+function DegradedValue<T>({ value, format }: { value: T | null; format: (value: T) => string }) {
 	const degraded = degrade(value, format);
 	if (degraded.available) {
 		return <span className="tabular-nums">{degraded.text}</span>;
@@ -122,7 +122,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
 				sortDescFirst: true,
 				cell: ({ row }) =>
-					row.original.markValue === null && quotesDegraded(row) ? (
+					row.original.markValue === null && quotesDegraded(row.original) ? (
 						<span className="text-muted-foreground" title="Провайдер котировок недоступен — стоимость не оценена">
 							сбой котировок
 						</span>
@@ -196,7 +196,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 								plannedProfit: row.original.profitUsdt,
 								realized: row.original.realizedPnL,
 								unrealized: row.original.unrealizedPnL,
-								quotesDegraded: quotesDegraded(row),
+								quotesDegraded: quotesDegraded(row.original),
 							}}
 							className="w-28"
 						/>
@@ -253,7 +253,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 	);
 
 	const table = useReactTable({
-		data: rows,
+		data: [...rows],
 		columns,
 		state: { sorting },
 		onSortingChange: setSorting,
