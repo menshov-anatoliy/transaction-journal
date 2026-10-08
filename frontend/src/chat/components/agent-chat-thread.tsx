@@ -13,6 +13,12 @@ import { SourceTraceView } from "./source-trace-view";
 export interface AgentChatThreadProps {
 	/** Контроллер чата агента из useAgentChatRuntime. */
 	chat: AgentChatController;
+	/** Наведение на ссылку карточки правила из следа источников. */
+	onRuleHover?: (ruleId: string) => void;
+	/** Уход курсора со ссылки карточки правила. */
+	onRuleLeave?: () => void;
+	/** Открытие карточки правила из следа источников. */
+	onRuleOpen?: (ruleId: string) => void;
 }
 
 // Журнальный текст чата рендерится единым MD-рендером — текстовая часть
@@ -31,7 +37,7 @@ const MarkdownText: TextMessagePartComponent = ({ text }) => (
  */
 // Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
 // Traceability: change:add-agent-chat/proposal#what-changes
-export function AgentChatThread({ chat }: AgentChatThreadProps) {
+export function AgentChatThread({ chat, onRuleHover, onRuleLeave, onRuleOpen }: AgentChatThreadProps) {
 	return (
 		<AssistantRuntimeProvider runtime={chat.runtime}>
 			<div className="flex h-full min-h-0 flex-col">
@@ -48,7 +54,7 @@ export function AgentChatThread({ chat }: AgentChatThreadProps) {
 								message.role === "user" ? (
 									<UserRow />
 								) : (
-									<AssistantRow trace={readSourceTrace(message)} />
+									<AssistantRow trace={readSourceTrace(message)} onRuleHover={onRuleHover} onRuleLeave={onRuleLeave} onRuleOpen={onRuleOpen} />
 								)
 							}
 						</ThreadPrimitive.Messages>
@@ -96,12 +102,24 @@ function UserRow() {
 	);
 }
 
-function AssistantRow({ trace }: { trace: SourceTrace | undefined }) {
+function AssistantRow({
+	trace,
+	onRuleHover,
+	onRuleLeave,
+	onRuleOpen,
+}: {
+	trace: SourceTrace | undefined;
+	onRuleHover?: (ruleId: string) => void;
+	onRuleLeave?: () => void;
+	onRuleOpen?: (ruleId: string) => void;
+}) {
 	return (
 		<MessagePrimitive.Root className="mb-4 flex flex-col items-start">
 			<div className="w-full max-w-[92%] rounded-2xl rounded-bl-md border bg-card px-4 py-2.5">
 				<MessagePrimitive.Parts components={{ Text: MarkdownText }} />
-				{trace !== undefined && <SourceTraceView trace={trace} />}
+				{trace !== undefined && (
+					<SourceTraceView trace={trace} onRuleHover={onRuleHover} onRuleLeave={onRuleLeave} onRuleOpen={onRuleOpen} />
+				)}
 			</div>
 		</MessagePrimitive.Root>
 	);

@@ -7,6 +7,7 @@ using TransactionJournal;
 using TransactionJournal.Api;
 using TransactionJournal.Api.Constructions;
 using TransactionJournal.Api.Hints;
+using TransactionJournal.Api.Agent;
 using TransactionJournal.Api.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
@@ -301,6 +302,8 @@ builder.Services.AddSingleton<IHintPassRunner>(sp => sp.GetRequiredService<HintA
 // «Применено»/«Отклонено» и первый показ идут через неё же.
 // Traceability: openspec:ui/screens#requirement-ui-hint-section-groups
 builder.Services.AddSingleton<IHintDisplayReadModel, HintDisplayReadModel>();
+builder.Services.AddSingleton<AgentRulesCatalog>();
+builder.Services.AddSingleton(_ => new AgentChatStore(dataDirectory));
 
 // Read-модель экрана «Конструкции»: соединяет метрики аналитики журнала с именами
 // и ручными статусами конструкций, скрывая архивные из списка и его счётчика.
@@ -439,6 +442,7 @@ api.MapConstructionsEndpoints();
 api.MapConstructionCardEndpoints();
 api.MapHintsEndpoints();
 api.MapSyncEndpoints();
+api.MapAgentEndpoints();
 
 if (spaRootPath != null)
 {
@@ -490,5 +494,4 @@ static IChatClient CreateConsultationChatClient(ConsultationChatModelOptions opt
 public partial class Program
 {
 }
-
 
