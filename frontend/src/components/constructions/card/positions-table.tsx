@@ -134,7 +134,9 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 				</div>
 			)}
 
-			<Table>
+			{/* Плотность Body #2 (yHC4d): все таблицы карточки — ячейки 7/12, шрифт 12. */}
+			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
+			<Table density="compact">
 				<TableHeader>
 					<TableRow>
 						<TableHead>Инструмент</TableHead>

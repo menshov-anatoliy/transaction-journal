@@ -82,7 +82,9 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 				id: "name",
 				header: "Конструкция",
 				accessorKey: "name",
-				cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+				// Имя строки по мастеру Body #1 — Inter 12.5/500 на textPrimary.
+				// Traceability: change:reconcile-frontend-with-design/design#D6
+				cell: ({ row }) => <span className="text-[12.5px] font-medium">{row.original.name}</span>,
 			},
 			{
 				id: "hints",
@@ -301,8 +303,11 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 		);
 	}
 
+	// Плотность Body #1 (X2ic2p) мастера: ячейки 9/10 при шрифте 12, имя —
+	// 12.5/500, шапка — 8/10 и 11/600.
+	// Traceability: change:reconcile-frontend-with-design/design#D6
 	return (
-		<Table>
+		<Table density="comfortable">
 			<TableHeader>
 				{table.getHeaderGroups().map((headerGroup) => (
 					<TableRow key={headerGroup.id}>

@@ -144,7 +144,10 @@ export function SyncSettingsPage() {
 				)}
 				{runsQuery.data !== undefined && runsQuery.data.length > 0 && (
 					<div className="rounded-md border">
-						<Table>
+						{/* Плотность Body #8 (qA7CW): журнал запусков — ячейки 6/12, шрифт 11.5. */}
+						{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
+						{/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
+						<Table density="dense">
 							<TableHeader>
 								<TableRow>
 									<TableHead>Время</TableHead>
