@@ -12,6 +12,12 @@ import type { ChatMessageDto } from "@/chat/types";
 // MD-рендером журнального текста со следом источников под ответом.
 // Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
 // Traceability: change:add-agent-chat/proposal#what-changes
+// Слой сверки с design.pen (задача 5.1 change reconcile-frontend-with-design):
+// сообщения и композер ленты чата принимаются по мастер-нодам Body #4 —
+// eja01 (пузырь владельца), sENPF (плоский ответ), Z14sH/K7kSy (композер
+// и кнопка отправки); классы проверяются как шов ретемизации.
+// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 
 function Harness({ chatId, model }: { chatId: string; model?: string }) {
 	const chat = useAgentChatRuntime(chatId, model ?? "GLM-5.3");
@@ -144,6 +150,52 @@ describe("базовая обёртка чата агента", () => {
 		expect(screen.getByText(/get_market_snapshot/)).toBeInTheDocument();
 		expect(screen.getByText(/Роллирование/)).toBeInTheDocument();
 		expect(screen.getByText(/Карточка правила/)).toBeInTheDocument();
+	});
+
+	it("стилизует сообщения и композер по мастер-нодам Body #4 (§3.5: 1–3)", async () => {
+		// Arrange: история содержит вопрос владельца и ответ агента без следа,
+		// чтобы классы контейнеров сообщений читались без вложенных панелей.
+		mockChatApi({
+			historyByCall: [
+				[
+					userMessage("вопрос из мастера", "m1"),
+					assistantMessage("ответ из мастера", "m2"),
+				],
+			],
+		});
+		renderChat();
+
+		// Assert: пузырь владельца — мастер eja01: заливка $surface2, радиус 12,
+		// паддинги [10,14]; индиго-пузырь bg-primary исчез вместе с oklch-остатками.
+		const bubble = (await screen.findByText("вопрос из мастера")).closest("div.bg-surface-2");
+		expect(bubble).not.toBeNull();
+		expect(bubble?.className).toContain("rounded-lg");
+		expect(bubble?.className).toContain("px-3.5");
+		expect(bubble?.className).toContain("py-2.5");
+		expect(bubble?.className).toContain("max-w-[400px]");
+		expect(bubble?.className).not.toContain("bg-primary");
+
+		// Assert: текст сообщений — Inter 13.5 мастера: у владельца 1.5 (uuYEd).
+		expect((await screen.findByText("ответ из мастера")).closest("div")?.className).toContain("text-[13.5px]");
+
+		// Assert: ответ агента — мастер sENPF: плоский текст 13.5/1.55 без
+		// карточки (нет bg-card/rounded-2xl у контейнера сообщения).
+		const answerBody = screen.getByText("ответ из мастера").closest("div");
+		expect(answerBody?.className).toContain("leading-[1.55]");
+		expect(answerBody?.parentElement?.className).not.toContain("bg-card");
+		expect(answerBody?.parentElement?.className).not.toContain("rounded-2xl");
+
+		// Assert: композер — мастер Z14sH (радиус 14, паддинг 14, заливка
+		// $surface), отправка — примитив Button Primary: квадрат 36×36
+		// (size-9) на акценте $accent, радиус 10 (мастер-нода K7kSy).
+		const send = screen.getByRole("button", { name: "Отправить" });
+		expect(send.className).toContain("bg-primary");
+		expect(send.className).toContain("size-9");
+		expect(send.className).toContain("rounded-md");
+		const composer = send.closest("form");
+		expect(composer?.className).toContain("rounded-[14px]");
+		expect(composer?.className).toContain("p-3.5");
+		expect(composer?.className).toContain("bg-surface");
 	});
 
 	it("отправляет сообщение и стримит ответ токенами до завершения", async () => {

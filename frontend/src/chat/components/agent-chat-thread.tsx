@@ -5,9 +5,11 @@ import {
 	MessagePrimitive,
 	ThreadPrimitive,
 } from "@assistant-ui/react";
+import { ArrowUp } from "lucide-react";
 import type { SourceTrace } from "@/chat/types";
 import type { AgentChatController } from "@/chat/runtime/use-agent-chat-runtime";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
+import { Button } from "@/components/ui/button";
 import { SourceTraceView } from "./source-trace-view";
 
 export interface AgentChatThreadProps {
@@ -24,8 +26,16 @@ export interface AgentChatThreadProps {
 // Журнальный текст чата рендерится единым MD-рендером — текстовая часть
 // сообщения проходит через MarkdownViewer, как правила и комментарии.
 // Примитив Parts спредит поля части (text) прямо в пропсы компонента.
-const MarkdownText: TextMessagePartComponent = ({ text }) => (
-	<MarkdownViewer text={text} />
+// Типографика сообщений — мастер Body #4 (design.pen, инстансы eja01/sENPF):
+// Inter 13.5/normal, у владельца межстрочный 1.5 (нода uuYEd), у агента 1.55
+// (нода L30TL); базовые text-sm/leading-relaxed перекрываются через cn.
+// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+const UserMarkdownText: TextMessagePartComponent = ({ text }) => (
+	<MarkdownViewer text={text} className="text-[13.5px] leading-[1.5]" />
+);
+
+const AssistantMarkdownText: TextMessagePartComponent = ({ text }) => (
+	<MarkdownViewer text={text} className="text-[13.5px] leading-[1.55]" />
 );
 
 /**
@@ -42,7 +52,11 @@ export function AgentChatThread({ chat, onRuleHover, onRuleLeave, onRuleOpen }: 
 		<AssistantRuntimeProvider runtime={chat.runtime}>
 			<div className="flex h-full min-h-0 flex-col">
 				<ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
-					<ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
+					{/* Лента сообщений — мастер Body #4, нода iXsp6 «Сообщения»:
+					    асимметричные паддинги [4,60,4,4] и зазор между элементами 16
+					    (mb-4 строк ниже); правый инсет 60 держит меру текста около
+					    ширины композера. */}
+					<ThreadPrimitive.Viewport className="min-h-0 flex-1 overflow-y-auto p-1 pr-15">
 						<ThreadPrimitive.Empty>
 							<p className="py-16 text-center text-sm text-muted-foreground">
 								Задайте вопрос ИИ-помощнику — он ответит сценариями «если/то» по
@@ -65,27 +79,45 @@ export function AgentChatThread({ chat, onRuleHover, onRuleLeave, onRuleOpen }: 
 				{chat.error !== null && (
 					<div
 						role="alert"
-						className="mx-4 mb-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+						className="mx-1 mb-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
 					>
 						Генерация не удалась: {chat.error}. Ответ может быть неполным — история
 						чата сохранена.
 					</div>
 				)}
 
-				<ComposerPrimitive.Root className="mx-4 mb-4 flex items-end gap-2 rounded-xl border bg-card p-2 shadow-sm">
+				{/* Композер Body #4 — мастер Z14sH «Композер/Агент» (инстанс AcXEb):
+				    заливка $surface, бордер $border, радиус 14, паддинг 14, зазор 12,
+				    вертикаль «поле ввода → строка действий», ширина колонки до 720.
+				    «Паддинг 10» аудита §3.5:3 принадлежит обёртке ComposerWrap (PZoUP)
+				    экрана Body #3 — в Body #4 композер идёт без обёртки, решение по
+				    мастеру; радиус 14 тоже по мастеру, а не «7–12» из текста задачи. */}
+				{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+				{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+				<ComposerPrimitive.Root className="mx-1 mb-1 flex w-[min(100%,720px)] flex-col gap-3 rounded-[14px] border bg-surface p-3.5">
 					<ComposerPrimitive.Input
 						rows={2}
 						placeholder="Спросите ИИ-помощника…"
-						className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground"
+						className="max-h-40 min-h-11 w-full resize-none bg-transparent text-[13.5px] leading-[1.5] outline-none placeholder:text-text-muted"
 					/>
-					<ComposerPrimitive.Send className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50">
-						Отправить
-					</ComposerPrimitive.Send>
-					{chat.isRunning && (
-						<ComposerPrimitive.Cancel className="inline-flex h-9 items-center rounded-lg border px-3 text-sm font-medium transition-colors hover:bg-accent">
-							Остановить
-						</ComposerPrimitive.Cancel>
-					)}
+					<div className="flex items-center justify-end gap-2">
+						{chat.isRunning && (
+							<ComposerPrimitive.Cancel asChild>
+								<Button variant="secondary" size="sm">
+									Остановить
+								</Button>
+							</ComposerPrimitive.Cancel>
+						)}
+						{/* Отправка — мастер-нода K7kSy «Send»: квадрат 36×36 на токене
+						    $accent (вариант Primary примитива ui/button), радиус 10
+						    (--radius-md лестницы --radius), иконка arrow-up белым. */}
+						{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+						<ComposerPrimitive.Send asChild>
+							<Button aria-label="Отправить" size="icon" className="rounded-md">
+								<ArrowUp aria-hidden />
+							</Button>
+						</ComposerPrimitive.Send>
+					</div>
 				</ComposerPrimitive.Root>
 			</div>
 		</AssistantRuntimeProvider>
@@ -95,8 +127,13 @@ export function AgentChatThread({ chat, onRuleHover, onRuleLeave, onRuleOpen }: 
 function UserRow() {
 	return (
 		<MessagePrimitive.Root className="mb-4 flex justify-end">
-			<div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
-				<MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+			{/* Пузырь сообщения владельца — мастер eja01 «Сообщение/Пользователь»:
+			    нейтральная заливка $surface2 с текстом $textPrimary, единый радиус 12
+			    без «хвоста» мессенджера, паддинги [10,14], мера текста до ~400.
+			    Индиго-пузырь bg-primary (аудит §3.5:1) убран как вне-токенный. */}
+			{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+			<div className="max-w-[400px] rounded-lg bg-surface-2 px-3.5 py-2.5 text-text-primary">
+				<MessagePrimitive.Parts components={{ Text: UserMarkdownText }} />
 			</div>
 		</MessagePrimitive.Root>
 	);
@@ -114,9 +151,14 @@ function AssistantRow({
 	onRuleOpen?: (ruleId: string) => void;
 }) {
 	return (
-		<MessagePrimitive.Root className="mb-4 flex flex-col items-start">
-			<div className="w-full max-w-[92%] rounded-2xl rounded-bl-md border bg-card px-4 py-2.5">
-				<MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+		<MessagePrimitive.Root className="mb-4 flex w-full flex-col items-start">
+			{/* Ответ агента — мастер sENPF «Сообщение/Ассистент»: без карточки-плашки,
+			    плоский текст $textPrimary на фоне колонки во всю ширину; радиусы чата
+			    7–12 в дизайне живут на вложенных панелях (след источников — таск 5.2),
+			    а не на самом сообщении. Карточка с радиусом 16 (аудит §3.5:2) убрана. */}
+			{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+			<div className="w-full">
+				<MessagePrimitive.Parts components={{ Text: AssistantMarkdownText }} />
 				{trace !== undefined && (
 					<SourceTraceView trace={trace} onRuleHover={onRuleHover} onRuleLeave={onRuleLeave} onRuleOpen={onRuleOpen} />
 				)}
