@@ -86,8 +86,8 @@ public class BybitTickersClientTests
 	}
 
 	[TestMethod]
-	[Description("Тикеры отдают опциональные рыночные поля консультаций из зафиксированных ответов обеих категорий")]
-	public async Task TryIfTickersExposeOptionalMarketFieldsForConsultationTools()
+	[Description("Тикеры отдают опциональные рыночные поля чата из зафиксированных ответов обеих категорий")]
+	public async Task TryIfTickersExposeOptionalMarketFieldsForChatTools()
 	{
 		// Arrange: те же зафиксированные ответы официальной документации — тикер опциона
 		// с греками и волатильностями, тикер линейного перпа со ставкой фандинга.
@@ -107,7 +107,7 @@ public class BybitTickersClientTests
 		})).Single();
 
 		// Assert: опционный тикер отдаёт греки, волатильности, бид-аск и открытый
-		// интерес — сырьё компактной проекции доски для инструментов консультаций.
+		// интерес — сырьё компактной проекции доски для инструментов чата.
 		// Traceability: change:add-assistant-chat/design#d3
 		Assert.Multiple(() =>
 		{
@@ -134,7 +134,7 @@ public class BybitTickersClientTests
 		});
 
 		// Assert: линейный перп отдаёт ставку фандинга, открытый интерес в обеих
-		// валютах и бид-аск — сырьё снимка рынка для инструментов консультаций,
+		// валютах и бид-аск — сырьё снимка рынка для инструментов чата,
 		// а греков и волатильностей у него нет.
 		// Traceability: change:add-assistant-chat/design#d3
 		Assert.Multiple(() =>

@@ -1,0 +1,14 @@
+﻿Change 'reconcile-frontend-with-design' is valid
+Команда: openspec validate reconcile-frontend-with-design --strict
+Exit code: 0
+Проверка 09.10.2026 после окончательной съёмки 10:08:44–10:09:20 +03:00.
+18 PNG: проверены SHA-256, размеры; все 9 app PNG свежие.
+Compact: 4/4 по 132 CSS px в 00/01.
+Статусы конструкций: живые status-chip pos/neutral в таблице и pos в карточке.
+03/04: source panel 278/278; списки 254/254; market chip 254 <= available 254.
+03/04: degraded-cache «кэш» entirelyVisible=true.
+Mock: 104 запроса, только GET, все 200; реальные команды не выполнялись.
+MCP Browser: load-page успешен; return-screenshot и CDP возвращают A capture is already running.
+8.3 не закрыта: обязательный live MCP Browser просмотр заблокирован.
+Локальный Chrome CDP не выдаётся за MCP screenshot.
+4file/28tests и build не запускались этой evidence-сессией; успех предоставлен владельцем.

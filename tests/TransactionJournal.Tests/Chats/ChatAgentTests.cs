@@ -1,0 +1,346 @@
+namespace TransactionJournal.Tests.Chats;
+
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using Microsoft.Extensions.AI;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
+using NUnit.Framework;
+using TransactionJournal.Chats;
+using TransactionJournal.Chats.Ports;
+using Assert = NUnit.Framework.Assert;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
+
+/// <summary>
+/// Проверки агентного цикла чата: ответ стримится обновлениями чата,
+/// конвейер сообщения собирается из инструкций, истории диалога и вопроса со
+/// снимком контекста, рыночный инструмент реально исполняется внутри цикла и
+/// его результат возвращается модели, а зацикливание тул-вызовов останавливается
+/// потолком итераций без исключения.
+/// </summary>
+[TestClass]
+public sealed class ChatAgentTests
+{
+	/// <summary>Фиксированный момент as-of для детерминированных снимков и ответов.</summary>
+	private static readonly DateTimeOffset FixedNow = new(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
+
+	[TestMethod]
+	[Description("Ответ стримится текстовыми обновлениями, вопрос уходит вместе со снимком контекста")]
+	public async Task TryIfStreamAnswerYieldsTextChunksAndComposesQuestion()
+	{
+		// Arrange: модель стримит ответ двумя кадрами одного запроса; рыночный
+		// порт под строгим моком — агент без инструментов не имеет права его трогать.
+		var chatClient = new FakeChatClient();
+		chatClient.Script =
+		[
+			[
+				() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ "),
+				() => new ChatResponseUpdate(ChatRole.Assistant, "начинается."),
+			],
+		];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
+		var agent = CreateAgent(chatClient, market);
+
+		// Act: задаём вопрос со снимком пустой истории.
+		var updates = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как выглядит структура?"));
+
+		// Assert: оба кадра стрима дошли до вызывающего без склейки — текстовые
+		// обновления агент отдаёт один к одному.
+		Assert.That(updates, Has.Count.EqualTo(2));
+		Assert.That(string.Concat(updates.Select(update => update.Text)), Is.EqualTo("Ответ начинается."));
+
+		// Assert: конвейер сообщения — инструкции системой, вопрос со снимком последним.
+		var request = chatClient.Requests.Single();
+		Assert.That(request[0].Role, Is.EqualTo(ChatRole.System));
+		Assert.That(request[0].Text, Is.Not.Empty);
+		Assert.That(request[^1].Role, Is.EqualTo(ChatRole.User));
+		Assert.That(request[^1].Text, Does.Contain("# Снимок конструкции"));
+		Assert.That(request[^1].Text, Does.Contain("Как выглядит структура?"));
+		Assert.That(market.Invocations, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("История диалога передаётся перед вопросом с ролями авторов")]
+	public async Task TryIfHistoryPrecedesQuestion()
+	{
+		// Arrange: в диалоге уже был обмен вопросом и ответом.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Новый ответ.")]];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
+		var agent = CreateAgent(chatClient, market);
+		var history = new List<TransactionJournal.Chats.Ports.ChatMessage>
+		{
+			new() { Role = ChatMessageRole.User, Text = "Прошлый вопрос", AsOf = FixedNow },
+			new() { Role = ChatMessageRole.Assistant, Text = "Прошлый ответ", AsOf = FixedNow },
+		};
+
+		// Act: задаём следующий вопрос диалога.
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), history, "Следующий вопрос"));
+
+		// Assert: порядок — инструкции, история владельца и ассистента, вопрос.
+		var roles = chatClient.Requests.Single().Select(message => message.Role).ToList();
+		Assert.That(roles, Is.EqualTo(new[] { ChatRole.System, ChatRole.User, ChatRole.Assistant, ChatRole.User }));
+		var request = chatClient.Requests.Single();
+		Assert.That(request[1].Text, Is.EqualTo("Прошлый вопрос"));
+		Assert.That(request[2].Text, Is.EqualTo("Прошлый ответ"));
+		Assert.That(request[3].Text, Does.Contain("Следующий вопрос"));
+	}
+
+	[TestMethod]
+	[Description("Рыночный инструмент исполняется в цикле, результат возвращается модели следующим запросом")]
+	public async Task TryIfToolLoopExecutesMarketTool()
+	{
+		// Arrange: сцена 1 — модель вызывает снимок рынка, сцена 2 — отвечает текстом.
+		var chatClient = new FakeChatClient();
+		chatClient.Script =
+		[
+			[() => ToolCallFrame("call-1", ChatTools.GetMarketSnapshotToolName, "BTC")],
+			[() => new ChatResponseUpdate(ChatRole.Assistant, "Марка 108975.4.")],
+		];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
+		market
+			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ChatMarketSnapshot
+			{
+				BaseCoin = "BTC",
+				AsOf = FixedNow,
+				IsAvailable = true,
+				Symbol = "BTCUSDT",
+				MarkPrice = 108975.4m,
+			});
+		var agent = CreateAgent(chatClient, market);
+
+		// Act: вопрос провоцирует модель обратиться к инструменту.
+		var updates = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?"));
+
+		// Assert: биржевой запрос выполнен ровно один раз на один вызов инструмента.
+		// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
+		market.Verify(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()), Times.Once);
+		market.VerifyNoOtherCalls();
+
+		// Assert: результат инструмента ушёл модели вторым запросом сообщением роли Tool.
+		Assert.That(chatClient.Requests, Has.Count.EqualTo(2));
+		var secondRequest = chatClient.Requests[1];
+		Assert.That(secondRequest, Has.Count.EqualTo(4));
+		Assert.That(secondRequest[^1].Role, Is.EqualTo(ChatRole.Tool));
+
+		// Assert: текстовый ответ модели после тула дошёл до вызывающего.
+		Assert.That(updates.Select(update => update.Text), Does.Contain("Марка 108975.4."));
+	}
+
+	[TestMethod]
+	[Description("Модель, упорствующая с тул-вызовами, останавливается потолком итераций без исключения")]
+	public async Task TryIfNeverEndingToolCallsStopAtIterationCap()
+	{
+		// Arrange: модель в каждой сцене требует новый вызов того же тула —
+		// сценарий зацикливания; id вызовов уникальны, как у настоящей модели.
+		var chatClient = new FakeChatClient();
+		chatClient.Script =
+		[
+			[() => ToolCallFrame($"call-{chatClient.Requests.Count}", ChatTools.GetMarketSnapshotToolName, "BTC")],
+		];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Loose);
+		market
+			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ChatMarketSnapshot { BaseCoin = "BTC", AsOf = FixedNow, IsAvailable = true });
+		var agent = CreateAgent(chatClient, market);
+
+		// Act: стримим ответ — исключения быть не должно, цикл обрывается потолком.
+		var updates = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Вопрос без конца"));
+
+		// Assert: биржевых запросов ровно столько, сколько допускает потолок итераций.
+		// Traceability: openspec:chats/sources#scenario-sources-iteration-cap
+		market.Verify(
+			reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()),
+			Times.Exactly(ChatAgent.MaximumIterationsPerRequest));
+
+		// Assert: последний запрос к модели ушёл без инструментов — цикл завершён
+		// возвратом последнего ответа, незакрытый тул-вызов проходит вызывающему как есть.
+		Assert.That(chatClient.Requests.Count, Is.EqualTo(ChatAgent.MaximumIterationsPerRequest + 1));
+		Assert.That(updates, Is.Not.Empty);
+	}
+
+	[TestMethod]
+	[Description("Тул-вызов агентного цикла записывается в след источников с as-of отданных данных")]
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+	public async Task TryIfMarketToolInvoked_TraceRecordsInvocationWithAsOf()
+	{
+		// Arrange: сцена 1 — модель вызывает снимок рынка, сцена 2 — отвечает текстом;
+		// биржа отвечает маркой с фиксированным as-of.
+		var chatClient = new FakeChatClient();
+		chatClient.Script =
+		[
+			[() => ToolCallFrame("call-1", ChatTools.GetMarketSnapshotToolName, "BTC")],
+			[() => new ChatResponseUpdate(ChatRole.Assistant, "Марка 108975.4.")],
+		];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
+		market
+			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new ChatMarketSnapshot
+			{
+				BaseCoin = "BTC",
+				AsOf = FixedNow,
+				IsAvailable = true,
+				Symbol = "BTCUSDT",
+				MarkPrice = 108975.4m,
+			});
+		var agent = CreateAgent(chatClient, market);
+		var traceRecorder = new ChatSourceTraceRecorder();
+
+		// Act: вопрос провоцирует модель обратиться к рыночному инструменту.
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?", traceRecorder: traceRecorder));
+
+		// Assert: вызов записан в момент исполнения — имя, компактные аргументы
+		// и as-of данных, отданных инструментом.
+		var trace = traceRecorder.Build();
+		Assert.That(trace, Is.Not.Null);
+		Assert.That(trace!.Invocations, Has.Count.EqualTo(1));
+		Assert.That(trace.Invocations[0].ToolName, Is.EqualTo(ChatTools.GetMarketSnapshotToolName));
+		Assert.That(trace.Invocations[0].Arguments, Is.EqualTo("{\"baseCoin\":\"BTC\"}"));
+		Assert.That(trace.Invocations[0].DataAsOf, Is.EqualTo(FixedNow));
+	}
+
+	[TestMethod]
+	[Description("Ответ без инструментальных вызовов следа источников не создаёт")]
+	// На уровне агентного цикла след строится только из тул-вызовов: ответ
+	// без инструментов не оставляет следа — as-of журнала пишет конвейер чата.
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+	public async Task TryIfAnswerWithoutTools_TraceStaysEmpty()
+	{
+		// Arrange: модель отвечает текстом без тул-вызовов.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по журналу.")]];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
+		var agent = CreateAgent(chatClient, market);
+		var traceRecorder = new ChatSourceTraceRecorder();
+
+		// Act
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", traceRecorder: traceRecorder));
+
+		// Assert
+		Assert.That(traceRecorder.Build(), Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Заданная модель уходит в опции запроса идентификатором ModelId")]
+	// Рабочая модель — параметр запроса: агент передаёт идентификатор модели
+	// клиенту в опциях, чтобы ответ пришёл от выбранной владельцем модели.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	public async Task TryIfModelSpecified_RequestOptionsCarryModelId()
+	{
+		// Arrange: агент над подменённым клиентом с захватом опций.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ.")]];
+		var agent = CreateAgent(chatClient, new Mock<IChatMarketReader>(MockBehavior.Strict));
+
+		// Act: вопрос с явно указанной моделью чата.
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", model: "glm-5.2"));
+
+		// Assert: опции запроса несут идентификатор выбранной модели без обрамления.
+		Assert.That(chatClient.Options, Has.Count.EqualTo(1));
+		Assert.That(chatClient.Options[0]!.ModelId, Is.EqualTo("glm-5.2"));
+	}
+
+	[TestMethod]
+	[Description("Модель без значения оставляет выбор дефолтного клиента модели")]
+	// Пустая модель не навязывает клиенту идентификатор: ModelId остаётся
+	// незаданным, и запрос уходит модели по умолчанию клиента.
+	// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+	public async Task TryIfModelMissing_RequestOptionsKeepModelUnset()
+	{
+		// Arrange: агент над подменённым клиентом с захватом опций.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ.")]];
+		var agent = CreateAgent(chatClient, new Mock<IChatMarketReader>(MockBehavior.Strict));
+
+		// Act: вопрос без модели чата.
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", model: "   "));
+
+		// Assert: ModelId в опциях не задан.
+		Assert.That(chatClient.Options, Has.Count.EqualTo(1));
+		Assert.That(chatClient.Options[0]!.ModelId, Is.Null);
+	}
+
+	/// <summary>Собирает стрим обновлений в список для проверок.</summary>
+	private static async Task<List<ChatResponseUpdate>> CollectAsync(IAsyncEnumerable<ChatResponseUpdate> stream)
+	{
+		var updates = new List<ChatResponseUpdate>();
+		await foreach (var update in stream)
+		{
+			updates.Add(update);
+		}
+
+		return updates;
+	}
+
+	/// <summary>Кадр модели с вызовом рыночного инструмента.</summary>
+	private static ChatResponseUpdate ToolCallFrame(string callId, string toolName, string baseCoin) => new()
+	{
+		Role = ChatRole.Assistant,
+		Contents = { new FunctionCallContent(callId, toolName, new Dictionary<string, object?> { ["baseCoin"] = baseCoin }) },
+	};
+
+	/// <summary>Детерминированный снимок контекста конструкции.</summary>
+	private static ChatContextSnapshot Snapshot() => new()
+	{
+		Markdown = "# Снимок конструкции",
+		AsOf = FixedNow,
+		IsConstructionClosed = false,
+	};
+
+	/// <summary>Агент над подменённым клиентом модели: инструкции берутся из несуществующего файла — встроенный дефолт.</summary>
+	private static ChatAgent CreateAgent(IChatClient chatClient, Mock<IChatMarketReader> market) =>
+		new(
+			chatClient,
+			new ChatTools(new Mock<IRuleCorpusReader>(MockBehavior.Loose).Object, market.Object),
+			new ChatInstructions(Path.Combine(Path.GetTempPath(), "no-such-agent-prompt.md")));
+
+	/// <summary>
+	/// Подмена клиента модели: на каждый запрос отдаёт кадры текущей сцены
+	/// (сцена — один ответ модели, кадры — его стрим-чанки), при исчерпании
+	/// повторяет последнюю сцену (модель упорствует), копии запросов сохраняет
+	/// для проверок конвейера сообщений. Кадры создаются фабриками — один и
+	/// тот же экземпляр обновления нельзя скармливать дважды.
+	/// </summary>
+	private sealed class FakeChatClient : IChatClient
+	{
+		/// <summary>Сцены сценария; при исчерпании повторяется последняя сцена.</summary>
+		public IReadOnlyList<IReadOnlyList<Func<ChatResponseUpdate>>> Script { get; set; } = [[]];
+
+		/// <summary>Запросы, полученные клиентом, в порядке поступления.</summary>
+		public List<List<ChatMessage>> Requests { get; } = [];
+
+		/// <summary>Опции запросов, в порядке поступления.</summary>
+		public List<ChatOptions?> Options { get; } = [];
+
+		/// <summary>Число запросов к клиенту модели.</summary>
+		public int RequestCount => Requests.Count;
+
+		public Task<ChatResponse> GetResponseAsync(
+			IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+			throw new NotSupportedException("Агентный цикл обязан использовать стриминг.");
+
+		public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+			IEnumerable<ChatMessage> messages,
+			ChatOptions? options = null,
+			[EnumeratorCancellation] CancellationToken cancellationToken = default)
+		{
+			Requests.Add([.. messages]);
+			Options.Add(options);
+			await Task.Yield();
+			// Сценарий исчерпан — повторяем последнюю сцену: модель упорствует с тул-коллами.
+			var scene = Script[Math.Min(Requests.Count - 1, Script.Count - 1)];
+			foreach (var frame in scene)
+			{
+				yield return frame();
+			}
+		}
+
+		public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+		public void Dispose()
+		{
+		}
+	}
+}

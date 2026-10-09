@@ -7,14 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Markdig" Version="1.4.0" />
+    <!-- Генерация OpenAPI-документа каркаса API нового SPA (Microsoft.AspNetCore.OpenApi). -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.12" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.12">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.12" />
-    <!-- Адаптер OpenAI-совместимых провайдеров модели чата консультаций
-         (z.ai по умолчанию); в Consultations остаётся только абстракция IChatClient. -->
+    <!-- Адаптер OpenAI-совместимого провайдера к IChatClient конвейера чатов:
+         ключевой клиент "chats" строится из общих настроек секции Llm. -->
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
   </ItemGroup>
 
@@ -31,11 +32,20 @@
   <ItemGroup>
     <!-- Корпус правил деплоится рядом с exe: дефолтный путь загрузчика — rules/ в BaseDirectory. -->
     <None Include="..\..\rules\**\*.yaml" CopyToOutputDirectory="PreserveNewest" Link="rules\%(Filename)%(Extension)" />
-    <!-- Инструкции агента консультаций деплоятся рядом с rules/: дефолтный
-         путь читателя — consultation-prompt.md в BaseDirectory, владелец правит
+    <!-- Инструкции агента чата деплоятся рядом с rules/: дефолтный
+         путь читателя — agent-prompt.md в BaseDirectory, владелец правит
          файл без пересборки, отсутствие или битость оставляет встроенный дефолт. -->
-    <!-- Traceability: openspec:consultations/context#requirement-context-agent-instructions-file -->
-    <None Include="..\..\consultation-prompt.md" CopyToOutputDirectory="PreserveNewest" Link="consultation-prompt.md" />
+    <!-- Traceability: openspec:chats/context#requirement-chat-context-agent-instructions-file -->
+    <None Include="..\..\agent-prompt.md" CopyToOutputDirectory="PreserveNewest" Link="agent-prompt.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Собранная статика SPA (frontend/dist) деплоится рядом с exe в frontend/dist
+         и раздаётся .NET-хостом из корня с fallback клиентских маршрутов. Сборка
+         SPA выполняется отдельно (npm run build в frontend/), поэтому при
+         отсутствии dist решение собирается и API остаётся доступным. -->
+    <!-- Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения -->
+    <Content Include="..\..\frontend\dist\**\*.*" LinkBase="frontend\dist" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\frontend\dist')" />
   </ItemGroup>
 
 </Project>

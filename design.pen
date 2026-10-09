@@ -1,5 +1,5 @@
 {
-  "version": "2.20",
+  "version": "2.21",
   "children": [
     {
       "type": "frame",
@@ -4882,7 +4882,8 @@
                               "fill": "$textSecondary",
                               "content": "−2",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -4903,7 +4904,8 @@
                               "fill": "$textSecondary",
                               "content": "0,21",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -4924,7 +4926,8 @@
                               "fill": "$textSecondary",
                               "content": "0,34",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -4945,7 +4948,8 @@
                               "fill": "$textSecondary",
                               "content": "+145,10",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -4997,7 +5001,8 @@
                               "fill": "$textSecondary",
                               "content": "−1,2",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5018,7 +5023,8 @@
                               "fill": "$textSecondary",
                               "content": "3 105",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5039,7 +5045,8 @@
                               "fill": "$textSecondary",
                               "content": "3 042",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5293,7 +5300,8 @@
                               "fill": "$textSecondary",
                               "content": "ETH-28MAR-1600-P",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5314,7 +5322,8 @@
                               "fill": "$textSecondary",
                               "content": "покупка",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5335,7 +5344,8 @@
                               "fill": "$textSecondary",
                               "content": "2",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5356,7 +5366,8 @@
                               "fill": "$textSecondary",
                               "content": "0,21",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5408,7 +5419,8 @@
                               "fill": "$textSecondary",
                               "content": "ETHUSDT",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5429,7 +5441,8 @@
                               "fill": "$textSecondary",
                               "content": "продажа",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5450,7 +5463,8 @@
                               "fill": "$textSecondary",
                               "content": "1,2",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5471,7 +5485,8 @@
                               "fill": "$textSecondary",
                               "content": "3 105",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5706,7 +5721,8 @@
                               "fill": "$textSecondary",
                               "content": "ETH-26AUG-1600-P",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5727,7 +5743,8 @@
                               "fill": "$textSecondary",
                               "content": "2",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5748,7 +5765,8 @@
                               "fill": "$textSecondary",
                               "content": "плановая экспирация",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -5800,7 +5818,8 @@
                               "fill": "$textSecondary",
                               "content": "ETHUSDT",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5821,7 +5840,8 @@
                               "fill": "$textSecondary",
                               "content": "1,2",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -5842,7 +5862,8 @@
                               "fill": "$textSecondary",
                               "content": "открытие конструкции",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6030,7 +6051,8 @@
                               "fill": "$textSecondary",
                               "content": "−12,00",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -6051,7 +6073,8 @@
                               "fill": "$textSecondary",
                               "content": "оплата комиссии ролла",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -6103,7 +6126,8 @@
                               "fill": "$textSecondary",
                               "content": "+8,40",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -6124,7 +6148,8 @@
                               "fill": "$textSecondary",
                               "content": "дивергенция котировок",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9056,7 +9081,8 @@
                               "fill": "$textSecondary",
                               "content": "Применено",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -9077,7 +9103,8 @@
                               "fill": "$textSecondary",
                               "content": "Отклонено",
                               "fontFamily": "$font",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9601,7 +9628,8 @@
                               "fill": "$textSecondary",
                               "content": "Мягкое",
                               "fontFamily": "$font",
-                              "fontSize": 11.5
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -9624,7 +9652,8 @@
                               "fill": "$textSecondary",
                               "content": "Жёсткое",
                               "fontFamily": "$font",
-                              "fontSize": 11.5
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9690,7 +9719,8 @@
                               "fill": "$textSecondary",
                               "content": "Однозначное",
                               "fontFamily": "$font",
-                              "fontSize": 11.5
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -9713,7 +9743,8 @@
                               "fill": "$textSecondary",
                               "content": "Формальное",
                               "fontFamily": "$font",
-                              "fontSize": 11.5
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -9779,7 +9810,8 @@
                               "fill": "$textSecondary",
                               "content": "Журнал",
                               "fontFamily": "$font",
-                              "fontSize": 11.5
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -9802,7 +9834,8 @@
                               "fill": "$textSecondary",
                               "content": "Стратегия",
                               "fontFamily": "$font",
-                              "fontSize": 11.5
+                              "fontSize": 11.5,
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -13346,10 +13379,10 @@
                 {
                   "type": "text",
                   "id": "YiUDF",
-                  "x": -13,
+                  "x": 0,
                   "y": 0,
                   "name": "RiskLabel",
-                  "fill": "$neg",
+                  "fill": "$textMuted",
                   "content": "−300",
                   "fontFamily": "$font",
                   "fontSize": 10.5,
@@ -13358,7 +13391,7 @@
                 {
                   "type": "text",
                   "id": "cdKIr",
-                  "x": 75,
+                  "x": 72,
                   "y": 0,
                   "name": "ZeroLabel",
                   "fill": "$textSecondary",
@@ -13369,12 +13402,15 @@
                 },
                 {
                   "type": "text",
-                  "id": "Z8VKV",
-                  "x": 299,
+                  "id": "VXsTX",
+                  "x": 186,
                   "y": 0,
                   "name": "ProfitLabel",
-                  "fill": "$accentStrong",
+                  "fill": "$textMuted",
+                  "textGrowth": "fixed-width",
+                  "width": 126,
                   "content": "+900",
+                  "textAlign": "right",
                   "fontFamily": "$font",
                   "fontSize": 10.5,
                   "fontWeight": "normal"
@@ -13633,6 +13669,14 @@
     "superZone": {
       "type": "color",
       "value": "#F3D68C"
+    },
+    "superLabel": {
+      "type": "color",
+      "value": "#8a6a1f"
+    },
+    "unrealLoss": {
+      "type": "color",
+      "value": "#EFB6AE"
     }
   },
   "fileToken": "fe854a54-fdc0-4f83-8bc8-fd42ed96f9ca"

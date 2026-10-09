@@ -13,7 +13,7 @@ using TransactionJournal.Application.Materialization;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Application.Sync;
 using TransactionJournal.Infrastructure.ReadModels;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Application;
 using TransactionJournal.Domain;
 
@@ -23,10 +23,12 @@ namespace TransactionJournal.Infrastructure.UseCases;
 /// Use-case пересбора конструкций: снимок сырых записей хранилища превращается
 /// в план сборки детерминированным алгоритмом, затем план применяется к базе
 /// одной транзакцией — доменные таблицы вычищаются и наполняются заново.
-/// Удаление идёт прямым вычищением таблиц в обход поштучного удаления сервиса
-/// конструкций: пересборка — массовая операция, карв-аут из запрета удаления
-/// непустой конструкции. Каждый вызов создаёт короткоживущий контекст, поэтому
-/// сервис безопасен в длительных сессиях Blazor Server.
+/// Вместе со старыми записями конструкций пересбор стирает и чаты, привязанные
+/// к ним; чаты без привязки переживают. Удаление идёт прямым вычищением таблиц
+/// в обход поштучного удаления сервиса конструкций: пересборка — массовая
+/// операция, карв-аут из запрета удаления непустой конструкции. Каждый вызов
+/// создаёт короткоживущий контекст, поэтому сервис безопасен в длительных
+/// сессиях Blazor Server.
 // Traceability: openspec:domain/construction-assembly#requirement-full-rebuild-semantics
 /// Traceability: change:add-construction-auto-assembly/design#d1
 /// </summary>
@@ -35,27 +37,27 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 	private readonly IJournalRawSnapshotStore _rawSnapshotStore;
 	private readonly IJournalBackupService _backupService;
 	private readonly DbContextOptions<JournalDbContext> _options;
-	private readonly IConsultationStore _consultationStore;
+	private readonly IChatStore _chatStore;
 	private readonly TimeProvider _timeProvider;
 
-	/// <summary>Создаёт команду пересбора над сырым хранилищем, сервисом резервных копий, опциями контекста журнала и хранилищем консультаций.</summary>
+	/// <summary>Создаёт команду пересбора над сырым хранилищем, сервисом резервных копий, опциями контекста журнала и хранилищем чатов.</summary>
 	/// <param name="rawSnapshotStore">Источник полного снимка сырых записей журнала.</param>
 	/// <param name="backupService">Сервис резервных копий; пересбор обязан стартовать после успешной копии.</param>
 	/// <param name="options">Опции EF-контекста журнала; база развёрнута миграциями.</param>
-	/// <param name="consultationStore">Хранилище консультаций: пересбор стирает чат конструкций вместе со старой записью.</param>
+	/// <param name="chatStore">Хранилище чатов: пересбор стирает чаты привязанных конструкций вместе со старой записью.</param>
 	/// <param name="timeProvider">Поставщик времени для границы OTM-закрывающих; по умолчанию системные часы.</param>
 	/// <exception cref="ArgumentNullException">Какая-либо обязательная зависимость не задана.</exception>
 	public ConstructionAssemblyService(
 		IJournalRawSnapshotStore rawSnapshotStore,
 		IJournalBackupService backupService,
 		DbContextOptions<JournalDbContext> options,
-		IConsultationStore consultationStore,
+		IChatStore chatStore,
 		TimeProvider? timeProvider = null)
 	{
 		_rawSnapshotStore = rawSnapshotStore ?? throw new ArgumentNullException(nameof(rawSnapshotStore));
 		_backupService = backupService ?? throw new ArgumentNullException(nameof(backupService));
 		_options = options ?? throw new ArgumentNullException(nameof(options));
-		_consultationStore = consultationStore ?? throw new ArgumentNullException(nameof(consultationStore));
+		_chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
@@ -480,18 +482,29 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 		using var db = new JournalDbContext(_options);
 		await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
 
-		// Консультации — запись окружения per construction: вместе со старой
-		// записью конструкций стираются и их базы чата. Стирание предшествует
-		// транзакции вычищения: новые конструкции получают те же ключи заново
-		// и не должны унаследовать чужие истории диалогов.
-		// Traceability: openspec:consultations/history#scenario-history-rebuild-wipes
+		// Чат — запись окружения: пересбор вычищает доменные таблицы и создаёт
+		// конструкции заново с новыми ключами, поэтому чаты, привязанные к
+		// старым записям конструкций, стираются вместе с ними; чаты без
+		// привязки пересбор переживают. Идентификаторы старых записей читаются
+		// до вычищения таблиц. Стирание идёт в собственной транзакции
+		// хранилища чатов (базы журнала и чатов раздельные, атомарной
+		// транзакции над двумя базами нет): удаления копятся в области и
+		// фиксируются только после фиксации плана журнала — сбой плана
+		// откатывает и журнал, и стирание, пережитых привязанных чатов не
+		// остаётся; сбой фиксации стирания после плана оставляет привязанный
+		// чат до следующего пересбора. Прежние per-construction базы
+		// консультаций не мигрируют: поддержка снята без конвертации истории,
+		// пересбор стирает только чаты единого хранилища (чистый лист).
+		// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+		// Traceability: openspec:chats/history#scenario-chat-unbound-chat-survives-rebuild
 		var oldConstructionIds = await db.Constructions
 			.Select(construction => construction.Id)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
+		await using var chatWipe = await _chatStore.BeginRebuildWipeAsync(cancellationToken).ConfigureAwait(false);
 		foreach (var constructionId in oldConstructionIds)
 		{
-			await _consultationStore.DeleteForConstructionAsync(constructionId, cancellationToken).ConfigureAwait(false);
+			await chatWipe.DeleteForConstructionAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		}
 
 		// Дочерние записи вычищаются перед конструкциями: внешние ключи привязок и
@@ -534,7 +547,12 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 			}));
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+		// Сначала фиксируется план журнала, затем стирание чатов: сбой до этой
+		// строки откатывает и журнал, и стирание чатов, привязанные чаты
+		// остаются жить вместе со старыми записями конструкций.
+		// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
 		await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+		await chatWipe.CommitAsync(cancellationToken).ConfigureAwait(false);
 	}
 
 	/// <summary>
@@ -647,4 +665,3 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 
 	#endregion
 }
-

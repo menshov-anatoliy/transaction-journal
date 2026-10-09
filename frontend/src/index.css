@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+/*
+	Светлая тема журнала по дизайн-системе design.pen: тёплый серый фон,
+	белые поверхности, зелёный акцент и семантические пары risk/neg/info.
+	Токен-слой — цвета hex 1:1 из дизайн-макета (без конверсии цветовых
+	пространств, design.md D1), семантические слоты shadcn разрешаются в
+	токены; шрифты Inter и JetBrains Mono подключены self-hosted (design.md D4).
+	Тёмная тема в плане отсутствует (до паритета и позже).
+*/
+
+/*
+	Шрифты дизайн-системы подключаются self-hosted woff2-файлами, без внешних
+	CDN: журнал — локальный персональный инструмент, работа без сети — норма,
+	поэтому Google Fonts <link> отклонён (design.md D4). Inter — основной
+	шрифт интерфейса, JetBrains Mono — моноширинный контекст кода и
+	MD-редактора; оба семейства поддерживают кириллицу.
+*/
+
+/* Inter — вариативное семейство (веса 100–900, включая используемые дизайном
+	400/500/600) в двух начертаниях: прямом и курсиве. */
+/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+/* Traceability: change:reconcile-frontend-with-design/design#D4 */
+@font-face {
+	font-family: "Inter";
+	src: url("./assets/fonts/InterVariable.woff2") format("woff2-variations");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Inter";
+	src: url("./assets/fonts/InterVariable-Italic.woff2") format("woff2-variations");
+	font-weight: 100 900;
+	font-style: italic;
+	font-display: swap;
+}
+
+/* JetBrains Mono — статические начертания, фактически нужные моно-контексту:
+	обычное, курсив (курсивные вставки markdown) и жирное. */
+/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+/* Traceability: change:reconcile-frontend-with-design/design#D4 */
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("./assets/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("./assets/fonts/JetBrainsMono-Italic.woff2") format("woff2");
+	font-weight: 400;
+	font-style: italic;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "JetBrains Mono";
+	src: url("./assets/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+
+:root {
+	/* Цветовые токены design.pen, hex 1:1 из design-extract.json;
+		значения не конвертируются в другие цветовые пространства (design.md D1). */
+	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
+	--bg: #F3F3EF;
+	--surface: #FFFFFF;
+	--surface-2: #EFEFEA;
+	--divider: #EBEBE5;
+	--text-primary: #17171E;
+	--text-secondary: #66666E;
+	--text-muted: #9B9BA1;
+	--accent-strong: #167853;
+	--accent-soft: #E2F4EB;
+	--accent-softer: #EFF9F4;
+	--mint: #A7E2C4;
+	--risk: #DFA23B;
+	--risk-soft: #F9EFD9;
+	--neg: #D14B41;
+	--neg-soft: #FBEAE7;
+	--info: #4A7FB5;
+	--info-soft: #E9F1F8;
+	--risk-zone: #EFB6AE;
+	--profit-zone: #B9E7CC;
+	--super-zone: #F3D68C;
+	--super-label: #8a6a1f;
+	--unreal-loss: #EFB6AE;
+	/* Токены accent (#1FA36B) и border (#E5E5DF) не дублируются: их значения
+		живут напрямую в одноимённых смыслу слотах shadcn --primary и --border. */
+
+	/* Семантические слоты shadcn перенаправлены на дизайн-токены:
+		--primary → accent, --destructive → neg, фон/карточки → bg/surface/surface2. */
+	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
+	--radius: 0.75rem;
+	--primary: #1FA36B;
+	--primary-foreground: var(--surface);
+	--background: var(--bg);
+	--foreground: var(--text-primary);
+	--card: var(--surface);
+	--card-foreground: var(--text-primary);
+	--popover: var(--surface);
+	--popover-foreground: var(--text-primary);
+	--secondary: var(--surface-2);
+	--secondary-foreground: var(--text-primary);
+	--muted: var(--surface-2);
+	--muted-foreground: var(--text-secondary);
+	--accent: var(--accent-soft);
+	--accent-foreground: var(--accent-strong);
+	--destructive: var(--neg);
+	--destructive-foreground: var(--surface);
+	--border: #E5E5DF;
+	--input: var(--border);
+	--ring: var(--primary);
+
+	/* Палитра индикатора финрезультата наследует токены design.pen
+		(riskZone/profitZone/superZone/superLabel/unrealLoss/accent/neg/mint)
+		вместо собственных hex. */
+	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
+	--fin-risk-zone: var(--risk-zone);
+	--fin-profit-zone: var(--profit-zone);
+	--fin-super-zone: var(--super-zone);
+	--fin-positive: var(--primary);
+	--fin-positive-strong: var(--accent-strong);
+	--fin-negative: var(--neg);
+	--fin-unreal-positive: var(--mint);
+	--fin-super-label: var(--super-label);
+	/* Минор-заливка нереализованного убытка и подпись сверхприбыли используют
+		собственные токены design.pen: unrealLoss — дизайн-пара к mint,
+		superLabel — тёмный цвет подписи зоны сверхприбыли из мастера; заимствование
+		riskZone и хардкод цвета подписи устранены, вне-токенных цветов не осталось. */
+	/* Traceability: change:add-finresult-design-tokens/specs/ui/design-system/spec#scenario-finresult-colors-use-own-tokens */
+	--fin-unreal-negative: var(--unreal-loss);
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	/* Прямые токены доступны как утилиты Tailwind (bg-risk, text-info-soft и т.д.). */
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-divider: var(--divider);
+	--color-text-primary: var(--text-primary);
+	--color-text-secondary: var(--text-secondary);
+	--color-text-muted: var(--text-muted);
+	--color-accent-strong: var(--accent-strong);
+	--color-accent-soft: var(--accent-soft);
+	--color-accent-softer: var(--accent-softer);
+	--color-mint: var(--mint);
+	--color-risk: var(--risk);
+	--color-risk-soft: var(--risk-soft);
+	--color-neg: var(--neg);
+	--color-neg-soft: var(--neg-soft);
+	--color-info: var(--info);
+	--color-info-soft: var(--info-soft);
+	--color-risk-zone: var(--risk-zone);
+	--color-profit-zone: var(--profit-zone);
+	--color-super-zone: var(--super-zone);
+	--color-super-label: var(--super-label);
+	--color-unreal-loss: var(--unreal-loss);
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+}
+
+@theme {
+	/* Семейства темы указывают на локальные self-hosted шрифты (design.md D4):
+		--font-sans через --default-font-family Tailwind становится шрифтом
+		документа (computed font-family у body — стек на Inter), --font-mono
+		питает утилиту font-mono и тематизацию MD-редактора (design.md D5).
+		Значения литеральные, поэтому переменные попадают в :root и доступны
+		для var() в CSS-переопределениях виджетов. */
+	/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+	/* Traceability: change:reconcile-frontend-with-design/design#D4 */
+	--font-sans: "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+	--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@utility page-title {
+	/* Титулы разделов — H1 дизайн-экранов Body #1..#8 (напр. «Конструкции»):
+		Inter 21/600, без tracking (letter-spacing в макете не задан).
+		Кегль сведён к дизайн-токену вместо дефолтного text-2xl (24px). */
+	/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+	/* Traceability: change:reconcile-frontend-with-design/design#D2 */
+	font-size: 21px;
+	line-height: 28px;
+	font-weight: 600;
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+
+	body {
+		@apply bg-background text-foreground antialiased;
+	}
+}

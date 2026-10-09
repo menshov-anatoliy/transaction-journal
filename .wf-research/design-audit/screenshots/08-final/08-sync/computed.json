@@ -1,0 +1,123 @@
+{
+  "capturedAt": "2026-10-09T07:09:20.408Z",
+  "url": "http://localhost:5173/spa/sync-settings",
+  "viewport": [
+    1440,
+    1000,
+    2
+  ],
+  "fonts": true,
+  "text": "Журнал Bybit\nКонструкции\nВходящие\n3\nПодсказки\nАгент\nСинхронизация\nСинхронизация\nПодключение Bybit\nподключено\nКлюч API\ndemo-••••••••7f2a\nАккаунт\nUnified (UTA), subaccount disabled\nХранение секрета\nфайл appsettings.Local.json, секция Bybit\nСинхронизация\nСинхронизировать сейчас\nрезервная копия перед синхронизацией\nВремя\tРежим\tРезультат\tСтатус\n2026-10-08 12:00\tдогрузка\tисполнений 5 · delivery 1 · инструментов 2\tуспех\n2026-10-05 21:12\tпервичная загрузка\tпрерван: сбой котировок (timeout Bybit)\tошибка\n2026-10-04 12:00\tдогрузка\tисполнений 5 · delivery 1 · инструментов 2\tуспех\n2026-10-03 12:00\tпервичная загрузка\tисполнений 5 · delivery 1 · инструментов 2\tуспех\n\nПропущенные области: option:BTC\n\nНеразрешённые инструменты: ETH-30OCT26-4500-C\n\nНепокрытые базовые активы: ETH\n\nОпасная зона\n\nСобрать конструкции (полный пересбор)\n\nБезвозвратно стирает: комментарии, ручные пометки, корректировки PnL, чаты привязанных конструкций. Автобэкап включён.\n\nСобрать конструкции\n\nСброс состояния категорий linear/option\n\nВозвращает разметку к исходной и запускает повторную сводку.\n\nСбросить linear\nСбросить option\n\nНастройки LLM-провайдера не выводятся в UI — управление через appsettings.Local.json.",
+  "headings": [
+    {
+      "text": "Синхронизация",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "21px",
+      "weight": "600",
+      "color": "rgb(23, 23, 30)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(229, 229, 223)",
+      "radius": "0px",
+      "padding": "0px",
+      "width": "1128px",
+      "shadow": "none",
+      "clientWidth": 1128,
+      "scrollWidth": 1128,
+      "rect": {
+        "x": 284,
+        "y": 74,
+        "width": 1128,
+        "height": 28
+      },
+      "slot": null,
+      "part": null,
+      "class": "page-title"
+    },
+    {
+      "text": "Подключение Bybit",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "13.5px",
+      "weight": "600",
+      "color": "rgb(23, 23, 30)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(229, 229, 223)",
+      "radius": "0px",
+      "padding": "0px",
+      "width": "131.641px",
+      "shadow": "none",
+      "clientWidth": 132,
+      "scrollWidth": 132,
+      "rect": {
+        "x": 303,
+        "y": 133,
+        "width": 131.640625,
+        "height": 20.25
+      },
+      "slot": null,
+      "part": null,
+      "class": "text-[13.5px] font-semibold"
+    },
+    {
+      "text": "Синхронизация",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "13.5px",
+      "weight": "600",
+      "color": "rgb(23, 23, 30)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(229, 229, 223)",
+      "radius": "0px",
+      "padding": "0px",
+      "width": "1090px",
+      "shadow": "none",
+      "clientWidth": 1090,
+      "scrollWidth": 1090,
+      "rect": {
+        "x": 303,
+        "y": 271.25,
+        "width": 1090,
+        "height": 20.25
+      },
+      "slot": null,
+      "part": null,
+      "class": "text-[13.5px] font-semibold"
+    },
+    {
+      "text": "Опасная зона",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "13.5px",
+      "weight": "600",
+      "color": "rgb(209, 75, 65)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(229, 229, 223)",
+      "radius": "0px",
+      "padding": "0px",
+      "width": "92.3594px",
+      "shadow": "none",
+      "clientWidth": 92,
+      "scrollWidth": 92,
+      "rect": {
+        "x": 327,
+        "y": 619.171875,
+        "width": 92.359375,
+        "height": 20.25
+      },
+      "slot": null,
+      "part": null,
+      "class": "text-[13.5px] font-semibold text-neg"
+    }
+  ],
+  "tokens": {
+    "risk": "#DFA23B",
+    "risk-soft": "#F9EFD9",
+    "risk-zone": "#EFB6AE",
+    "text-primary": "#17171E",
+    "surface": "#FFFFFF",
+    "accent": "#E2F4EB",
+    "neg": "#D14B41"
+  },
+  "elements": [],
+  "compact": [],
+  "statuses": [],
+  "sourcePanels": [],
+  "overflow": []
+}

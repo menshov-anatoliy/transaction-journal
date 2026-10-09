@@ -1,0 +1,107 @@
+/*
+	Тематизация @uiw/react-md-editor по дизайн-фреймам «Стенд/MD-редактор
+	(split)» макета design.pen: Header (nBfEb), Toolbar (f1i0Gf), Split
+	(veYUd: Source + Preview), Footer (H5zNRM). Файл подключается после
+	библиотечного markdown-editor.css и переопределяет виджетные классы
+	.w-md-editor-* на дизайн-токенах темы index.css. Виджет сам остаётся
+	без рамок и заливок: рамку и тень несёт попап DialogContent.
+	Переопределения сцеплены с классом-хуком .journal-md-editor, который
+	компонент markdown-edit-dialog ставит на корень виджета.
+*/
+/* Traceability: change:reconcile-frontend-with-design/design#D5 */
+/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
+/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */
+
+/* Корень виджета: без собственных рамок (попап уже обрамлён), интерфейсный
+	шрифт Inter; переменные виджета направлены на дизайн-токены:
+	--md-editor-box-shadow-color → divider (линии Toolbar/Split виджета),
+	--md-editor-font-family → JetBrains Mono (панель исходника, veYUd/Source). */
+.journal-md-editor {
+	--md-editor-box-shadow-color: var(--divider);
+	--md-editor-font-family: var(--font-mono);
+	box-shadow: none;
+	border-radius: 0;
+	background-color: var(--surface);
+	color: var(--text-primary);
+	font-family: var(--font-sans);
+}
+
+/* Сплит-область занимает всё свободное место попапа между тулбаром
+	и футером (высота стенда 680, LeiDq). */
+.journal-md-editor .w-md-editor-content {
+	flex: 1 1 0;
+	min-height: 0;
+	height: auto;
+	border-radius: 0;
+	overflow: hidden;
+}
+
+/* Toolbar (f1i0Gf): паддинги [10,18], нижняя линия divider, зазор 6
+	между кнопками; фон — поверхность попапа. */
+.journal-md-editor .w-md-editor-toolbar {
+	padding: 10px 18px;
+	border-bottom: 1px solid var(--divider);
+	border-radius: 0;
+	background-color: var(--surface);
+}
+.journal-md-editor .w-md-editor-toolbar ul {
+	display: flex;
+	gap: 6px;
+}
+
+/* Кнопки тулбара (Tb:* фрейма f1i0Gf): 30×30, радиус 8, иконка 14
+	наследует цвет $textSecondary; наведение — пара surface2/textPrimary. */
+.journal-md-editor .w-md-editor-toolbar li > button {
+	width: 30px;
+	height: 30px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border-radius: 8px;
+	color: var(--text-secondary);
+	transition:
+		background-color 0.15s ease,
+		color 0.15s ease;
+}
+.journal-md-editor .w-md-editor-toolbar li > button:hover,
+.journal-md-editor .w-md-editor-toolbar li > button:focus-visible {
+	background-color: var(--surface-2);
+	color: var(--text-primary);
+}
+.journal-md-editor .w-md-editor-toolbar li > button:active {
+	background-color: var(--surface-2);
+	color: var(--text-primary);
+}
+
+/* Source (veYUd/wRRDM): тёплый фон $bg, паддинг 16, моноширинный
+	JetBrains Mono 12 с межстрочным 1.7. */
+.journal-md-editor .w-md-editor-input {
+	background-color: var(--bg);
+}
+.journal-md-editor .w-md-editor-text {
+	padding: 16px;
+	font-size: 12px !important;
+	line-height: 1.7 !important;
+}
+
+/* Preview (veYUd/hrCte): паддинг 16, фон-поверхность; разделительная
+	линия слева — inset-тень виджета уже на переменной divider. */
+.journal-md-editor .w-md-editor-preview {
+	padding: 16px;
+	background-color: var(--surface);
+	font-family: var(--font-sans);
+}
+
+/* Цитата в превью (Quote j7wXc): заливка surface2, радиус 6, левая
+	линия accentSoft 2, курсив 12 на $textSecondary. */
+.journal-md-editor .w-md-editor-preview blockquote {
+	margin: 0 0 8px;
+	padding: 8px 12px;
+	background-color: var(--surface-2);
+	border-left: 2px solid var(--accent-soft);
+	border-radius: 6px;
+	font-size: 12px;
+	font-style: italic;
+	color: var(--text-secondary);
+}

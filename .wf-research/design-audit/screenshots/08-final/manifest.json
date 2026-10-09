@@ -1,0 +1,197 @@
+{
+  "generatedAt": "2026-10-09T07:09:20.646Z",
+  "browser": "Chrome 154.0.8037.98",
+  "pairs": 9,
+  "files": [
+    {
+      "path": "00-layout\\design-frame.png",
+      "width": 2880,
+      "height": 1240,
+      "bytes": 118581,
+      "sha256": "B7593FE3D401673A21E14221EC510D880BA0BE3F660825F9F61E4B01731F1ACD",
+      "savedAt": "2026-10-09T06:27:18.789Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "00-layout\\app-page.png",
+      "width": 2880,
+      "height": 2000,
+      "bytes": 210549,
+      "sha256": "06D15E7DE70AB79DCBAC207835A7BC1C82F1C136DAC99A47320F6CCFBA42BE12",
+      "savedAt": "2026-10-09T07:08:45.101Z",
+      "capturedAt": "2026-10-09T07:08:44.867Z",
+      "source": "http://localhost:5173/spa/",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    },
+    {
+      "path": "01-constructions\\design-frame.png",
+      "width": 3200,
+      "height": 2048,
+      "bytes": 521047,
+      "sha256": "3C419D69E2D1B227BD3C6F37051A6FC368221484913363FB4CCD61244B96268A",
+      "savedAt": "2026-10-09T06:27:19.877Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "01-constructions\\app-page.png",
+      "width": 2880,
+      "height": 2000,
+      "bytes": 197163,
+      "sha256": "E16851172C9698DA2843828043A033ACC7EB12874CD97A9B0FD763DE9CC8B394",
+      "savedAt": "2026-10-09T07:08:49.397Z",
+      "capturedAt": "2026-10-09T07:08:49.168Z",
+      "source": "http://localhost:5173/spa/",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    },
+    {
+      "path": "02-card\\design-frame.png",
+      "width": 3200,
+      "height": 2960,
+      "bytes": 951070,
+      "sha256": "BA0A8DEB3AF2516C9BE0631835DAC639A022F1E228E1D11E20203B9E43387EDE",
+      "savedAt": "2026-10-09T06:27:21.011Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "02-card\\app-page.png",
+      "width": 2880,
+      "height": 3270,
+      "bytes": 368150,
+      "sha256": "2C9324D6E3F08EAEF32B1DB172CB23B12359552186235BD68713C110E3D028DD",
+      "savedAt": "2026-10-09T07:08:53.807Z",
+      "capturedAt": "2026-10-09T07:08:53.474Z",
+      "source": "http://localhost:5173/spa/constructions/7",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    },
+    {
+      "path": "03-agent-chats\\design-frame.png",
+      "width": 3200,
+      "height": 2048,
+      "bytes": 372593,
+      "sha256": "7B2796B56D35AE114B6B4A84B9C5ABC8FE39C54BD2055CA9E217D4382EC389BB",
+      "savedAt": "2026-10-09T06:27:22.081Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "03-agent-chats\\app-page.png",
+      "width": 2880,
+      "height": 2000,
+      "bytes": 271907,
+      "sha256": "B4F9D9C3AB947038E3747A5B867FEDB03C5E4CB4D09F8A6EC24DE264E90F9D89",
+      "savedAt": "2026-10-09T07:08:58.119Z",
+      "capturedAt": "2026-10-09T07:08:57.887Z",
+      "source": "http://localhost:5173/spa/agent",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    },
+    {
+      "path": "04-agent-thread\\design-frame.png",
+      "width": 3200,
+      "height": 2240,
+      "bytes": 501348,
+      "sha256": "B70D4498898C4C96CB37C33AF8B2D63D18B0DBF2FD57986B19111DB8F89AE6A9",
+      "savedAt": "2026-10-09T06:27:23.175Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "04-agent-thread\\app-page.png",
+      "width": 2880,
+      "height": 2000,
+      "bytes": 273738,
+      "sha256": "546801E40150236D73CB72F269B89F4B21FC44002CF37E79C0904BE658258DA3",
+      "savedAt": "2026-10-09T07:09:02.430Z",
+      "capturedAt": "2026-10-09T07:09:02.190Z",
+      "source": "http://localhost:5173/spa/agent",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    },
+    {
+      "path": "05-inbox\\design-frame.png",
+      "width": 3200,
+      "height": 2160,
+      "bytes": 408159,
+      "sha256": "68572A579ADC88FB3EF4CEDDD8C0C6B321010D0FE90A881D6486848BFBCD9C00",
+      "savedAt": "2026-10-09T06:27:24.255Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "05-inbox\\app-page.png",
+      "width": 2880,
+      "height": 2000,
+      "bytes": 206287,
+      "sha256": "4C221BDB24EC404D96DBD27515DD5F284B071CB8204059996D8238C254AA02A9",
+      "savedAt": "2026-10-09T07:09:06.728Z",
+      "capturedAt": "2026-10-09T07:09:06.512Z",
+      "source": "http://localhost:5173/spa/inbox?from=2026-09-09&to=2026-10-09&sides=buy%2Csell",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    },
+    {
+      "path": "06-hints\\design-frame.png",
+      "width": 3200,
+      "height": 2048,
+      "bytes": 414242,
+      "sha256": "F391BE324C41AEA04879BB927F89B3AC46577D164CE684C89C4B7A25B6115993",
+      "savedAt": "2026-10-09T06:27:25.321Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "06-hints\\app-page.png",
+      "width": 2880,
+      "height": 2000,
+      "bytes": 238596,
+      "sha256": "A35BA1D91B9E198C127ABE79E8E7F29A5B8B8BC515DA821276A05F832E459F94",
+      "savedAt": "2026-10-09T07:09:11.036Z",
+      "capturedAt": "2026-10-09T07:09:10.801Z",
+      "source": "http://localhost:5173/spa/hints",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    },
+    {
+      "path": "07-agent-rules\\design-frame.png",
+      "width": 3200,
+      "height": 2160,
+      "bytes": 472752,
+      "sha256": "545A0BB8D88F0AEDC4A3123EF8BC02E795DCF86198C401A4B9C78D22726F5604",
+      "savedAt": "2026-10-09T06:27:26.401Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "07-agent-rules\\app-page.png",
+      "width": 2880,
+      "height": 2000,
+      "bytes": 265420,
+      "sha256": "071D4EAF7AB9F5E93AF603256AB32B13E5A2C08839D8344948D4A03382C9B21E",
+      "savedAt": "2026-10-09T07:09:16.332Z",
+      "capturedAt": "2026-10-09T07:09:16.104Z",
+      "source": "http://localhost:5173/spa/agent",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    },
+    {
+      "path": "08-sync\\design-frame.png",
+      "width": 3200,
+      "height": 2300,
+      "bytes": 497129,
+      "sha256": "621AAEAC7148151CEFCA858A8C1AD1799926FE99ACD9526CEA90DBA13CB49B34",
+      "savedAt": "2026-10-09T06:27:27.474Z",
+      "capturedAt": null,
+      "source": "MCP Pen Export(scale:2)"
+    },
+    {
+      "path": "08-sync\\app-page.png",
+      "width": 2880,
+      "height": 2000,
+      "bytes": 254750,
+      "sha256": "CC8A5E5EDAD02B6F877276D6A088FDFE0054A0C9A7CC50C0C725D124732C58B6",
+      "savedAt": "2026-10-09T07:09:20.634Z",
+      "capturedAt": "2026-10-09T07:09:20.408Z",
+      "source": "http://localhost:5173/spa/sync-settings",
+      "captureMethod": "local Chrome CDP; not MCP Browser"
+    }
+  ],
+  "visualAcceptance": "blocked only by MCP Browser capture lock; refreshed local evidence after approved source fixes"
+}

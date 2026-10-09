@@ -11,7 +11,6 @@ using TransactionJournal.Application.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
-using TransactionJournal.Infrastructure.Consultations;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -60,15 +59,14 @@ public class ConstructionAssemblyHistoryReconciliationTests
 	private static readonly DateTimeOffset FixedNow = new(2026, 9, 27, 0, 0, 0, TimeSpan.Zero);
 
 	private string _databasePath = null!;
-
-	private string _consultationsDirectory = null!;
+	private string _chatsDatabasePath = null!;
 
 	[TestInitialize]
 	public void Initialize()
 	{
 		// Каждая проверка работает со своей пустой базой во временной папке.
 		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-assembly-history-{Guid.NewGuid():N}.db");
-		_consultationsDirectory = Path.Combine(Path.GetTempPath(), $"journal-assembly-history-consultations-{Guid.NewGuid():N}");
+		_chatsDatabasePath = Path.Combine(Path.GetTempPath(), $"journal-assembly-history-chats-{Guid.NewGuid():N}.db");
 		using var db = new JournalDbContext(CreateOptions());
 		db.Database.Migrate();
 	}
@@ -79,20 +77,20 @@ public class ConstructionAssemblyHistoryReconciliationTests
 		// Пул соединений SQLite держит файл базы открытым — сбрасываем его перед удалением.
 		Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
-		// Временная база и соседние WAL/SHM-файлы удаляются после каждой проверки.
+		// Временная база и соседние WAL/SHM-файлы удаляются после каждой проверки;
+		// вместе с базой журнала убирается и файл единой базы чатов.
 		foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
 		{
-			var file = _databasePath + suffix;
-			if (File.Exists(file))
+			foreach (var candidate in new[] { _databasePath, _chatsDatabasePath })
 			{
-				File.Delete(file);
+				var file = candidate + suffix;
+				if (File.Exists(file))
+				{
+					File.Delete(file);
+				}
 			}
 		}
 
-		if (Directory.Exists(_consultationsDirectory))
-		{
-			Directory.Delete(_consultationsDirectory, recursive: true);
-		}
 	}
 
 	[TestMethod]
@@ -186,7 +184,7 @@ public class ConstructionAssemblyHistoryReconciliationTests
 		new JournalSyncStore(CreateOptions()),
 		new StubJournalBackupService(),
 		CreateOptions(),
-		CreateConsultationStore(),
+		new TransactionJournal.Infrastructure.Chats.ChatStore(_chatsDatabasePath),
 		new FixedTimeProvider(FixedNow));
 
 	/// <summary>Создаёт опции контекста журнала над временной SQLite-базой проверки.</summary>
@@ -194,9 +192,6 @@ public class ConstructionAssemblyHistoryReconciliationTests
 		new DbContextOptionsBuilder<JournalDbContext>()
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
-
-	/// <summary>Создаёт настоящее хранилище консультаций над временной папкой проверки.</summary>
-	private ConsultationStore CreateConsultationStore() => new(_consultationsDirectory);
 
 	/// <summary>Загружает фиксированный снимок истории из fixture проверки.</summary>
 	private static JournalRawSnapshot LoadSnapshot()

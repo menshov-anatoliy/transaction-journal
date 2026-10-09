@@ -1,8 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.FileProviders;
 using OpenAI;
 using System.ClientModel;
 using TransactionJournal;
+using TransactionJournal.Api;
+using TransactionJournal.Api.Constructions;
+using TransactionJournal.Api.Hints;
+using TransactionJournal.Api.Agent;
+using TransactionJournal.Api.Sync;
+using TransactionJournal.Api.Inbox;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Bybit;
@@ -15,20 +22,17 @@ using TransactionJournal.Infrastructure.Sync;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Sync;
-using TransactionJournal.Components;
-using TransactionJournal.Components.Layout;
-using TransactionJournal.Components.Pages;
 using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Infrastructure.Hints;
+using TransactionJournal.Infrastructure.Chats;
+using TransactionJournal.Chats;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Hints;
 using TransactionJournal.Hints.Corpus;
 using TransactionJournal.Hints.Display;
 using TransactionJournal.Hints.Ports;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
-using TransactionJournal.Infrastructure.Consultations;
-using TransactionJournal.Consultations;
-using TransactionJournal.Consultations.Ports;
 using TransactionJournal.Domain;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,8 +45,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile(
 	BybitCredentialsConfig.LocalFileName, optional: true, reloadOnChange: false);
 
-builder.Services.AddRazorComponents()
-	.AddInteractiveServerComponents();
+// Каркас HTTP API нового SPA: единая версионированная JSON-точка входа,
+// OpenAPI-описание и SSE-примитивы чата; состав эндпоинтов разделов
+// фиксируется задачами 5.x поверх того же префикса /api/v1.
+builder.Services.AddApiSkeleton();
 
 // База журнала — SQLite в режиме WAL: единственное хранилище, параллельные
 // читатели не блокируют пишущее веб-приложение (ADR-0003).
@@ -175,15 +181,17 @@ builder.Services.AddSingleton<IJournalReparseService, JournalReparseService>();
 
 // Команда «Собрать конструкции» на «Настройках»: полный пересбор конструкций
 // и привязок из локального сырья одной транзакцией; пересбор стартует только после
-// обязательной резервной копии, неудача копии блокирует операцию. Экран зависит
-// от интерфейса, тесты экрана подменяют команду заглушкой.
+// обязательной резервной копии, неудача копии блокирует операцию. Чаты,
+// привязанные к старым записям конструкций, стираются пересбором вместе с ними,
+// чаты без привязки переживают. Экран зависит от интерфейса, тесты экрана
+// подменяют команду заглушкой.
 // Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-full-rebuild-semantics
 // Traceability: openspec:ops/db-backup#requirement-backup-mandatory-before-rebuild
 builder.Services.AddSingleton(sp => new ConstructionAssemblyService(
 	sp.GetRequiredService<IJournalRawSnapshotStore>(),
 	sp.GetRequiredService<IJournalBackupService>(),
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
-	sp.GetRequiredService<IConsultationStore>()));
+	sp.GetRequiredService<IChatStore>()));
 builder.Services.AddSingleton<IConstructionAssemblyService>(sp => sp.GetRequiredService<ConstructionAssemblyService>());
 
 // Слой доменных операций: use-case сервисы над контекстом журнала; каждый вызов
@@ -228,11 +236,6 @@ builder.Services.AddSingleton(sp => new FrameReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
 	sp.GetRequiredService<InboxReadModel>()));
 builder.Services.AddSingleton<IFrameReadModel>(sp => sp.GetRequiredService<FrameReadModel>());
-
-// Сигнал изменений журнала в границах circuit: экраны оповещают его после мутаций
-// домена, каркас перечитывает панель — итог, бейдж «Входящих» и транзитную вкладку —
-// без навигации.
-builder.Services.AddScoped<JournalChangeSignal>();
 
 // Провайдер марок аналитики: публичные тикеры без аутентификации и кэш последней
 // известной марки со временем получения. Read-модель позиций получает его как
@@ -291,6 +294,17 @@ builder.Services.AddSingleton<IHintPassRunner>(sp => sp.GetRequiredService<HintA
 // «Применено»/«Отклонено» и первый показ идут через неё же.
 // Traceability: openspec:ui/screens#requirement-ui-hint-section-groups
 builder.Services.AddSingleton<IHintDisplayReadModel, HintDisplayReadModel>();
+builder.Services.AddSingleton<AgentRulesCatalog>();
+
+// Единое SQLite-хранилище чатов агента: плоские чаты с параметрами и полной
+// историей сообщений одним файлом рядом с базой журнала — per-construction
+// базы консультаций заменены; привязка чата к конструкции хранится значением
+// и может отсутствовать. Домен журнала о чатах не знает, адаптер живёт в
+// Infrastructure по образцу HintStore.
+// Traceability: openspec:chats/history#requirement-chat-environment-record
+// Traceability: openspec:chats/history#requirement-chat-flat-full-history
+builder.Services.AddSingleton<IChatStore>(_ => new ChatStore(
+	Path.Combine(dataDirectory, "chats.db")));
 
 // Read-модель экрана «Конструкции»: соединяет метрики аналитики журнала с именами
 // и ручными статусами конструкций, скрывая архивные из списка и его счётчика.
@@ -308,29 +322,6 @@ builder.Services.AddSingleton(sp => new ConstructionDetailReadModel(
 	sp.GetRequiredService<PositionReadModel>()));
 builder.Services.AddSingleton<IConstructionDetailReadModel>(sp => sp.GetRequiredService<ConstructionDetailReadModel>());
 
-// Консультации: порты объявлены в проекте Consultations, адаптеры живут здесь
-// и в Infrastructure (направление «адаптер → порт»); снимок контекста собирается
-// кодом поверх read-моделей журнала, живые подсказки движка в него не входят.
-// Traceability: openspec:architecture/solution-structure#requirement-dependencies-point-inward
-// Traceability: openspec:consultations/context#requirement-context-deterministic-snapshot
-builder.Services.AddSingleton<IRuleCorpusReader, RulesCorpusConsultationAdapter>();
-builder.Services.AddSingleton<IConsultationContextReader, ConsultationContextReader>();
-// Хранилище консультаций: SQLite per construction — по одному файлу базы на
-// конструкцию в папке App_Data/consultations; пересбор конструкции стирает её
-// файл базы целиком. Домен о хранилище не знает: порт окружения с адаптером
-// в Infrastructure (ADR-0009).
-// Traceability: openspec:consultations/history#requirement-history-environment-record
-builder.Services.AddSingleton<IConsultationStore>(new ConsultationStore(
-	Path.Combine(dataDirectory, "consultations")));
-// Инструкции агента консультаций: дефолт consultation-prompt.md рядом с
-// rules/, путь переопределяется настройкой Consultations:InstructionsPath;
-// валидный файл переопределяет встроенный дефолт, отсутствие или битость
-// файла чат не ломает — правки владельца действуют со следующего сообщения.
-// Traceability: openspec:consultations/context#requirement-context-agent-instructions-file
-builder.Services.AddSingleton(_ => new ConsultationInstructions(
-	builder.Configuration["Consultations:InstructionsPath"]
-	?? Path.Combine(AppContext.BaseDirectory, ConsultationInstructions.DefaultFileName)));
-
 // Общие параметры LLM-провайдера: секция Llm задаёт провайдера,
 // OpenAI-совместимый эндпоинт и ключ доступа для всех потребителей журнала;
 // провайдер, отличный от z.ai, обязан указать явный эндпоинт, эндпоинт
@@ -340,16 +331,6 @@ var llmSettings = LlmProviderSettings.Resolve(
 	builder.Configuration["Llm:Provider"],
 	builder.Configuration["Llm:BaseUrl"],
 	builder.Configuration["Llm:ApiKey"]);
-// Модель чата консультаций: подсекция Llm:Chat задаёт рабочую модель
-// (дефолт — GLM-5.3); смена провайдера или модели выполняется правкой
-// конфигурации без правки кода.
-// Traceability: openspec:consultations/tools#requirement-tools-chat-model-configurable
-// Traceability: openspec:config/llm-provider#requirement-llm-model-subsections
-var chatModelOptions = ConsultationChatModelOptions.Resolve(
-	llmSettings.Provider,
-	llmSettings.BaseUrl,
-	llmSettings.ApiKey,
-	builder.Configuration["Llm:Chat:Model"]);
 // Изложение сводок подсказок: подсекция Llm:Hint задаёт рабочую модель
 // (дефолт — glm-5.3-flash); зависимость регистрируется сразу, потребитель —
 // изложение сводок — появится в change add-summary-channels и внедрит её без
@@ -360,24 +341,64 @@ builder.Services.AddSingleton(HintChatModelOptions.Resolve(
 	llmSettings.BaseUrl,
 	llmSettings.ApiKey,
 	builder.Configuration["Llm:Hint:Model"]));
-// Клиент строится лениво при первом обращении к агентному циклу: незастроенный
-// ключ доступа не мешает остальному журналу работать.
-builder.Services.AddKeyedChatClient(ConsultationAgent.ChatClientServiceKey, _ => CreateConsultationChatClient(chatModelOptions));
-// Агентный цикл: инструменты реестра и keyed клиент соединяются здесь;
-// рыночные данные агента читаются из Bybit через адаптер Infrastructure, а при
-// сбое биржи адаптер деградирует в кэш марок провайдера с явным as-of — чат
-// продолжается по журналу и корпусу.
-// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
-// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
-builder.Services.AddSingleton<IConsultationMarketReader>(sp => new BybitConsultationMarketReader(
+// Рабочая модель чата агента: подсекция Llm:Chat задаёт модель, пустое или
+// отсутствующее значение откатывается к дефолту GLM-5.3; смена модели
+// выполняется правкой конфигурации без правки кода.
+// Traceability: openspec:chats/sources#requirement-sources-model-is-chat-parameter
+builder.Services.AddSingleton(ChatModelOptions.Resolve(
+	llmSettings.Provider,
+	llmSettings.BaseUrl,
+	llmSettings.ApiKey,
+	builder.Configuration["Llm:Chat:Model"]));
+
+// Конвейер чатов add-agent-chat подключается к разделу «Агент»:
+// ключевой клиент модели "chats" — OpenAI-совместимый доступ из общих
+// настроек секции Llm (эндпоинт, ключ, рабочая модель); незастроенный ключ
+// обнаруживается лениво, в момент обращения к модели, и деградирует
+// событием ошибки SSE-канала, историю чата он не ломает.
+// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
+builder.Services.AddKeyedSingleton<IChatClient>(ChatAgent.ChatClientServiceKey, static (sp, _) =>
+{
+	var options = sp.GetRequiredService<ChatModelOptions>();
+	if (string.IsNullOrWhiteSpace(options.ApiKey))
+	{
+		return new UnconfiguredChatClient();
+	}
+
+	return new OpenAIClient(new ApiKeyCredential(options.ApiKey), new OpenAIClientOptions
+	{
+		Endpoint = new Uri(options.BaseUrl),
+	})
+	.GetChatClient(options.Model)
+	.AsIChatClient();
+});
+// Инструменты чата: читатели связываются в composition root — корпус правил
+// через адаптер над загрузчиком, рынок Bybit поверх единого клиента тикеров
+// и кэша марок журнала.
+// Traceability: openspec:chats/sources#requirement-sources-read-only-tool-registry
+builder.Services.AddSingleton<IRuleCorpusReader>(sp =>
+	new RulesCorpusChatAdapter(sp.GetRequiredService<RulesCorpusLoader>()));
+builder.Services.AddSingleton<IChatMarketReader>(sp => new BybitChatMarketReader(
 	sp.GetRequiredService<BybitTickersClient>(),
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
-builder.Services.AddSingleton<ConsultationTools>();
-builder.Services.AddSingleton<ConsultationAgent>();
-// Конвейер сообщения консультаций для панели «Консультации»: разрешается в
-// момент первого вопроса — незастроенный ключ модели не мешает чтению истории
-// диалогов и работе остального журнала.
-builder.Services.AddSingleton<ConsultationChatService>();
+// Снимок контекста чата: конструкция либо портфельный уровень из read-моделей
+// журнала; для закрытой конструкции конвейер сам ведёт пост-мортем.
+// Traceability: openspec:chats/context#requirement-chat-context-postmortem-mode
+builder.Services.AddSingleton<IChatContextReader>(sp => new ChatContextReader(
+	sp.GetRequiredService<IConstructionDetailReadModel>(),
+	sp.GetRequiredService<IJournalMetricsReadModel>(),
+	sp.GetRequiredService<IRuleCorpusReader>()));
+// Инструкции агента: agent-prompt.md рядом с rules/, перечитывается на каждое
+// сообщение; отсутствие файла оставляет встроенный дефолт.
+// Traceability: openspec:chats/context#requirement-chat-context-agent-instructions-file
+builder.Services.AddSingleton(_ => new ChatInstructions(
+	Path.Combine(AppContext.BaseDirectory, ChatInstructions.DefaultFileName)));
+// Агентный цикл и сервис конвейера: стриминг ответа, след источников,
+// жизненный цикл чатов — единственный путь HTTP-раздела к данным чатов.
+// Traceability: openspec:chats/history#requirement-chat-flat-full-history
+builder.Services.AddSingleton<ChatTools>();
+builder.Services.AddSingleton<ChatAgent>();
+builder.Services.AddSingleton<ChatService>();
 
 var app = builder.Build();
 
@@ -391,34 +412,80 @@ using (var scope = app.Services.CreateScope())
 
 if (!app.Environment.IsDevelopment())
 {
-	app.UseExceptionHandler("/Error", createScopeForErrors: true);
+	app.UseExceptionHandler("/");
 	app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-app.UseAntiforgery();
+
+// Новый SPA журнала (React) после cutover обслуживает корневой маршрут:
+// статика frontend/dist раздаётся из "/" и fallback возвращает index.html
+// для клиентских роутов разделов. API /api/v1/* и OpenAPI остаются
+// отдельными серверными маршрутами и не деградируют.
+// Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
+// Traceability: doc:.wf-research/ui-concept/concept.md#12-карта-переноса-по-инвентаризации-129
+// Traceability: issue:#53
+// Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
+// Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
+var spaRootPath = FindSpaRootPath(app.Environment);
+if (spaRootPath != null)
+{
+	app.UseStaticFiles(new StaticFileOptions
+	{
+		FileProvider = new PhysicalFileProvider(spaRootPath),
+	});
+}
 
 app.MapStaticAssets();
-app.MapRazorComponents<App>()
-	.AddInteractiveServerRenderMode();
+
+// Единая точка входа JSON API нового SPA с версией в маршруте и публикуемым
+// OpenAPI-описанием.
+var api = app.MapApiSkeleton();
+// Эндпоинты разделов подключаются к той же версионированной группе: задачи 5.x
+// фиксируют контракты поверх единого префикса /api/v1.
+api.MapConstructionsEndpoints();
+api.MapConstructionCardEndpoints();
+api.MapHintsEndpoints();
+api.MapSyncEndpoints();
+api.MapInboxEndpoints();
+api.MapAgentEndpoints();
+
+if (spaRootPath != null)
+{
+	// SPA-fallback: клиентские маршруты разделов (/constructions/7, /agent,
+	// /sync-settings и другие) получают index.html, а файлы бандла с хешами
+	// в имени раздаются статикой выше.
+	app.MapGet("/{**path:nonfile}", (HttpContext http) =>
+	{
+		if (http.Request.Path.StartsWithSegments("/api", StringComparison.Ordinal))
+		{
+			http.Response.StatusCode = StatusCodes.Status404NotFound;
+			return Task.CompletedTask;
+		}
+
+		http.Response.ContentType = "text/html; charset=utf-8";
+		return http.Response.SendFileAsync(Path.Combine(spaRootPath, "index.html"));
+	});
+}
 
 app.Run();
 
-// Адаптер OpenAI-совместимого провайдера модели чата: ключ обязателен — без
-// него запрос к модели невозможен, ошибка сообщается в момент первого вопроса.
-static IChatClient CreateConsultationChatClient(ConsultationChatModelOptions options)
+// Каталог сборки SPA: при запуске из исходников — frontend/dist репозитория,
+// при запуске опубликованного приложения — копия frontend/dist рядом с exe.
+static string? FindSpaRootPath(IWebHostEnvironment environment)
 {
-	// Незастроенный ключ обнаруживается лениво, в момент обращения к модели:
-	// остальной журнал продолжает работать без ключа LLM-провайдера.
-	// Traceability: openspec:config/llm-provider#scenario-llm-provider-missing-key-lazy
-	if (string.IsNullOrWhiteSpace(options.ApiKey))
-	{
-		throw new InvalidOperationException(
-			"Ключ модели чата консультаций не задан: заполните Llm:ApiKey в appsettings.Local.json.");
-	}
-
-	return new OpenAIClient(new ApiKeyCredential(options.ApiKey), new OpenAIClientOptions { Endpoint = new Uri(options.BaseUrl) })
-		.GetChatClient(options.Model)
-		.AsIChatClient();
+	string[] candidates =
+	[
+		Path.Combine(environment.ContentRootPath, "frontend", "dist"),
+		Path.Combine(AppContext.BaseDirectory, "frontend", "dist"),
+		Path.Combine(environment.ContentRootPath, "..", "..", "frontend", "dist"),
+	];
+	return candidates.FirstOrDefault(candidate => File.Exists(Path.Combine(candidate, "index.html")));
 }
 
+// Маркер точки входа для WebApplicationFactory в интеграционных тестах API:
+// top-level statements порождают внутренний класс Program, а фабрике нужен
+// доступный извне тип точки входа.
+public partial class Program
+{
+}

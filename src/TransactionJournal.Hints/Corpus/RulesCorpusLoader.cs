@@ -247,7 +247,7 @@ public sealed class RulesCorpusLoader
 
 		// Человекочитаемое описание триггера — информационное поле схемы: не
 		// проверяется и не влияет на исполнение, нужно краткому содержанию
-		// индекса корпуса в снимке консультации.
+		// индекса корпуса в снимке контекста чата.
 		return (OptionalScalar(triggerMap, "implementation"), OptionalScalar(triggerMap, "description"));
 	}
 
@@ -267,7 +267,7 @@ public sealed class RulesCorpusLoader
 
 		// Человекочитаемое описание действия — информационное поле схемы: не
 		// проверяется и не влияет на исполнение, нужно краткому содержанию
-		// индекса корпуса в снимке консультации.
+		// индекса корпуса в снимке контекста чата.
 		return (OptionalScalar(actionMap, "hintTemplate"), OptionalScalar(actionMap, "description"));
 	}
 

@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -19,7 +19,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TransactionJournal.Applicat
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TransactionJournal.Hints", "src\TransactionJournal.Hints\TransactionJournal.Hints.csproj", "{AF92D52D-5577-48B6-B699-97277D35C958}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TransactionJournal.Consultations", "src\TransactionJournal.Consultations\TransactionJournal.Consultations.csproj", "{E0F9120A-7794-428B-8969-0B6C134551A0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TransactionJournal.Chats", "src\TransactionJournal.Chats\TransactionJournal.Chats.csproj", "{E0F9120A-7794-428B-8969-0B6C134551A0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using NUnit.Framework;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
@@ -10,9 +11,9 @@ using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Application.Sync;
 using TransactionJournal.Application;
 using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.Chats;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Infrastructure.UseCases;
-using TransactionJournal.Infrastructure.Consultations;
-using TransactionJournal.Consultations.Ports;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -22,7 +23,9 @@ namespace TransactionJournal.Tests.Domain.ConstructionAssembly;
 /// Интеграционные проверки use-case пересбора конструкций на SQLite-базе:
 /// план сборки применяется одной транзакцией, счётчики соответствуют плану,
 /// ручные данные стираются безвозвратно, сырьё и состояние синхронизации
-/// остаются нетронутыми, повторный прогон воспроизводит результат.
+/// остаются нетронутыми, повторный прогон воспроизводит результат. Чаты,
+/// привязанные к старым записям конструкций, стираются пересбором, чаты
+/// без привязки переживают.
 /// </summary>
 [TestClass]
 public class ConstructionAssemblyServiceTests
@@ -37,15 +40,14 @@ public class ConstructionAssemblyServiceTests
 	private static readonly DateTimeOffset Now = new(2026, 8, 20, 12, 0, 0, TimeSpan.Zero);
 
 	private string _databasePath = null!;
-
-	private string _consultationsDirectory = null!;
+	private string _chatsDatabasePath = null!;
 
 	[TestInitialize]
 	public void Initialize()
 	{
 		// Каждая проверка работает со своей пустой базой во временной папке.
 		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-assembly-tests-{Guid.NewGuid():N}.db");
-		_consultationsDirectory = Path.Combine(Path.GetTempPath(), $"journal-assembly-consultations-{Guid.NewGuid():N}");
+		_chatsDatabasePath = Path.Combine(Path.GetTempPath(), $"journal-assembly-chats-tests-{Guid.NewGuid():N}.db");
 		using var db = new JournalDbContext(CreateOptions());
 		db.Database.Migrate();
 	}
@@ -56,20 +58,20 @@ public class ConstructionAssemblyServiceTests
 		// Пул соединений SQLite держит файл базы открытым — сбрасываем его перед удалением.
 		Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
-		// Временная база и соседние WAL/SHM-файлы удаляются после каждой проверки.
+		// Временная база и соседние WAL/SHM-файлы удаляются после каждой проверки;
+		// вместе с базой журнала убирается и файл единой базы чатов.
 		foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
 		{
-			var file = _databasePath + suffix;
-			if (File.Exists(file))
+			foreach (var candidate in new[] { _databasePath, _chatsDatabasePath })
 			{
-				File.Delete(file);
+				var file = candidate + suffix;
+				if (File.Exists(file))
+				{
+					File.Delete(file);
+				}
 			}
 		}
 
-		if (Directory.Exists(_consultationsDirectory))
-		{
-			Directory.Delete(_consultationsDirectory, recursive: true);
-		}
 	}
 
 	[TestMethod]
@@ -131,6 +133,115 @@ public class ConstructionAssemblyServiceTests
 		// Assert: состояние базы идентично первому прогону.
 		Assert.That(second.Constructions, Is.EqualTo(first.Constructions), "Состав и атрибуты конструкций воспроизводятся");
 		Assert.That(second.Userdata, Is.EqualTo(first.Userdata), "Привязки сделок воспроизводятся");
+	}
+
+	[TestMethod]
+	[Description("Пересбор стирает чаты, привязанные к старым записям конструкций, вместе с ними")]
+	// Чат — запись окружения: конструкции пересоздаются с новыми ключами,
+	// поэтому чаты привязанных конструкций уходят вместе со старыми записями,
+	// включая их полную историю.
+	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+	public async Task TryIfRebuildWipesChatsBoundToErasedConstructions()
+	{
+		// Arrange: сырьё собрано в конструкцию, владелец ведёт чат, привязанный к ней.
+		SeedRawStorage();
+		var service = CreateService();
+		var store = CreateChatStore();
+		await service.RebuildAsync();
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var constructionId = db.Constructions.Single().Id;
+			await store.AppendMessageAsync(null, StartChat(constructionId), UserDraft("Вопрос по конструкции."));
+			await store.AppendMessageAsync(null, StartChat(constructionId), UserDraft("Второй вопрос по конструкции."));
+		}
+
+		// Act: пересбор стирает старую запись конструкции и строит её заново.
+		await service.RebuildAsync();
+
+		// Assert: привязанные чаты стёрты с историей, конструкция собрана заново.
+		Assert.That(await store.FindChatAsync(1), Is.Null, "Первый привязанный чат стёрт");
+		Assert.That(await store.FindChatAsync(2), Is.Null, "Второй привязанный чат стёрт");
+		Assert.That(await store.ListActiveChatsAsync(), Is.Empty, "Чаты привязанных конструкций стёрты пересбором");
+		Assert.That(await store.ListCompletedChatsAsync(), Is.Empty, "Список чатов пуст после стирания привязанных");
+		Assert.That(await store.ListMessagesAsync(1), Is.Empty, "История стёртых чатов удалена");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.Constructions.Count(), Is.EqualTo(1), "Конструкция собрана заново из inbox");
+		}
+	}
+
+	[TestMethod]
+	[Description("Сбой плана после стирания чатов откатывает и стирание чатов, и журнал")]
+	// Стирание чатов пересбором координировано с планом журнала: удаления
+	// копятся в области хранилища чатов и фиксируются только после фиксации
+	// плана — сбой плана откатывает обе операции, привязанный чат переживает
+	// вместе со старой записью конструкции.
+	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+	public async Task TryIfPlanFailsAfterChatWipe_ChatsAndJournalRollBack()
+	{
+		// Arrange: сырьё собрано в конструкцию, владелец ведёт привязанный чат;
+		// хранилище-обёртка выполняет первое удаление области и срывается.
+		SeedRawStorage();
+		await CreateService().RebuildAsync();
+		var realStore = CreateChatStore();
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var constructionId = db.Constructions.Single().Id;
+			await realStore.AppendMessageAsync(null, StartChat(constructionId), UserDraft("Вопрос по конструкции."));
+		}
+
+		var failingStore = new Mock<IChatStore>(MockBehavior.Loose);
+		failingStore
+			.Setup(store => store.BeginRebuildWipeAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync((CancellationToken _) => new ThrowingRebuildWipe(realStore));
+		var failingService = CreateService(chatStore: failingStore.Object);
+
+		// Act: пересбор срывается на плане после стирания чатов.
+		Assert.ThrowsAsync<InvalidOperationException>(async () => await failingService.RebuildAsync());
+
+		// Assert: привязанный чат пережил сбой со всей историей, журнал цел —
+		// старая запись конструкции и её привязки на месте.
+		var chat = await realStore.FindChatAsync(1);
+		Assert.That(chat, Is.Not.Null, "Привязанный чат пережил откат стирания");
+		Assert.That(
+			(await realStore.ListMessagesAsync(1)).Single().Text,
+			Is.EqualTo("Вопрос по конструкции."),
+			"История пережитого чата цела");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.Constructions.Count(), Is.EqualTo(1), "Старая запись конструкции на месте");
+			Assert.That(db.TradeUserdata.Count(), Is.GreaterThan(0), "Привязки старой записи на месте");
+		}
+	}
+
+	[TestMethod]
+	[Description("Полный пересбор переживает чат без привязки к конструкции с его историей")]
+	// Чат — запись окружения: пересбор стирает только чаты привязанных
+	// конструкций; портфельный чат без привязки сохраняется целиком — и
+	// параметры, и полная история сообщений.
+	// Traceability: openspec:chats/history#scenario-chat-unbound-chat-survives-rebuild
+	public async Task TryIfUnboundChatSurvivesRebuild()
+	{
+		// Arrange: сырьё собрано, владелец ведёт портфельный чат без привязки.
+		SeedRawStorage();
+		var service = CreateService();
+		var store = CreateChatStore();
+		await service.RebuildAsync();
+		var unbound = await store.AppendMessageAsync(null, StartChat(), UserDraft("Портфельный вопрос."));
+		await store.AppendMessageAsync(unbound.ChatId, null, UserDraft("Уточнение портфельного вопроса."));
+
+		// Act: полный пересбор журнала.
+		await service.RebuildAsync();
+
+		// Assert: непривязанный чат жив — параметры и полная история на месте.
+		var surviving = await store.FindChatAsync(unbound.ChatId);
+		Assert.That(surviving, Is.Not.Null, "Непривязанный чат переживает пересбор");
+		Assert.That(surviving!.ConstructionId, Is.Null, "Привязка пережитого чата остаётся отсутствующей");
+		Assert.That(surviving.Status, Is.EqualTo(ChatStatus.Active), "Статус пережитого чата не меняется");
+		var messages = await store.ListMessagesAsync(unbound.ChatId);
+		Assert.That(messages.Select(message => message.Text), Is.EqualTo(
+			new[] { "Портфельный вопрос.", "Уточнение портфельного вопроса." }),
+			"Полная история пережитого чата сохранена");
 	}
 
 	[TestMethod]
@@ -335,7 +446,7 @@ public class ConstructionAssemblyServiceTests
 			snapshotStore,
 			backup,
 			CreateOptions(),
-			CreateConsultationStore(),
+			CreateChatStore(),
 			new FixedTimeProvider(Now));
 
 		// Act: пересбор отклоняется исключением неудавшейся копии.
@@ -710,7 +821,7 @@ public class ConstructionAssemblyServiceTests
 	public void ThrowOnNullRawSnapshotStore()
 	{
 		// Arrange — Act — Assert
-		new ConstructionAssemblyService(null!, new StubJournalBackupService(), CreateOptions(), CreateConsultationStore());
+		new ConstructionAssemblyService(null!, new StubJournalBackupService(), CreateOptions(), CreateChatStore());
 	}
 
 	[TestMethod]
@@ -719,7 +830,7 @@ public class ConstructionAssemblyServiceTests
 	public void ThrowOnNullBackupService()
 	{
 		// Arrange — Act — Assert
-		new ConstructionAssemblyService(new StubSnapshotStore(), null!, CreateOptions(), CreateConsultationStore());
+		new ConstructionAssemblyService(new StubSnapshotStore(), null!, CreateOptions(), CreateChatStore());
 	}
 
 	[TestMethod]
@@ -728,58 +839,29 @@ public class ConstructionAssemblyServiceTests
 	public void ThrowOnNullDbContextOptions()
 	{
 		// Arrange — Act — Assert
-		new ConstructionAssemblyService(new StubSnapshotStore(), new StubJournalBackupService(), null!, CreateConsultationStore());
+		new ConstructionAssemblyService(new StubSnapshotStore(), new StubJournalBackupService(), null!, CreateChatStore());
 	}
 
 	[TestMethod]
-	[Description("Null-хранилище консультаций отклоняется конструктором")]
+	[Description("Null-хранилище чатов отклоняется конструктором")]
 	[ExpectedException(typeof(ArgumentNullException))]
-	public void ThrowOnNullConsultationStore()
+	public void ThrowOnNullChatStore()
 	{
 		// Arrange — Act — Assert
 		new ConstructionAssemblyService(new StubSnapshotStore(), new StubJournalBackupService(), CreateOptions(), null!);
 	}
 
-	// Traceability: openspec:consultations/history#scenario-history-rebuild-wipes
-	[TestMethod]
-	[Description("Пересбор конструкций стирает их консультации, не трогая чужие файлы хранилища")]
-	public async Task TryIfRebuildWipesConsultations()
-	{
-		// Arrange: первая сборка создаёт конструкции, владелец оставляет вопрос.
-		SeedRawStorage();
-		await CreateService().RebuildAsync();
-
-		var consultations = CreateConsultationStore();
-		var now = new DateTimeOffset(2026, 9, 26, 12, 0, 0, TimeSpan.Zero);
-		await consultations.AppendMessageAsync(1, null, new ConsultationMessageDraft
-		{
-			Role = ConsultationMessageRole.User,
-			Text = "Почему закрыт стреддл?",
-			AsOf = now,
-		});
-		await consultations.AppendMessageAsync(8, null, new ConsultationMessageDraft
-		{
-			Role = ConsultationMessageRole.User,
-			Text = "Чужой вопрос без конструкции",
-			AsOf = now,
-		});
-
-		// Act: пересбор с нуля заново создаёт конструкции под теми же ключами.
-		await CreateService().RebuildAsync();
-
-		// Assert: история первой конструкции стёрта, чужой файл цел.
-		Assert.That(await consultations.ListDialoguesAsync(1), Is.Empty, "Консультации конструкции стёрты пересбором");
-		Assert.That(await consultations.ListDialoguesAsync(8), Has.Count.EqualTo(1), "Чужие файлы хранилища не тронуты");
-	}
-
 	#region Помощники
 
-	/// <summary>Команда пересбора над настоящим адаптером сырого хранилища, как в работе.</summary>
-	private ConstructionAssemblyService CreateService(TimeProvider? timeProvider = null, StubJournalBackupService? backupService = null) => new(
+	/// <summary>Команда пересбора над настоящим адаптером сырого хранилища и единым хранилищем чатов, как в работе.</summary>
+	private ConstructionAssemblyService CreateService(
+		TimeProvider? timeProvider = null,
+		StubJournalBackupService? backupService = null,
+		IChatStore? chatStore = null) => new(
 		new JournalSyncStore(CreateOptions()),
 		backupService ?? new StubJournalBackupService(),
 		CreateOptions(),
-		CreateConsultationStore(),
+		chatStore ?? CreateChatStore(),
 		timeProvider ?? new FixedTimeProvider(Now));
 
 	/// <summary>Создаёт опции контекста журнала над временной SQLite-базой проверки.</summary>
@@ -788,8 +870,57 @@ public class ConstructionAssemblyServiceTests
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
 
-	/// <summary>Создаёт настоящее хранилище консультаций над временной папкой проверки.</summary>
-	private ConsultationStore CreateConsultationStore() => new(_consultationsDirectory);
+	/// <summary>Настоящее хранилище чатов над временной SQLite-базой проверки.</summary>
+	private ChatStore CreateChatStore() => new(_chatsDatabasePath);
+
+	/// <summary>Параметры создания чата проверки: модель по умолчанию и опциональная привязка к конструкции.</summary>
+	private static ChatStartParameters StartChat(long? constructionId = null) => new()
+	{
+		Model = "glm-5.3",
+		ConstructionId = constructionId,
+	};
+
+	/// <summary>Черновик сообщения владельца с фиксированным as-of.</summary>
+	private static ChatMessageDraft UserDraft(string text) => new()
+	{
+		Role = ChatMessageRole.User,
+		Text = text,
+		AsOf = Now,
+	};
+
+	/// <summary>
+	/// Область стирания с инъекцией сбоя: первое удаление выполняется
+	/// настоящим хранилищем чатов, затем область срывается — имитация сбоя
+	/// плана пересбора после того, как стирание чатов уже выполнено.
+	/// </summary>
+	private sealed class ThrowingRebuildWipe : IChatRebuildWipe
+	{
+		private readonly IChatStore _realStore;
+		private IChatRebuildWipe? _realWipe;
+
+		public ThrowingRebuildWipe(IChatStore realStore) => _realStore = realStore;
+
+		public async Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default)
+		{
+			// Удаление привязанных чатов выполняется по-настоящему — только так
+			// проверяется откат уже применённого стирания.
+			_realWipe ??= await _realStore.BeginRebuildWipeAsync(cancellationToken);
+			await _realWipe.DeleteForConstructionAsync(constructionId, cancellationToken);
+			throw new InvalidOperationException("Сбой плана пересбора после стирания чатов.");
+		}
+
+		public Task CommitAsync(CancellationToken cancellationToken = default) =>
+			throw new NotSupportedException("Область со сбоем не фиксируется.");
+
+		public async ValueTask DisposeAsync()
+		{
+			// Откат настоящей области стирания при закрытии без фиксации.
+			if (_realWipe is not null)
+			{
+				await _realWipe.DisposeAsync();
+			}
+		}
+	}
 
 	/// <summary>Наполняет сырьё: справочник инструментов, стреддл, его закрытия и сделки робота.</summary>
 	private void SeedRawStorage()

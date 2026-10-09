@@ -19,16 +19,16 @@ public sealed record RuleCard
 	/// <summary>
 	/// Человекочитаемое условие триггера из карточки; информационное поле без
 	/// влияния на исполнение движком — служит сырьём для краткого содержания
-	/// индекса корпуса в снимке контекста консультации.
-	/// Traceability: openspec:consultations/context#scenario-context-card-index-only
+	/// индекса корпуса в снимке контекста чата.
+	/// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
 	/// </summary>
 	public string? TriggerDescription { get; init; }
 
 	/// <summary>
 	/// Человекочитаемое описание действия из карточки; информационное поле без
 	/// влияния на исполнение движком — служит сырьём для краткого содержания
-	/// индекса корпуса в снимке контекста консультации.
-	/// Traceability: openspec:consultations/context#scenario-context-card-index-only
+	/// индекса корпуса в снимке контекста чата.
+	/// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
 	/// </summary>
 	public string? ActionDescription { get; init; }
 

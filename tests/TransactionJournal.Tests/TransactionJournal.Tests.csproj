@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="bunit.web" Version="1.40.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.12" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="Moq" Version="4.20.72" />
     <PackageReference Include="MSTest" Version="3.6.4" />
@@ -29,7 +30,7 @@
          прогона копируются по прежнему пути Bybit\Fixtures: LoadFixture в тестах
          читает их относительно корня вывода, расклад не часть ассертов. -->
     <Content Include="Infrastructure\Bybit\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" Link="Bybit\Fixtures\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Content Include="Infrastructure\Consultations\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" Link="Consultations\Fixtures\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="Infrastructure\Chats\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" Link="Chats\Fixtures\%(RecursiveDir)%(Filename)%(Extension)" />
     <Content Include="Domain\ConstructionAssembly\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
