@@ -2,7 +2,7 @@
 
 ## Context
 
-Сверка `reconcile-frontend-with-design` завершена и заархивирована; её design.md (D1: hex-токены в `index.css`, семантика shadcn поверх) и ADR 0011 действуют без изменений. Токен-слой frontend содержит 24 переменные design.pen 1:1 + блок `--fin-*`, наследующий токены. Аудит (`.wf-research/design-audit/report.md` §3.10) зафиксировал: подпись сверхприбыли — точный цвет мастера `#8a6a1f` без токена; минор-заливка нереализованного убытка — дизайнерская пара riskZone `#EFB6AE`, прежний frontend-цвет `#f6cbc7` был изобретён и на сверке заменён. design.pen редактируется только через MCP pen; его машиночитаемое отражение — экстракт `.wf-research/design-audit/design-extract.json`.
+Сверка `reconcile-frontend-with-design` завершена и заархивирована; её design.md (D1: hex-токены в `index.css`, семантика shadcn поверх) и ADR 0011 действуют без изменений. Токен-слой frontend содержит переменные design.pen 1:1 (23 на момент старта change: 22 цвета + font) + блок `--fin-*`, наследующий токены. Аудит (`.wf-research/design-audit/report.md` §3.10) зафиксировал: подпись сверхприбыли — точный цвет мастера `#8a6a1f` без токена; минор-заливка нереализованного убытка — дизайнерская пара riskZone `#EFB6AE`, прежний frontend-цвет `#f6cbc7` был изобретён и на сверке заменён. design.pen редактируется только через MCP pen; его машиночитаемое отражение — экстракт `.wf-research/design-audit/design-extract.json`.
 
 ## Goals / Non-Goals
 

@@ -1,6 +1,6 @@
 ﻿{
     "source":  "design.pen — извлечено через MCP pen (execute), НЕ парсить design.pen напрямую",
-    "extractedAt":  "2026-10-08T14:17:03",
+    "extractedAt":  "2026-10-09T22:07:02",
     "variables":  {
                       "bg":  {
                                  "type":  "color",
@@ -93,7 +93,15 @@
                       "superZone":  {
                                         "type":  "color",
                                         "value":  "#F3D68C"
-                                    }
+                                    },
+                      "superLabel":  {
+                                         "type":  "color",
+                                         "value":  "#8a6a1f"
+                                     },
+                      "unrealLoss":  {
+                                         "type":  "color",
+                                         "value":  "#EFB6AE"
+                                     }
                   },
     "reusableComponentCount":  26,
     "topLevelReusableComponents":  [
