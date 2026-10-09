@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Builder;
 using TransactionJournal.Api.Sse;
+using TransactionJournal.Chats;
 using TransactionJournal.Hints.Corpus;
 
 /// <summary>
@@ -109,6 +110,19 @@ public static class AgentEndpoints
 			return Results.Json(ToChatDto(chat!));
 		});
 
+		// Смена модели на лету: параметр чата обновляется самим действием
+		// владельца, история остаётся как есть — последующие сообщения уходят
+		// выбранной модели.
+		// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+		chats.MapPut("/{chatId}/model", (string chatId, ChangeAgentChatModelRequest request, AgentChatStore store) =>
+		{
+			if (string.IsNullOrWhiteSpace(request.Model))
+				return Results.Json(new AgentChatErrorResponse("Модель чата не задана."), statusCode: StatusCodes.Status400BadRequest);
+			if (store.TryChangeModel(chatId, request.Model, out var chat) == false)
+				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
+			return Results.Json(ToChatDto(chat!));
+		});
+
 		// Удаление привязанного чата убирает всю историю, а не только его статус.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 		chats.MapDelete("/{chatId}", (string chatId, AgentChatStore store) =>
@@ -166,12 +180,10 @@ public static class AgentEndpoints
 			return true;
 		}
 
-		if (string.IsNullOrWhiteSpace(request.Params.Model))
-		{
-			error = "Модель чата не задана.";
-			return true;
-		}
-
+		// Модель при создании необязательна: чат без выбора модели получает
+		// дефолт из подсекции Llm:Chat (GLM-5.3), проверяется только текст и
+		// непустой набор источников.
+		// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
 		if (request.Params.Sources.Count == 0)
 		{
 			error = "Выберите хотя бы один источник данных.";
@@ -215,6 +227,8 @@ public static class AgentEndpoints
 }
 
 public sealed record CreateAgentChatRequest(string Text, AgentChatParams Params);
+
+public sealed record ChangeAgentChatModelRequest(string Model);
 
 public sealed record ChatMessageStreamRequest(string Text, string? Model);
 
@@ -323,11 +337,15 @@ public sealed class AgentChatStore
 
 	private readonly List<AgentChat> _chats;
 
-	public AgentChatStore(string dataDirectory)
+	/// <summary>Дефолт модели чата из подсекции Llm:Chat:Model; без опций — встроенный GLM-5.3.</summary>
+	private readonly string _defaultModel;
+
+	public AgentChatStore(string dataDirectory, ChatModelOptions? chatModelOptions = null)
 	{
 		Directory.CreateDirectory(dataDirectory);
 		_storagePath = Path.Combine(dataDirectory, "agent-chats.json");
 		_chats = Load(_storagePath);
+		_defaultModel = chatModelOptions?.Model ?? ChatModelOptions.DefaultModel;
 	}
 
 	public IReadOnlyList<AgentChat> List(AgentChatStatus status)
@@ -427,6 +445,25 @@ public sealed class AgentChatStore
 		}
 	}
 
+	/// <summary>
+	/// Смена модели существующего чата на лету: меняется только параметр чата,
+	/// история сообщений не трогается — последующие сообщения уходят новой
+	/// модели. Неизвестный идентификатор даёт отказ без изменений.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	/// </summary>
+	public bool TryChangeModel(string chatId, string model, out AgentChat? chat)
+	{
+		lock (_sync)
+		{
+			chat = _chats.FirstOrDefault(item => item.Id == chatId);
+			if (chat is null)
+				return false;
+			chat.Params = chat.Params with { Model = model.Trim() };
+			Persist();
+			return true;
+		}
+	}
+
 	/// <summary>Удаляет чат вместе с сообщениями и сохраняет результат в существующем хранилище.</summary>
 	// Удалённый чат не должен восстанавливаться при повторном чтении JSON.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
@@ -460,9 +497,15 @@ public sealed class AgentChatStore
 		}
 	}
 
-	private static AgentChatParams NormalizeParams(AgentChatParams raw)
+	/// <summary>
+	/// Параметры создания нормализуются: модель без выбора владельца получает
+	/// дефолт из подсекции Llm:Chat:Model (GLM-5.3), источники — подмножество
+	/// закрытого справочника, пустой выбор разворачивается во все три.
+	// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+	/// </summary>
+	private AgentChatParams NormalizeParams(AgentChatParams raw)
 	{
-		var model = string.IsNullOrWhiteSpace(raw.Model) ? "GLM-5.3" : raw.Model.Trim();
+		var model = string.IsNullOrWhiteSpace(raw.Model) ? _defaultModel : raw.Model.Trim();
 		var constructionId = string.IsNullOrWhiteSpace(raw.ConstructionId) ? null : raw.ConstructionId!.Trim();
 		var sources = raw.Sources
 			.Select(source => source.Trim())

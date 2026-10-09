@@ -222,6 +222,46 @@ public sealed class ChatAgentTests
 		Assert.That(traceRecorder.Build(), Is.Null);
 	}
 
+	[TestMethod]
+	[Description("Заданная модель уходит в опции запроса идентификатором ModelId")]
+	// Рабочая модель — параметр запроса: агент передаёт идентификатор модели
+	// клиенту в опциях, чтобы ответ пришёл от выбранной владельцем модели.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	public async Task TryIfModelSpecified_RequestOptionsCarryModelId()
+	{
+		// Arrange: агент над подменённым клиентом с захватом опций.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ.")]];
+		var agent = CreateAgent(chatClient, new Mock<IChatMarketReader>(MockBehavior.Strict));
+
+		// Act: вопрос с явно указанной моделью чата.
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", model: "glm-5.2"));
+
+		// Assert: опции запроса несут идентификатор выбранной модели без обрамления.
+		Assert.That(chatClient.Options, Has.Count.EqualTo(1));
+		Assert.That(chatClient.Options[0]!.ModelId, Is.EqualTo("glm-5.2"));
+	}
+
+	[TestMethod]
+	[Description("Модель без значения оставляет выбор дефолтного клиента модели")]
+	// Пустая модель не навязывает клиенту идентификатор: ModelId остаётся
+	// незаданным, и запрос уходит модели по умолчанию клиента.
+	// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+	public async Task TryIfModelMissing_RequestOptionsKeepModelUnset()
+	{
+		// Arrange: агент над подменённым клиентом с захватом опций.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ.")]];
+		var agent = CreateAgent(chatClient, new Mock<IChatMarketReader>(MockBehavior.Strict));
+
+		// Act: вопрос без модели чата.
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", model: "   "));
+
+		// Assert: ModelId в опциях не задан.
+		Assert.That(chatClient.Options, Has.Count.EqualTo(1));
+		Assert.That(chatClient.Options[0]!.ModelId, Is.Null);
+	}
+
 	/// <summary>Собирает стрим обновлений в список для проверок.</summary>
 	private static async Task<List<ChatResponseUpdate>> CollectAsync(IAsyncEnumerable<ChatResponseUpdate> stream)
 	{
@@ -271,6 +311,9 @@ public sealed class ChatAgentTests
 		/// <summary>Запросы, полученные клиентом, в порядке поступления.</summary>
 		public List<List<ChatMessage>> Requests { get; } = [];
 
+		/// <summary>Опции запросов, в порядке поступления.</summary>
+		public List<ChatOptions?> Options { get; } = [];
+
 		/// <summary>Число запросов к клиенту модели.</summary>
 		public int RequestCount => Requests.Count;
 
@@ -284,6 +327,7 @@ public sealed class ChatAgentTests
 			[EnumeratorCancellation] CancellationToken cancellationToken = default)
 		{
 			Requests.Add([.. messages]);
+			Options.Add(options);
 			await Task.Yield();
 			// Сценарий исчерпан — повторяем последнюю сцену: модель упорствует с тул-коллами.
 			var scene = Script[Math.Min(Requests.Count - 1, Script.Count - 1)];

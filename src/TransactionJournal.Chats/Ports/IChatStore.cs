@@ -52,6 +52,17 @@ public interface IChatStore
 	Task<IReadOnlyList<ChatMessage>> ListMessagesAsync(long chatId, CancellationToken cancellationToken = default);
 
 	/// <summary>
+	/// Смена модели существующего чата владельцем: меняется только параметр
+	/// чата — последующие сообщения уходят выбранной модели, история не
+	/// переписывается. Возвращает чат с обновлённой моделью.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	/// </summary>
+	/// <param name="chatId">Идентификатор чата.</param>
+	/// <param name="model">Новый идентификатор модели в API провайдера.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task<ChatRecord> ChangeChatModelAsync(long chatId, string model, CancellationToken cancellationToken = default);
+
+	/// <summary>
 	/// Ручное завершение чата владельцем: активный чат исчезает из списка
 	/// активных и появляется в списке завершённых, история сохраняется.
 	/// Единственный способ завершить чат — это действие; автоматики нет.
@@ -139,7 +150,7 @@ public sealed record ChatRecord
 	/// <summary>Суррогатный ключ чата; 0 у несохранённого чата.</summary>
 	public long Id { get; init; }
 
-	/// <summary>ИИ-модель чата: новые сообщения чата уходят ей.</summary>
+	/// <summary>ИИ-модель чата: новые сообщения чата уходят ей; владелец меняет её на лету без переписывания истории.</summary>
 	public required string Model { get; init; }
 
 	/// <summary>Идентификатор конструкции привязки; null — чат без привязки.</summary>

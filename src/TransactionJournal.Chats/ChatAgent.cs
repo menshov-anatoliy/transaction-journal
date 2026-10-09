@@ -69,6 +69,7 @@ public sealed class ChatAgent
 	/// <param name="history">Предыдущие сообщения текущего диалога в порядке следования.</param>
 	/// <param name="question">Вопрос владельца.</param>
 	/// <param name="sources">Набор источников чата; null — дефолт, все три категории.</param>
+	/// <param name="model">Рабочая модель запроса — параметр чата; null или пустая — дефолт клиента.</param>
 	/// <param name="traceRecorder">Накопитель рыночного следа ответа; null — вызовы не записываются.</param>
 	/// <param name="cancellationToken">Токен отмены генерации.</param>
 	/// <returns>Поток обновлений ответа: текстовые чанки и tool-вызовы.</returns>
@@ -77,6 +78,7 @@ public sealed class ChatAgent
 		IReadOnlyList<Ports.ChatMessage> history,
 		string question,
 		IReadOnlyList<ChatDataSource>? sources = null,
+		string? model = null,
 		ChatMarketTraceRecorder? traceRecorder = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
@@ -100,6 +102,10 @@ public sealed class ChatAgent
 			// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
 			Tools = [.. _tools.CreateTools(sources, traceRecorder)],
 			ToolMode = ChatToolMode.Auto,
+			// Рабочая модель — параметр чата: смена модели на лету меняет только
+			// идентификатор модели в запросе, история передаётся как есть.
+			// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+			ModelId = string.IsNullOrWhiteSpace(model) ? null : model.Trim(),
 		};
 
 		await foreach (var update in _chatClient

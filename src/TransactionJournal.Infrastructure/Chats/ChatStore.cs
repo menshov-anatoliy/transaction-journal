@@ -147,6 +147,27 @@ public sealed class ChatStore : IChatStore
 		return entities.Select(ToRecord).ToList();
 	}
 
+	/// <inheritdoc cref="IChatStore.ChangeChatModelAsync" />
+	public async Task<ChatRecord> ChangeChatModelAsync(
+		long chatId,
+		string model,
+		CancellationToken cancellationToken = default)
+	{
+		EnsureChatId(chatId);
+		ArgumentException.ThrowIfNullOrWhiteSpace(model);
+
+		using var db = CreateContext();
+		var chat = await LoadChatAsync(db, chatId, cancellationToken).ConfigureAwait(false);
+
+		// Смена на лету меняет только параметр чата: сообщения не трогаются —
+		// история сохраняется как есть, а последующие вопросы уходят выбранной
+		// модели, которую конвейер читает из чата при каждом обращении.
+		// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+		chat.Model = model.Trim();
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+		return ToRecord(chat);
+	}
+
 	/// <inheritdoc cref="IChatStore.CompleteChatAsync" />
 	public async Task CompleteChatAsync(long chatId, CancellationToken cancellationToken = default)
 	{

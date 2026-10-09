@@ -90,6 +90,18 @@ public sealed class ChatService
 		public Task<IReadOnlyList<ChatRecord>> ListCompletedAsync(CancellationToken cancellationToken = default) =>
 			_store.ListCompletedChatsAsync(cancellationToken);
 
+		/// <summary>
+		/// Меняет модель существующего чата: последующие сообщения уходят выбранной
+		/// модели, история не переписывается; возвращает чат с обновлённой моделью.
+		// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+		/// </summary>
+		/// <param name="chatId">Идентификатор чата.</param>
+		/// <param name="model">Новый идентификатор модели в API провайдера.</param>
+		/// <param name="cancellationToken">Токен отмены.</param>
+		/// <returns>Чат с обновлённой моделью.</returns>
+		public Task<ChatRecord> ChangeModelAsync(long chatId, string model, CancellationToken cancellationToken = default) =>
+			_store.ChangeChatModelAsync(chatId, model, cancellationToken);
+
 	/// <summary>
 	/// Фиксирует сообщение владельца и возвращает его с присвоенными ключами:
 	/// сообщение без чата создаёт новый чат с переданными параметрами —
@@ -180,8 +192,18 @@ public sealed class ChatService
 		await foreach (var update in _agent
 			// Реестр инструментов агентного цикла — из набора источников чата:
 			// только read-only функции выбранных категорий справочника.
+			// Рабочая модель — текущий параметр чата: смена модели на лету
+			// действует со следующего сообщения, история не переписывается.
 			// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
-			.StreamAnswerAsync(snapshot, history, userMessage.Text, chat.Sources, traceRecorder, cancellationToken)
+			// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+			.StreamAnswerAsync(
+				snapshot,
+				history,
+				userMessage.Text,
+				chat.Sources,
+				chat.Model,
+				traceRecorder,
+				cancellationToken)
 			.ConfigureAwait(false))
 		{
 			answer.Append(update.Text);

@@ -453,6 +453,63 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 		Assert.That(toolNames, Is.EqualTo([ChatTools.GetMarketSnapshotToolName, ChatTools.GetOptionBoardToolName]));
 	}
 
+	[TestMethod]
+	[Description("Смена модели на лету переключает модель следующих сообщений, история не переписывается")]
+	// Модель — параметр чата: первый обмен уходит модели из параметров создания,
+	// после смены следующий вопрос с историей уходит новой модели, а записанная
+	// история сохраняется как есть.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+	public async Task TryIfModelChangedMidChat_NewQuestionUsesNewModelAndHistoryUntouched()
+	{
+		// Arrange: конвейер, чат на дефолтной модели, первый обмен завершён.
+		var chatClient = new FakeChatClient();
+		chatClient.Script =
+		[
+			[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ на старой модели.")],
+			[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ на новой модели.")],
+		];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Loose);
+		var service = CreateService(chatClient, market, out _);
+		var first = await service.AppendUserMessageAsync(null, Start(7), "Первый вопрос.");
+		_ = await CollectAsync(service.StreamAssistantAnswerAsync(first.ChatId, first));
+
+		// Act: владелец меняет модель и задаёт следующий вопрос.
+		await service.ChangeModelAsync(first.ChatId, "glm-5.2");
+		var second = await service.AppendUserMessageAsync(first.ChatId, null, "Второй вопрос.");
+		_ = await CollectAsync(service.StreamAssistantAnswerAsync(second.ChatId, second));
+
+		// Assert: каждый запрос ушёл своей модели — первая glm-5.3, вторая glm-5.2.
+		Assert.That(chatClient.Options, Has.Count.EqualTo(2));
+		Assert.That(chatClient.Options[0]!.ModelId, Is.EqualTo("glm-5.3"));
+		Assert.That(chatClient.Options[1]!.ModelId, Is.EqualTo("glm-5.2"));
+
+		// Assert: история не переписана — четыре записи обмена в исходном порядке.
+		var messages = await CreateStore().ListMessagesAsync(first.ChatId);
+		Assert.That(
+			messages.Select(stored => (Role: stored.Role, Text: stored.Text)),
+			Is.EqualTo(new[]
+			{
+				(ChatMessageRole.User, "Первый вопрос."),
+				(ChatMessageRole.Assistant, "Ответ на старой модели."),
+				(ChatMessageRole.User, "Второй вопрос."),
+				(ChatMessageRole.Assistant, "Ответ на новой модели."),
+			}));
+	}
+
+	[TestMethod]
+	[Description("Смена модели несуществующего чата через конвейер отвергается исключением")]
+	// Параметр меняется только у существующего чата.
+	public void ThrowOnChangeModelUnknownChat()
+	{
+		// Arrange
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+
+		// Act — Assert
+		Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			await service.ChangeModelAsync(999, "glm-5.2"));
+	}
+
 	/// <summary>Параметры создания чата с дефолтной моделью и полным набором источников.</summary>
 	private static ChatStartParameters Start(long? constructionId) => new()
 	{

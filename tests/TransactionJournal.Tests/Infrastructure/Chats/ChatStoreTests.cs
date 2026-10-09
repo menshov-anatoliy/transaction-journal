@@ -496,4 +496,64 @@ public class ChatStoreTests : ChatDatabaseTests
 		Assert.ThrowsAsync<InvalidOperationException>(async () =>
 			await store.DeleteChatAsync(999));
 	}
+
+	[TestMethod]
+	[Description("Смена модели на лету обновляет параметр чата, история остаётся как есть")]
+	// Модель — параметр чата: владелец меняет её между сообщениями, значение
+	// нормализуется обрезкой и сохраняется, ранее записанная история не
+	// переписывается.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	public async Task TryIfModelChangedMidChat_OnlyParameterMovesAndHistoryUntouched()
+	{
+		// Arrange: активный чат на дефолтной модели с одним сообщением.
+		var store = CreateStore();
+		var first = await store.AppendMessageAsync(null, Start(), UserDraft());
+
+		// Act: владелец меняет модель чата между сообщениями.
+		var chat = await store.ChangeChatModelAsync(first.ChatId, "  glm-5.2  ");
+
+		// Assert: модель обновлена с обрезкой и видна новому экземпляру хранилища.
+		Assert.That(chat.Model, Is.EqualTo("glm-5.2"));
+		var reloaded = await CreateStore().FindChatAsync(first.ChatId);
+		Assert.That(reloaded!.Model, Is.EqualTo("glm-5.2"));
+
+		// Assert: история не переписана — единственное сообщение владельца на месте.
+		var messages = await CreateStore().ListMessagesAsync(first.ChatId);
+		Assert.That(messages.Select(stored => stored.Text), Is.EqualTo(new[] { "Первый вопрос." }));
+	}
+
+	[TestMethod]
+	[Description("Смена модели несуществующего чата отвергается исключением")]
+	// Параметр меняется только у существующего чата: неизвестный идентификатор —
+	// ошибка состояния, а не молчаливый успех.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	public void ThrowOnChangeModelUnknownChat()
+	{
+		// Arrange
+		var store = CreateStore();
+
+		// Act — Assert
+		Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			await store.ChangeChatModelAsync(999, "glm-5.2"));
+	}
+
+	[TestMethod]
+	[Description("Смена модели на пустое значение отвергается, прежняя модель сохраняется")]
+	// Модель чата не бывает пустой: пустая или пробельная строка не проходит
+	// валидацию параметра, чат продолжает работать на прежней модели.
+	// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+	public async Task ThrowOnChangeModelBlank()
+	{
+		// Arrange: активный чат на дефолтной модели.
+		var store = CreateStore();
+		var first = await store.AppendMessageAsync(null, Start(), UserDraft());
+
+		// Act — Assert
+		Assert.ThrowsAsync<ArgumentException>(async () =>
+			await store.ChangeChatModelAsync(first.ChatId, "   "));
+
+		// Assert: прежняя модель сохранилась.
+		var chat = await store.FindChatAsync(first.ChatId);
+		Assert.That(chat!.Model, Is.EqualTo("glm-5.3"));
+	}
 }

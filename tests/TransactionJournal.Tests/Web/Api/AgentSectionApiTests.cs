@@ -133,6 +133,104 @@ public sealed class AgentSectionApiTests
 	}
 
 	[TestMethod]
+	[Description("Чат, созданный без выбора модели, получает дефолт GLM-5.3")]
+	// Дефолт модели задаётся подсекцией Llm:Chat:Model: владелец создаёт чат,
+	// не выбирая модель, и чат работает на GLM-5.3 без правки кода.
+	// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+	public async Task TryIfChatCreatedWithoutModel_DefaultModelGlmApplied()
+	{
+		await using var factory = new SectionApiFactory();
+		using var client = factory.CreateClient();
+
+		var createPayload = new JsonObject
+		{
+			["text"] = "Проверь конструкцию без выбора модели",
+			["params"] = new JsonObject
+			{
+				["constructionId"] = null,
+				["sources"] = new JsonArray("journal", "rules-corpus", "market"),
+			},
+		};
+
+		// Act: создание чата с пустым параметром модели.
+		var createResponse = await client.PostAsJsonAsync("/api/v1/chats", createPayload);
+
+		// Assert: чат создан на дефолтной модели GLM-5.3.
+		Assert.That(createResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+		var created = await createResponse.Content.ReadFromJsonAsync<JsonNode>();
+		Assert.That(created!["params"]!["model"]!.GetValue<string>(), Is.EqualTo("glm-5.3"));
+	}
+
+	[TestMethod]
+	[Description("Смена модели на лету обновляет параметр чата и сохраняет историю")]
+	// Модель — параметр чата: смена выполняется действием владельца поверх
+	// существующего чата, история сообщений остаётся как есть; неизвестный
+	// идентификатор даёт 404 без изменений.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	public async Task TryIfModelChangedMidChat_ParamsUpdatedAndHistoryPreserved()
+	{
+		await using var factory = new SectionApiFactory();
+		using var client = factory.CreateClient();
+		var created = await (await client.PostAsJsonAsync("/api/v1/chats", new JsonObject
+		{
+			["text"] = "Проверь лимиты риска",
+			["params"] = new JsonObject
+			{
+				["model"] = "glm-5.3",
+				["constructionId"] = null,
+				["sources"] = new JsonArray("journal", "rules-corpus", "market"),
+			},
+		})).Content.ReadFromJsonAsync<JsonNode>();
+		var chatId = created!["id"]!.GetValue<string>();
+
+		// Act: владелец меняет модель существующего чата.
+		var changeResponse = await client.PutAsJsonAsync($"/api/v1/chats/{chatId}/model", new { model = "glm-5.2" });
+
+		// Assert: параметр чата обновлён, история не тронута.
+		Assert.That(changeResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+		var changed = await changeResponse.Content.ReadFromJsonAsync<JsonNode>();
+		Assert.That(changed!["params"]!["model"]!.GetValue<string>(), Is.EqualTo("glm-5.2"));
+		var messages = await (await client.GetAsync($"/api/v1/chats/{chatId}/messages")).Content.ReadFromJsonAsync<JsonArray>();
+		Assert.That(messages!, Has.Count.EqualTo(1));
+		Assert.That(messages[0]!["text"]!.GetValue<string>(), Is.EqualTo("Проверь лимиты риска"));
+
+		// Assert: смена модели неизвестного чата даёт 404.
+		var unknownResponse = await client.PutAsJsonAsync($"/api/v1/chats/missing-{Guid.NewGuid():N}/model", new { model = "glm-5.2" });
+		Assert.That(unknownResponse.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+	}
+
+	[TestMethod]
+	[Description("Смена модели на пустое значение отвечает 400 без изменения чата")]
+	// Модель чата не бывает пустой: пустая строка отвергается валидацией,
+	// прежний параметр сохраняется.
+	// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+	public async Task ThrowOnChangingModelWithoutModelReturns400()
+	{
+		await using var factory = new SectionApiFactory();
+		using var client = factory.CreateClient();
+		var created = await (await client.PostAsJsonAsync("/api/v1/chats", new JsonObject
+		{
+			["text"] = "Проверь ликвидность",
+			["params"] = new JsonObject
+			{
+				["model"] = "glm-5.3",
+				["constructionId"] = null,
+				["sources"] = new JsonArray("market"),
+			},
+		})).Content.ReadFromJsonAsync<JsonNode>();
+		var chatId = created!["id"]!.GetValue<string>();
+
+		// Act: смена модели на пустую строку.
+		var response = await client.PutAsJsonAsync($"/api/v1/chats/{chatId}/model", new { model = "  " });
+
+		// Assert: отказ 400, прежняя модель сохранена.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+		var reloaded = await (await client.GetAsync($"/api/v1/chats?status=active")).Content.ReadFromJsonAsync<JsonArray>();
+		var chat = reloaded!.Single(node => node!["id"]!.GetValue<string>() == chatId);
+		Assert.That(chat["params"]!["model"]!.GetValue<string>(), Is.EqualTo("glm-5.3"));
+	}
+
+	[TestMethod]
 	[Description("Каталог правил фильтруется по характеру, чёткости и поисковой строке")]
 	// Каталог корпуса правил read-only доступен в том же окне раздела «Агент»:
 	// список поддерживает фильтры характера, чёткости, субъекта и поиск.

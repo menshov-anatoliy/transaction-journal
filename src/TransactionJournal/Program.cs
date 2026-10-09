@@ -22,6 +22,7 @@ using TransactionJournal.Domain.Sync;
 using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Infrastructure.Hints;
 using TransactionJournal.Infrastructure.Chats;
+using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
 using TransactionJournal.Hints;
 using TransactionJournal.Hints.Corpus;
@@ -291,7 +292,13 @@ builder.Services.AddSingleton<IHintPassRunner>(sp => sp.GetRequiredService<HintA
 // Traceability: openspec:ui/screens#requirement-ui-hint-section-groups
 builder.Services.AddSingleton<IHintDisplayReadModel, HintDisplayReadModel>();
 builder.Services.AddSingleton<AgentRulesCatalog>();
-builder.Services.AddSingleton(_ => new AgentChatStore(dataDirectory));
+// Хранилище раздела «Агент» получает дефолт модели чата из подсекции
+// Llm:Chat: чат, созданный без выбора модели, работает на конфигурируемой
+// модели без правки кода.
+// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+builder.Services.AddSingleton(sp => new AgentChatStore(
+	dataDirectory,
+	sp.GetRequiredService<ChatModelOptions>()));
 
 // Единое SQLite-хранилище чатов агента: плоские чаты с параметрами и полной
 // историей сообщений одним файлом рядом с базой журнала — per-construction
@@ -338,6 +345,15 @@ builder.Services.AddSingleton(HintChatModelOptions.Resolve(
 	llmSettings.BaseUrl,
 	llmSettings.ApiKey,
 	builder.Configuration["Llm:Hint:Model"]));
+// Рабочая модель чата агента: подсекция Llm:Chat задаёт модель, пустое или
+// отсутствующее значение откатывается к дефолту GLM-5.3; смена модели
+// выполняется правкой конфигурации без правки кода.
+// Traceability: openspec:chats/sources#requirement-sources-model-is-chat-parameter
+builder.Services.AddSingleton(ChatModelOptions.Resolve(
+	llmSettings.Provider,
+	llmSettings.BaseUrl,
+	llmSettings.ApiKey,
+	builder.Configuration["Llm:Chat:Model"]));
 
 var app = builder.Build();
 
