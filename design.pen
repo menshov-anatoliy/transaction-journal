@@ -13575,24 +13575,6 @@
           ]
         }
       ]
-    },
-    {
-      "type": "rectangle",
-      "id": "ZPBnm",
-      "x": 6680,
-      "y": 0,
-      "name": "Журнал Bybit",
-      "fill": [
-        "#ffffff",
-        {
-          "type": "image",
-          "enabled": true,
-          "url": "screenshot-localhost.png",
-          "mode": "cover"
-        }
-      ],
-      "width": 476,
-      "height": 370
     }
   ],
   "variables": {
