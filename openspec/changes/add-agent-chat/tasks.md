@@ -2,7 +2,7 @@
 
 ## 1. Словарь и проект окружения
 
-- [ ] 1.1 Переименовать проект окружения `src/TransactionJournal.Consultations` → `src/TransactionJournal.Chats` (зависимость только от Domain), порты `IConsultationContextReader` → `IChatContextReader`, `IConsultationStore` → `IChatStore`; зеркальные тесты структуры обновить. Проверить: `requirement-chat-environment-record` — сценарий `scenario-chat-domain-agnostic`; сборка решения зелёная.
+- [x] 1.1 Переименовать проект окружения `src/TransactionJournal.Consultations` → `src/TransactionJournal.Chats` (зависимость только от Domain), порты `IConsultationContextReader` → `IChatContextReader`, `IConsultationStore` → `IChatStore`; зеркальные тесты структуры обновить. Проверить: `requirement-chat-environment-record` — сценарий `scenario-chat-domain-agnostic`; сборка решения зелёная.
 - [ ] 1.2 Переименовать файл инструкций `consultation-prompt.md` → `agent-prompt.md` (настраиваемый путь, дефолт рядом с `rules/`, встроенный дефолт в коде, битость не ломает чат). Проверить: `requirement-chat-context-agent-instructions-file` — сценарии `scenario-chat-context-instructions-override`, `scenario-chat-context-instructions-missing-ok`.
 
 ## 2. Хранилище чатов

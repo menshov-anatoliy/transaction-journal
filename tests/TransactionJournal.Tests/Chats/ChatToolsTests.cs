@@ -1,23 +1,23 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
-using TransactionJournal.Consultations;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats;
+using TransactionJournal.Chats.Ports;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 using OptionType = TransactionJournal.Domain.Materialization.OptionType;
 
-namespace TransactionJournal.Tests.Consultations;
+namespace TransactionJournal.Tests.Chats;
 
 /// <summary>
-/// Проверки реестра инструментов консультаций: реестр содержит ровно три
+/// Проверки реестра инструментов чата: реестр содержит ровно три
 /// read-only функции, карточка правила читается полным текстом только по id,
 /// доска опционов отдаётся компактной проекцией вместо сырых данных, а
 /// недоступность биржи отдаётся структурированным «недоступно» с последней
 /// кэшированной проекцией марок и её as-of.
 /// </summary>
 [TestClass]
-public sealed class ConsultationToolsTests
+public sealed class ChatToolsTests
 {
 	/// <summary>Фиксированный момент as-of для детерминированных ответов портов.</summary>
 	private static readonly DateTimeOffset FixedNow = new(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
@@ -34,13 +34,13 @@ public sealed class ConsultationToolsTests
 
 		// Assert: функций ровно три, имена фиксированы, пишущих и посторонних
 		// инструментов в реестре нет.
-		// Traceability: openspec:consultations/tools#scenario-tools-no-write-tools
+		// Traceability: openspec:chats/sources#scenario-sources-write-never
 		Assert.That(functions, Has.Count.EqualTo(3));
 		Assert.That(functions.Select(function => function.Name), Is.EqualTo(
 		[
-			ConsultationTools.ReadRuleCardToolName,
-			ConsultationTools.GetMarketSnapshotToolName,
-			ConsultationTools.GetOptionBoardToolName,
+			ChatTools.ReadRuleCardToolName,
+			ChatTools.GetMarketSnapshotToolName,
+			ChatTools.GetOptionBoardToolName,
 		]));
 		Assert.That(
 			functions.Select(function => function.Name),
@@ -66,7 +66,7 @@ public sealed class ConsultationToolsTests
 		var unknown = await tools.ReadRuleCardAsync("ac-99");
 
 		// Assert: полный текст отдаётся целиком, отсутствие — не ошибка, а текст.
-		// Traceability: openspec:consultations/tools#scenario-tools-card-by-id
+		// Traceability: openspec:chats/sources#scenario-sources-card-by-id
 		Assert.That(known, Is.EqualTo("Полный текст правила ac-01."));
 		Assert.That(unknown, Does.Contain("ac-99"));
 		Assert.That(unknown, Does.Contain("не найдена"));
@@ -77,10 +77,10 @@ public sealed class ConsultationToolsTests
 	public async Task GetMarketSnapshotAsync_RendersMarkdownSnapshot()
 	{
 		// Arrange: порт отвечает доступным снимком перпа BTCUSDT.
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationMarketSnapshot
+			.ReturnsAsync(new ChatMarketSnapshot
 			{
 				BaseCoin = "BTC",
 				AsOf = FixedNow,
@@ -112,10 +112,10 @@ public sealed class ConsultationToolsTests
 	{
 		// Arrange: доска с двумя экспирациями; страйк 135000 лежит вне окна
 		// ±20% от марки 106000 и не должен попасть в проекцию.
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadOptionBoardAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationOptionBoard
+			.ReturnsAsync(new ChatOptionBoard
 			{
 				BaseCoin = "BTC",
 				AsOf = FixedNow,
@@ -139,7 +139,7 @@ public sealed class ConsultationToolsTests
 
 		// Assert: окно объявлено с якорем-маркой, счётчики сырых и проекционных
 		// котировок разделены.
-		// Traceability: openspec:consultations/tools#scenario-tools-option-board-projection
+		// Traceability: openspec:chats/sources#scenario-sources-option-board-projection
 		Assert.That(markdown, Does.Contain("Доска опционов BTC"));
 		Assert.That(markdown, Does.Contain("Окно проекции: страйки ±20% от марки базового актива 106000 USDT"));
 		Assert.That(markdown, Does.Contain("Инструментов в ответе биржи: 9, в проекции: 6"));
@@ -163,10 +163,10 @@ public sealed class ConsultationToolsTests
 	public async Task GetOptionBoardAsync_UnavailableBoard_ReturnsStructuredUnavailable()
 	{
 		// Arrange: порт отвечает недоступностью с причиной сбоя биржи.
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadOptionBoardAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationOptionBoard
+			.ReturnsAsync(new ChatOptionBoard
 			{
 				BaseCoin = "BTC",
 				AsOf = FixedNow,
@@ -182,7 +182,7 @@ public sealed class ConsultationToolsTests
 
 		// Assert: ответ помечен недоступностью с причиной; кэш пуст — таблицы
 		// проекции нет, инструмент объявляет отсутствие кэшированных марок.
-		// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
+		// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 		Assert.That(markdown, Does.Contain("биржа недоступна"));
 		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
 		Assert.That(markdown, Does.Contain("Кэшированных марок опционов BTC в кэше марок нет"));
@@ -196,10 +196,10 @@ public sealed class ConsultationToolsTests
 		// Arrange: порт отвечает недоступностью с последней кэшированной маркой
 		// перпа и as-of момента её получения из кэша марок.
 		var cachedAt = new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero);
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationMarketSnapshot
+			.ReturnsAsync(new ChatMarketSnapshot
 			{
 				BaseCoin = "BTC",
 				AsOf = cachedAt,
@@ -216,7 +216,7 @@ public sealed class ConsultationToolsTests
 		// Assert: недоступность с причиной и последняя кэшированная марка с as-of
 		// кэша — ассистент обязан пометить устаревшие данные и не давать
 		// рыночно-зависимых рекомендаций.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(markdown, Does.Contain("Снимок фьючерсного рынка BTC — биржа недоступна"));
 		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
 		Assert.That(markdown, Does.Contain("Последняя кэшированная марка (as-of: 2029-12-31 10:00:00 UTC):"));
@@ -229,10 +229,10 @@ public sealed class ConsultationToolsTests
 	public async Task GetMarketSnapshotAsync_UnavailableWithoutCache_SaysNoCachedMark()
 	{
 		// Arrange: порт отвечает недоступностью без марки — кэш провайдера пуст.
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationMarketSnapshot
+			.ReturnsAsync(new ChatMarketSnapshot
 			{
 				BaseCoin = "BTC",
 				AsOf = FixedNow,
@@ -245,7 +245,7 @@ public sealed class ConsultationToolsTests
 		var markdown = await tools.GetMarketSnapshotAsync("BTC");
 
 		// Assert: деградировать нечем — инструмент объявляет отсутствие кэшированной марки.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(markdown, Does.Contain("биржа недоступна"));
 		Assert.That(markdown, Does.Contain("Кэшированной марки BTCUSDT в кэше марок нет"));
 	}
@@ -257,10 +257,10 @@ public sealed class ConsultationToolsTests
 		// Arrange: порт отвечает недоступностью с кэшированными марками двух
 		// опционов и якорем из кэшированной марки перпа.
 		var cachedAt = new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero);
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadOptionBoardAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationOptionBoard
+			.ReturnsAsync(new ChatOptionBoard
 			{
 				BaseCoin = "BTC",
 				AsOf = cachedAt,
@@ -282,7 +282,7 @@ public sealed class ConsultationToolsTests
 		// Assert: недоступность с причиной и кэшированная проекция марок с as-of
 		// кэша; кэш хранит только марки — таблица деградации без IV, греков и
 		// бид-аска; сырых данных биржи в ответе нет.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(markdown, Does.Contain("Доска опционов BTC — биржа недоступна"));
 		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
 		Assert.That(markdown, Does.Contain("Последняя кэшированная проекция марок (as-of: 2029-12-31 10:00:00 UTC):"));
@@ -299,10 +299,10 @@ public sealed class ConsultationToolsTests
 	public async Task GetMarketSnapshotAsync_SingleCall_PerformsSinglePortRead()
 	{
 		// Arrange: порт отвечает доступным снимком.
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationMarketSnapshot
+			.ReturnsAsync(new ChatMarketSnapshot
 			{
 				BaseCoin = "BTC",
 				AsOf = FixedNow,
@@ -317,7 +317,7 @@ public sealed class ConsultationToolsTests
 
 		// Assert: чтений порта ровно одно — «один вызов = один биржевой запрос»;
 		// потолок числа вызовов на запрос ассистента ограничивает агентный цикл (3.3).
-		// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+		// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 		market.Verify(
 			reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()),
 			Times.Once);
@@ -325,28 +325,28 @@ public sealed class ConsultationToolsTests
 	}
 
 	/// <summary>Создаёт реестр поверх заглушек портов по умолчанию.</summary>
-	private static ConsultationTools CreateTools()
+	private static ChatTools CreateTools()
 	{
 		var corpus = new Mock<IRuleCorpusReader>(MockBehavior.Loose);
 		return CreateTools(corpus.Object);
 	}
 
 	/// <summary>Создаёт реестр поверх переданного читателя корпуса и заглушки рынка.</summary>
-	private static ConsultationTools CreateTools(IRuleCorpusReader corpusReader)
+	private static ChatTools CreateTools(IRuleCorpusReader corpusReader)
 	{
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Loose);
-		return new ConsultationTools(corpusReader, market.Object);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Loose);
+		return new ChatTools(corpusReader, market.Object);
 	}
 
 	/// <summary>Создаёт реестр поверх читателя корпуса по умолчанию и переданного порта рынка.</summary>
-	private static ConsultationTools CreateTools(IConsultationMarketReader marketReader)
+	private static ChatTools CreateTools(IChatMarketReader marketReader)
 	{
 		var corpus = new Mock<IRuleCorpusReader>(MockBehavior.Loose);
-		return new ConsultationTools(corpus.Object, marketReader);
+		return new ChatTools(corpus.Object, marketReader);
 	}
 
 	/// <summary>Строит котировку доски с типовыми значениями греков.</summary>
-	private static ConsultationOptionQuote Quote(
+	private static ChatOptionQuote Quote(
 		string symbol,
 		DateOnly expiry,
 		decimal strike,

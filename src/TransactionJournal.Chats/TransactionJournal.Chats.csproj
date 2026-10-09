@@ -4,10 +4,10 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>TransactionJournal.Consultations</RootNamespace>
+    <RootNamespace>TransactionJournal.Chats</RootNamespace>
   </PropertyGroup>
 
-  <!-- Окружение чата консультаций: зависит только от домена (ADR-0009).
+  <!-- Окружение чата агента: зависит только от домена (ADR-0009).
        Ссылки на Application, Infrastructure, Web и Hints запрещены: доступ к
        корпусу правил идёт через собственный порт с адаптером в composition root,
        доступ к рынку — через порт рыночных данных с адаптером в Infrastructure.

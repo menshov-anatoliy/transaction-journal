@@ -1,28 +1,28 @@
-namespace TransactionJournal.Consultations.Ports;
+namespace TransactionJournal.Chats.Ports;
 
 using TransactionJournal.Domain.Materialization;
 
 /// <summary>
-/// Порт рыночных данных для инструментов консультаций: снимок фьючерсного
+/// Порт рыночных данных для инструментов чата: снимок фьючерсного
 /// рынка по базовому активу и доска опционов. Каждое чтение — ровно один
 /// биржевой запрос через единый клиент тикеров с его троттлером и
 /// resilience; отдельные счётчики запросов не вводятся, глубину вызовов
 /// ограничивает потолок итераций агентного цикла. Недоступность биржи —
 /// управляемый исход в записи результата, а не исключение: инструмент
-/// консультаций обязан ответить структурированным «недоступно».
-// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+/// чата обязан ответить структурированным «недоступно».
+// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 /// </summary>
-public interface IConsultationMarketReader
+public interface IChatMarketReader
 {
 	/// <summary>Читает снимок фьючерсного рынка по базовому активу: марка, бид-аск, открытый интерес, ставка фандинга.</summary>
 	/// <param name="baseCoin">Базовый актив, например BTC или ETH.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	Task<ConsultationMarketSnapshot> ReadSnapshotAsync(string baseCoin, CancellationToken cancellationToken = default);
+	Task<ChatMarketSnapshot> ReadSnapshotAsync(string baseCoin, CancellationToken cancellationToken = default);
 
 	/// <summary>Читает доску опционов по базовому активу: страйки с IV, греками, открытым интересом и бид-аском.</summary>
 	/// <param name="baseCoin">Базовый актив, например BTC или ETH.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	Task<ConsultationOptionBoard> ReadOptionBoardAsync(string baseCoin, CancellationToken cancellationToken = default);
+	Task<ChatOptionBoard> ReadOptionBoardAsync(string baseCoin, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -30,9 +30,9 @@ public interface IConsultationMarketReader
 /// тикеров категории linear. Недоступность биржи помечается флагом с
 /// причиной: ассистент обязан помечать устаревшие данные и не давать
 /// рыночно-зависимых рекомендаций.
-// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
+// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 /// </summary>
-public sealed record ConsultationMarketSnapshot
+public sealed record ChatMarketSnapshot
 {
 	/// <summary>Базовый актив снимка.</summary>
 	public required string BaseCoin { get; init; }
@@ -74,11 +74,11 @@ public sealed record ConsultationMarketSnapshot
 /// <summary>
 /// Доска опционов по базовому активу — результат одного запроса тикеров
 /// категории option с фильтром baseCoin. Котировки приведены к каноническим
-/// частям символа; компактную проекцию доски строит инструмент консультаций.
+/// частям символа; компактную проекцию доски строит инструмент чата.
 /// Недоступность биржи помечается флагом с причиной.
-// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
+// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 /// </summary>
-public sealed record ConsultationOptionBoard
+public sealed record ChatOptionBoard
 {
 	/// <summary>Базовый актив доски.</summary>
 	public required string BaseCoin { get; init; }
@@ -99,11 +99,11 @@ public sealed record ConsultationOptionBoard
 	public required int TotalTickerCount { get; init; }
 
 	/// <summary>Котировки доски с разобранными частями символа; нечитаемые символы отброшены.</summary>
-	public required IReadOnlyList<ConsultationOptionQuote> Quotes { get; init; }
+	public required IReadOnlyList<ChatOptionQuote> Quotes { get; init; }
 }
 
 /// <summary>Котировка опциона доски: канонические части символа плюс рыночные поля тикера.</summary>
-public sealed record ConsultationOptionQuote
+public sealed record ChatOptionQuote
 {
 	/// <summary>Символ опциона биржи.</summary>
 	public required string Symbol { get; init; }

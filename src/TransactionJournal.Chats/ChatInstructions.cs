@@ -1,16 +1,16 @@
-namespace TransactionJournal.Consultations;
+namespace TransactionJournal.Chats;
 
 /// <summary>
-/// Инструкции агента консультаций: поведение ассистента задаётся редактируемым
+/// Инструкции агента чата: поведение ассистента задаётся редактируемым
 /// файлом <c>consultation-prompt.md</c> — отдельный настраиваемый путь, по
 /// умолчанию файл лежит рядом с каталогом <c>rules/</c>; валидный файл
 /// переопределяет встроенный минимальный дефолт, отсутствие или нечитаемость
 /// файла чат не ломает — работает встроенный дефолт. Файл перечитывается на
 /// каждое чтение: правки владельца действуют со следующего сообщения без
 /// перезапуска приложения.
-/// Traceability: openspec:consultations/context#requirement-context-agent-instructions-file
+/// Traceability: openspec:chats/context#requirement-chat-context-agent-instructions-file
 /// </summary>
-public sealed class ConsultationInstructions
+public sealed class ChatInstructions
 {
 	/// <summary>Имя файла инструкций по умолчанию, размещаемого рядом с rules/.</summary>
 	public const string DefaultFileName = "consultation-prompt.md";
@@ -21,8 +21,8 @@ public sealed class ConsultationInstructions
 	/// прогнозов цены, цитирование id карточек корпуса, явная маркировка
 	/// «вне корпуса правил», read-only чат с планом управления markdown-текстом
 	/// и пост-мортем «работа над ошибками» для закрытых конструкций.
-	/// Traceability: openspec:consultations/context#requirement-context-scenario-conduct
-	/// Traceability: openspec:consultations/context#requirement-context-postmortem-mode
+	/// Traceability: openspec:chats/context#requirement-chat-context-scenario-conduct
+	/// Traceability: openspec:chats/context#requirement-chat-context-postmortem-mode
 	/// </summary>
 	public const string DefaultInstructions =
 		"""
@@ -60,7 +60,7 @@ public sealed class ConsultationInstructions
 
 	/// <summary>Создаёт источник инструкций агента по пути файла.</summary>
 	/// <param name="path">Путь файла инструкций (дефолт consultation-prompt.md рядом с rules/, переопределяется настройкой).</param>
-	public ConsultationInstructions(string path)
+	public ChatInstructions(string path)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(path);
 		_path = path;
@@ -73,8 +73,8 @@ public sealed class ConsultationInstructions
 	/// Возвращает текст инструкций для агента: валидный непустой файл
 	/// переопределяет встроенный дефолт; отсутствующий, пустой или нечитаемый
 	/// файл оставляет дефолт — чат продолжает работать.
-	/// Traceability: openspec:consultations/context#scenario-context-instructions-override
-	/// Traceability: openspec:consultations/context#scenario-context-instructions-missing-ok
+	/// Traceability: openspec:chats/context#scenario-chat-context-instructions-override
+	/// Traceability: openspec:chats/context#scenario-chat-context-instructions-missing-ok
 	/// </summary>
 	/// <returns>Текст инструкций агента.</returns>
 	public string Read()

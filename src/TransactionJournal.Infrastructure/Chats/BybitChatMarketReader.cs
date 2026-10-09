@@ -1,28 +1,28 @@
-namespace TransactionJournal.Infrastructure.Consultations;
+namespace TransactionJournal.Infrastructure.Chats;
 
 using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Application.Bybit;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Infrastructure.Bybit;
 using TransactionJournal.Infrastructure.Data;
 
 /// <summary>
-/// Адаптер рыночных данных инструментов консультаций поверх публичного клиента
+/// Адаптер рыночных данных инструментов чата поверх публичного клиента
 /// тикеров Bybit: снимок фьючерсного рынка — один запрос категории linear по
 /// символу перпа, доска опционов — один запрос категории option с фильтром
 /// baseCoin. Троттлер и resilience клиента наследуются целиком, собственных
 /// счётчиков запросов нет; сбой биржи — управляемая недоступность в записи
 /// результата, а не исключение: вместе с пометкой недоступности адаптер
 /// возвращает последнюю кэшированную проекцию из кэша марок InstrumentMarkProvider
-/// с явным as-of кэша, чтобы инструмент консультаций ответил структурированным
+/// с явным as-of кэша, чтобы инструмент чата ответил структурированным
 /// «недоступно + кэш». Деградация покрывает и ошибки конверта биржи, и
 /// транспортные сбои после всех повторов resilience: сеть, DNS, отказ соединения
-/// и таймаут HTTP — для инструмента консультаций это одна недоступность биржи.
-// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
-// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
+/// и таймаут HTTP — для инструмента чата это одна недоступность биржи.
+// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
+// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 /// </summary>
-public sealed class BybitConsultationMarketReader : IConsultationMarketReader
+public sealed class BybitChatMarketReader : IChatMarketReader
 {
 	/// <summary>Категория фьючерсных тикеров: перп базового актива несёт марку и ставку фандинга.</summary>
 	private const string LinearCategory = "linear";
@@ -40,7 +40,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 	/// <param name="tickersClient">Единый клиент тикеров Bybit с троттлером и resilience.</param>
 	/// <param name="markCacheOptions">Опции контекста журнала: чтение кэша марок при деградации — короткоживущий контекст на каждое чтение.</param>
 	/// <param name="timeProvider">Поставщик момента as-of ответа; по умолчанию системные часы.</param>
-	public BybitConsultationMarketReader(
+	public BybitChatMarketReader(
 		BybitTickersClient tickersClient,
 		DbContextOptions<JournalDbContext> markCacheOptions,
 		TimeProvider? timeProvider = null)
@@ -57,9 +57,9 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 	/// запрашивается — глубину биржевых обращений ограничивает потолок итераций
 	/// агентного цикла. При сбое биржи снимок деградирует в кэш: последняя
 	/// кэшированная марка перпа с моментом её получения в роли as-of.
-	// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+	// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 	/// </remarks>
-	public async Task<ConsultationMarketSnapshot> ReadSnapshotAsync(string baseCoin, CancellationToken cancellationToken = default)
+	public async Task<ChatMarketSnapshot> ReadSnapshotAsync(string baseCoin, CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
 		try
@@ -68,7 +68,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 				new BybitTickerQuery { Category = LinearCategory, Symbol = baseCoin + "USDT" },
 				cancellationToken).ConfigureAwait(false);
 			var ticker = tickers.FirstOrDefault();
-			return new ConsultationMarketSnapshot
+			return new ChatMarketSnapshot
 			{
 				BaseCoin = baseCoin,
 				AsOf = _timeProvider.GetUtcNow(),
@@ -88,22 +88,22 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 			// Деградация при сбое биржи: вместе с пометкой недоступности возвращается
 			// последняя кэшированная марка перпа из кэша InstrumentMarkProvider, а as-of
 			// снимка — момент её получения, а не момент сбоя.
-			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 			return await SnapshotFromCacheAsync(baseCoin, exception.Message, cancellationToken).ConfigureAwait(false);
 		}
 		catch (HttpRequestException exception)
 		{
 			// Транспортный сбой (сеть, DNS, отказ соединения) после всех повторов
 			// resilience деградирует так же, как ошибка биржи: для инструмента
-			// консультаций это одна недоступность биржи с кэшем и её as-of.
-			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			// чата это одна недоступность биржи с кэшем и её as-of.
+			// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 			return await SnapshotFromCacheAsync(baseCoin, exception.Message, cancellationToken).ConfigureAwait(false);
 		}
 		catch (TaskCanceledException exception) when (exception.InnerException is TimeoutException)
 		{
 			// Таймаут HTTP-запроса — та же недоступность биржи; отмена вызывающим
 			// кодом сюда не попадает: у неё нет внутреннего TimeoutException.
-			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 			return await SnapshotFromCacheAsync(baseCoin, exception.InnerException.Message, cancellationToken).ConfigureAwait(false);
 		}
 	}
@@ -115,9 +115,9 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 	/// актива. Символы вне формата опционов отбрасываются с подсчётом, котировки
 	/// приводятся к каноническим частям символа. При сбое биржи доска деградирует
 	/// в кэш марок: последние известные цены опционов актива с as-of кэша.
-	// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+	// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 	/// </remarks>
-	public async Task<ConsultationOptionBoard> ReadOptionBoardAsync(string baseCoin, CancellationToken cancellationToken = default)
+	public async Task<ChatOptionBoard> ReadOptionBoardAsync(string baseCoin, CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
 		try
@@ -125,7 +125,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 			var tickers = await _tickersClient.GetTickersAsync(
 				new BybitTickerQuery { Category = OptionCategory, BaseCoin = baseCoin },
 				cancellationToken).ConfigureAwait(false);
-			var quotes = new List<ConsultationOptionQuote>(tickers.Count);
+			var quotes = new List<ChatOptionQuote>(tickers.Count);
 			foreach (var ticker in tickers)
 			{
 				if (OptionSymbolParser.TryParse(ticker.Symbol, out var parts) == false)
@@ -133,7 +133,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 					continue;
 				}
 
-				quotes.Add(new ConsultationOptionQuote
+				quotes.Add(new ChatOptionQuote
 				{
 					Symbol = ticker.Symbol,
 					Expiry = DateOnly.FromDateTime(parts!.ExpiryDate),
@@ -153,7 +153,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 				});
 			}
 
-			return new ConsultationOptionBoard
+			return new ChatOptionBoard
 			{
 				BaseCoin = baseCoin,
 				AsOf = _timeProvider.GetUtcNow(),
@@ -169,22 +169,22 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 			// InstrumentMarkProvider — только последние известные цены опционов
 			// актива, as-of — момент получения самой старой из них; IV, греки и
 			// бид-аск кэш не хранит, якорь окна — кэшированная марка перпа.
-			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 			return await BoardFromCacheAsync(baseCoin, exception.Message, cancellationToken).ConfigureAwait(false);
 		}
 		catch (HttpRequestException exception)
 		{
 			// Транспортный сбой после всех повторов resilience деградирует так же,
-			// как ошибка биржи: для инструмента консультаций это одна недоступность
+			// как ошибка биржи: для инструмента чата это одна недоступность
 			// биржи с кэшем марок и её as-of.
-			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 			return await BoardFromCacheAsync(baseCoin, exception.Message, cancellationToken).ConfigureAwait(false);
 		}
 		catch (TaskCanceledException exception) when (exception.InnerException is TimeoutException)
 		{
 			// Таймаут HTTP-запроса — та же недоступность биржи; отмена вызывающим
 			// кодом сюда не попадает: у неё нет внутреннего TimeoutException.
-			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 			return await BoardFromCacheAsync(baseCoin, exception.InnerException.Message, cancellationToken).ConfigureAwait(false);
 		}
 	}
@@ -200,13 +200,13 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 	/// <param name="reason">Причина недоступности из исключения сбоя.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Недоступный снимок с кэшированной маркой, когда она известна.</returns>
-	private async Task<ConsultationMarketSnapshot> SnapshotFromCacheAsync(
+	private async Task<ChatMarketSnapshot> SnapshotFromCacheAsync(
 		string baseCoin,
 		string reason,
 		CancellationToken cancellationToken)
 	{
 		var cached = await ReadCachedMarkAsync(baseCoin + "USDT", cancellationToken).ConfigureAwait(false);
-		return new ConsultationMarketSnapshot
+		return new ChatMarketSnapshot
 		{
 			BaseCoin = baseCoin,
 			AsOf = cached?.ReceivedAt ?? _timeProvider.GetUtcNow(),
@@ -226,7 +226,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 	/// <param name="reason">Причина недоступности из исключения сбоя.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Недоступная доска с кэшированными марками, когда они известны.</returns>
-	private async Task<ConsultationOptionBoard> BoardFromCacheAsync(
+	private async Task<ChatOptionBoard> BoardFromCacheAsync(
 		string baseCoin,
 		string reason,
 		CancellationToken cancellationToken)
@@ -238,7 +238,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 			underlyingPrice = (await ReadCachedMarkAsync(baseCoin + "USDT", cancellationToken).ConfigureAwait(false))?.Price;
 		}
 
-		return new ConsultationOptionBoard
+		return new ChatOptionBoard
 		{
 			BaseCoin = baseCoin,
 			AsOf = quotes.Count > 0 ? quotes.Min(quote => quote.ReceivedAt) : _timeProvider.GetUtcNow(),
@@ -289,7 +289,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 			}
 
 			quotes.Add(new CachedOptionQuote(
-				new ConsultationOptionQuote
+				new ChatOptionQuote
 				{
 					Symbol = row.Symbol,
 					Expiry = DateOnly.FromDateTime(parts!.ExpiryDate),
@@ -307,7 +307,7 @@ public sealed class BybitConsultationMarketReader : IConsultationMarketReader
 	private sealed record CachedMark(decimal Price, DateTimeOffset ReceivedAt);
 
 	/// <summary>Кэшированная котировка опциона: приведённые части символа плюс момент получения марки.</summary>
-	private sealed record CachedOptionQuote(ConsultationOptionQuote Quote, DateTimeOffset ReceivedAt);
+	private sealed record CachedOptionQuote(ChatOptionQuote Quote, DateTimeOffset ReceivedAt);
 
 	#endregion
 }

@@ -1,13 +1,14 @@
-namespace TransactionJournal.Consultations;
+namespace TransactionJournal.Chats;
 
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 /// <summary>
-/// Агентный цикл консультаций: keyed <see cref="IChatClient"/> из конфигурации
+/// Агентный цикл чата: keyed <see cref="IChatClient"/> из конфигурации
 /// оборачивается FunctionInvokingChatClient с потолком
 /// <see cref="MaximumIterationsPerRequest"/> — глубина инструментальных вызовов
 /// ограничена ~6 биржевыми запросами на сообщение. На каждое сообщение
@@ -15,38 +16,38 @@ using TransactionJournal.Consultations.Ports;
 /// вопрос вместе со снимком контекста; ответ стримится
 /// <see cref="ChatResponseUpdate"/> — текстовые чанки идут в UI, tool-вызовы
 /// проходят через поток для рыночного следа ответа.
-/// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+/// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 /// </summary>
-public sealed class ConsultationAgent
+public sealed class ChatAgent
 {
 	/// <summary>Ключ keyed-регистрации IChatClient модели чата в composition root.</summary>
-	public const string ChatClientServiceKey = "consultations";
+	public const string ChatClientServiceKey = "chats";
 
 	/// <summary>Потолок итераций агентного цикла на одно сообщение: ~6 биржевых запросов.</summary>
 	public const int MaximumIterationsPerRequest = 6;
 
 	private readonly IChatClient _chatClient;
 
-	private readonly ConsultationTools _tools;
+	private readonly ChatTools _tools;
 
-	private readonly ConsultationInstructions _instructions;
+	private readonly ChatInstructions _instructions;
 
 	/// <summary>Создаёт агентный цикл над keyed клиентом модели и реестром инструментов.</summary>
 	/// <param name="chatClient">Клиент модели чата, разрешаемый по ключу из конфигурации.</param>
-	/// <param name="tools">Реестр read-only инструментов консультаций.</param>
+	/// <param name="tools">Реестр read-only инструментов чата.</param>
 	/// <param name="instructions">Источник инструкций агента.</param>
-	public ConsultationAgent(
+	public ChatAgent(
 		[FromKeyedServices(ChatClientServiceKey)] IChatClient chatClient,
-		ConsultationTools tools,
-		ConsultationInstructions instructions)
+		ChatTools tools,
+		ChatInstructions instructions)
 	{
 		ArgumentNullException.ThrowIfNull(chatClient);
 		_tools = tools ?? throw new ArgumentNullException(nameof(tools));
 		_instructions = instructions ?? throw new ArgumentNullException(nameof(instructions));
 
-		// Цикл с функциями и его потолок — механика проекта Consultations, а не
+		// Цикл с функциями и его потолок — механика проекта Chats, а не
 		// composition root: контракт потолка проверяется тестом на зацикливание.
-		// Traceability: openspec:consultations/tools#scenario-tools-iteration-cap
+		// Traceability: openspec:chats/sources#scenario-sources-iteration-cap
 		_chatClient = chatClient
 			.AsBuilder()
 			.UseFunctionInvocation(configure: static options => options.MaximumIterationsPerRequest = MaximumIterationsPerRequest)
@@ -60,8 +61,8 @@ public sealed class ConsultationAgent
 	/// read-only функции реестра. Накопитель следа заполняется тул-вызовами
 	/// в момент их исполнения — по завершении стрима из него строится
 	/// рыночный след сообщения ассистента.
-	// Traceability: openspec:consultations/tools#requirement-tools-read-only-registry
-	// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+	// Traceability: openspec:chats/sources#requirement-sources-read-only-tool-registry
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	/// </summary>
 	/// <param name="context">Снимок контекста конструкции, собранный кодом без LLM.</param>
 	/// <param name="history">Предыдущие сообщения текущего диалога в порядке следования.</param>
@@ -70,10 +71,10 @@ public sealed class ConsultationAgent
 	/// <param name="cancellationToken">Токен отмены генерации.</param>
 	/// <returns>Поток обновлений ответа: текстовые чанки и tool-вызовы.</returns>
 	public async IAsyncEnumerable<ChatResponseUpdate> StreamAnswerAsync(
-		ConsultationContextSnapshot context,
-		IReadOnlyList<ConsultationMessage> history,
+		ChatContextSnapshot context,
+		IReadOnlyList<Ports.ChatMessage> history,
 		string question,
-		ConsultationMarketTraceRecorder? traceRecorder = null,
+		ChatMarketTraceRecorder? traceRecorder = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(context);
@@ -105,12 +106,12 @@ public sealed class ConsultationAgent
 	}
 
 	/// <summary>Сообщение диалога отображается в сообщение чата по роли автора.</summary>
-	private static ChatMessage ToChatMessage(ConsultationMessage message) => new(
-		message.Role == ConsultationMessageRole.User ? ChatRole.User : ChatRole.Assistant,
+	private static ChatMessage ToChatMessage(Ports.ChatMessage message) => new(
+		message.Role == ChatMessageRole.User ? ChatRole.User : ChatRole.Assistant,
 		message.Text);
 
 	/// <summary>Вопрос владельца уходит вместе со снимком контекста: модель видит факты журнала в момент вопроса.</summary>
-	private static string ComposeUserMessage(ConsultationContextSnapshot context, string question)
+	private static string ComposeUserMessage(ChatContextSnapshot context, string question)
 	{
 		var builder = new StringBuilder();
 		builder.AppendLine(context.Markdown.TrimEnd());

@@ -1,13 +1,13 @@
-namespace TransactionJournal.Tests.Infrastructure.Consultations;
+namespace TransactionJournal.Tests.Infrastructure.Chats;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Application.Analytics;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.Data;
-using TransactionJournal.Infrastructure.Consultations;
+using TransactionJournal.Infrastructure.Chats;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Infrastructure.Hints;
 using TransactionJournal.Infrastructure.ReadModels;
@@ -18,15 +18,15 @@ using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
 /// <summary>
-/// Интеграционные проверки адаптера снимка контекста консультации: снимок
+/// Интеграционные проверки адаптера снимка контекста чата: снимок
 /// собирается кодом поверх read-моделей журнала и несёт первичные факты
 /// конструкции, портфельные агрегаты, лимиты и компактный индекс корпуса,
 /// каждый раздел датирован as-of моментом сборки, живые подсказки движка
 /// в снимок не попадают, а полный текст карточек в снимке не рендерится.
-/// Traceability: openspec:consultations/context#requirement-context-deterministic-snapshot
+/// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
 /// </summary>
 [TestClass]
-public class ConsultationContextReaderTests
+public class ChatContextReaderTests
 {
 	private const string LinearSymbol = "BTCUSDT";
 
@@ -56,7 +56,7 @@ public class ConsultationContextReaderTests
 	{
 		// Каждая проверка работает со своей пустой базой во временной папке
 		// со справочником линейного перпа BTCUSDT.
-		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-consultation-context-tests-{Guid.NewGuid():N}.db");
+		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-chat-context-tests-{Guid.NewGuid():N}.db");
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			db.Database.Migrate();
@@ -90,7 +90,7 @@ public class ConsultationContextReaderTests
 	// Проверяем сценарий первичных фактов: конструкция, позиции, результат,
 	// портфельные агрегаты и лимиты присутствуют в markdown-снимке, каждый
 	// раздел помечен одной as-of отметкой сборки.
-	// Traceability: openspec:consultations/context#scenario-context-primary-facts-with-asof
+	// Traceability: openspec:chats/context#scenario-chat-context-construction-snapshot-with-asof
 	public async Task TryIfSnapshotCarriesPrimaryFactsWithPerSectionAsOf()
 	{
 		// Arrange: конструкция с капиталом 1000, риском 5% и профитом 200 USDT;
@@ -114,7 +114,7 @@ public class ConsultationContextReaderTests
 		// конструкция описана первичными фактами с позициями и результатом.
 		Assert.That(snapshot.AsOf, Is.EqualTo(Now));
 		Assert.That(snapshot.IsConstructionClosed, Is.False);
-		Assert.That(markdown, Does.Contain($"# Снимок контекста консультации (as-of: {AsOfStamp})"));
+		Assert.That(markdown, Does.Contain($"# Снимок контекста чата (as-of: {AsOfStamp})"));
 		Assert.That(markdown, Does.Contain($"## Конструкция «Календарь сентябрь» (as-of: {AsOfStamp})"));
 		Assert.That(markdown, Does.Contain("- Идентификатор: 1"));
 		Assert.That(markdown, Does.Contain("- Статус: открыта"));
@@ -143,7 +143,7 @@ public class ConsultationContextReaderTests
 	// Проверяем сценарий исключения подсказок: в хранилище есть живая
 	// new-подсказка по конструкции, но снимок собран без обращения к подсказкам —
 	// ни текста, ни самого слова «подсказка» в markdown нет.
-	// Traceability: openspec:consultations/context#scenario-context-hints-excluded
+	// Traceability: openspec:chats/context#scenario-chat-context-hints-excluded
 	public async Task TryIfLiveHintsStayOutOfSnapshot()
 	{
 		// Arrange: конструкция и живая подсказка движка по ней в хранилище.
@@ -183,7 +183,7 @@ public class ConsultationContextReaderTests
 	// Проверяем сценарий «только карточный индекс»: снимок берёт у читателя
 	// корпуса лишь индекс, чтение полного текста карточки не выполняется вовсе —
 	// заглушка читателя падает при любом обращении к ReadCardAsync.
-	// Traceability: openspec:consultations/context#scenario-context-card-index-only
+	// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
 	public async Task TryIfRuleIndexStaysCompactWithoutFullText()
 	{
 		// Arrange: конструкция с капиталом и заглушка корпуса с запретом полного текста.
@@ -204,7 +204,7 @@ public class ConsultationContextReaderTests
 	[Description("Закрытая конструкция помечает снимок режимом пост-мортема")]
 	// Проверяем признак пост-мортема: конструкция с ручным статусом «закрыта»
 	// даёт снимок с IsConstructionClosed = true, построенный по финальному состоянию.
-	// Traceability: openspec:consultations/context#requirement-context-postmortem-mode
+	// Traceability: openspec:chats/context#requirement-chat-context-postmortem-mode
 	public async Task TryIfClosedConstructionSwitchesSnapshotToPostmortem()
 	{
 		// Arrange: конструкция с позицией, переведённая в статус «закрыта».
@@ -225,10 +225,10 @@ public class ConsultationContextReaderTests
 	#region Помощники
 
 	/// <summary>Собирает адаптер снимка над реальными read-моделями и заглушкой корпуса.</summary>
-	private ConsultationContextReader CreateReader(IFreshInstrumentMarkSource freshMarkSource, IRuleCorpusReader corpus)
+	private ChatContextReader CreateReader(IFreshInstrumentMarkSource freshMarkSource, IRuleCorpusReader corpus)
 	{
 		var options = CreateOptions();
-		return new ConsultationContextReader(
+		return new ChatContextReader(
 			new ConstructionDetailReadModel(options, new JournalMetricsReadModel(options, freshMarkSource), new PositionReadModel(options)),
 			new JournalMetricsReadModel(options, freshMarkSource),
 			corpus,

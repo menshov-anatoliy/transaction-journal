@@ -1,4 +1,4 @@
-namespace TransactionJournal.Consultations;
+namespace TransactionJournal.Chats;
 
 using System.ComponentModel;
 using System.Globalization;
@@ -6,21 +6,21 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Domain.Materialization;
 
 /// <summary>
-/// Реестр инструментов консультаций: ровно три read-only инструмента —
+/// Реестр инструментов чата: ровно три read-only инструмента —
 /// чтение карточки правила по id, снимок фьючерсного рынка и компактная
 /// проекция доски опционов по базовому активу. Пишущих инструментов и
 /// инструментов по чужим конструкциям нет: реестр собирается только из
 /// этих трёх функций, каждое рыночное чтение выполняет ровно один биржевой
 /// запрос через порт рыночных данных. Результаты инструментов — markdown:
 /// компактная проекция вместо сырых данных биржи.
-// Traceability: openspec:consultations/tools#requirement-tools-read-only-registry
-// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+// Traceability: openspec:chats/sources#requirement-sources-read-only-tool-registry
+// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 /// </summary>
-public sealed class ConsultationTools
+public sealed class ChatTools
 {
 	/// <summary>Имя инструмента чтения карточки правила.</summary>
 	public const string ReadRuleCardToolName = "read_rule_card";
@@ -47,12 +47,12 @@ public sealed class ConsultationTools
 
 	private readonly IRuleCorpusReader _ruleCorpusReader;
 
-	private readonly IConsultationMarketReader _marketReader;
+	private readonly IChatMarketReader _marketReader;
 
 	/// <summary>Создаёт реестр поверх читателя корпуса и порта рыночных данных.</summary>
 	/// <param name="ruleCorpusReader">Читатель корпуса правил: полный текст карточки только по id.</param>
 	/// <param name="marketReader">Порт рыночных данных: одно чтение — один биржевой запрос.</param>
-	public ConsultationTools(IRuleCorpusReader ruleCorpusReader, IConsultationMarketReader marketReader)
+	public ChatTools(IRuleCorpusReader ruleCorpusReader, IChatMarketReader marketReader)
 	{
 		_ruleCorpusReader = ruleCorpusReader ?? throw new ArgumentNullException(nameof(ruleCorpusReader));
 		_marketReader = marketReader ?? throw new ArgumentNullException(nameof(marketReader));
@@ -63,12 +63,12 @@ public sealed class ConsultationTools
 	/// с фиксированными именами; проверка реестра показывает отсутствие
 	/// пишущих инструментов. Накопитель следа опционален: каждый вызов тула
 	/// записывается в него в момент исполнения — вместе с as-of отданных данных.
-	// Traceability: openspec:consultations/tools#scenario-tools-no-write-tools
-	// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+	// Traceability: openspec:chats/sources#scenario-sources-write-never
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	/// </summary>
 	/// <param name="traceRecorder">Накопитель рыночного следа ответа; null — вызовы не записываются.</param>
 	/// <returns>Список из трёх функций инструментов.</returns>
-	public IReadOnlyList<AIFunction> CreateTools(ConsultationMarketTraceRecorder? traceRecorder = null) =>
+	public IReadOnlyList<AIFunction> CreateTools(ChatMarketTraceRecorder? traceRecorder = null) =>
 	[
 		AIFunctionFactory.Create(
 			ReadRuleCardAsync,
@@ -87,8 +87,8 @@ public sealed class ConsultationTools
 	/// замыканием в момент исполнения.
 	/// </summary>
 	private static Func<ParameterInfo, AIFunctionFactoryOptions.ParameterBindingOptions> TraceBinding(
-		ConsultationMarketTraceRecorder? traceRecorder) =>
-		parameter => parameter.ParameterType == typeof(ConsultationMarketTraceRecorder)
+		ChatMarketTraceRecorder? traceRecorder) =>
+		parameter => parameter.ParameterType == typeof(ChatMarketTraceRecorder)
 			? new AIFunctionFactoryOptions.ParameterBindingOptions
 			{
 				BindParameter = (_, _) => traceRecorder,
@@ -103,21 +103,21 @@ public sealed class ConsultationTools
 	/// <summary>
 	/// Читает полный текст карточки правила по id из индекса корпуса; карточки
 	/// с таким id нет — инструмент отвечает текстом об отсутствии, а не ошибкой.
-	// Traceability: openspec:consultations/tools#scenario-tools-card-by-id
+	// Traceability: openspec:chats/sources#scenario-sources-card-by-id
 	/// </summary>
 	/// <param name="cardId">Идентификатор карточки из индекса корпуса, например ac-01.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Полный текст карточки или сообщение об отсутствии.</returns>
 	public async Task<string> ReadRuleCardAsync(
 		[Description("Идентификатор карточки из индекса корпуса, например ac-01.")] string cardId,
-		ConsultationMarketTraceRecorder? traceRecorder = null,
+		ChatMarketTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(cardId);
 		var card = await _ruleCorpusReader.ReadCardAsync(cardId, cancellationToken).ConfigureAwait(false);
 
 		// Чтение карточки попадает в след без as-of: корпус правил — не рыночные данные.
-		// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 		traceRecorder?.Record(ReadRuleCardToolName, CompactArguments(new { cardId }), dataAsOf: null);
 
 		return card is null
@@ -129,15 +129,15 @@ public sealed class ConsultationTools
 	/// Читает снимок фьючерсного рынка по базовому активу: одно чтение порта —
 	/// один биржевой запрос; недоступность биржи отдаётся структурированным
 	/// «недоступно» с причиной и последней кэшированной маркой с её as-of.
-	// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
-	// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
+	// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
+	// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 	/// </summary>
 	/// <param name="baseCoin">Базовый актив, например BTC или ETH.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Markdown-снимок рынка.</returns>
 	public async Task<string> GetMarketSnapshotAsync(
 		[Description("Базовый актив, например BTC или ETH.")] string baseCoin,
-		ConsultationMarketTraceRecorder? traceRecorder = null,
+		ChatMarketTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
@@ -145,7 +145,7 @@ public sealed class ConsultationTools
 
 		// As-of следа: живой снимок или кэшированная проекция дают as-of данных;
 		// без того и другого рыночных данных нет вовсе — след хранит null.
-		// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 		traceRecorder?.Record(
 			GetMarketSnapshotToolName,
 			CompactArguments(new { baseCoin }),
@@ -183,7 +183,7 @@ public sealed class ConsultationTools
 			// кэшированной маркой с её as-of: ассистент обязан пометить устаревшие
 			// данные и не давать рыночно-зависимых рекомендаций, отвечая по журналу
 			// и корпусу.
-			// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+			// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 			if (snapshot.MarkPrice is { } cachedMark)
 			{
 				markdown.AppendLine($"# Снимок фьючерсного рынка {snapshot.BaseCoin} — биржа недоступна");
@@ -216,15 +216,15 @@ public sealed class ConsultationTools
 	/// актива, максимум 21 ближайший страйк на экспирацию; отсечённые страйки
 	/// объявляются в шапке, сырые данные биржи не отдаются. Недоступность биржи
 	/// деградирует в последнюю кэшированную проекцию марок с её as-of.
-	// Traceability: openspec:consultations/tools#scenario-tools-option-board-projection
-	// Traceability: openspec:consultations/tools#requirement-tools-degradation-cached-asof
+	// Traceability: openspec:chats/sources#scenario-sources-option-board-projection
+	// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 	/// </summary>
 	/// <param name="baseCoin">Базовый актив, например BTC или ETH.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Markdown-проекция доски опционов.</returns>
 	public async Task<string> GetOptionBoardAsync(
 		[Description("Базовый актив, например BTC или ETH.")] string baseCoin,
-		ConsultationMarketTraceRecorder? traceRecorder = null,
+		ChatMarketTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
@@ -232,7 +232,7 @@ public sealed class ConsultationTools
 
 		// As-of следа тот же, что у снимка: живая доска или кэшированные марки
 		// дают as-of данных, пустой кэш при недоступной бирже — null.
-		// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 		traceRecorder?.Record(
 			GetOptionBoardToolName,
 			CompactArguments(new { baseCoin }),
@@ -274,11 +274,11 @@ public sealed class ConsultationTools
 	/// опционов, поэтому таблица деградации показывает страйк и марки колла/пута,
 	/// без IV, греков и бид-аска; ассистент обязан пометить устаревший as-of и
 	/// не давать рыночно-зависимых рекомендаций.
-	// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+	// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 	/// </summary>
 	/// <param name="board">Недоступная доска с кэшированными марками актива.</param>
 	/// <returns>Markdown-ответ инструмента при недоступности биржи.</returns>
-	private static string RenderUnavailableBoard(ConsultationOptionBoard board)
+	private static string RenderUnavailableBoard(ChatOptionBoard board)
 	{
 		var markdown = new StringBuilder();
 		markdown.AppendLine($"# Доска опционов {board.BaseCoin} — биржа недоступна");
@@ -311,7 +311,7 @@ public sealed class ConsultationTools
 	private static void AppendCachedExpirySection(
 		StringBuilder markdown,
 		DateOnly expiry,
-		IEnumerable<ConsultationOptionQuote> quotes,
+		IEnumerable<ChatOptionQuote> quotes,
 		decimal? boardAnchor)
 	{
 		var byStrike = quotes.ToLookup(quote => quote.Strike);
@@ -349,7 +349,7 @@ public sealed class ConsultationTools
 	private static void AppendExpirySection(
 		StringBuilder markdown,
 		DateOnly expiry,
-		IEnumerable<ConsultationOptionQuote> quotes,
+		IEnumerable<ChatOptionQuote> quotes,
 		decimal? boardAnchor)
 	{
 		var byStrike = quotes.ToLookup(quote => quote.Strike);
@@ -413,11 +413,11 @@ public sealed class ConsultationTools
 	}
 
 	/// <summary>Ячейка бид-аска котировки; котировки нет — прочерк.</summary>
-	private static string BidAsk(ConsultationOptionQuote? quote) =>
+	private static string BidAsk(ChatOptionQuote? quote) =>
 		quote is null ? "—" : $"{NumOpt(quote.Bid1Price)}/{NumOpt(quote.Ask1Price)}";
 
 	/// <summary>Ячейка подразумеваемой волатильности в процентах; значения нет — прочерк.</summary>
-	private static string Iv(ConsultationOptionQuote? quote) =>
+	private static string Iv(ChatOptionQuote? quote) =>
 		quote?.MarkIv is { } iv ? $"{Num(iv * 100)}%" : "—";
 
 	/// <summary>Ячейка грекa; значения нет — прочерк.</summary>

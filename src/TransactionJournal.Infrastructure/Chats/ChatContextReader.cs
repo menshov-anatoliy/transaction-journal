@@ -1,25 +1,25 @@
-namespace TransactionJournal.Infrastructure.Consultations;
+namespace TransactionJournal.Infrastructure.Chats;
 
 using System.Globalization;
 using System.Text;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Domain;
 using TransactionJournal.Infrastructure.Analytics;
 using TransactionJournal.Infrastructure.ReadModels;
 
 /// <summary>
-/// Адаптер снимка контекста консультации: собирает детерминированный
+/// Адаптер снимка контекста чата: собирает детерминированный
 /// markdown-снимок из read-моделей деталей конструкции и метрик журнала плюс
 /// компактного индекса корпуса правил. Каждый раздел несёт собственную as-of
 /// отметку сборки, живые подсказки движка в снимок не попадают вовсе —
 /// контекст формируется только из фактов журнала и канона правил.
-/// Traceability: openspec:consultations/context#requirement-context-deterministic-snapshot
-/// Traceability: openspec:consultations/context#scenario-context-primary-facts-with-asof
-/// Traceability: openspec:consultations/context#scenario-context-hints-excluded
+/// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
+/// Traceability: openspec:chats/context#scenario-chat-context-construction-snapshot-with-asof
+/// Traceability: openspec:chats/context#scenario-chat-context-hints-excluded
 /// </summary>
-public sealed class ConsultationContextReader : IConsultationContextReader
+public sealed class ChatContextReader : IChatContextReader
 {
 	private readonly IConstructionDetailReadModel _detailReadModel;
 
@@ -34,7 +34,7 @@ public sealed class ConsultationContextReader : IConsultationContextReader
 	/// <param name="metricsReadModel">Read-модель метрик журнала: портфельные агрегаты.</param>
 	/// <param name="ruleCorpusReader">Читатель корпуса правил: компактный индекс карточек.</param>
 	/// <param name="timeProvider">Поставщик момента сборки снимка; по умолчанию системные часы.</param>
-	public ConsultationContextReader(
+	public ChatContextReader(
 		IConstructionDetailReadModel detailReadModel,
 		IJournalMetricsReadModel metricsReadModel,
 		IRuleCorpusReader ruleCorpusReader,
@@ -54,9 +54,9 @@ public sealed class ConsultationContextReader : IConsultationContextReader
 	/// метрики конструкции; отдельное чтение метрик журнала нужно только для
 	/// портфельных агрегатов, дублирование вычисления принимается как цена
 	/// разделения read-моделей.
-	/// Traceability: openspec:consultations/context#requirement-context-deterministic-snapshot
+	/// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
 	/// </remarks>
-	public async Task<ConsultationContextSnapshot> ReadAsync(long constructionId, CancellationToken cancellationToken = default)
+	public async Task<ChatContextSnapshot> ReadAsync(long constructionId, CancellationToken cancellationToken = default)
 	{
 		var asOf = _timeProvider.GetUtcNow();
 		var detail = await _detailReadModel.ReadAsync(constructionId, cancellationToken);
@@ -65,18 +65,18 @@ public sealed class ConsultationContextReader : IConsultationContextReader
 
 		// Конструкции не в открытом статусе уже разобраны: снимок строится по
 		// финальному состоянию, промпт пост-мортема выбирает другой режим работы.
-		// Traceability: openspec:consultations/context#requirement-context-deterministic-snapshot
+		// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
 		var isClosed = detail.Status is ConstructionStatus.Closed or ConstructionStatus.Archived;
 
 		var markdown = new StringBuilder();
-		markdown.AppendLine($"# Снимок контекста консультации {AsOfTag(asOf)}");
+		markdown.AppendLine($"# Снимок контекста чата {AsOfTag(asOf)}");
 		markdown.AppendLine();
 		AppendConstructionSection(markdown, detail, asOf);
 		AppendPortfolioSection(markdown, metrics, asOf);
 		AppendLimitsSection(markdown, detail, asOf);
 		AppendRuleIndexSection(markdown, ruleIndex, asOf);
 
-		return new ConsultationContextSnapshot
+		return new ChatContextSnapshot
 		{
 			Markdown = markdown.ToString(),
 			AsOf = asOf,
@@ -214,7 +214,7 @@ public sealed class ConsultationContextReader : IConsultationContextReader
 	/// <summary>
 	/// Раздел индекса корпуса правил: компактный перечень карточек без полного
 	/// текста — полное содержание читается отдельным инструментом по id.
-	/// Traceability: openspec:consultations/context#scenario-context-card-index-only
+	/// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
 	/// </summary>
 	private static void AppendRuleIndexSection(StringBuilder markdown, IReadOnlyList<RuleCardSummary> ruleIndex, DateTimeOffset asOf)
 	{

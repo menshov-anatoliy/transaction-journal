@@ -1,21 +1,21 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Bybit;
-using TransactionJournal.Infrastructure.Consultations;
+using TransactionJournal.Infrastructure.Chats;
 using TransactionJournal.Infrastructure.Data;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 using OptionType = TransactionJournal.Domain.Materialization.OptionType;
 
-namespace TransactionJournal.Tests.Infrastructure.Consultations;
+namespace TransactionJournal.Tests.Infrastructure.Chats;
 
 using TransactionJournal.Tests.Infrastructure.Bybit;
 
 /// <summary>
-/// Проверки Bybit-адаптера рыночных данных консультаций против зафиксированных
+/// Проверки Bybit-адаптера рыночных данных чата против зафиксированных
 /// HTTP-ответов: каждое чтение порта выполняет ровно один запрос к публичному
 /// эндпоинту тикеров, снимок — линейным запросом по символу перпа, доска —
 /// опционным запросом с фильтром baseCoin, ошибка биржи превращается в
@@ -23,7 +23,7 @@ using TransactionJournal.Tests.Infrastructure.Bybit;
 /// в кэш марок провайдера — последняя известная проекция с её as-of.
 /// </summary>
 [TestClass]
-public sealed class BybitConsultationMarketReaderTests
+public sealed class BybitChatMarketReaderTests
 {
 	/// <summary>Тестовый адрес API Bybit без завершающего слэша.</summary>
 	private const string TestBaseUrl = "http://bybit-test.local";
@@ -40,7 +40,7 @@ public sealed class BybitConsultationMarketReaderTests
 	public void Initialize()
 	{
 		// Каждая проверка работает со своей пустой базой кэша марок во временной папке.
-		_databasePath = Path.Combine(Path.GetTempPath(), $"consultation-market-reader-tests-{Guid.NewGuid():N}.db");
+		_databasePath = Path.Combine(Path.GetTempPath(), $"chat-market-reader-tests-{Guid.NewGuid():N}.db");
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			db.Database.Migrate();
@@ -80,7 +80,7 @@ public sealed class BybitConsultationMarketReaderTests
 
 		// Assert: ровно один HTTP-запрос к линейному эндпоинту тикеров —
 		// требование «один вызов инструмента = один биржевой запрос».
-		// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+		// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 		Assert.That(handler.Requests.Count, Is.EqualTo(1));
 		Assert.That(handler.Requests[0].Method, Is.EqualTo(HttpMethod.Get));
 		Assert.That(handler.Requests[0].RequestUri!.ToString(), Is.EqualTo(
@@ -108,7 +108,7 @@ public sealed class BybitConsultationMarketReaderTests
 		// Arrange: зафиксированный ответ доски BTC — два экспирации, страйки
 		// внутри и вне проекции, пара колл/пут и один нечитаемый символ.
 		var handler = new ScriptedHttpMessageHandler();
-		handler.EnqueueJson(LoadFixture(Path.Combine("Consultations", "Fixtures", "tickers-option-board.json")));
+		handler.EnqueueJson(LoadFixture(Path.Combine("Chats", "Fixtures", "tickers-option-board.json")));
 
 		var reader = CreateReader(handler);
 
@@ -117,7 +117,7 @@ public sealed class BybitConsultationMarketReaderTests
 
 		// Assert: ровно один HTTP-запрос к опционному эндпоинту с фильтром baseCoin —
 		// доска не запрашивается по одному символу за вызов.
-		// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+		// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 		Assert.That(handler.Requests.Count, Is.EqualTo(1));
 		Assert.That(handler.Requests[0].RequestUri!.ToString(), Is.EqualTo(
 			$"{TestBaseUrl}/v5/market/tickers?category=option&baseCoin=BTC"));
@@ -191,7 +191,7 @@ public sealed class BybitConsultationMarketReaderTests
 
 		// Assert: недоступность + последняя кэшированная марка с as-of кэша;
 		// биржевой запрос по-прежнему ровно один.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(handler.Requests.Count, Is.EqualTo(1));
 		Assert.That(snapshot.IsAvailable, Is.False);
 		Assert.That(snapshot.UnavailableReason, Does.Contain("params error"));
@@ -214,7 +214,7 @@ public sealed class BybitConsultationMarketReaderTests
 		var snapshot = await reader.ReadSnapshotAsync("BTC");
 
 		// Assert: деградировать нечем — марки нет, as-of совпадает с моментом сбоя.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(snapshot.IsAvailable, Is.False);
 		Assert.That(snapshot.Symbol, Is.Null);
 		Assert.That(snapshot.MarkPrice, Is.Null);
@@ -244,7 +244,7 @@ public sealed class BybitConsultationMarketReaderTests
 		// Assert: недоступность + кэшированные марки только опционов BTC; as-of —
 		// момент получения самой старой марки проекции; IV, греки и бид-аск кэш
 		// не хранит; биржевой запрос по-прежнему ровно один.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(handler.Requests.Count, Is.EqualTo(1));
 		Assert.That(board.IsAvailable, Is.False);
 		Assert.That(board.UnavailableReason, Does.Contain("params error"));
@@ -278,7 +278,7 @@ public sealed class BybitConsultationMarketReaderTests
 		var board = await reader.ReadOptionBoardAsync("BTC");
 
 		// Assert: деградировать нечем — проекция пуста, as-of совпадает с моментом сбоя.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(board.IsAvailable, Is.False);
 		Assert.That(board.UnderlyingPrice, Is.Null);
 		Assert.That(board.TotalTickerCount, Is.EqualTo(0));
@@ -304,7 +304,7 @@ public sealed class BybitConsultationMarketReaderTests
 		// Assert: исключение не вышло наружу — управляемая недоступность с кэшем
 		// и его as-of; попыток две (исходная + один повтор сети resilience),
 		// второй биржевой запрос ридер сам не инициирует.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(handler.Requests.Count, Is.EqualTo(2));
 		Assert.That(snapshot.IsAvailable, Is.False);
 		Assert.That(snapshot.UnavailableReason, Does.Contain("actively refused"));
@@ -331,7 +331,7 @@ public sealed class BybitConsultationMarketReaderTests
 		var board = await reader.ReadOptionBoardAsync("BTC");
 
 		// Assert: управляемая недоступность с кэшированной проекцией и её as-of.
-		// Traceability: openspec:consultations/tools#scenario-tools-market-down-cached-projection
+		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(board.IsAvailable, Is.False);
 		Assert.That(board.UnavailableReason, Does.Contain("actively refused"));
 		Assert.That(board.UnderlyingPrice, Is.EqualTo(106000m));
@@ -341,7 +341,7 @@ public sealed class BybitConsultationMarketReaderTests
 	}
 
 	/// <summary>Создаёт адаптер над клиентом тикеров с фиктивным транспортом, кэшем марок и фиксированным временем.</summary>
-	private BybitConsultationMarketReader CreateReader(
+	private BybitChatMarketReader CreateReader(
 		ScriptedHttpMessageHandler handler,
 		BybitResilienceOptions? resilienceOptions = null)
 	{
@@ -349,7 +349,7 @@ public sealed class BybitConsultationMarketReaderTests
 			new HttpClient(handler) { BaseAddress = new Uri(TestBaseUrl) },
 			new BybitClientOptions { BaseUrl = TestBaseUrl },
 			resilienceOptions);
-		return new BybitConsultationMarketReader(tickersClient, CreateOptions(), new FixedTimeProvider(FixedNow));
+		return new BybitChatMarketReader(tickersClient, CreateOptions(), new FixedTimeProvider(FixedNow));
 	}
 
 	#region Помощники
@@ -380,8 +380,8 @@ public sealed class BybitConsultationMarketReaderTests
 	/// <summary>Читает зафиксированный ответ биржи рядом с тестовой сборкой.</summary>
 	private static string LoadFixture(string relativePath)
 	{
-		// Зафиксированные ответы лежат рядом с тестовой сборкой: доски консультаций —
-		// в Consultations/Fixtures, общие ответы клиента тикеров — в Bybit/Fixtures.
+		// Зафиксированные ответы лежат рядом с тестовой сборкой: доски чата —
+		// в Chats/Fixtures, общие ответы клиента тикеров — в Bybit/Fixtures.
 		return File.ReadAllText(Path.Combine(AppContext.BaseDirectory, relativePath));
 	}
 

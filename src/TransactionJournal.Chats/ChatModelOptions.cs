@@ -1,16 +1,16 @@
-namespace TransactionJournal.Consultations;
+namespace TransactionJournal.Chats;
 
 /// <summary>
-/// Модель чата консультаций: общие параметры провайдера (провайдер,
+/// Модель чата агента: общие параметры провайдера (провайдер,
 /// OpenAI-совместимый эндпоинт, ключ доступа, правило стороннего провайдера)
 /// задаёт секция <c>Llm</c> через резолвер composition root
 /// <c>LlmProviderSettings</c>, рабочая модель — подсекция <c>Llm:Chat</c>;
 /// дефолт модели — GLM-5.3. Смена провайдера или модели выполняется правкой
 /// конфигурации без правки кода.
-/// Traceability: openspec:consultations/tools#requirement-tools-chat-model-configurable
+/// Traceability: openspec:chats/sources#requirement-sources-model-is-chat-parameter
 /// Traceability: openspec:config/llm-provider#requirement-llm-model-subsections
 /// </summary>
-public sealed record ConsultationChatModelOptions
+public sealed record ChatModelOptions
 {
 	/// <summary>Модель по умолчанию: GLM-5.3 в OpenAI-совместимом доступе.</summary>
 	public const string DefaultModel = "glm-5.3";
@@ -40,9 +40,9 @@ public sealed record ConsultationChatModelOptions
 	/// <param name="apiKey">Общий ключ из Llm:ApiKey.</param>
 	/// <param name="model">Значение Llm:Chat:Model.</param>
 	/// <returns>Разрешённые опции модели чата.</returns>
-	public static ConsultationChatModelOptions Resolve(string provider, string baseUrl, string apiKey, string? model)
+	public static ChatModelOptions Resolve(string provider, string baseUrl, string apiKey, string? model)
 	{
-		return new ConsultationChatModelOptions
+		return new ChatModelOptions
 		{
 			Provider = provider,
 			Model = BlankToNull(model) ?? DefaultModel,

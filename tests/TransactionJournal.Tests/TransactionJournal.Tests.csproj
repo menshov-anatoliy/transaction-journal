@@ -30,7 +30,7 @@
          прогона копируются по прежнему пути Bybit\Fixtures: LoadFixture в тестах
          читает их относительно корня вывода, расклад не часть ассертов. -->
     <Content Include="Infrastructure\Bybit\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" Link="Bybit\Fixtures\%(RecursiveDir)%(Filename)%(Extension)" />
-    <Content Include="Infrastructure\Consultations\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" Link="Consultations\Fixtures\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="Infrastructure\Chats\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" Link="Chats\Fixtures\%(RecursiveDir)%(Filename)%(Extension)" />
     <Content Include="Domain\ConstructionAssembly\Fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

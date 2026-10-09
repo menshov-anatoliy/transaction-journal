@@ -1,4 +1,4 @@
-namespace TransactionJournal.Tests.Consultations;
+namespace TransactionJournal.Tests.Chats;
 
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -6,20 +6,21 @@ using Microsoft.Extensions.AI;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using NUnit.Framework;
-using TransactionJournal.Consultations;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats;
+using TransactionJournal.Chats.Ports;
 using Assert = NUnit.Framework.Assert;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
 /// <summary>
-/// Проверки агентного цикла консультаций: ответ стримится обновлениями чата,
+/// Проверки агентного цикла чата: ответ стримится обновлениями чата,
 /// конвейер сообщения собирается из инструкций, истории диалога и вопроса со
 /// снимком контекста, рыночный инструмент реально исполняется внутри цикла и
 /// его результат возвращается модели, а зацикливание тул-вызовов останавливается
 /// потолком итераций без исключения.
 /// </summary>
 [TestClass]
-public sealed class ConsultationAgentTests
+public sealed class ChatAgentTests
 {
 	/// <summary>Фиксированный момент as-of для детерминированных снимков и ответов.</summary>
 	private static readonly DateTimeOffset FixedNow = new(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
@@ -38,7 +39,7 @@ public sealed class ConsultationAgentTests
 				() => new ChatResponseUpdate(ChatRole.Assistant, "начинается."),
 			],
 		];
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		var agent = CreateAgent(chatClient, market);
 
 		// Act: задаём вопрос со снимком пустой истории.
@@ -66,12 +67,12 @@ public sealed class ConsultationAgentTests
 		// Arrange: в диалоге уже был обмен вопросом и ответом.
 		var chatClient = new FakeChatClient();
 		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Новый ответ.")]];
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		var agent = CreateAgent(chatClient, market);
-		var history = new List<ConsultationMessage>
+		var history = new List<TransactionJournal.Chats.Ports.ChatMessage>
 		{
-			new() { Role = ConsultationMessageRole.User, Text = "Прошлый вопрос", AsOf = FixedNow },
-			new() { Role = ConsultationMessageRole.Assistant, Text = "Прошлый ответ", AsOf = FixedNow },
+			new() { Role = ChatMessageRole.User, Text = "Прошлый вопрос", AsOf = FixedNow },
+			new() { Role = ChatMessageRole.Assistant, Text = "Прошлый ответ", AsOf = FixedNow },
 		};
 
 		// Act: задаём следующий вопрос диалога.
@@ -94,13 +95,13 @@ public sealed class ConsultationAgentTests
 		var chatClient = new FakeChatClient();
 		chatClient.Script =
 		[
-			[() => ToolCallFrame("call-1", ConsultationTools.GetMarketSnapshotToolName, "BTC")],
+			[() => ToolCallFrame("call-1", ChatTools.GetMarketSnapshotToolName, "BTC")],
 			[() => new ChatResponseUpdate(ChatRole.Assistant, "Марка 108975.4.")],
 		];
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationMarketSnapshot
+			.ReturnsAsync(new ChatMarketSnapshot
 			{
 				BaseCoin = "BTC",
 				AsOf = FixedNow,
@@ -114,7 +115,7 @@ public sealed class ConsultationAgentTests
 		var updates = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?"));
 
 		// Assert: биржевой запрос выполнен ровно один раз на один вызов инструмента.
-		// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+		// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 		market.Verify(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()), Times.Once);
 		market.VerifyNoOtherCalls();
 
@@ -137,32 +138,32 @@ public sealed class ConsultationAgentTests
 		var chatClient = new FakeChatClient();
 		chatClient.Script =
 		[
-			[() => ToolCallFrame($"call-{chatClient.Requests.Count}", ConsultationTools.GetMarketSnapshotToolName, "BTC")],
+			[() => ToolCallFrame($"call-{chatClient.Requests.Count}", ChatTools.GetMarketSnapshotToolName, "BTC")],
 		];
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Loose);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Loose);
 		market
 			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationMarketSnapshot { BaseCoin = "BTC", AsOf = FixedNow, IsAvailable = true });
+			.ReturnsAsync(new ChatMarketSnapshot { BaseCoin = "BTC", AsOf = FixedNow, IsAvailable = true });
 		var agent = CreateAgent(chatClient, market);
 
 		// Act: стримим ответ — исключения быть не должно, цикл обрывается потолком.
 		var updates = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Вопрос без конца"));
 
 		// Assert: биржевых запросов ровно столько, сколько допускает потолок итераций.
-		// Traceability: openspec:consultations/tools#scenario-tools-iteration-cap
+		// Traceability: openspec:chats/sources#scenario-sources-iteration-cap
 		market.Verify(
 			reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()),
-			Times.Exactly(ConsultationAgent.MaximumIterationsPerRequest));
+			Times.Exactly(ChatAgent.MaximumIterationsPerRequest));
 
 		// Assert: последний запрос к модели ушёл без инструментов — цикл завершён
 		// возвратом последнего ответа, незакрытый тул-вызов проходит вызывающему как есть.
-		Assert.That(chatClient.Requests.Count, Is.EqualTo(ConsultationAgent.MaximumIterationsPerRequest + 1));
+		Assert.That(chatClient.Requests.Count, Is.EqualTo(ChatAgent.MaximumIterationsPerRequest + 1));
 		Assert.That(updates, Is.Not.Empty);
 	}
 
 	[TestMethod]
 	[Description("Тул-вызов агентного цикла записывается в рыночный след с as-of отданных данных")]
-	// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	public async Task TryIfMarketToolInvoked_TraceRecordsInvocationWithAsOf()
 	{
 		// Arrange: сцена 1 — модель вызывает снимок рынка, сцена 2 — отвечает текстом;
@@ -170,13 +171,13 @@ public sealed class ConsultationAgentTests
 		var chatClient = new FakeChatClient();
 		chatClient.Script =
 		[
-			[() => ToolCallFrame("call-1", ConsultationTools.GetMarketSnapshotToolName, "BTC")],
+			[() => ToolCallFrame("call-1", ChatTools.GetMarketSnapshotToolName, "BTC")],
 			[() => new ChatResponseUpdate(ChatRole.Assistant, "Марка 108975.4.")],
 		];
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new ConsultationMarketSnapshot
+			.ReturnsAsync(new ChatMarketSnapshot
 			{
 				BaseCoin = "BTC",
 				AsOf = FixedNow,
@@ -185,7 +186,7 @@ public sealed class ConsultationAgentTests
 				MarkPrice = 108975.4m,
 			});
 		var agent = CreateAgent(chatClient, market);
-		var traceRecorder = new ConsultationMarketTraceRecorder();
+		var traceRecorder = new ChatMarketTraceRecorder();
 
 		// Act: вопрос провоцирует модель обратиться к рыночному инструменту.
 		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?", traceRecorder));
@@ -195,7 +196,7 @@ public sealed class ConsultationAgentTests
 		var trace = traceRecorder.Build();
 		Assert.That(trace, Is.Not.Null);
 		Assert.That(trace!.Invocations, Has.Count.EqualTo(1));
-		Assert.That(trace.Invocations[0].ToolName, Is.EqualTo(ConsultationTools.GetMarketSnapshotToolName));
+		Assert.That(trace.Invocations[0].ToolName, Is.EqualTo(ChatTools.GetMarketSnapshotToolName));
 		Assert.That(trace.Invocations[0].Arguments, Is.EqualTo("{\"baseCoin\":\"BTC\"}"));
 		Assert.That(trace.Invocations[0].DataAsOf, Is.EqualTo(FixedNow));
 	}
@@ -204,15 +205,15 @@ public sealed class ConsultationAgentTests
 	[Description("Ответ без инструментальных вызовов рыночного следа не создаёт")]
 	// След в сообщении появляется только у ответов, использовавших инструменты:
 	// у «чистого» ответа по журналу и корпусу рыночных данных нет.
-	// Traceability: openspec:consultations/history#scenario-history-market-trace-persisted
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	public async Task TryIfAnswerWithoutTools_TraceStaysEmpty()
 	{
 		// Arrange: модель отвечает текстом без тул-вызовов.
 		var chatClient = new FakeChatClient();
 		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по журналу.")]];
-		var market = new Mock<IConsultationMarketReader>(MockBehavior.Strict);
+		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		var agent = CreateAgent(chatClient, market);
-		var traceRecorder = new ConsultationMarketTraceRecorder();
+		var traceRecorder = new ChatMarketTraceRecorder();
 
 		// Act
 		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", traceRecorder));
@@ -241,7 +242,7 @@ public sealed class ConsultationAgentTests
 	};
 
 	/// <summary>Детерминированный снимок контекста конструкции.</summary>
-	private static ConsultationContextSnapshot Snapshot() => new()
+	private static ChatContextSnapshot Snapshot() => new()
 	{
 		Markdown = "# Снимок конструкции",
 		AsOf = FixedNow,
@@ -249,11 +250,11 @@ public sealed class ConsultationAgentTests
 	};
 
 	/// <summary>Агент над подменённым клиентом модели: инструкции берутся из несуществующего файла — встроенный дефолт.</summary>
-	private static ConsultationAgent CreateAgent(IChatClient chatClient, Mock<IConsultationMarketReader> market) =>
+	private static ChatAgent CreateAgent(IChatClient chatClient, Mock<IChatMarketReader> market) =>
 		new(
 			chatClient,
-			new ConsultationTools(new Mock<IRuleCorpusReader>(MockBehavior.Loose).Object, market.Object),
-			new ConsultationInstructions(Path.Combine(Path.GetTempPath(), "no-such-consultation-prompt.md")));
+			new ChatTools(new Mock<IRuleCorpusReader>(MockBehavior.Loose).Object, market.Object),
+			new ChatInstructions(Path.Combine(Path.GetTempPath(), "no-such-consultation-prompt.md")));
 
 	/// <summary>
 	/// Подмена клиента модели: на каждый запрос отдаёт кадры текущей сцены

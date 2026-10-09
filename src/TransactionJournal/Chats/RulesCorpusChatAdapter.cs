@@ -1,20 +1,20 @@
-namespace TransactionJournal.Consultations;
+namespace TransactionJournal.Chats;
 
 using System.Text;
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Hints.Corpus;
 
 /// <summary>
-/// Адаптер корпуса правил для консультаций в composition root поверх
+/// Адаптер корпуса правил для чата в composition root поверх
 /// загрузчика корпуса: индекс отдаёт все карточки (исполняемые, без машинного
 /// триггера и retired) компактно — id, название, краткое содержание из первых
 /// фраз описаний карточки, статус; полный текст карточки рендерится только по
-/// id. Проект Consultations на Hints не ссылается — связывание сред живёт
+/// id. Проект Chats на Hints не ссылается — связывание сред живёт
 /// здесь, как и остальные связывания composition root.
-/// Traceability: openspec:consultations/context#scenario-context-card-index-only
+/// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
 /// Traceability: openspec:architecture/solution-structure#scenario-environments-not-linked
 /// </summary>
-public sealed class RulesCorpusConsultationAdapter : IRuleCorpusReader
+public sealed class RulesCorpusChatAdapter : IRuleCorpusReader
 {
 	/// <summary>Предельная длина одной части краткого содержания карточки.</summary>
 	private const int MaxSummaryPartLength = 160;
@@ -26,7 +26,7 @@ public sealed class RulesCorpusConsultationAdapter : IRuleCorpusReader
 
 	/// <summary>Создаёт адаптер поверх загрузчика корпуса правил.</summary>
 	/// <param name="loader">Загрузчик корпуса: снимок пересобирается на каждое чтение.</param>
-	public RulesCorpusConsultationAdapter(RulesCorpusLoader loader)
+	public RulesCorpusChatAdapter(RulesCorpusLoader loader)
 	{
 		_loader = loader;
 	}
@@ -74,7 +74,7 @@ public sealed class RulesCorpusConsultationAdapter : IRuleCorpusReader
 	/// <summary>
 	/// Краткое содержание — первые фразы описаний триггера и действия: «условие
 	/// → действие»; при отсутствии описаний откат к шаблону подсказки или названию.
-	/// Traceability: openspec:consultations/context#scenario-context-card-index-only
+	/// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
 	/// </summary>
 	private static string ComposeSummary(RuleCard card)
 	{
@@ -111,7 +111,7 @@ public sealed class RulesCorpusConsultationAdapter : IRuleCorpusReader
 	/// <summary>
 	/// Полный текст карточки: декларативные поля, описания триггера и действия,
 	/// пороги, шаблон подсказки, конфликтные объявления и атрибуция источников.
-	/// Traceability: openspec:consultations/context#scenario-context-card-index-only
+	/// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
 	/// </summary>
 	private static string RenderCard(RuleCard card)
 	{

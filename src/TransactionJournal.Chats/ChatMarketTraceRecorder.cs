@@ -1,17 +1,17 @@
-namespace TransactionJournal.Consultations;
+namespace TransactionJournal.Chats;
 
-using TransactionJournal.Consultations.Ports;
+using TransactionJournal.Chats.Ports;
 
 /// <summary>
 /// Накопитель рыночного следа одного ответа ассистента: инструменты исполняются
 /// внутри агентного цикла, запись ведётся в момент вызова тула — когда as-of
 /// отданных данных известен точно. По завершении стрима след фиксируется в
 /// сообщении ассистента; без инструментальных вызовов следа нет.
-// Traceability: openspec:consultations/history#requirement-history-message-composition
+// Traceability: openspec:chats/history#requirement-chat-message-composition
 /// </summary>
-public sealed class ConsultationMarketTraceRecorder
+public sealed class ChatMarketTraceRecorder
 {
-	private readonly List<ConsultationToolInvocation> _invocations = [];
+	private readonly List<ChatToolInvocation> _invocations = [];
 
 	/// <summary>Записывает один вызов инструмента: имя, компактные аргументы и as-of отданных данных.</summary>
 	/// <param name="toolName">Имя инструмента реестра read-only функций.</param>
@@ -21,7 +21,7 @@ public sealed class ConsultationMarketTraceRecorder
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(toolName);
 		ArgumentException.ThrowIfNullOrWhiteSpace(arguments);
-		_invocations.Add(new ConsultationToolInvocation
+		_invocations.Add(new ChatToolInvocation
 		{
 			ToolName = toolName,
 			Arguments = arguments,
@@ -30,7 +30,7 @@ public sealed class ConsultationMarketTraceRecorder
 	}
 
 	/// <summary>Строит рыночный след сообщения; null — инструментальных вызовов не было.</summary>
-	public ConsultationMarketTrace? Build() => _invocations.Count == 0
+	public ChatMarketTrace? Build() => _invocations.Count == 0
 		? null
-		: new ConsultationMarketTrace { Invocations = [.. _invocations] };
+		: new ChatMarketTrace { Invocations = [.. _invocations] };
 }

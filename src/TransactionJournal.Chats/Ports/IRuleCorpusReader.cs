@@ -1,12 +1,12 @@
-namespace TransactionJournal.Consultations.Ports;
+namespace TransactionJournal.Chats.Ports;
 
 /// <summary>
-/// Порт корпуса правил для консультаций: индекс отдаёт компактный список всех
+/// Порт корпуса правил для чата: индекс отдаёт компактный список всех
 /// карточек (id и краткое содержание), полный текст карточки читается только
 /// по id — инструментом чтения в момент сообщения. Адаптер живёт в
-/// composition root поверх загрузчика корпуса подсказок: проект Consultations
+/// composition root поверх загрузчика корпуса подсказок: проект Chats
 /// на Hints не ссылается, окружения не связаны друг с другом.
-// Traceability: openspec:consultations/context#scenario-context-card-index-only
+// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
 // Traceability: openspec:architecture/solution-structure#scenario-environments-not-linked
 /// </summary>
 public interface IRuleCorpusReader

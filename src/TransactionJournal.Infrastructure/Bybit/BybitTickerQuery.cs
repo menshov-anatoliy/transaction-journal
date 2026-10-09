@@ -15,10 +15,10 @@ public sealed record BybitTickerQuery
 	public string? Symbol { get; init; }
 
 	/// <summary>
-	/// Фильтр по базовому активу доски опционов; инструменты консультаций
+	/// Фильтр по базовому активу доски опционов; инструменты чата
 	/// запрашивают целую доску одним запросом. По документации биржи применим
 	/// только к категории option.
-	// Traceability: openspec:consultations/tools#requirement-tools-single-request-per-call
+	// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 	/// </summary>
 	public string? BaseCoin { get; init; }
 

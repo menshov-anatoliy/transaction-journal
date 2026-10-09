@@ -1,21 +1,21 @@
-namespace TransactionJournal.Tests.Consultations;
+namespace TransactionJournal.Tests.Chats;
 
 using System.Xml.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
-using TransactionJournal.Consultations;
+using TransactionJournal.Chats;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
 /// <summary>
-/// Проверки инструкций агента консультаций: встроенный дефолт несёт все
+/// Проверки инструкций агента чата: встроенный дефолт несёт все
 /// обязательные принципы поведения ассистента, валидный файл инструкций
 /// переопределяет дефолт, а отсутствие или битость файла чат не ломает —
 /// работает встроенный дефолт.
-/// Traceability: openspec:consultations/context#requirement-context-agent-instructions-file
+/// Traceability: openspec:chats/context#requirement-chat-context-agent-instructions-file
 /// </summary>
 [TestClass]
-public class ConsultationInstructionsTests
+public class ChatInstructionsTests
 {
 	/// <summary>Относительный путь проекта Web в решении.</summary>
 	private const string WebProjectPath = @"src\TransactionJournal\TransactionJournal.csproj";
@@ -29,12 +29,12 @@ public class ConsultationInstructionsTests
 	// цены, цитирование id карточек корпуса, маркировка «вне корпуса правил»,
 	// read-only план управления markdown-текстом и пост-мортем закрытых
 	// конструкций присутствуют в тексте дефолта.
-	// Traceability: openspec:consultations/context#requirement-context-scenario-conduct
-	// Traceability: openspec:consultations/context#requirement-context-postmortem-mode
+	// Traceability: openspec:chats/context#requirement-chat-context-scenario-conduct
+	// Traceability: openspec:chats/context#requirement-chat-context-postmortem-mode
 	public void TryIfDefaultInstructionsCarryMandatoryPrinciples()
 	{
 		// Arrange: встроенный минимальный дефолт инструкций.
-		var instructions = ConsultationInstructions.DefaultInstructions;
+		var instructions = ChatInstructions.DefaultInstructions;
 
 		// Act: состав дефолта не вычисляется — проверяются его элементы.
 
@@ -53,7 +53,7 @@ public class ConsultationInstructionsTests
 		// Деградация рынка: дефолт инструкций обязывает модель помечать
 		// устаревший as-of недоступных рыночных данных и отказываться от
 		// рыночно-зависимых рекомендаций, отвечая по журналу и корпусу.
-		// Traceability: openspec:consultations/tools#scenario-tools-stale-asof-no-market-advice
+		// Traceability: openspec:chats/sources#scenario-sources-stale-asof-no-market-advice
 		Assert.That(flat, Does.Contain("as-of"));
 		Assert.That(flat, Does.Contain("недоступ").IgnoreCase);
 		Assert.That(flat, Does.Contain("рыночно-зависимых"));
@@ -63,16 +63,16 @@ public class ConsultationInstructionsTests
 	[Description("Валидный файл инструкций переопределяет встроенный дефолт")]
 	// Проверяем сценарий переопределения: непустой consultation-prompt.md рядом
 	// с rules/ используется ассистентом вместо встроенного дефолта.
-	// Traceability: openspec:consultations/context#scenario-context-instructions-override
+	// Traceability: openspec:chats/context#scenario-chat-context-instructions-override
 	public async Task TryIfValidFileOverridesBuiltInDefault()
 	{
 		// Arrange: временный каталог с валидным файлом инструкций владельца.
 		var dir = CreateTempDir();
 		try
 		{
-			var path = Path.Combine(dir, ConsultationInstructions.DefaultFileName);
+			var path = Path.Combine(dir, ChatInstructions.DefaultFileName);
 			await File.WriteAllTextAsync(path, "СВОИ ИНСТРУКЦИИ ВЛАДЕЛЬЦА: отвечай только цитатами корпуса");
-			var instructions = new ConsultationInstructions(path);
+			var instructions = new ChatInstructions(path);
 
 			// Act: читаем инструкции агента.
 			var text = instructions.Read();
@@ -90,18 +90,18 @@ public class ConsultationInstructionsTests
 	[Description("Отсутствующий файл инструкций не ломает чат — работает встроенный дефолт")]
 	// Проверяем сценарий отсутствия файла: пути с несуществующим файлом
 	// соответствует встроенный дефолт, исключение не поднимается.
-	// Traceability: openspec:consultations/context#scenario-context-instructions-missing-ok
+	// Traceability: openspec:chats/context#scenario-chat-context-instructions-missing-ok
 	public void TryIfMissingFileFallsBackToBuiltInDefault()
 	{
 		// Arrange: путь файла инструкций, которого не существует.
-		var path = Path.Combine(CreateTempDir(), ConsultationInstructions.DefaultFileName);
-		var instructions = new ConsultationInstructions(path);
+		var path = Path.Combine(CreateTempDir(), ChatInstructions.DefaultFileName);
+		var instructions = new ChatInstructions(path);
 
 		// Act: читаем инструкции агента.
 		var text = instructions.Read();
 
 		// Assert: чат продолжает работу на встроенном дефолте.
-		Assert.That(text, Is.EqualTo(ConsultationInstructions.DefaultInstructions));
+		Assert.That(text, Is.EqualTo(ChatInstructions.DefaultInstructions));
 	}
 
 	[TestMethod]
@@ -110,22 +110,22 @@ public class ConsultationInstructionsTests
 	[Description("Пустой или пробельный файл инструкций не ломает чат — работает встроенный дефолт")]
 	// Проверяем сценарий битости файла: пустое или пробельное содержимое
 	// не считается валидными инструкциями, ассистент получает встроенный дефолт.
-	// Traceability: openspec:consultations/context#scenario-context-instructions-missing-ok
+	// Traceability: openspec:chats/context#scenario-chat-context-instructions-missing-ok
 	public async Task TryIfEmptyFileFallsBackToBuiltInDefault(string content)
 	{
 		// Arrange: временный каталог с битым файлом инструкций.
 		var dir = CreateTempDir();
 		try
 		{
-			var path = Path.Combine(dir, ConsultationInstructions.DefaultFileName);
+			var path = Path.Combine(dir, ChatInstructions.DefaultFileName);
 			await File.WriteAllTextAsync(path, content);
-			var instructions = new ConsultationInstructions(path);
+			var instructions = new ChatInstructions(path);
 
 			// Act: читаем инструкции агента.
 			var text = instructions.Read();
 
 			// Assert: пустой файл равнозначен отсутствующему — работает дефолт.
-			Assert.That(text, Is.EqualTo(ConsultationInstructions.DefaultInstructions));
+			Assert.That(text, Is.EqualTo(ChatInstructions.DefaultInstructions));
 		}
 		finally
 		{
@@ -137,20 +137,20 @@ public class ConsultationInstructionsTests
 	[Description("Нечитаемый файл инструкций не ломает чат — работает встроенный дефолт")]
 	// Проверяем сценарий нечитаемости: путь на каталог вместо файла даёт
 	// ошибку чтения, которая откатывается на встроенный дефолт без исключения.
-	// Traceability: openspec:consultations/context#scenario-context-instructions-missing-ok
+	// Traceability: openspec:chats/context#scenario-chat-context-instructions-missing-ok
 	public void TryIfUnreadableFileFallsBackToBuiltInDefault()
 	{
 		// Arrange: на месте файла инструкций находится каталог.
 		var dir = CreateTempDir();
 		try
 		{
-			var instructions = new ConsultationInstructions(dir);
+			var instructions = new ChatInstructions(dir);
 
 			// Act: читаем инструкции агента.
 			var text = instructions.Read();
 
 			// Assert: нечитаемость файла оставляет чат на встроенном дефолте.
-			Assert.That(text, Is.EqualTo(ConsultationInstructions.DefaultInstructions));
+			Assert.That(text, Is.EqualTo(ChatInstructions.DefaultInstructions));
 		}
 		finally
 		{
@@ -163,7 +163,7 @@ public class ConsultationInstructionsTests
 	// Проверяем дефолтное размещение: consultation-prompt.md находится рядом с
 	// каталогом rules/ в репозитории, а проект Web копирует его в BaseDirectory
 	// при сборке — файл доступен для правки владельцем без пересборки кода.
-	// Traceability: openspec:consultations/context#requirement-context-agent-instructions-file
+	// Traceability: openspec:chats/context#requirement-chat-context-agent-instructions-file
 	public void TryIfDeployablePromptFileSitsNextToRules()
 	{
 		// Arrange: корень решения с каталогом rules и проектом Web.
@@ -188,7 +188,7 @@ public class ConsultationInstructionsTests
 		// Arrange: источник инструкций без пути файла.
 
 		// Act / Assert: создание поднимает ArgumentNullException.
-		_ = new ConsultationInstructions(null!);
+		_ = new ChatInstructions(null!);
 	}
 
 	[TestMethod]
@@ -203,7 +203,7 @@ public class ConsultationInstructionsTests
 		// Arrange: источник инструкций без пути файла.
 
 		// Act / Assert: создание поднимает ArgumentException.
-		_ = new ConsultationInstructions(path);
+		_ = new ChatInstructions(path);
 	}
 
 	#region Помощники
@@ -211,7 +211,7 @@ public class ConsultationInstructionsTests
 	/// <summary>Создаёт уникальный временный каталог для проверки.</summary>
 	private static string CreateTempDir()
 	{
-		var dir = Path.Combine(Path.GetTempPath(), $"consultation-instructions-tests-{Guid.NewGuid():N}");
+		var dir = Path.Combine(Path.GetTempPath(), $"chat-instructions-tests-{Guid.NewGuid():N}");
 		Directory.CreateDirectory(dir);
 		return dir;
 	}
