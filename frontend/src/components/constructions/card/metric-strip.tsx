@@ -1,6 +1,7 @@
 import type { ConstructionCard } from "@/lib/api/construction-card";
 import { Metric } from "@/components/design";
-import { FullFinResultIndicator } from "@/components/finresult/fin-result-indicator";
+import { FullFinResultIndicator, MediumFinResultIndicator } from "@/components/finresult/fin-result-indicator";
+import { useIsMobile } from "@/lib/use-mobile";
 import { DASH } from "@/lib/format/degradation";
 import { formatDay, formatMoment } from "@/lib/format/display-time";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
@@ -54,6 +55,9 @@ function formatDuration(seconds: number): string {
 
 export function ConstructionMetricStrip({ card }: ConstructionMetricStripProps) {
 	const metrics = card.metrics;
+	// Узкий экран сохраняет ту же геометрию и подписи в среднем размере.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
+	const Indicator = useIsMobile() ? MediumFinResultIndicator : FullFinResultIndicator;
 
 	return (
 		<section data-slot="construction-metric-strip" className="flex flex-col gap-4">
@@ -171,7 +175,7 @@ export function ConstructionMetricStrip({ card }: ConstructionMetricStripProps) 
 
 			{/* Полный индикатор финансового результата: зоны планового риска и
 			    профита, границы реализованной прибыли и итога (§9). */}
-			<FullFinResultIndicator
+			<Indicator
 				input={{
 					plannedRisk: card.riskUsdt,
 					plannedProfit: card.profitUsdt,

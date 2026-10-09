@@ -14,7 +14,17 @@ export function useCardCommands(constructionId: number) {
 	const queryClient = useQueryClient();
 	const cardKey = ["construction-card", constructionId] as const;
 
-	const invalidate = () => queryClient.invalidateQueries({ queryKey: cardKey });
+	// После мутации согласуются карточки, список, превью и «Входящие»:
+	// перенос сделки меняет обе конструкции и счётчик непривязанных записей.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#1-рамка-и-принципы
+	const invalidate = () => Promise.all([
+		queryClient.invalidateQueries({ queryKey: ["construction-card"] }),
+		queryClient.invalidateQueries({ queryKey: ["constructions-overview"] }),
+		queryClient.invalidateQueries({ queryKey: ["construction-preview"] }),
+		queryClient.invalidateQueries({ queryKey: ["construction-move-targets"] }),
+		queryClient.invalidateQueries({ queryKey: ["inbox-overview"] }),
+		queryClient.invalidateQueries({ queryKey: ["inbox-count"] }),
+	]);
 
 	const rename = useMutation({
 		mutationFn: (name: string) => cardApi.renameConstruction(constructionId, name),
@@ -45,6 +55,10 @@ export function useCardCommands(constructionId: number) {
 
 	const remove = useMutation({
 		mutationFn: (makeBackup: boolean) => cardApi.deleteConstruction(constructionId, makeBackup),
+		onSuccess: async () => {
+			queryClient.removeQueries({ queryKey: cardKey });
+			await invalidate();
+		},
 	});
 
 	const constructionComment = useMutation({

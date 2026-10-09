@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DASH } from "@/lib/format/degradation";
 import { formatDay } from "@/lib/format/display-time";
-import { formatAmount, formatSignedAmount } from "@/lib/format/quantity";
+import { formatSignedAmount } from "@/lib/format/quantity";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Таблица внешних корректировок PnL карточки по концепции §4: форма
 // добавления с пикером даты (дефолт — сегодня), источником «робот»/«ручная»,
@@ -66,19 +67,23 @@ function formFromAdjustment(adjustment: ConstructionCardAdjustment): AdjustmentF
 	return {
 		date: toLocalDateInput(adjustment.date),
 		source: adjustment.source,
-		amount: formatAmount(adjustment.amountUsdt),
+		amount: String(adjustment.amountUsdt),
 		description: adjustment.description ?? "",
 	};
 }
 
 function formToInput(form: AdjustmentFormState): AdjustmentInput | null {
 	const amount = Number(form.amount.replace(",", "."));
-	if (Number.isNaN(amount) || form.amount.trim() === "") {
+	const date = new Date(`${form.date}T00:00:00`);
+	// Пустая дата и нечисловая сумма не превращаются в валидную корректировку;
+	// точность исходной суммы сохраняется при открытии формы правки.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+	if (Number.isFinite(amount) === false || form.amount.trim() === "" || Number.isFinite(date.getTime()) === false) {
 		return null;
 	}
 
 	return {
-		date: new Date(`${form.date}T00:00:00`).toISOString(),
+		date: date.toISOString(),
 		source: form.source,
 		amountUsdt: amount,
 		description: form.description.trim() === "" ? null : form.description,
@@ -86,6 +91,7 @@ function formToInput(form: AdjustmentFormState): AdjustmentInput | null {
 }
 
 export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, onDelete }: AdjustmentsTableProps) {
+	const isMobile = useIsMobile();
 	const [addForm, setAddForm] = React.useState<AdjustmentFormState | null>(null);
 	const [editTarget, setEditTarget] = React.useState<ConstructionCardAdjustment | null>(null);
 	const [editForm, setEditForm] = React.useState<AdjustmentFormState | null>(null);
@@ -126,7 +132,9 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 
 	return (
 		<section data-slot="adjustments-table" className="flex flex-col gap-2">
-			{addForm === null ? (
+			{/* Изменение корректировок — desktop-операция, суммы доступны на мобильном. */}
+			{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
+			{isMobile ? null : addForm === null ? (
 				<Button variant="outline" size="sm" onClick={() => setAddForm(emptyForm())}>
 					Добавить корректировку…
 				</Button>
@@ -178,7 +186,7 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 					<Button size="sm" variant="outline" onClick={() => setAddForm(null)}>
 						Отмена
 					</Button>
-					{invalid && <span className="text-destructive text-sm">Введите сумму со знаком, например +87.4 или -12</span>}
+					{invalid && <span className="text-destructive text-sm" role="alert">Введите корректную дату и сумму со знаком, например +87.4 или -12</span>}
 				</div>
 			)}
 
@@ -203,7 +211,7 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 						</TableRow>
 					) : (
 						adjustments.map((adjustment) =>
-							editTarget?.adjustmentId === adjustment.adjustmentId && editForm !== null ? (
+							isMobile === false && editTarget?.adjustmentId === adjustment.adjustmentId && editForm !== null ? (
 								// Inline-правка корректировки в строке таблицы.
 								<TableRow key={adjustment.adjustmentId}>
 									<TableCell>
@@ -256,6 +264,7 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 												Отмена
 											</Button>
 										</div>
+										{invalid && <p className="text-destructive text-sm" role="alert">Введите корректную дату и сумму.</p>}
 									</TableCell>
 								</TableRow>
 							) : (
@@ -269,7 +278,7 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 										</span>
 									</TableCell>
 									<TableCell>
-										<div className="flex gap-1.5">
+										{isMobile === false && <div className="flex gap-1.5">
 											<Button
 												variant="outline"
 												size="sm"
@@ -285,7 +294,7 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 											<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => onDelete(adjustment.adjustmentId)}>
 												удалить
 											</Button>
-										</div>
+										</div>}
 									</TableCell>
 								</TableRow>
 							),

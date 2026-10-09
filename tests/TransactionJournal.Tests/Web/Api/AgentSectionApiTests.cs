@@ -7,6 +7,9 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using TransactionJournal.Api.Agent;
 
 /// <summary>
 /// Интеграционные проверки API раздела «Агент»: контракты истории чатов,
@@ -16,6 +19,74 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 [TestClass]
 public sealed class AgentSectionApiTests
 {
+	[TestMethod]
+	[DataRow(false)]
+	[DataRow(true)]
+	[Description("Удаление активного или завершённого привязанного чата убирает историю и сохраняется после загрузки хранилища")]
+	// Чат удаляется целиком из обоих списков, не затрагивая соседние чаты.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+	public async Task TryIfDeletingBoundChatRemovesPersistedHistory(bool completed)
+	{
+		// Arrange: изолированный JSON в каталоге тестового проекта.
+		var dataDirectory = Path.Combine(AppContext.BaseDirectory, $"agent-delete-{Guid.NewGuid():N}");
+		try
+		{
+			var store = new AgentChatStore(dataDirectory);
+			var parameters = new AgentChatParams("GLM-5.3", "7", ["journal"]);
+			var chat = store.Create("Проверь конструкцию", parameters);
+			var retained = store.Create("Другой чат", parameters);
+			if (completed)
+				store.TrySetStatus(chat.Id, AgentChatStatus.Completed, out _);
+			await using var factory = new SectionApiFactory(services =>
+			{
+				services.RemoveAll<AgentChatStore>();
+				services.AddSingleton(store);
+			});
+			using var client = factory.CreateClient();
+
+			// Act: удаление по HTTP.
+			var response = await client.DeleteAsync($"/api/v1/chats/{chat.Id}");
+
+			// Assert: исчезли список, история и сохранённая запись.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That((await client.GetAsync($"/api/v1/chats/{chat.Id}/messages")).StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+			foreach (var status in new[] { "active", "completed" })
+			{
+				var list = await client.GetFromJsonAsync<JsonArray>($"/api/v1/chats?status={status}");
+				Assert.That(list!.Any(node => node!["id"]!.GetValue<string>() == chat.Id), Is.False);
+			}
+			var reloaded = new AgentChatStore(dataDirectory);
+			Assert.That(reloaded.TryGet(chat.Id, out _), Is.False);
+			Assert.That(reloaded.TryGet(retained.Id, out var preserved), Is.True);
+			Assert.That(preserved!.Messages, Has.Count.EqualTo(1));
+		}
+		finally
+		{
+			if (Directory.Exists(dataDirectory))
+				Directory.Delete(dataDirectory, recursive: true);
+		}
+	}
+
+	[TestMethod]
+	[Description("Удаление неизвестного чата отвечает 404 без создания пустой записи")]
+	// Неизвестный идентификатор даёт явный отказ вместо ложного успешного удаления.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+	public async Task ThrowOnDeletingUnknownChatReturns404()
+	{
+		// Arrange: неизвестный идентификатор не совпадёт с существующими чатами.
+		await using var factory = new SectionApiFactory();
+		using var client = factory.CreateClient();
+		var chatId = $"missing-{Guid.NewGuid():N}";
+
+		// Act: запрос удаления.
+		var response = await client.DeleteAsync($"/api/v1/chats/{chatId}");
+
+		// Assert: отказ содержит тот же идентификатор.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+		Assert.That(payload!["chatId"]!.GetValue<string>(), Is.EqualTo(chatId));
+	}
+
 	[TestMethod]
 	[Description("Созданный чат появляется в активных и скрывается в завершённых после completion")]
 	// История раздела «Агент» ведётся списками активных и завершённых чатов:
@@ -100,4 +171,3 @@ public sealed class AgentSectionApiTests
 		Assert.That(paths, Does.Contain("/api/v1/rules"));
 	}
 }
-
