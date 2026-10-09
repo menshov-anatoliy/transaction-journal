@@ -3,7 +3,7 @@ namespace TransactionJournal.Tests.Infrastructure.Chats;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Chats.Ports;
-using TransactionJournal.Infrastructure.Chats;
+using TransactionJournal.Tests.Chats;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 using Does = NUnit.Framework.Does;
@@ -15,37 +15,8 @@ using Does = NUnit.Framework.Does;
 /// создания, след источников ответа ИИ-помощника сохраняется в сообщении.
 /// </summary>
 [TestClass]
-public class ChatStoreTests
+public class ChatStoreTests : ChatDatabaseTests
 {
-	/// <summary>Фиксированный момент as-of сообщений проверок.</summary>
-	private static readonly DateTimeOffset FixedNow = new(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
-
-	private string _databasePath = null!;
-
-	[TestInitialize]
-	public void Initialize()
-	{
-		// Каждая проверка работает со своей пустой базой во временной папке.
-		_databasePath = Path.Combine(Path.GetTempPath(), $"chat-store-tests-{Guid.NewGuid():N}.db");
-	}
-
-	[TestCleanup]
-	public void Cleanup()
-	{
-		// Пул соединений SQLite держит файл базы открытым — сбрасываем его перед удалением.
-		Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-		foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
-		{
-			var file = _databasePath + suffix;
-			if (File.Exists(file))
-			{
-				File.Delete(file);
-			}
-		}
-	}
-
-	/// <summary>Хранилище над файлом базы проверки: каждое обращение создаёт независимый контекст.</summary>
-	private ChatStore CreateStore() => new(_databasePath);
 
 	/// <summary>Параметры создания чата: модель по умолчанию, привязка и набор источников.</summary>
 	private static ChatStartParameters Start(long? constructionId = 7, params string[] sources) => new()

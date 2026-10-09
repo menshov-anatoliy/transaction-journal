@@ -97,6 +97,18 @@ public sealed class ChatService
 	{
 		ArgumentNullException.ThrowIfNull(userMessage);
 
+		// Сообщение-якорь обязано принадлежать отвечаемому чату: рассинхрон
+		// пары (чат, сообщение) означал бы ответ на чужой вопрос с записью
+		// ответа в данный чат — нарушение изоляции историй, а не сценарий
+		// конвейера.
+		// Traceability: openspec:chats/history#scenario-chat-neighbour-isolation
+		if (userMessage.ChatId != chatId)
+		{
+			throw new ArgumentException(
+				$"Сообщение {userMessage.Id} принадлежит чату {userMessage.ChatId}, а не чату {chatId}.",
+				nameof(userMessage));
+		}
+
 		// Чат — носитель параметров: привязка выбирает ветку снимка контекста,
 		// отсутствующий чат означает, что отвечать некуда.
 		var chat = await _store

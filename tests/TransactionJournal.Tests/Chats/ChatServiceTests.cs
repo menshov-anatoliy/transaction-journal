@@ -8,7 +8,6 @@ using Moq;
 using NUnit.Framework;
 using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
-using TransactionJournal.Infrastructure.Chats;
 using TransactionJournal.Tests;
 using Assert = NUnit.Framework.Assert;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -23,34 +22,8 @@ using Does = NUnit.Framework.Does;
 /// собирается по привязке чата.
 /// </summary>
 [TestClass]
-public sealed class ChatServiceTests
+public sealed class ChatServiceTests : ChatDatabaseTests
 {
-	/// <summary>Фиксированный момент as-of сообщений и рыночных данных.</summary>
-	private static readonly DateTimeOffset FixedNow = new(2030, 1, 1, 12, 0, 0, TimeSpan.Zero);
-
-	private string _databasePath = null!;
-
-	[TestInitialize]
-	public void Initialize()
-	{
-		// Каждая проверка работает со своей пустой базой чатов во временной папке.
-		_databasePath = Path.Combine(Path.GetTempPath(), $"chat-service-tests-{Guid.NewGuid():N}.db");
-	}
-
-	[TestCleanup]
-	public void Cleanup()
-	{
-		// Пул соединений SQLite держит файл базы открытым — сбрасываем перед удалением.
-		Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-		foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
-		{
-			var file = _databasePath + suffix;
-			if (File.Exists(file))
-			{
-				File.Delete(file);
-			}
-		}
-	}
 
 	[TestMethod]
 	[Description("Первое сообщение владельца создаёт новый чат с выбранными параметрами")]
@@ -236,6 +209,30 @@ public sealed class ChatServiceTests
 			await CollectAsync(service.StreamAssistantAnswerAsync(orphan.ChatId, orphan)));
 	}
 
+	[TestMethod]
+	[Description("Стрим ответа с сообщением-якорем чужого чата отвергается исключением")]
+	// Сообщение-якорь обязано принадлежать отвечаемому чату: рассинхрон пары
+	// (чат, сообщение) не должен молча подмешивать чужой вопрос в контекст
+	// чата и дописывать в него ответ.
+	// Traceability: openspec:chats/history#scenario-chat-neighbour-isolation
+	public async Task ThrowOnUserMessageOfAnotherChat()
+	{
+		// Arrange: два чата с вопросами; сообщение-якорь — вопрос первого чата,
+		// ответ запрашивается во второй.
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+		var first = await service.AppendUserMessageAsync(null, Start(7), "Вопрос чата один.");
+		var second = await service.AppendUserMessageAsync(null, Start(9), "Вопрос чата два.");
+
+		// Act — Assert: нарушение контракта отвергается до генерации ответа.
+		Assert.ThrowsAsync<ArgumentException>(async () =>
+			await CollectAsync(service.StreamAssistantAnswerAsync(second.ChatId, first)));
+
+		// Assert: история чата-получателя не изменилась — чужой вопрос и ответ
+		// в неё не попали.
+		var messages = await CreateStore().ListMessagesAsync(second.ChatId);
+		Assert.That(messages.Select(stored => stored.Text), Is.EqualTo(new[] { "Вопрос чата два." }));
+	}
+
 	/// <summary>Параметры создания чата с дефолтной моделью и полным набором источников.</summary>
 	private static ChatStartParameters Start(long? constructionId) => new()
 	{
@@ -255,9 +252,6 @@ public sealed class ChatServiceTests
 
 		return updates;
 	}
-
-	/// <summary>Хранилище над файлом базы проверки: каждое обращение создаёт независимый контекст.</summary>
-	private ChatStore CreateStore() => new(_databasePath);
 
 	/// <summary>Конвейер над настоящим хранилищем, заглушкой читателя контекста и подменённым клиентом модели.</summary>
 	private ChatService CreateService(
