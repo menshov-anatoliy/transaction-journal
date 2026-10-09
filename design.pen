@@ -1,5 +1,5 @@
 {
-  "version": "2.20",
+  "version": "2.21",
   "children": [
     {
       "type": "frame",
@@ -13669,6 +13669,14 @@
     "superZone": {
       "type": "color",
       "value": "#F3D68C"
+    },
+    "superLabel": {
+      "type": "color",
+      "value": "#8a6a1f"
+    },
+    "unrealLoss": {
+      "type": "color",
+      "value": "#EFB6AE"
     }
   },
   "fileToken": "fe854a54-fdc0-4f83-8bc8-fd42ed96f9ca"
