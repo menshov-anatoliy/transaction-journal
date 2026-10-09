@@ -8,7 +8,8 @@
 } from "@tanstack/react-table";
 import * as React from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import type { ConstructionRow, ConstructionStatus } from "@/lib/api/constructions";
+import type { ConstructionRow } from "@/lib/api/constructions";
+import { ConstructionStatusChip } from "./construction-status-chip";
 import { CompactFinResultIndicator } from "@/components/finresult/fin-result-indicator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DASH, degrade } from "@/lib/format/degradation";
@@ -30,18 +31,6 @@ export interface ConstructionsTableProps {
 	readonly selectedId: number | null;
 	/** Обработчик выделения строки кликом. */
 	readonly onSelect: (constructionId: number) => void;
-}
-
-/** Статус конструкции словами строки. */
-function statusText(status: ConstructionStatus): string {
-	switch (status) {
-		case "open":
-			return "открыта";
-		case "closed":
-			return "закрыта";
-		case "archived":
-			return "архив";
-	}
 }
 
 /** Сбой котировок строки: нереализованная часть не оценена именно из-за сбоя. */
@@ -107,7 +96,9 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 				id: "status",
 				header: "Статус",
 				accessorKey: "status",
-				cell: ({ row }) => statusText(row.original.status),
+				// Статусы списка используют тот же примитив и тона, что и карточка.
+				// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+				cell: ({ row }) => <ConstructionStatusChip status={row.original.status} />,
 			},
 			{
 				id: "capital",
@@ -202,7 +193,6 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 								unrealized: row.original.unrealizedPnL,
 								quotesDegraded: quotesDegraded(row.original),
 							}}
-							className="w-28"
 						/>
 					</div>
 				),
@@ -286,7 +276,12 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 								<p className="font-medium">{row.name}</p>
 								{row.liveHintCount > 0 && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">{row.liveHintCount}</span>}
 							</div>
-							<p className="text-muted-foreground text-xs">{statusText(row.status)} · капитал {row.allocatedCapitalUsdt === null ? DASH : formatAmount(row.allocatedCapitalUsdt)}</p>
+							{/* Узкий список сохраняет тот же статусный примитив. */}
+							{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+							<div className="text-muted-foreground flex flex-wrap items-center gap-1 text-xs">
+								<ConstructionStatusChip status={row.status} />
+								<span>· капитал {row.allocatedCapitalUsdt === null ? DASH : formatAmount(row.allocatedCapitalUsdt)}</span>
+							</div>
 							<p className="mt-1 text-sm">
 								итог: {row.totalPnL === null ? "неполный" : formatSignedAmount(row.totalPnL)} ·
 								{" "}реализов. {formatSignedAmount(row.realizedPnL)} ·

@@ -1,0 +1,286 @@
+{
+  "capturedAt": "2026-10-09T07:09:02.190Z",
+  "url": "http://localhost:5173/spa/agent",
+  "viewport": [
+    1440,
+    1000,
+    2
+  ],
+  "fonts": true,
+  "text": "Журнал Bybit\nКонструкции\nВходящие\n3\nПодсказки\nАгент\nСинхронизация\nАгент\nЧаты\nПравила\nНовый чат\nМодель\nGLM-5.3\nglm-5.3-flash\nОпциональная конструкция\nИсточники данных\nжурнал\nкорпус правил\nрынок Bybit\nПервое сообщение\nСоздать чат\n\nGLM-5.3\n\nпоследнее сообщение: 2026-10-08 12:01\n\nЗавершить чат\n\nОцени риск конструкции ETH и предложи план до экспирации.\n\nПлан по конструкции\n\nТекущий риск укладывается в лимит 3%. Сохраняйте обе опционные ноги и проверяйте ликвидность перед экспирацией.\n\nНе наращивать риск до конца недели.\nПроверить стакан октябрьских страйков.\n\nДанные рынка взяты из кэша; решение требует актуализации котировок.\n\nИсточник журнала: journal/ETH.\n\nИСТОЧНИКИ ОТВЕТА\n\nread_rule_card · ac-01\nget_market_snapshot · ETH, as-of 2026-10-08 12:01кэш\nПравило · Лимиты риска на период, as-of 2026-10-08 12:01\nЖурнал · Стреддл ETH, as-of 2026-10-08 12:01\nИстория чатов\nАКТИВНЫЕ\nGLM-5.3\n2026-10-08 12:01\nЗавершить чат\nЗАВЕРШЁННЫЕ\nglm-5.3-flash\n2026-10-07 12:30\nПродолжить чат",
+  "headings": [
+    {
+      "text": "Агент",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "21px",
+      "weight": "600",
+      "color": "rgb(23, 23, 30)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(229, 229, 223)",
+      "radius": "0px",
+      "padding": "0px",
+      "width": "59.0312px",
+      "shadow": "none",
+      "clientWidth": 59,
+      "scrollWidth": 59,
+      "rect": {
+        "x": 280,
+        "y": 83.375,
+        "width": 59.03125,
+        "height": 28
+      },
+      "slot": null,
+      "part": null,
+      "class": "page-title"
+    },
+    {
+      "text": "Новый чат",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "16px",
+      "weight": "600",
+      "color": "rgb(23, 23, 30)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(229, 229, 223)",
+      "radius": "0px",
+      "padding": "0px",
+      "width": "326px",
+      "shadow": "none",
+      "clientWidth": 326,
+      "scrollWidth": 326,
+      "rect": {
+        "x": 293,
+        "y": 143.75,
+        "width": 326,
+        "height": 24
+      },
+      "slot": null,
+      "part": null,
+      "class": "text-base font-semibold"
+    },
+    {
+      "text": "История чатов",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "16px",
+      "weight": "600",
+      "color": "rgb(23, 23, 30)",
+      "background": "rgba(0, 0, 0, 0)",
+      "border": "rgb(229, 229, 223)",
+      "radius": "0px",
+      "padding": "0px",
+      "width": "358px",
+      "shadow": "none",
+      "clientWidth": 358,
+      "scrollWidth": 358,
+      "rect": {
+        "x": 1045,
+        "y": 143.75,
+        "width": 358,
+        "height": 24
+      },
+      "slot": null,
+      "part": null,
+      "class": "text-base font-semibold"
+    }
+  ],
+  "tokens": {
+    "risk": "#DFA23B",
+    "risk-soft": "#F9EFD9",
+    "risk-zone": "#EFB6AE",
+    "text-primary": "#17171E",
+    "surface": "#FFFFFF",
+    "accent": "#E2F4EB",
+    "neg": "#D14B41"
+  },
+  "elements": [
+    {
+      "text": "journal/ETH",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "11px",
+      "weight": "400",
+      "color": "rgb(23, 23, 30)",
+      "background": "rgb(239, 239, 234)",
+      "border": "rgb(229, 229, 223)",
+      "radius": "4px",
+      "padding": "2px 4px",
+      "width": "auto",
+      "shadow": "none",
+      "clientWidth": 0,
+      "scrollWidth": 0,
+      "rect": {
+        "x": 797.09375,
+        "y": 543.546875,
+        "width": 69.28125,
+        "height": 18
+      },
+      "slot": null,
+      "part": null,
+      "class": "rounded bg-muted px-1 py-0.5 font-sans text-[11px]"
+    }
+  ],
+  "compact": [],
+  "statuses": [],
+  "sourcePanels": [
+    {
+      "text": "Источники ответаread_rule_card · ac-01get_market_snapshot · ETH, as-of 2026-10-08 12:01кэшПравило · Лимиты риска на период, as-of 2026-10-08 12:01Журнал · Стреддл ETH, as-of 2026-10-08 12:01",
+      "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "size": "16px",
+      "weight": "400",
+      "color": "rgb(23, 23, 30)",
+      "background": "rgb(239, 249, 244)",
+      "border": "rgb(226, 244, 235)",
+      "radius": "10px",
+      "padding": "10px 12px",
+      "width": "278px",
+      "shadow": "none",
+      "clientWidth": 278,
+      "scrollWidth": 278,
+      "rect": {
+        "x": 665,
+        "y": 570.46875,
+        "width": 278,
+        "height": 207
+      },
+      "slot": null,
+      "part": null,
+      "class": "mt-2 flex flex-col gap-[5px] rounded-[10px] border-accent-soft bg-accent-softer px-3 py-2.5",
+      "lists": [
+        {
+          "text": "read_rule_card · ac-01get_market_snapshot · ETH, as-of 2026-10-08 12:01кэш",
+          "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+          "size": "16px",
+          "weight": "400",
+          "color": "rgb(23, 23, 30)",
+          "background": "rgba(0, 0, 0, 0)",
+          "border": "rgb(229, 229, 223)",
+          "radius": "0px",
+          "padding": "0px",
+          "width": "254px",
+          "shadow": "none",
+          "clientWidth": 254,
+          "scrollWidth": 254,
+          "rect": {
+            "x": 677,
+            "y": 600.46875,
+            "width": 254,
+            "height": 85
+          },
+          "slot": null,
+          "part": null,
+          "class": "flex flex-wrap gap-[7px]"
+        },
+        {
+          "text": "Правило · Лимиты риска на период, as-of 2026-10-08 12:01Журнал · Стреддл ETH, as-of 2026-10-08 12:01",
+          "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+          "size": "16px",
+          "weight": "400",
+          "color": "rgb(23, 23, 30)",
+          "background": "rgba(0, 0, 0, 0)",
+          "border": "rgb(229, 229, 223)",
+          "radius": "0px",
+          "padding": "0px",
+          "width": "254px",
+          "shadow": "none",
+          "clientWidth": 254,
+          "scrollWidth": 254,
+          "rect": {
+            "x": 677,
+            "y": 690.46875,
+            "width": 254,
+            "height": 77
+          },
+          "slot": null,
+          "part": null,
+          "class": "flex flex-col gap-[5px]"
+        }
+      ],
+      "chips": [
+        {
+          "text": "read_rule_card · ac-01",
+          "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+          "size": "12px",
+          "weight": "400",
+          "color": "rgb(102, 102, 110)",
+          "background": "rgb(255, 255, 255)",
+          "border": "rgb(229, 229, 223)",
+          "radius": "3.35544e+07px",
+          "padding": "5px 10px",
+          "width": "165.562px",
+          "shadow": "none",
+          "clientWidth": 164,
+          "scrollWidth": 164,
+          "rect": {
+            "x": 677,
+            "y": 600.46875,
+            "width": 165.5625,
+            "height": 30
+          },
+          "slot": "source-chip",
+          "part": null,
+          "class": "inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-[5px] text-[12px] text-text-secondary max-w-full whitespace-normal",
+          "available": 166
+        },
+        {
+          "text": "get_market_snapshot · ETH, as-of 2026-10-08 12:01кэш",
+          "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+          "size": "12px",
+          "weight": "400",
+          "color": "rgb(102, 102, 110)",
+          "background": "rgb(255, 255, 255)",
+          "border": "rgb(229, 229, 223)",
+          "radius": "3.35544e+07px",
+          "padding": "5px 10px",
+          "width": "254px",
+          "shadow": "none",
+          "clientWidth": 252,
+          "scrollWidth": 252,
+          "rect": {
+            "x": 677,
+            "y": 637.46875,
+            "width": 254,
+            "height": 48
+          },
+          "slot": "source-chip",
+          "part": null,
+          "class": "inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-[5px] text-[12px] text-text-secondary max-w-full whitespace-normal",
+          "available": 254
+        }
+      ],
+      "cache": [
+        {
+          "text": "кэш",
+          "font": "Inter, ui-sans-serif, system-ui, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+          "size": "12px",
+          "weight": "400",
+          "color": "rgb(223, 162, 59)",
+          "background": "rgb(249, 239, 217)",
+          "border": "rgb(229, 229, 223)",
+          "radius": "4px",
+          "padding": "0px 4px",
+          "width": "auto",
+          "shadow": "none",
+          "clientWidth": 0,
+          "scrollWidth": 0,
+          "rect": {
+            "x": 809.625,
+            "y": 662.46875,
+            "width": 30.96875,
+            "height": 15
+          },
+          "slot": null,
+          "part": null,
+          "class": "ml-1 rounded bg-risk-soft px-1 text-risk",
+          "entirelyVisible": true
+        }
+      ]
+    }
+  ],
+  "overflow": [
+    {
+      "tag": "DIV",
+      "class": "relative min-h-0 flex-1 overflow-hidden",
+      "width": 342,
+      "scrollWidth": 346,
+      "text": "Оцени риск конструкции ETH и предложи план до экспирации.План по конструкции\nТекущий риск укладывает"
+    }
+  ]
+}

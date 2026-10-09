@@ -82,6 +82,8 @@ export function MediumFinResultIndicator({ input, className }: FinResultIndicato
 }
 
 /** Компактный индикатор для строк таблицы конструкций: только полоса. */
+// Ширина компактной шкалы — 132px по мастеру FMghY, независимо от ширины ячейки.
+// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 export function CompactFinResultIndicator({ input, className }: FinResultIndicatorProps) {
 	const geometry = computeFinResultGeometry(input);
 
@@ -89,7 +91,7 @@ export function CompactFinResultIndicator({ input, className }: FinResultIndicat
 		<div
 			data-slot="fin-result-compact"
 			data-incomplete={geometry.incomplete ? "true" : "false"}
-			className={cn("relative", className)}
+			className={cn("relative w-[132px]", className)}
 			style={{ height: COMPACT_PRESET.barHeight + COMPACT_PRESET.markerSize / 2 }}
 			role="img"
 			aria-label={describeForScreenReader(geometry)}
@@ -156,6 +158,10 @@ function ScaleLabels({ geometry, preset }: { geometry: FinResultGeometry; preset
 				</span>
 			)}
 			{geometry.labels.superEnd !== null && (
+				// Подпись сверхприбыли сохраняет точный цвет макета: собственного
+				// токена пока нет; его добавление запланировано в дизайн-backlog #73.
+				// Traceability: issue:#73
+				// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
 				<span
 					data-part="super-scale"
 					className="absolute right-0 translate-x-1/2 text-[#8a6a1f]"
@@ -233,7 +239,9 @@ function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; prese
 			{geometry.borderAt !== null && (
 				<span
 					data-part="border"
-					className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-[1px] bg-[#17171e]"
+					// Насечка использует textPrimary, а не дублирующий его hex.
+					// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+					className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-[1px] bg-text-primary"
 					style={{
 						left: percent(geometry.borderAt),
 						width: preset.borderWidth,
@@ -247,7 +255,7 @@ function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; prese
 					data-part="marker"
 					data-tone={geometry.tone}
 					className={cn(
-						"absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 border-white",
+						"absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full border-2 border-surface",
 						geometry.tone === "positive"
 							? "bg-[color:var(--fin-positive)]"
 							: "bg-[color:var(--fin-negative)]",

@@ -89,6 +89,19 @@ describe("средний индикатор", () => {
 });
 
 describe("компактный индикатор", () => {
+	// Компакт сохраняет ширину 132px мастера и токенную насечку в любой ячейке.
+	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
+	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+	it("использует ширину макета и токенные цвета насечки и обводки", () => {
+		// Arrange / Act: компактный индикатор с отрицательным итогом.
+		const { container } = render(<CompactFinResultIndicator input={CASE_C3} />);
+
+		// Assert: размер задаётся компонентом, цвета — дизайн-токенами.
+		expect(container.firstElementChild).toHaveClass("w-[132px]");
+		expect(container.querySelector('[data-part="border"]')).toHaveClass("bg-text-primary");
+		expect(container.querySelector('[data-part="marker"]')).toHaveClass("border-surface");
+	});
+
 	it("рисует только полосу без текстовых подписей", () => {
 		// Act: компакт для строк таблицы конструкций.
 		const { container } = render(<CompactFinResultIndicator input={CASE_C3} />);

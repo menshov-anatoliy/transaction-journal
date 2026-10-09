@@ -434,7 +434,8 @@ describe("страница агента", () => {
 		const popup = await screen.findByLabelText(/карточка правила \(hover из чата\)/i);
 		expect(popup.className).toContain("w-[280px]");
 		expect(popup.className).toContain("rounded-[10px]");
-		expect(popup.className).toContain("shadow-[0_8px_24px_#17171E20]");
+		expect(popup.className).toContain("shadow-[0_8px_24px]");
+		expect(popup.className).toContain("shadow-text-primary/12");
 		expect(popup.className).toContain("p-3");
 		expect(popup.className).toContain("gap-[7px]");
 

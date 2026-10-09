@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, Pencil } from "lucide-react";
-import { fetchConstructionCard, type ConstructionStatus } from "@/lib/api/construction-card";
+import { fetchConstructionCard } from "@/lib/api/construction-card";
 import { applyHint, dismissHint, fetchConstructionHintsPanel, markHintSeen } from "@/lib/api/hints";
-import { StatusChip } from "@/components/design";
+import { ConstructionStatusChip } from "@/components/constructions/construction-status-chip";
 import { useCardCommands } from "@/components/constructions/card/use-card-commands";
 import { ConstructionMetricStrip } from "@/components/constructions/card/metric-strip";
 import { PositionsTable } from "@/components/constructions/card/positions-table";
@@ -30,34 +30,6 @@ import type { ConstructionCard } from "@/lib/api/construction-card";
 
 /** Ключ запроса снимка карточки. */
 const cardKey = (constructionId: number) => ["construction-card", constructionId] as const;
-
-/** Статус конструкции словами. */
-function statusText(status: ConstructionStatus): string {
-	switch (status) {
-		case "open":
-			return "открыта";
-		case "closed":
-			return "закрыта";
-		case "archived":
-			return "архив";
-	}
-}
-
-// Тон статусной пилюли по инстансам дизайн-нод: «открыта» — pos (X7CR1q,
-// Body #2: accentSoft/accentStrong), «закрыта» — neutral (EIqx3:
-// surface2/textSecondary), «архив» — muted (dAcLW: surface2/textMuted).
-// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
-// Traceability: change:reconcile-frontend-with-design/design#D2
-function statusTone(status: ConstructionStatus): "pos" | "neutral" | "muted" {
-	switch (status) {
-		case "open":
-			return "pos";
-		case "closed":
-			return "neutral";
-		case "archived":
-			return "muted";
-	}
-}
 
 export function ConstructionCardPage() {
 	const { constructionId } = useParams<{ constructionId: string }>();
@@ -334,7 +306,7 @@ function ConstructionHeader({
 			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
 			<h1 className="page-title flex flex-wrap items-center gap-2.5">
 				{card.name}
-				<StatusChip tone={statusTone(card.status)}>{statusText(card.status)}</StatusChip>
+				<ConstructionStatusChip status={card.status} />
 			</h1>
 
 			{/* Действия конструкции в шапке: переименование, смена ручного

@@ -150,7 +150,7 @@ export function MarkdownEditDialog({
 			{/* Traceability: change:reconcile-frontend-with-design/design#D5 */}
 			<DialogContent
 				showCloseButton={false}
-				className="flex h-[680px] max-h-[90vh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 shadow-[0_16px_48px_#17171E26] sm:max-w-[960px]"
+				className="flex h-[680px] max-h-[90vh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 shadow-[0_16px_48px] shadow-text-primary/15 sm:max-w-[960px]"
 				onKeyDown={handleKeyDown}
 			>
 				{/* Header (nBfEb): [14,18], нижний divider, заголовок Inter

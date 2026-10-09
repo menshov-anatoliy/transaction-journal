@@ -52,6 +52,25 @@ const closedRow: ConstructionRow = {
 };
 
 describe("таблица конструкций", () => {
+	// Все состояния конструкции показаны единым StatusChip в дизайн-тонах.
+	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+	it("показывает открытый, закрытый и архивный статусы пилюлями", () => {
+		// Arrange / Act: строки всех трёх состояний.
+		render(
+			<ConstructionsTable
+				rows={[openRow, closedRow, { ...closedRow, constructionId: 9, status: "archived" }]}
+				selectedId={null}
+				onSelect={() => {}}
+			/>,
+		);
+
+		// Assert: подписи и цвета совпадают с карточкой конструкции.
+		for (const [label, tone] of [["открыта", "text-accent-strong"], ["закрыта", "text-text-secondary"], ["архив", "text-text-muted"]]) {
+			expect(screen.getByText(label)).toHaveAttribute("data-slot", "status-chip");
+			expect(screen.getByText(label)).toHaveClass(tone, "rounded-full");
+		}
+	});
+
 	it("выводит колонки паритета и строки с величинами", () => {
 		// Act: таблица с двумя строками.
 		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
@@ -94,6 +113,8 @@ describe("таблица конструкций", () => {
 		expect(screen.getByRole("row", { name: /BTC-240531/ }).querySelector('[data-slot="hint-badge"]')).toBeNull();
 	});
 
+	// Ячейка не переопределяет ширину 132px компактного мастера FMghY.
+	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 	it("рендерит компактный индикатор финрезультата в строке", () => {
 		// Act: таблица с открытой строкой.
 		render(<ConstructionsTable rows={[openRow]} selectedId={null} onSelect={() => {}} />);
@@ -101,6 +122,8 @@ describe("таблица конструкций", () => {
 		// Assert: компактный индикатор в ячейке итога.
 		const indicator = screen.getByRole("row", { name: /ETH-240628/ }).querySelector('[data-slot="fin-result-compact"]');
 		expect(indicator).not.toBeNull();
+		expect(indicator).toHaveClass("w-[132px]");
+		expect(indicator).not.toHaveClass("w-28");
 	});
 
 	it("выделяет строку кликом и подсвечивает выделенную", async () => {

@@ -126,9 +126,11 @@
 	--fin-positive-strong: var(--accent-strong);
 	--fin-negative: var(--neg);
 	--fin-unreal-positive: var(--mint);
-	/* Нереализованный убыток: токена в design.pen нет (кандидат — riskZone),
-		замена запланирована чисткой таска 8.1 change reconcile-frontend-with-design. */
-	--fin-unreal-negative: #f6cbc7;
+	/* Минор-заливка убытка использует riskZone до выделения собственного
+		дизайн-токена в backlog #73; вне-токенный оттенок не сохраняется. */
+	/* Traceability: issue:#73 */
+	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
+	--fin-unreal-negative: var(--risk-zone);
 }
 
 @theme inline {

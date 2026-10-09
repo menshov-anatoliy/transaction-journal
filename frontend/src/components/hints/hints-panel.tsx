@@ -150,7 +150,9 @@ function HintCard({
 					{hint.sources.map((source) => (
 						<li key={`${source.tag}-${source.file}`}>
 							<span className="bg-secondary text-secondary-foreground rounded px-1 py-px font-medium">{source.tag}</span>{" "}
-							<span className="font-mono text-[11px]">{source.file}</span>
+							{/* Источники печатаются основным Inter 11, моношрифт оставлен редактору. */}
+							{/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
+							<span className="font-sans text-[11px]">{source.file}</span>
 							<ul className="list-disc pl-4">
 								{source.quotes.map((quote) => (
 									<li key={quote}>{quote}</li>

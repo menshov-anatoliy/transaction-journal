@@ -14,6 +14,24 @@ import { SourceTraceView } from "./source-trace-view";
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 
 describe("след источников в ответе ИИ-помощника", () => {
+	// Длинный рыночный источник переносится внутри пилюли без потери признака кэша.
+	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+	it("разрешает перенос длинных аргументов и as-of в чипе источника", () => {
+		// Arrange / Act: длинный аргумент без пробелов и деградированные данные.
+		render(<SourceTraceView trace={{
+			toolCalls: [{ tool: "get_market_snapshot", argument: "ETH-20261030-3200-C".repeat(8), asOf: "2026-10-09T09:00:00Z", degraded: true }],
+			references: [],
+		}} />);
+
+		// Assert: ни пилюля, ни текст не вынуждают ленту расти по ширине.
+		const cache = screen.getByText("кэш");
+		const chip = cache.closest('[data-slot="source-chip"]');
+		expect(chip).toHaveClass("max-w-full", "whitespace-normal");
+		expect(chip).not.toHaveClass("whitespace-nowrap");
+		expect(cache.parentElement).toHaveClass("min-w-0", "[overflow-wrap:anywhere]");
+		expect(chip?.parentElement).toHaveClass("min-w-0", "max-w-full");
+	});
+
 	it("показывает вызванные инструменты пилюлями-источниками с аргументами и as-of", () => {
 		// Arrange: ответ использовал рыночный инструмент и чтение карточки.
 		const trace: SourceTrace = {
@@ -79,6 +97,8 @@ describe("след источников в ответе ИИ-помощника"
 		expect(screen.getAllByText(/2026-10-07/).length).toBe(2);
 	});
 
+	// Деградация рынка видна как предупреждение на паре risk/riskSoft.
+	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
 	it("помечает рыночный след из кэша при недоступности биржи", () => {
 		// Arrange: рыночный инструмент ответил кэшем с явным as-of —
 		// владелец должен видеть, что рынок был недоступен.
@@ -99,6 +119,7 @@ describe("след источников в ответе ИИ-помощника"
 
 		// Assert: признак деградации рынка виден рядом с инструментом.
 		expect(screen.getByText(/кэш/i)).toBeInTheDocument();
+		expect(screen.getByText(/кэш/i)).toHaveClass("bg-risk-soft", "text-risk");
 	});
 
 	it("пустой след не рендерит ничего", () => {

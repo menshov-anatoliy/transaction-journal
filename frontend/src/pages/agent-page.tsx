@@ -851,7 +851,7 @@ function RuleBriefPopup({ card }: { card: AgentRuleCard }) {
 	return (
 		<aside
 			aria-label="Карточка правила (hover из чата)"
-			className="absolute right-3 top-3 z-10 flex w-[280px] flex-col gap-[7px] rounded-[10px] border bg-card p-3 shadow-[0_8px_24px_#17171E20]"
+			className="absolute right-3 top-3 z-10 flex w-[280px] flex-col gap-[7px] rounded-[10px] border bg-card p-3 shadow-[0_8px_24px] shadow-text-primary/12"
 		>
 			<p className="text-[12.5px] font-semibold text-foreground">{card.title}</p>
 			<p className="text-[11px] text-text-muted">

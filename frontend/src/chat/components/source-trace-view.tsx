@@ -59,7 +59,7 @@ export function SourceTraceView({ trace, onRuleHover, onRuleLeave, onRuleOpen }:
 			{hasTools && (
 				<ul className="flex flex-wrap gap-[7px]" aria-label="Использованные инструменты">
 					{trace.toolCalls.map((call, index) => (
-						<li key={toolCallKey(call, index)}>
+						<li key={toolCallKey(call, index)} className="min-w-0 max-w-full">
 							{/*
 								Вызванные инструменты — пилюли-источники (примитив
 								«Чип/Источник» fYadZ, pill 999): у мастера bUrOy
@@ -69,17 +69,27 @@ export function SourceTraceView({ trace, onRuleHover, onRuleLeave, onRuleOpen }:
 							*/}
 							{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
 							{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
-							<SourceChip icon={toolIcon(call.tool)} iconClassName="text-accent-strong">
-								{call.tool} · {call.argument}
-								{call.asOf && (
-									<span className="text-text-muted">, as-of {formatMoment(call.asOf)}</span>
-								)}
-								{/* Рыночный след из кэша: биржа была недоступна, данные устарели. */}
-								{call.degraded === true && (
-									<span className="ml-1 rounded bg-amber-100 px-1 text-amber-800">
-										кэш
-									</span>
-								)}
+							{/* Длинные аргументы и as-of переносятся, чтобы кэш-метка не скрывалась за краем ленты. */}
+							{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+							<SourceChip
+								icon={toolIcon(call.tool)}
+								iconClassName="text-accent-strong"
+								className="max-w-full whitespace-normal"
+							>
+								<span className="min-w-0 [overflow-wrap:anywhere]">
+									{call.tool} · {call.argument}
+									{call.asOf && (
+										<span className="text-text-muted">, as-of {formatMoment(call.asOf)}</span>
+									)}
+									{/* Рыночный след из кэша: биржа была недоступна, данные устарели. */}
+									{/* Предупреждение использует семантическую пару risk/riskSoft. */}
+									{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+									{call.degraded === true && (
+										<span className="ml-1 rounded bg-risk-soft px-1 text-risk">
+											кэш
+										</span>
+									)}
+								</span>
 							</SourceChip>
 						</li>
 					))}

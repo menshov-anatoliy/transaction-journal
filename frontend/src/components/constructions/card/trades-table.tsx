@@ -128,7 +128,9 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 						trades.map((trade) => (
 							<TableRow key={trade.execId}>
 								<TableCell>{formatMoment(trade.executedAt)}</TableCell>
-								<TableCell className="font-mono text-xs">{trade.execId}</TableCell>
+								{/* Идентификаторы сделок используют основной шрифт дизайна, Inter 11. */}
+								{/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
+								<TableCell className="font-sans text-[11px]">{trade.execId}</TableCell>
 								<TableCell className="font-medium">{trade.symbol}</TableCell>
 								<TableCell>{trade.isBuy ? "покупка" : "продажа"}</TableCell>
 								<TableCell className="tabular-nums">{formatAmount(trade.quantity)}</TableCell>

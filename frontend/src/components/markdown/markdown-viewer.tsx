@@ -63,9 +63,11 @@ const journalComponents: Components = {
 		<img className="max-w-full rounded-md" {...props} />
 	),
 	hr: (props) => <hr className="my-3 border-border" {...props} />,
+	// Журнальный просмотр использует Inter 11; JetBrains Mono остаётся в редакторе.
+	// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 	code: (props) => (
 		<code
-			className="rounded bg-muted px-1 py-0.5 font-mono text-[0.875em]"
+			className="rounded bg-muted px-1 py-0.5 font-sans text-[11px]"
 			{...props}
 		/>
 	),
