@@ -86,6 +86,17 @@ public interface IChatStore
 	/// <summary>Завершённые владельцем чаты в порядке создания.</summary>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	Task<IReadOnlyList<ChatRecord>> ListCompletedChatsAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Стирание пересбором: удаляет все чаты, привязанные к конструкции,
+	/// вместе со всеми их сообщениями; чаты без привязки и чаты других
+	/// конструкций не затрагиваются. Чат — запись окружения: вместе со
+	/// старой записью конструкций уходит и привязанный к ней чат.
+	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+	/// </summary>
+	/// <param name="constructionId">Идентификатор стираемой конструкции.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Статус жизненного цикла чата: активен или завершён владельцем.</summary>

@@ -202,6 +202,35 @@ public sealed class ChatStore : IChatStore
 	public async Task<IReadOnlyList<ChatRecord>> ListCompletedChatsAsync(CancellationToken cancellationToken = default) =>
 		await ListByStatusAsync(ChatStatus.Completed, cancellationToken).ConfigureAwait(false);
 
+	/// <inheritdoc cref="IChatStore.DeleteForConstructionAsync" />
+	public async Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default)
+	{
+		EnsureConstructionId(constructionId);
+		using var db = CreateContext();
+		var boundChatIds = await db.Chats
+			.Where(chat => chat.ConstructionId == constructionId)
+			.Select(chat => chat.Id)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+		if (boundChatIds.Count == 0)
+		{
+			return;
+		}
+
+		// Стирание как у удаления владельцем — целиком без корзины: сначала
+		// все сообщения привязанных чатов, затем сами чаты. Чаты без привязки
+		// и чаты других конструкций в выборку не попадают и переживают.
+		// Traceability: openspec:chats/history#scenario-chat-unbound-chat-survives-rebuild
+		await db.Messages
+			.Where(message => boundChatIds.Contains(message.ChatId))
+			.ExecuteDeleteAsync(cancellationToken)
+			.ConfigureAwait(false);
+		await db.Chats
+			.Where(chat => chat.ConstructionId == constructionId)
+			.ExecuteDeleteAsync(cancellationToken)
+			.ConfigureAwait(false);
+	}
+
 	#region Служебные выборки хранилища
 
 	/// <summary>Загружает чат на изменение; отсутствующий чат — ошибка состояния.</summary>
@@ -259,6 +288,18 @@ public sealed class ChatStore : IChatStore
 				nameof(chatId),
 				chatId,
 				"Идентификатор чата должен быть положительным.");
+		}
+	}
+
+	/// <summary>Идентификатор конструкции привязки обязан быть положительным ключом журнала.</summary>
+	private static void EnsureConstructionId(long constructionId)
+	{
+		if (constructionId <= 0)
+		{
+			throw new ArgumentOutOfRangeException(
+				nameof(constructionId),
+				constructionId,
+				"Идентификатор конструкции должен быть положительным.");
 		}
 	}
 

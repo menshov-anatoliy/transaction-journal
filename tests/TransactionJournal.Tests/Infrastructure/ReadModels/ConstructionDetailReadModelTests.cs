@@ -682,6 +682,8 @@ public class ConstructionDetailReadModelTests
 			new JournalSyncStore(CreateOptions()),
 			new StubJournalBackupService(),
 			CreateOptions(),
+			new TransactionJournal.Infrastructure.Chats.ChatStore(
+				Path.Combine(Path.GetTempPath(), $"chat-detail-tests-{Guid.NewGuid():N}.db")),
 			new FixedTimeProvider(AssemblyNow));
 		await assembly.RebuildAsync();
 

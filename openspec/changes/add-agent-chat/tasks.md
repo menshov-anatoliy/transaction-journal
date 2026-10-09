@@ -9,7 +9,7 @@
 
 - [x] 2.1 Заменить per-construction базы единым SQLite-хранилищем: чат (ИИ-модель, опциональная неизменяемая привязка к конструкции, набор источников, статус «активен/завершён») и сообщения (роль, текст, as-of, след источников); чат создаётся первым сообщением, ИИ-помощник видит только свою историю. Проверить: `requirement-chat-flat-full-history` — `scenario-chat-created-by-first-message`, `scenario-chat-neighbour-isolation`; `requirement-chat-construction-binding-immutable` — `scenario-chat-without-construction-allowed`, `scenario-chat-binding-cannot-change`.
 - [x] 2.2 Жизненный цикл: ручное завершение (скрытие в список завершённых), продолжение с возвратом в активные, удаление целиком без корзины; автоматического завершения нет. Проверить: `requirement-chat-manual-completion-and-deletion` — сценарии `scenario-chat-completion-hides-to-completed-list`, `scenario-chat-resume-returns-to-active`, `scenario-chat-hard-delete`.
-- [ ] 2.3 Пересбор: стирает только чаты привязанных конструкций, непривязанные переживают; старые базы консультаций удаляются без миграции (чистый лист). Проверить: `requirement-chat-environment-record` — `scenario-chat-rebuild-wipes-bound-chats`, `scenario-chat-unbound-chat-survives-rebuild`.
+- [x] 2.3 Пересбор: стирает только чаты привязанных конструкций, непривязанные переживают; старые базы консультаций удаляются без миграции (чистый лист). Проверить: `requirement-chat-environment-record` — `scenario-chat-rebuild-wipes-bound-chats`, `scenario-chat-unbound-chat-survives-rebuild`.
 
 ## 3. Контекст и источники
 

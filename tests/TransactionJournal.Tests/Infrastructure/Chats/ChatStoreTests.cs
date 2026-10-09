@@ -375,6 +375,59 @@ public class ChatStoreTests : ChatDatabaseTests
 	}
 
 	[TestMethod]
+	[Description("Стирание чатов конструкции удаляет привязанные чаты с историей; непривязанные и чужие переживают")]
+	// Чат — запись окружения: пересбор конструкции стирает чаты, привязанные
+	// к ней, вместе с её старой записью; портфельные чаты без привязки и чаты
+	// других конструкций пересбор переживают.
+	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+	// Traceability: openspec:chats/history#scenario-chat-unbound-chat-survives-rebuild
+	public async Task TryIfDeleteForConstruction_WipesOnlyBoundChats()
+	{
+		// Arrange: активный и завершённый чаты конструкции 7, чат конструкции 9
+		// и чат без привязки — у каждого своя история.
+		var store = CreateStore();
+		var boundActive = await store.AppendMessageAsync(null, Start(7), UserDraft("Вопрос конструкции 7."));
+		var boundCompleted = await store.AppendMessageAsync(null, Start(7), UserDraft("Второй вопрос конструкции 7."));
+		await store.CompleteChatAsync(boundCompleted.ChatId);
+		var otherConstruction = await store.AppendMessageAsync(null, Start(9), UserDraft("Вопрос конструкции 9."));
+		var unbound = await store.AppendMessageAsync(null, Start(null), UserDraft("Портфельный вопрос."));
+
+		// Act: стирание пересбором чатов конструкции 7.
+		await store.DeleteForConstructionAsync(7);
+
+		// Assert: привязанные чаты исчезли целиком, остальные живы с историей.
+		Assert.That(await store.FindChatAsync(boundActive.ChatId), Is.Null, "Чат привязанной конструкции стёрт");
+		Assert.That(await store.FindChatAsync(boundCompleted.ChatId), Is.Null, "Завершённый чат привязанной конструкции стёрт");
+		Assert.That(await store.ListMessagesAsync(boundActive.ChatId), Is.Empty, "История стёртого чата удалена");
+		Assert.That(await store.ListMessagesAsync(boundCompleted.ChatId), Is.Empty, "История стёртого завершённого чата удалена");
+		var survivingOther = await store.FindChatAsync(otherConstruction.ChatId);
+		Assert.That(survivingOther, Is.Not.Null, "Чат другой конструкции переживает");
+		Assert.That((await store.ListMessagesAsync(otherConstruction.ChatId)).Single().Text, Is.EqualTo("Вопрос конструкции 9."));
+		var survivingUnbound = await store.FindChatAsync(unbound.ChatId);
+		Assert.That(survivingUnbound, Is.Not.Null, "Непривязанный чат переживает");
+		Assert.That(survivingUnbound!.ConstructionId, Is.Null, "Привязка непривязанного чата не изменилась");
+		Assert.That((await store.ListMessagesAsync(unbound.ChatId)).Single().Text, Is.EqualTo("Портфельный вопрос."));
+	}
+
+	[TestMethod]
+	[Description("Стирание чатов несуществующей конструкции ничего не меняет")]
+	// Пересбор над журналом без конструкций стирает пустое множество: ни чаты,
+	// ни их истории не затрагиваются.
+	public async Task TryIfDeleteForUnknownConstruction_KeepsEverythingIntact()
+	{
+		// Arrange: один непривязанный чат.
+		var store = CreateStore();
+		var chat = await store.AppendMessageAsync(null, Start(null), UserDraft());
+
+		// Act: стирание чатов отсутствующей конструкции.
+		await store.DeleteForConstructionAsync(42);
+
+		// Assert: чат и его история не тронуты.
+		Assert.That(await store.FindChatAsync(chat.ChatId), Is.Not.Null);
+		Assert.That(await store.ListMessagesAsync(chat.ChatId), Has.Count.EqualTo(1));
+	}
+
+	[TestMethod]
 	[Description("Сообщения сами по себе чат не завершают: автоматического завершения нет")]
 	// Автоматического завершения нет: ни отправка сообщений, ни поздний as-of
 	// не меняют активный статус — чат завершает только ручное действие

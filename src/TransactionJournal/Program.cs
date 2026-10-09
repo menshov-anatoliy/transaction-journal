@@ -177,14 +177,17 @@ builder.Services.AddSingleton<IJournalReparseService, JournalReparseService>();
 
 // Команда «Собрать конструкции» на «Настройках»: полный пересбор конструкций
 // и привязок из локального сырья одной транзакцией; пересбор стартует только после
-// обязательной резервной копии, неудача копии блокирует операцию. Экран зависит
-// от интерфейса, тесты экрана подменяют команду заглушкой.
+// обязательной резервной копии, неудача копии блокирует операцию. Чаты,
+// привязанные к старым записям конструкций, стираются пересбором вместе с ними,
+// чаты без привязки переживают. Экран зависит от интерфейса, тесты экрана
+// подменяют команду заглушкой.
 // Traceability: change:add-construction-auto-assembly/specs/domain/construction-assembly/spec#requirement-full-rebuild-semantics
 // Traceability: openspec:ops/db-backup#requirement-backup-mandatory-before-rebuild
 builder.Services.AddSingleton(sp => new ConstructionAssemblyService(
 	sp.GetRequiredService<IJournalRawSnapshotStore>(),
 	sp.GetRequiredService<IJournalBackupService>(),
-	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<IChatStore>()));
 builder.Services.AddSingleton<IConstructionAssemblyService>(sp => sp.GetRequiredService<ConstructionAssemblyService>());
 
 // Слой доменных операций: use-case сервисы над контекстом журнала; каждый вызов
