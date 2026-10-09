@@ -11,10 +11,14 @@ namespace TransactionJournal.Chats.Ports;
 /// </summary>
 public interface IChatContextReader
 {
-	/// <summary>Собирает снимок контекста конструкции для сообщения чата.</summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
+	/// <summary>
+	/// Собирает снимок контекста для сообщения чата: у чата с привязкой —
+	/// конструкция с позициями и результатами, у чата без привязки —
+	/// портфельный уровень журнала.
+	/// </summary>
+	/// <param name="constructionId">Идентификатор конструкции привязки; null — чат без привязки, портфельный уровень журнала.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	Task<ChatContextSnapshot> ReadAsync(long constructionId, CancellationToken cancellationToken = default);
+	Task<ChatContextSnapshot> ReadAsync(long? constructionId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

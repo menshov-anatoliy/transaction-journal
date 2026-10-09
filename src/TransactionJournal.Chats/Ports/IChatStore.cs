@@ -1,68 +1,103 @@
 namespace TransactionJournal.Chats.Ports;
 
 /// <summary>
-/// Порт хранения чатов: совокупность диалогов «один вопрос — один
-/// диалог» в контексте одной конструкции. Диалог создаётся первым сообщением
-/// владельца и удаляется им целиком — полное удаление без корзины; ассистент
-/// видит историю только собственного диалога. Чат — запись
-/// окружения: домен журнала порт не видит, пересбор конструкции стирает её
-/// чаты вместе со старой записью.
+/// Порт хранения чатов агента: единое хранилище плоских чатов — каждый чат
+/// ведётся единой полной историей сообщений без вложенных диалогов. Чат
+/// создаётся первым сообщением владельца вместе с параметрами — ИИ-модель,
+/// опциональная привязка к конструкции, набор источников; параметры
+/// фиксируются при создании и повторно не передаются, сменить контекст
+/// можно только новым чатом. ИИ-помощник видит историю только собственного
+/// чата. Чат — запись окружения: домен журнала порт не видит.
 // Traceability: openspec:chats/history#requirement-chat-flat-full-history
 // Traceability: openspec:chats/history#requirement-chat-environment-record
 /// </summary>
 public interface IChatStore
 {
-	/// <summary>Диалоги конструкции в порядке создания.</summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="cancellationToken">Токен отмены.</param>
-	Task<IReadOnlyList<ChatDialogue>> ListDialoguesAsync(long constructionId, CancellationToken cancellationToken = default);
-
 	/// <summary>
 	/// Сохраняет сообщение и возвращает его с присвоенными идентификаторами.
-	/// Отдельной команды создания диалога нет: диалог без идентификатора
-	/// создаётся этим сообщением.
+	/// Отдельной команды создания чата нет: сообщение без идентификатора чата
+	/// создаёт новый чат с переданными параметрами; сообщение существующего
+	/// чата параметры не принимает — привязка и набор источников неизменяемы,
+	/// перепривязка означает начало нового чата.
 	// Traceability: openspec:chats/history#scenario-chat-created-by-first-message
+	// Traceability: openspec:chats/history#scenario-chat-binding-cannot-change
 	/// </summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="dialogueId">Идентификатор диалога; null — создаётся новый диалог этим сообщением.</param>
+	/// <param name="chatId">Идентификатор чата; null — создаётся новый чат этим сообщением.</param>
+	/// <param name="start">Параметры создания чата: обязательны при новом чате, запрещены для существующего.</param>
 	/// <param name="message">Черновик сообщения с незаполненным идентификатором.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	Task<ChatMessage> AppendMessageAsync(
-		long constructionId,
-		long? dialogueId,
+		long? chatId,
+		ChatStartParameters? start,
 		ChatMessageDraft message,
 		CancellationToken cancellationToken = default);
 
-	/// <summary>Сообщения диалога в порядке следования — история видна только этому диалогу.</summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="dialogueId">Идентификатор диалога.</param>
+	/// <summary>Чат по идентификатору: параметры и статус; null — чата нет.</summary>
+	/// <param name="chatId">Идентификатор чата.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	Task<IReadOnlyList<ChatMessage>> ListMessagesAsync(
-		long constructionId,
-		long dialogueId,
-		CancellationToken cancellationToken = default);
+	Task<ChatRecord?> FindChatAsync(long chatId, CancellationToken cancellationToken = default);
 
 	/// <summary>
-	/// Удаляет диалог со всеми его сообщениями без возможности восстановления;
-	/// false — диалога нет или он принадлежит другой конструкции.
-	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	/// Сообщения чата в порядке следования — полная история видна только
+	/// этому чату, истории соседних чатов в выборку не попадают.
+	// Traceability: openspec:chats/history#scenario-chat-neighbour-isolation
 	/// </summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="dialogueId">Идентификатор диалога.</param>
+	/// <param name="chatId">Идентификатор чата.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	Task<bool> DeleteDialogueAsync(long constructionId, long dialogueId, CancellationToken cancellationToken = default);
-
-	/// <summary>
-	/// Стирает все чаты конструкции вместе со старой записью — история
-	/// чата живёт и умирает вместе с конструкцией при её пересборе.
-	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
-	/// </summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="cancellationToken">Токен отмены.</param>
-	Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default);
+	Task<IReadOnlyList<ChatMessage>> ListMessagesAsync(long chatId, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Роль автора сообщения диалога.</summary>
+/// <summary>Статус жизненного цикла чата: активен или завершён владельцем.</summary>
+public enum ChatStatus
+{
+	/// <summary>Активный чат.</summary>
+	Active,
+
+	/// <summary>Завершён владельцем; продолжение возвращает в активные.</summary>
+	Completed,
+}
+
+/// <summary>
+/// Параметры создания чата: ИИ-модель, опциональная привязка к конструкции
+/// и набор источников данных. Фиксируются первым сообщением владельца и
+/// дальше не меняются.
+// Traceability: openspec:chats/history#scenario-chat-created-by-first-message
+/// </summary>
+public sealed record ChatStartParameters
+{
+	/// <summary>ИИ-модель чата: новые сообщения чата уходят ей.</summary>
+	public required string Model { get; init; }
+
+	/// <summary>Идентификатор конструкции привязки; null — чат без привязки, портфельный уровень журнала.</summary>
+	public long? ConstructionId { get; init; }
+
+	/// <summary>Набор источников данных чата — ключи закрытого справочника источников.</summary>
+	public required IReadOnlyList<string> Sources { get; init; }
+}
+
+/// <summary>Чат агента: плоская полная история обмена с параметрами и статусом.</summary>
+public sealed record ChatRecord
+{
+	/// <summary>Суррогатный ключ чата; 0 у несохранённого чата.</summary>
+	public long Id { get; init; }
+
+	/// <summary>ИИ-модель чата: новые сообщения чата уходят ей.</summary>
+	public required string Model { get; init; }
+
+	/// <summary>Идентификатор конструкции привязки; null — чат без привязки.</summary>
+	public long? ConstructionId { get; init; }
+
+	/// <summary>Набор источников данных чата — ключи закрытого справочника источников.</summary>
+	public required IReadOnlyList<string> Sources { get; init; }
+
+	/// <summary>Статус жизненного цикла: активен или завершён.</summary>
+	public ChatStatus Status { get; init; }
+
+	/// <summary>Момент создания чата первым сообщением владельца.</summary>
+	public required DateTimeOffset CreatedAt { get; init; }
+}
+
+/// <summary>Роль автора сообщения чата.</summary>
 public enum ChatMessageRole
 {
 	/// <summary>Сообщение владельца.</summary>
@@ -72,20 +107,7 @@ public enum ChatMessageRole
 	Assistant,
 }
 
-/// <summary>Диалог чата — единичный обмен «один вопрос — один диалог».</summary>
-public sealed record ChatDialogue
-{
-	/// <summary>Суррогатный ключ диалога; 0 у несохранённого диалога.</summary>
-	public long Id { get; init; }
-
-	/// <summary>Идентификатор конструкции, в контексте которой ведётся диалог.</summary>
-	public long ConstructionId { get; init; }
-
-	/// <summary>Момент создания диалога первым сообщением владельца.</summary>
-	public required DateTimeOffset CreatedAt { get; init; }
-}
-
-/// <summary>Черновик сообщения диалога с незаполненным идентификатором.</summary>
+/// <summary>Черновик сообщения чата с незаполненным идентификатором.</summary>
 public sealed record ChatMessageDraft
 {
 	/// <summary>Роль автора сообщения.</summary>
@@ -97,18 +119,18 @@ public sealed record ChatMessageDraft
 	/// <summary>Отметка as-of момента сообщения.</summary>
 	public required DateTimeOffset AsOf { get; init; }
 
-	/// <summary>Рыночный след ответа ассистента; у сообщений владельца null.</summary>
+	/// <summary>След источников ответа ИИ-помощника; у сообщений владельца null.</summary>
 	public ChatMarketTrace? MarketTrace { get; init; }
 }
 
-/// <summary>Сообщение диалога: роль, текст, as-of; у ассистента дополнительно рыночный след.</summary>
+/// <summary>Сообщение чата: роль, текст, as-of; у помощника дополнительно след источников.</summary>
 public sealed record ChatMessage
 {
 	/// <summary>Суррогатный ключ сообщения.</summary>
 	public long Id { get; init; }
 
-	/// <summary>Идентификатор диалога, в котором оставлено сообщение.</summary>
-	public long DialogueId { get; init; }
+	/// <summary>Идентификатор чата, в котором оставлено сообщение.</summary>
+	public long ChatId { get; init; }
 
 	/// <summary>Роль автора сообщения.</summary>
 	public required ChatMessageRole Role { get; init; }
@@ -119,7 +141,7 @@ public sealed record ChatMessage
 	/// <summary>Отметка as-of момента сообщения.</summary>
 	public required DateTimeOffset AsOf { get; init; }
 
-	/// <summary>Рыночный след ответа ассистента; у сообщений владельца null.</summary>
+	/// <summary>След источников ответа ИИ-помощника; у сообщений владельца null.</summary>
 	public ChatMarketTrace? MarketTrace { get; init; }
 }
 

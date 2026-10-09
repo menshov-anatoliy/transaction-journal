@@ -7,14 +7,16 @@ using TransactionJournal.Chats.Ports;
 using ChatMessage = TransactionJournal.Chats.Ports.ChatMessage;
 
 /// <summary>
-/// Конвейер сообщения чата: сообщение владельца фиксируется первым —
-/// без идентификатора диалога оно создаёт диалог, затем стримится ответ
-/// ассистента, по завершении стрима ответ фиксируется в диалоге с as-of
-/// момента фиксации и рыночным следом — какие инструменты вызывались и с
-/// какими as-of их данные. Рендер чанков, троттлинг перерисовок и отмена —
-/// ответственность UI, конвейер отдаёт поток обновлений модели как есть.
+/// Конвейер сообщения чата агента: сообщение владельца без идентификатора
+/// чата создаёт новый чат с выбранными параметрами, затем стримится ответ
+/// ИИ-помощника, по завершении стрима ответ фиксируется в том же чате с
+/// as-of момента фиксации и следом источников — какие инструменты
+/// вызывались и с какими as-of их данные. Агенту передаётся история только
+/// собственного чата: истории соседних чатов ему не видны. Рендер чанков,
+/// троттлинг перерисовок и отмена — ответственность UI, конвейер отдаёт
+/// поток обновлений модели как есть.
+// Traceability: openspec:chats/history#requirement-chat-flat-full-history
 // Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
-// Traceability: openspec:chats/history#scenario-chat-created-by-first-message
 /// </summary>
 public sealed class ChatService
 {
@@ -26,9 +28,9 @@ public sealed class ChatService
 
 	private readonly TimeProvider _timeProvider;
 
-	/// <summary>Создаёт конвейер над хранилищем, читателем снимка контекста и агентным циклом.</summary>
-	/// <param name="store">Порт хранения чатов конструкции.</param>
-	/// <param name="contextReader">Порт снимка контекста конструкции.</param>
+	/// <summary>Создаёт конвейер над хранилищем чатов, читателем снимка контекста и агентным циклом.</summary>
+	/// <param name="store">Порт хранения чатов.</param>
+	/// <param name="contextReader">Порт снимка контекста чата.</param>
 	/// <param name="agent">Агентный цикл чата.</param>
 	/// <param name="timeProvider">Поставщик времени as-of сообщений; по умолчанию системные часы.</param>
 	/// <exception cref="ArgumentNullException">Какая-либо обязательная зависимость не задана.</exception>
@@ -46,24 +48,25 @@ public sealed class ChatService
 
 	/// <summary>
 	/// Фиксирует сообщение владельца и возвращает его с присвоенными ключами:
-	/// сообщение без диалога создаёт новый диалог чата.
+	/// сообщение без чата создаёт новый чат с переданными параметрами —
+	/// модель, привязка (или её отсутствие), источники.
 	// Traceability: openspec:chats/history#scenario-chat-created-by-first-message
 	/// </summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="dialogueId">Идентификатор диалога; null — создаётся новый диалог этим сообщением.</param>
+	/// <param name="chatId">Идентификатор чата; null — создаётся новый чат этим сообщением.</param>
+	/// <param name="start">Параметры создания нового чата; обязательны при новом чате, запрещены для существующего.</param>
 	/// <param name="question">Вопрос владельца.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Сохранённое сообщение владельца.</returns>
 	public Task<ChatMessage> AppendUserMessageAsync(
-		long constructionId,
-		long? dialogueId,
+		long? chatId,
+		ChatStartParameters? start,
 		string question,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(question);
 		return _store.AppendMessageAsync(
-			constructionId,
-			dialogueId,
+			chatId,
+			start,
 			new ChatMessageDraft
 			{
 				Role = ChatMessageRole.User,
@@ -74,33 +77,46 @@ public sealed class ChatService
 	}
 
 	/// <summary>
-	/// Стримит ответ ассистента на зафиксированное сообщение владельца: история
-	/// диалога читается до вопроса, инструменты агентного цикла пишут рыночный
-	/// след, по завершении стрима ответ фиксируется с as-of и следом. Отмена
-	/// генерации оставляет диалог без ответа ассистента.
+	/// Стримит ответ ИИ-помощника на зафиксированное сообщение владельца:
+	/// читается чат и его собственная история до вопроса, снимок контекста
+	/// собирается по привязке чата — с конструкцией или портфельный уровень,
+	/// инструменты агентного цикла пишут след источников, по завершении
+	/// стрима ответ фиксируется с as-of и следом. Отмена генерации оставляет
+	/// чат без ответа помощника.
+	// Traceability: openspec:chats/history#scenario-chat-neighbour-isolation
 	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	/// </summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="userMessage">Зафиксированное сообщение владельца, на которое отвечает ассистент.</param>
+	/// <param name="chatId">Идентификатор чата, в котором оставлено сообщение владельца.</param>
+	/// <param name="userMessage">Зафиксированное сообщение владельца, на которое отвечает помощник.</param>
 	/// <param name="cancellationToken">Токен отмены генерации.</param>
 	/// <returns>Поток обновлений ответа: текстовые чанки и tool-вызовы.</returns>
 	public async IAsyncEnumerable<ChatResponseUpdate> StreamAssistantAnswerAsync(
-		long constructionId,
+		long chatId,
 		ChatMessage userMessage,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(userMessage);
+
+		// Чат — носитель параметров: привязка выбирает ветку снимка контекста,
+		// отсутствующий чат означает, что отвечать некуда.
+		var chat = await _store
+			.FindChatAsync(chatId, cancellationToken)
+			.ConfigureAwait(false)
+			?? throw new InvalidOperationException($"Чат {chatId} не найден.");
+
 		var allMessages = await _store
-			.ListMessagesAsync(constructionId, userMessage.DialogueId, cancellationToken)
+			.ListMessagesAsync(chatId, cancellationToken)
 			.ConfigureAwait(false);
 
-		// История диалога — сообщения до вопроса: сам вопрос агент получает
-		// отдельно вместе со снимком контекста.
+		// История чата — сообщения до вопроса: сам вопрос агент получает
+		// отдельно вместе со снимком контекста; сообщения соседних чатов
+		// хранилище в выборку не включает.
+		// Traceability: openspec:chats/history#scenario-chat-neighbour-isolation
 		var history = allMessages
 			.TakeWhile(message => message.Id != userMessage.Id)
 			.ToList();
 		var snapshot = await _contextReader
-			.ReadAsync(constructionId, cancellationToken)
+			.ReadAsync(chat.ConstructionId, cancellationToken)
 			.ConfigureAwait(false);
 
 		var traceRecorder = new ChatMarketTraceRecorder();
@@ -114,11 +130,11 @@ public sealed class ChatService
 		}
 
 		// Ответ фиксируется по завершении стрима: текст целиком, as-of момента
-		// фиксации и рыночный след из накопителя агентного цикла.
+		// фиксации и след источников из накопителя агентного цикла.
 		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 		await _store.AppendMessageAsync(
-			constructionId,
-			userMessage.DialogueId,
+			chatId,
+			null,
 			new ChatMessageDraft
 			{
 				Role = ChatMessageRole.Assistant,

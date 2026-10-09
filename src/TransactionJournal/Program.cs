@@ -21,6 +21,8 @@ using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Sync;
 using TransactionJournal.Infrastructure.Ops;
 using TransactionJournal.Infrastructure.Hints;
+using TransactionJournal.Infrastructure.Chats;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Hints;
 using TransactionJournal.Hints.Corpus;
 using TransactionJournal.Hints.Display;
@@ -287,6 +289,16 @@ builder.Services.AddSingleton<IHintPassRunner>(sp => sp.GetRequiredService<HintA
 builder.Services.AddSingleton<IHintDisplayReadModel, HintDisplayReadModel>();
 builder.Services.AddSingleton<AgentRulesCatalog>();
 builder.Services.AddSingleton(_ => new AgentChatStore(dataDirectory));
+
+// Единое SQLite-хранилище чатов агента: плоские чаты с параметрами и полной
+// историей сообщений одним файлом рядом с базой журнала — per-construction
+// базы консультаций заменены; привязка чата к конструкции хранится значением
+// и может отсутствовать. Домен журнала о чатах не знает, адаптер живёт в
+// Infrastructure по образцу HintStore.
+// Traceability: openspec:chats/history#requirement-chat-environment-record
+// Traceability: openspec:chats/history#requirement-chat-flat-full-history
+builder.Services.AddSingleton<IChatStore>(_ => new ChatStore(
+	Path.Combine(dataDirectory, "chats.db")));
 
 // Read-модель экрана «Конструкции»: соединяет метрики аналитики журнала с именами
 // и ручными статусами конструкций, скрывая архивные из списка и его счётчика.

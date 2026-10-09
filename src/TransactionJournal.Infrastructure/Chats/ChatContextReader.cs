@@ -56,10 +56,20 @@ public sealed class ChatContextReader : IChatContextReader
 	/// разделения read-моделей.
 	/// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
 	/// </remarks>
-	public async Task<ChatContextSnapshot> ReadAsync(long constructionId, CancellationToken cancellationToken = default)
+	public async Task<ChatContextSnapshot> ReadAsync(long? constructionId, CancellationToken cancellationToken = default)
 	{
+		// Чат без привязки консультируется на портфельном уровне журнала —
+		// агрегаты и лимиты с индексом корпуса без раздела конструкции.
+		// Портфельная ветка снимка появляется в change add-agent-chat; до неё
+		// запрос без привязки отвергается явно, а не молча.
+		// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+		if (constructionId is null)
+		{
+			throw new NotSupportedException("Снимок контекста чата без привязки к конструкции пока не поддерживается.");
+		}
+
 		var asOf = _timeProvider.GetUtcNow();
-		var detail = await _detailReadModel.ReadAsync(constructionId, cancellationToken);
+		var detail = await _detailReadModel.ReadAsync(constructionId.Value, cancellationToken);
 		var metrics = await _metricsReadModel.ReadAsync(cancellationToken);
 		var ruleIndex = await _ruleCorpusReader.ListIndexAsync(cancellationToken);
 
