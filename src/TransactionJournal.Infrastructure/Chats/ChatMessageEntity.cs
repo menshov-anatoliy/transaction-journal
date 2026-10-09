@@ -30,5 +30,5 @@ internal sealed class ChatMessageEntity
 	public required DateTimeOffset AsOf { get; set; }
 
 	/// <summary>След источников ответа ИИ-помощника в JSON; null у сообщений владельца.</summary>
-	public string? MarketTraceJson { get; set; }
+	public string? SourceTraceJson { get; set; }
 }

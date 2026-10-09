@@ -172,6 +172,40 @@ public sealed class ChatToolsTests
 	}
 
 	[TestMethod]
+	[Description("Чтение карточки правила оставляет ссылку на неё в следе источников: только выданные карточки, без повторов")]
+	// Ссылка пишется только при фактической выдаче текста карточки:
+	// несуществующий id данных правила не дал, повторное чтение одной
+	// карточки даёт в следе одну запись.
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+	public async Task ReadRuleCardAsync_RecordsRuleCardReferenceInTrace()
+	{
+		// Arrange: корпус знает карточку ac-01 и не знает ac-99.
+		var corpus = new Mock<IRuleCorpusReader>(MockBehavior.Strict);
+		corpus
+			.Setup(reader => reader.ReadCardAsync("ac-01", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new RuleCardContent { Id = "ac-01", Text = "Полный текст правила ac-01." });
+		corpus
+			.Setup(reader => reader.ReadCardAsync("ac-99", It.IsAny<CancellationToken>()))
+			.ReturnsAsync((RuleCardContent?)null);
+		var tools = CreateTools(corpus.Object);
+		var traceRecorder = new ChatSourceTraceRecorder();
+
+		// Act: читаем найденную, отсутствующую и снова найденную карточки.
+		_ = await tools.ReadRuleCardAsync("ac-01", traceRecorder);
+		_ = await tools.ReadRuleCardAsync("ac-99", traceRecorder);
+		_ = await tools.ReadRuleCardAsync("ac-01", traceRecorder);
+
+		// Assert: три вызова инструмента и одна ссылка на ac-01 — отсутствующая
+		// карточка ссылки не дала, повторное чтение задедуплировано; корпус
+		// правил — не рыночные данные, as-of у вызовов чтения нет.
+		var trace = traceRecorder.Build();
+		Assert.That(trace, Is.Not.Null);
+		Assert.That(trace!.Invocations, Has.Count.EqualTo(3));
+		Assert.That(trace.Invocations, Has.All.Matches<ChatToolInvocation>(invocation => invocation.DataAsOf is null));
+		Assert.That(trace.RuleCards, Is.EqualTo(new[] { "ac-01" }));
+	}
+
+	[TestMethod]
 	[Description("Снимок рынка рендерится markdown с маркой, фандингом и as-of отметкой")]
 	public async Task GetMarketSnapshotAsync_RendersMarkdownSnapshot()
 	{

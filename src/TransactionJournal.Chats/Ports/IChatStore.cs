@@ -189,7 +189,7 @@ public sealed record ChatMessageDraft
 	public required DateTimeOffset AsOf { get; init; }
 
 	/// <summary>След источников ответа ИИ-помощника; у сообщений владельца null.</summary>
-	public ChatMarketTrace? MarketTrace { get; init; }
+	public ChatSourceTrace? SourceTrace { get; init; }
 }
 
 /// <summary>Сообщение чата: роль, текст, as-of; у помощника дополнительно след источников.</summary>
@@ -211,21 +211,30 @@ public sealed record ChatMessage
 	public required DateTimeOffset AsOf { get; init; }
 
 	/// <summary>След источников ответа ИИ-помощника; у сообщений владельца null.</summary>
-	public ChatMarketTrace? MarketTrace { get; init; }
+	public ChatSourceTrace? SourceTrace { get; init; }
 }
 
 /// <summary>
-/// Рыночный след ответа ассистента: какие инструменты вызывались и с какими
-/// as-of их данные — происхождение рыночных рекомендаций проверяемо постфактум.
+/// След источников ответа ассистента — обобщение рыночного следа: какие
+/// инструменты вызывались и с какими as-of их данные, какие карточки правил
+/// прочитаны и каков as-of данных журнала в снимке контекста. Происхождение
+/// рекомендаций проверяемо постфактум, UI рендерит из следа ссылки на правила.
 // Traceability: openspec:chats/history#requirement-chat-message-composition
+// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 /// </summary>
-public sealed record ChatMarketTrace
+public sealed record ChatSourceTrace
 {
 	/// <summary>Вызовы инструментов в порядке следования.</summary>
 	public required IReadOnlyList<ChatToolInvocation> Invocations { get; init; }
+
+	/// <summary>Идентификаторы прочитанных карточек правил в порядке чтения, без повторов.</summary>
+	public IReadOnlyList<string> RuleCards { get; init; } = [];
+
+	/// <summary>As-of данных журнала в снимке контекста; null — данные журнала не зафиксированы.</summary>
+	public DateTimeOffset? JournalAsOf { get; init; }
 }
 
-/// <summary>Запись вызова инструмента в рыночном следе ответа.</summary>
+/// <summary>Запись вызова инструмента в следе источников ответа.</summary>
 public sealed record ChatToolInvocation
 {
 	/// <summary>Имя инструмента (read_rule_card, get_market_snapshot, get_option_board).</summary>
@@ -236,7 +245,7 @@ public sealed record ChatToolInvocation
 
 	/// <summary>
 	/// As-of данных, отданных инструментом вызову; у кэшированной проекции
-	/// при недоступном рынке это as-of кэша, null — данных нет вовсе.
+	/// при недоступном рынке это as-of кэша, null — данных с as-of нет вовсе.
 	/// </summary>
 	public DateTimeOffset? DataAsOf { get; init; }
 }

@@ -99,19 +99,88 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 		var userMessage = await service.AppendUserMessageAsync(null, Start(7), "Что с маркой BTC?");
 		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
 
-		// Assert: сообщение владельца без следа, ответ помощника — со следом тула.
+		// Assert: сообщение владельца без следа, ответ помощника — со следом:
+		// вызов тула и as-of данных журнала из снимка контекста.
 		var messages = await CreateStore().ListMessagesAsync(userMessage.ChatId);
 		Assert.That(messages, Has.Count.EqualTo(2));
 		var storedUser = messages.Single(message => message.Role == ChatMessageRole.User);
-		Assert.That(storedUser.MarketTrace, Is.Null);
+		Assert.That(storedUser.SourceTrace, Is.Null);
 		var storedAssistant = messages.Single(message => message.Role == ChatMessageRole.Assistant);
 		Assert.That(storedAssistant.Text, Is.EqualTo("Марка BTC 108975.4 USDT."));
-		Assert.That(storedAssistant.MarketTrace, Is.Not.Null);
-		var invocations = storedAssistant.MarketTrace!.Invocations;
+		Assert.That(storedAssistant.SourceTrace, Is.Not.Null);
+		var trace = storedAssistant.SourceTrace!;
+		Assert.That(trace.RuleCards, Is.Empty);
+		Assert.That(trace.JournalAsOf, Is.EqualTo(FixedNow));
+		var invocations = trace.Invocations;
 		Assert.That(invocations, Has.Count.EqualTo(1));
 		Assert.That(invocations[0].ToolName, Is.EqualTo(ChatTools.GetMarketSnapshotToolName));
 		Assert.That(invocations[0].Arguments, Is.EqualTo("{\"baseCoin\":\"BTC\"}"));
 		Assert.That(invocations[0].DataAsOf, Is.EqualTo(FixedNow));
+	}
+
+	[TestMethod]
+	[Description("Чтение карточки правила инструментом сохраняет её ссылку в следе сообщения помощника")]
+	// Ссылка на карточку попадает в след при фактической выдаче текста:
+	// источник «корпус правил» проверяем по сохранённому сообщению постфактум.
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+	public async Task TryIfAssistantReadRuleCard_RuleCardReferencePersistedInTrace()
+	{
+		// Arrange: модель сначала читает карточку ac-01, затем отвечает текстом;
+		// корпус отдаёт полный текст карточки.
+		var chatClient = new FakeChatClient();
+		chatClient.Script =
+		[
+			[() => RuleCardCallFrame("call-1", ChatTools.ReadRuleCardToolName, "ac-01")],
+			[() => new ChatResponseUpdate(ChatRole.Assistant, "Правило: резать убытки.")],
+		];
+		var corpus = new Mock<IRuleCorpusReader>(MockBehavior.Strict);
+		corpus
+			.Setup(reader => reader.ReadCardAsync("ac-01", It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new RuleCardContent { Id = "ac-01", Text = "Полный текст правила ac-01." });
+		var service = CreateService(chatClient, new Mock<IChatMarketReader>(MockBehavior.Strict), out _, corpus.Object);
+
+		// Act: обмен с инструментальным чтением карточки.
+		var userMessage = await service.AppendUserMessageAsync(null, Start(7), "Какое правило про убытки?");
+		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
+
+		// Assert: след помощника несёт ссылку на прочитанную карточку и вызов
+		// чтения без as-of; as-of журнала снимка записан рядом.
+		var messages = await CreateStore().ListMessagesAsync(userMessage.ChatId);
+		var storedAssistant = messages.Single(message => message.Role == ChatMessageRole.Assistant);
+		Assert.That(storedAssistant.SourceTrace, Is.Not.Null);
+		Assert.That(storedAssistant.SourceTrace!.RuleCards, Is.EqualTo(new[] { "ac-01" }));
+		var invocation = storedAssistant.SourceTrace.Invocations.Single();
+		Assert.That(invocation.ToolName, Is.EqualTo(ChatTools.ReadRuleCardToolName));
+		Assert.That(invocation.Arguments, Is.EqualTo("{\"cardId\":\"ac-01\"}"));
+		Assert.That(invocation.DataAsOf, Is.Null);
+		Assert.That(storedAssistant.SourceTrace.JournalAsOf, Is.EqualTo(FixedNow));
+	}
+
+	[TestMethod]
+	[Description("Ответ без инструментов сохраняет as-of данных журнала снимка в следе источников")]
+	// Данные журнала входят в промпт детерминированным снимком контекста:
+	// журнал использован ответом независимо от тулов модели, поэтому as-of
+	// снимка фиксируется в следе каждого ответа помощника.
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+	public async Task TryIfAssistantAnsweredWithoutTools_TraceKeepsJournalAsOf()
+	{
+		// Arrange: модель отвечает текстом без тул-вызовов.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по журналу.")]];
+		var service = CreateService(chatClient, new Mock<IChatMarketReader>(MockBehavior.Strict), out _);
+
+		// Act: обмен без инструментальных вызовов.
+		var userMessage = await service.AppendUserMessageAsync(null, Start(7), "Как структура?");
+		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
+
+		// Assert: след не null только из-за as-of журнала; инструментов и
+		// карточек правил в следе нет.
+		var messages = await CreateStore().ListMessagesAsync(userMessage.ChatId);
+		var storedAssistant = messages.Single(message => message.Role == ChatMessageRole.Assistant);
+		Assert.That(storedAssistant.SourceTrace, Is.Not.Null);
+		Assert.That(storedAssistant.SourceTrace!.Invocations, Is.Empty);
+		Assert.That(storedAssistant.SourceTrace.RuleCards, Is.Empty);
+		Assert.That(storedAssistant.SourceTrace.JournalAsOf, Is.EqualTo(FixedNow));
 	}
 
 	[TestMethod]
@@ -534,7 +603,8 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 	private ChatService CreateService(
 		FakeChatClient chatClient,
 		Mock<IChatMarketReader> market,
-		out RecordingContextReader contextReader)
+		out RecordingContextReader contextReader,
+		IRuleCorpusReader? corpusReader = null)
 	{
 		contextReader = new RecordingContextReader();
 		return new ChatService(
@@ -542,7 +612,7 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 			contextReader,
 			new ChatAgent(
 				chatClient,
-				new ChatTools(new Mock<IRuleCorpusReader>(MockBehavior.Loose).Object, market.Object),
+				new ChatTools(corpusReader ?? new Mock<IRuleCorpusReader>(MockBehavior.Loose).Object, market.Object),
 				new ChatInstructions(Path.Combine(Path.GetTempPath(), "no-such-agent-prompt.md"))),
 			new FixedTimeProvider(FixedNow));
 	}
@@ -552,6 +622,13 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 	{
 		Role = ChatRole.Assistant,
 		Contents = { new FunctionCallContent(callId, toolName, new Dictionary<string, object?> { ["baseCoin"] = baseCoin }) },
+	};
+
+	/// <summary>Кадр модели с вызовом инструмента чтения карточки правила.</summary>
+	private static ChatResponseUpdate RuleCardCallFrame(string callId, string toolName, string cardId) => new()
+	{
+		Role = ChatRole.Assistant,
+		Contents = { new FunctionCallContent(callId, toolName, new Dictionary<string, object?> { ["cardId"] = cardId }) },
 	};
 
 	/// <summary>

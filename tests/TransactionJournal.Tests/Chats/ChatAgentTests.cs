@@ -162,7 +162,7 @@ public sealed class ChatAgentTests
 	}
 
 	[TestMethod]
-	[Description("Тул-вызов агентного цикла записывается в рыночный след с as-of отданных данных")]
+	[Description("Тул-вызов агентного цикла записывается в след источников с as-of отданных данных")]
 	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	public async Task TryIfMarketToolInvoked_TraceRecordsInvocationWithAsOf()
 	{
@@ -186,7 +186,7 @@ public sealed class ChatAgentTests
 				MarkPrice = 108975.4m,
 			});
 		var agent = CreateAgent(chatClient, market);
-		var traceRecorder = new ChatMarketTraceRecorder();
+		var traceRecorder = new ChatSourceTraceRecorder();
 
 		// Act: вопрос провоцирует модель обратиться к рыночному инструменту.
 		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?", traceRecorder: traceRecorder));
@@ -202,9 +202,9 @@ public sealed class ChatAgentTests
 	}
 
 	[TestMethod]
-	[Description("Ответ без инструментальных вызовов рыночного следа не создаёт")]
-	// След в сообщении появляется только у ответов, использовавших инструменты:
-	// у «чистого» ответа по журналу и корпусу рыночных данных нет.
+	[Description("Ответ без инструментальных вызовов следа источников не создаёт")]
+	// На уровне агентного цикла след строится только из тул-вызовов: ответ
+	// без инструментов не оставляет следа — as-of журнала пишет конвейер чата.
 	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	public async Task TryIfAnswerWithoutTools_TraceStaysEmpty()
 	{
@@ -213,7 +213,7 @@ public sealed class ChatAgentTests
 		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по журналу.")]];
 		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		var agent = CreateAgent(chatClient, market);
-		var traceRecorder = new ChatMarketTraceRecorder();
+		var traceRecorder = new ChatSourceTraceRecorder();
 
 		// Act
 		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", traceRecorder: traceRecorder));

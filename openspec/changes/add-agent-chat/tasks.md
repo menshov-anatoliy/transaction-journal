@@ -16,7 +16,7 @@
 - [x] 3.1 Портфельная ветка снимка контекста для чатов без конструкции: агрегаты и лимиты журнала + индекс корпуса с as-of, без раздела конструкции. Проверить: `requirement-chat-context-deterministic-snapshot` — `scenario-chat-context-portfolio-snapshot-without-construction`; регресс `scenario-chat-context-construction-snapshot-with-asof`.
 - [x] 3.2 Справочник источников данных (журнал, корпус правил, рынок Bybit) и параметр чата: фильтрация реестра инструментов по набору источников, дефолт — все три. Проверить: `requirement-sources-closed-catalog` — `scenario-sources-three-categories`, `scenario-sources-subset-parameter`, `scenario-sources-write-never`; `requirement-sources-read-only-tool-registry` — `scenario-sources-registry-matches-chat-sources`.
 - [x] 3.3 ИИ-модель как параметр чата: дефолт GLM-5.3 из `Llm:Chat:Model`, смена на лету без переписывания истории. Проверить: `requirement-sources-model-is-chat-parameter` — `scenario-sources-default-model-glm`, `scenario-sources-model-switch-mid-chat`.
-- [ ] 3.4 След источников в ответе ИИ-помощника: обобщение рыночного следа — инструменты, ссылки на карточки правил и данные журнала с as-of. Проверить: `requirement-chat-message-composition` — `scenario-chat-source-trace-persisted`.
+- [x] 3.4 След источников в ответе ИИ-помощника: обобщение рыночного следа — инструменты, ссылки на карточки правил и данные журнала с as-of. Проверить: `requirement-chat-message-composition` — `scenario-chat-source-trace-persisted`.
 
 ## 4. Приёмка
 

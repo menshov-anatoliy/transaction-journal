@@ -41,7 +41,7 @@ public sealed class ChatTools
 	/// <summary>Максимум страйков одной экспирации в проекции доски — ближайшие к якорю окном.</summary>
 	private const int MaxStrikesPerExpiry = 21;
 
-	// Компактная сериализация аргументов вызовов: рыночный след читается адаптером,
+	// Компактная сериализация аргументов вызовов: след источников читается адаптером,
 	// а не человеком.
 	private static readonly JsonSerializerOptions CompactJsonOptions = new()
 	{
@@ -75,12 +75,12 @@ public sealed class ChatTools
 	// Traceability: openspec:chats/sources#scenario-sources-write-never
 	/// </summary>
 	/// <param name="sources">Набор источников чата; null — дефолт, все три категории.</param>
-	/// <param name="traceRecorder">Накопитель рыночного следа ответа; null — вызовы не записываются.</param>
+	/// <param name="traceRecorder">Накопитель следа источников ответа; null — вызовы не записываются.</param>
 	/// <returns>Функции инструментов только выбранных источников.</returns>
 	/// <exception cref="ArgumentException">Набор источников пуст.</exception>
 	public IReadOnlyList<AIFunction> CreateTools(
 		IReadOnlyList<ChatDataSource>? sources = null,
-		ChatMarketTraceRecorder? traceRecorder = null)
+		ChatSourceTraceRecorder? traceRecorder = null)
 	{
 		// Дефолт набора — закрытый справочник целиком: чат без явного выбора
 		// источников получает все три категории.
@@ -118,8 +118,8 @@ public sealed class ChatTools
 	/// замыканием в момент исполнения.
 	/// </summary>
 	private static Func<ParameterInfo, AIFunctionFactoryOptions.ParameterBindingOptions> TraceBinding(
-		ChatMarketTraceRecorder? traceRecorder) =>
-		parameter => parameter.ParameterType == typeof(ChatMarketTraceRecorder)
+		ChatSourceTraceRecorder? traceRecorder) =>
+		parameter => parameter.ParameterType == typeof(ChatSourceTraceRecorder)
 			? new AIFunctionFactoryOptions.ParameterBindingOptions
 			{
 				BindParameter = (_, _) => traceRecorder,
@@ -127,7 +127,7 @@ public sealed class ChatTools
 			}
 			: default;
 
-	/// <summary>Компактная сериализация аргументов вызова тула для рыночного следа.</summary>
+	/// <summary>Компактная сериализация аргументов вызова тула для следа источников.</summary>
 	private static string CompactArguments(object arguments) =>
 		JsonSerializer.Serialize(arguments, CompactJsonOptions);
 
@@ -141,7 +141,7 @@ public sealed class ChatTools
 	/// <returns>Полный текст карточки или сообщение об отсутствии.</returns>
 	public async Task<string> ReadRuleCardAsync(
 		[Description("Идентификатор карточки из индекса корпуса, например ac-01.")] string cardId,
-		ChatMarketTraceRecorder? traceRecorder = null,
+		ChatSourceTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(cardId);
@@ -151,9 +151,17 @@ public sealed class ChatTools
 		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 		traceRecorder?.Record(ReadRuleCardToolName, CompactArguments(new { cardId }), dataAsOf: null);
 
-		return card is null
-			? $"Карточка «{cardId}» в корпусе правил не найдена."
-			: card.Text;
+		if (card is null)
+		{
+			return $"Карточка «{cardId}» в корпусе правил не найдена.";
+		}
+
+		// Ссылка на карточку пишется только при фактической выдаче текста:
+		// несуществующий id не дал ответу никаких данных правила.
+		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+		traceRecorder?.RecordRuleCard(cardId);
+
+		return card.Text;
 	}
 
 	/// <summary>
@@ -168,7 +176,7 @@ public sealed class ChatTools
 	/// <returns>Markdown-снимок рынка.</returns>
 	public async Task<string> GetMarketSnapshotAsync(
 		[Description("Базовый актив, например BTC или ETH.")] string baseCoin,
-		ChatMarketTraceRecorder? traceRecorder = null,
+		ChatSourceTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
@@ -255,7 +263,7 @@ public sealed class ChatTools
 	/// <returns>Markdown-проекция доски опционов.</returns>
 	public async Task<string> GetOptionBoardAsync(
 		[Description("Базовый актив, например BTC или ETH.")] string baseCoin,
-		ChatMarketTraceRecorder? traceRecorder = null,
+		ChatSourceTraceRecorder? traceRecorder = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);

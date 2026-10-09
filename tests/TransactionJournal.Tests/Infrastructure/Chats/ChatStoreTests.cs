@@ -182,15 +182,18 @@ public class ChatStoreTests : ChatDatabaseTests
 	[TestMethod]
 	[Description("След источников ответа ИИ-помощника сохраняется в сообщении целиком")]
 	// Сообщение хранит роль, текст и as-of; ответ помощника дополнительно —
-	// след источников: вызовы инструментов с as-of их данных, у сообщений
+	// след источников: вызовы инструментов с as-of их данных, ссылки на
+	// прочитанные карточки правил и as-of данных журнала; у сообщений
 	// владельца следа нет.
 	// Traceability: openspec:chats/history#requirement-chat-message-composition
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	public async Task TryIfAssistantMessage_KeepsSourceTrace()
 	{
-		// Arrange: чат с первым вопросом и ответом помощника с одним тул-вызовом.
+		// Arrange: чат с первым вопросом и ответом помощника с тул-вызовом,
+		// ссылкой на карточку правила и as-of данных журнала.
 		var store = CreateStore();
 		var first = await store.AppendMessageAsync(null, Start(), UserDraft());
-		var trace = new ChatMarketTrace
+		var trace = new ChatSourceTrace
 		{
 			Invocations =
 			[
@@ -201,6 +204,8 @@ public class ChatStoreTests : ChatDatabaseTests
 					DataAsOf = FixedNow,
 				},
 			],
+			RuleCards = ["ac-01"],
+			JournalAsOf = FixedNow,
 		};
 
 		// Act
@@ -209,20 +214,23 @@ public class ChatStoreTests : ChatDatabaseTests
 			Role = ChatMessageRole.Assistant,
 			Text = "Марка BTC 108975.4.",
 			AsOf = FixedNow,
-			MarketTrace = trace,
+			SourceTrace = trace,
 		});
 
-		// Assert: след восстановлен из хранения с аргументами и as-of данных.
+		// Assert: след восстановлен из хранения целиком — вызовы с as-of,
+		// ссылка на карточку и as-of данных журнала.
 		var messages = await store.ListMessagesAsync(first.ChatId);
 		var storedAssistant = messages.Single(stored => stored.Role == ChatMessageRole.Assistant);
 		Assert.That(storedAssistant.Id, Is.EqualTo(answer.Id));
-		Assert.That(storedAssistant.MarketTrace, Is.Not.Null);
-		Assert.That(storedAssistant.MarketTrace!.Invocations, Has.Count.EqualTo(1));
-		Assert.That(storedAssistant.MarketTrace.Invocations[0].ToolName, Is.EqualTo("get_market_snapshot"));
-		Assert.That(storedAssistant.MarketTrace.Invocations[0].Arguments, Is.EqualTo("{\"baseCoin\":\"BTC\"}"));
-		Assert.That(storedAssistant.MarketTrace.Invocations[0].DataAsOf, Is.EqualTo(FixedNow));
+		Assert.That(storedAssistant.SourceTrace, Is.Not.Null);
+		Assert.That(storedAssistant.SourceTrace!.Invocations, Has.Count.EqualTo(1));
+		Assert.That(storedAssistant.SourceTrace.Invocations[0].ToolName, Is.EqualTo("get_market_snapshot"));
+		Assert.That(storedAssistant.SourceTrace.Invocations[0].Arguments, Is.EqualTo("{\"baseCoin\":\"BTC\"}"));
+		Assert.That(storedAssistant.SourceTrace.Invocations[0].DataAsOf, Is.EqualTo(FixedNow));
+		Assert.That(storedAssistant.SourceTrace.RuleCards, Is.EqualTo(new[] { "ac-01" }));
+		Assert.That(storedAssistant.SourceTrace.JournalAsOf, Is.EqualTo(FixedNow));
 		var storedUser = messages.Single(stored => stored.Role == ChatMessageRole.User);
-		Assert.That(storedUser.MarketTrace, Is.Null);
+		Assert.That(storedUser.SourceTrace, Is.Null);
 	}
 
 	[TestMethod]

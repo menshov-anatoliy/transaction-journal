@@ -11,7 +11,8 @@ using ChatMessage = TransactionJournal.Chats.Ports.ChatMessage;
 /// чата создаёт новый чат с выбранными параметрами, затем стримится ответ
 /// ИИ-помощника, по завершении стрима ответ фиксируется в том же чате с
 /// as-of момента фиксации и следом источников — какие инструменты
-/// вызывались и с какими as-of их данные. Агенту передаётся история только
+/// вызывались и с какими as-of их данные, какие карточки правил прочитаны
+/// и каков as-of данных журнала в снимке контекста. Агенту передаётся история только
 /// собственного чата: истории соседних чатов ему не видны. Рендер чанков,
 /// троттлинг перерисовок и отмена — ответственность UI, конвейер отдаёт
 /// поток обновлений модели как есть. Жизненный цикл чата — только ручные
@@ -187,7 +188,14 @@ public sealed class ChatService
 			.ReadAsync(chat.ConstructionId, cancellationToken)
 			.ConfigureAwait(false);
 
-		var traceRecorder = new ChatMarketTraceRecorder();
+		var traceRecorder = new ChatSourceTraceRecorder();
+
+		// As-of данных журнала записывается на каждый ответ: снимок контекста
+		// собран детерминированным кодом и уже вошёл в промпт — данные журнала
+		// использованы ответом независимо от того, звала ли модель инструменты.
+		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+		traceRecorder.RecordJournal(snapshot.AsOf);
+
 		var answer = new StringBuilder();
 		await foreach (var update in _agent
 			// Реестр инструментов агентного цикла — из набора источников чата:
@@ -221,7 +229,7 @@ public sealed class ChatService
 				Role = ChatMessageRole.Assistant,
 				Text = answer.ToString(),
 				AsOf = _timeProvider.GetUtcNow(),
-				MarketTrace = traceRecorder.Build(),
+				SourceTrace = traceRecorder.Build(),
 			},
 			cancellationToken).ConfigureAwait(false);
 	}

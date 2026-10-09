@@ -108,9 +108,9 @@ public sealed class ChatStore : IChatStore
 			Role = message.Role.ToString(),
 			Text = message.Text,
 			AsOf = message.AsOf,
-			MarketTraceJson = message.MarketTrace == null
+			SourceTraceJson = message.SourceTrace == null
 				? null
-				: JsonSerializer.Serialize(message.MarketTrace, JsonOptions),
+				: JsonSerializer.Serialize(message.SourceTrace, JsonOptions),
 		};
 		db.Messages.Add(entity);
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -386,9 +386,9 @@ public sealed class ChatStore : IChatStore
 		Role = Enum.Parse<ChatMessageRole>(entity.Role),
 		Text = entity.Text,
 		AsOf = entity.AsOf,
-		MarketTrace = entity.MarketTraceJson == null
+		SourceTrace = entity.SourceTraceJson == null
 			? null
-			: JsonSerializer.Deserialize<ChatMarketTrace>(entity.MarketTraceJson, JsonOptions),
+			: JsonSerializer.Deserialize<ChatSourceTrace>(entity.SourceTraceJson, JsonOptions),
 	};
 
 	#endregion

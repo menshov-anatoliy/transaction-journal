@@ -15,7 +15,7 @@ using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 /// владельца собирается конвейер: инструкции агента (system), история диалога,
 /// вопрос вместе со снимком контекста; ответ стримится
 /// <see cref="ChatResponseUpdate"/> — текстовые чанки идут в UI, tool-вызовы
-/// проходят через поток для рыночного следа ответа.
+/// проходят через поток для следа источников ответа.
 /// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 /// </summary>
 public sealed class ChatAgent
@@ -61,7 +61,7 @@ public sealed class ChatAgent
 	/// собранный из набора источников чата: только read-only функции
 	/// выбранных категорий. Накопитель следа заполняется тул-вызовами
 	/// в момент их исполнения — по завершении стрима из него строится
-	/// рыночный след сообщения ассистента.
+	/// след источников сообщения ассистента.
 	// Traceability: openspec:chats/sources#requirement-sources-read-only-tool-registry
 	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	/// </summary>
@@ -70,7 +70,7 @@ public sealed class ChatAgent
 	/// <param name="question">Вопрос владельца.</param>
 	/// <param name="sources">Набор источников чата; null — дефолт, все три категории.</param>
 	/// <param name="model">Рабочая модель запроса — параметр чата; null или пустая — дефолт клиента.</param>
-	/// <param name="traceRecorder">Накопитель рыночного следа ответа; null — вызовы не записываются.</param>
+	/// <param name="traceRecorder">Накопитель следа источников ответа; null — вызовы не записываются.</param>
 	/// <param name="cancellationToken">Токен отмены генерации.</param>
 	/// <returns>Поток обновлений ответа: текстовые чанки и tool-вызовы.</returns>
 	public async IAsyncEnumerable<ChatResponseUpdate> StreamAnswerAsync(
@@ -79,7 +79,7 @@ public sealed class ChatAgent
 		string question,
 		IReadOnlyList<ChatDataSource>? sources = null,
 		string? model = null,
-		ChatMarketTraceRecorder? traceRecorder = null,
+		ChatSourceTraceRecorder? traceRecorder = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(context);
