@@ -3,6 +3,7 @@ import {
 	ChatStreamFailure,
 	completeChat,
 	createChat,
+	deleteChat,
 	listChatMessages,
 	listChats,
 	resumeChat,
@@ -34,6 +35,29 @@ function tokenFrame(text: string): string {
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+});
+
+// Удаление целиком подтверждено в UI и передаётся отдельным DELETE без completion.
+// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+describe("удаление чата", () => {
+	it("TryIfDeletionReturnsNoContent", async () => {
+		// Arrange: успешный DELETE не содержит JSON.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+		vi.stubGlobal("fetch", fetchMock);
+		// Act: удаляем чат.
+		await deleteChat("chat-1");
+		// Assert: отдельный маршрут целого чата.
+		expect(fetchMock).toHaveBeenCalledWith("/api/v1/chats/chat-1", expect.objectContaining({ method: "DELETE" }));
+	});
+
+	it("ThrowOnDeletingUnknownChat", async () => {
+		// Arrange: неизвестный идентификатор.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+		// Act / Assert: ошибка остаётся видимой вызывающему коду.
+		await expect(deleteChat("unknown")).rejects.toThrow("удаление чата: HTTP 404");
+	});
 });
 
 describe("стриминг ответа ИИ-помощника по SSE", () => {

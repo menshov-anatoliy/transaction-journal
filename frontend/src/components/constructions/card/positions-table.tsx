@@ -10,6 +10,7 @@ import { DASH } from "@/lib/format/degradation";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Таблица позиций карточки по концепции §4: картина позиции её записями —
 // вход, выход, стоимость, раздельные части результата, общий P&L, комиссии,
@@ -70,23 +71,33 @@ export function toLocalInputValue(iso: string): string {
 }
 
 export function PositionsTable({ constructionId, positions, markPending, onAddCloseMark, onSaveComment }: PositionsTableProps) {
+	const isMobile = useIsMobile();
 	const [markSymbol, setMarkSymbol] = React.useState<string | null>(null);
 	const [markPrice, setMarkPrice] = React.useState("");
 	const [markTime, setMarkTime] = React.useState("");
 	const [commentTarget, setCommentTarget] = React.useState<ConstructionCardPosition | null>(null);
+	const [markError, setMarkError] = React.useState<string | null>(null);
+	const markRequest = React.useRef(0);
 
 	// Открытие формы пометки: цена предзаполняется последней известной маркой
-	// инструмента, время — текущим моментом; неудача марки оставляет поле
-	// пустым — цену задаст домен при чтении.
+	// инструмента, время — текущим моментом; сбой марки виден у формы,
+	// запоздавший ответ отменённой или другой формы не меняет цену.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 	const beginMark = async (symbol: string) => {
+		const request = ++markRequest.current;
 		setMarkSymbol(symbol);
 		setMarkTime(toLocalInputValue(new Date().toISOString()));
 		setMarkPrice("");
+		setMarkError(null);
 		try {
 			const lastMark = await fetchLastInstrumentMark(constructionId, symbol);
-			setMarkPrice(lastMark === null ? "" : formatAmount(lastMark));
-		} catch {
-			// Марка недоступна — форма остаётся с пустой ценой.
+			if (request === markRequest.current) {
+				setMarkPrice(lastMark === null ? "" : String(lastMark));
+			}
+		} catch (error) {
+			if (request === markRequest.current) {
+				setMarkError(`Последняя марка недоступна: ${error instanceof Error ? error.message : String(error)}. Задайте цену вручную или оставьте её пустой.`);
+			}
 		}
 	};
 
@@ -96,13 +107,22 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 		}
 
 		const price = markPrice.trim() === "" ? null : Number(markPrice.replace(",", "."));
-		onAddCloseMark({ symbol: markSymbol, markedAt: new Date(markTime).toISOString(), price: Number.isNaN(price) ? null : price });
+		const time = new Date(markTime);
+		// Ошибочное число не превращается в запрос последней марки;
+		// некорректное время не отправляется и не обрушает форму.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		if ((price !== null && Number.isFinite(price) === false) || Number.isFinite(time.getTime()) === false) {
+			setMarkError("Введите корректную цену и время пометки.");
+			return;
+		}
+		onAddCloseMark({ symbol: markSymbol, markedAt: time.toISOString(), price });
+		++markRequest.current;
 		setMarkSymbol(null);
 	};
 
 	return (
 		<section data-slot="positions-table" className="flex flex-col gap-2">
-			{markSymbol !== null && (
+			{isMobile === false && markSymbol !== null && (
 				// Форма ручной пометки закрытия: цена — последняя марка или пусто
 				// (марка подставится при чтении), время — пикер даты-времени.
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
@@ -113,7 +133,10 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 							className="border-input bg-background h-9 w-40 rounded-md border px-2 text-sm"
 							placeholder="пусто — последняя марка"
 							value={markPrice}
-							onChange={(event) => setMarkPrice(event.target.value)}
+							onChange={(event) => {
+								++markRequest.current;
+								setMarkPrice(event.target.value);
+							}}
 						/>
 					</label>
 					<label className="flex flex-col gap-1 text-sm">
@@ -128,9 +151,13 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 					<Button size="sm" disabled={markPending || markTime === ""} onClick={submitMark}>
 						Поставить пометку
 					</Button>
-					<Button size="sm" variant="outline" onClick={() => setMarkSymbol(null)}>
+					<Button size="sm" variant="outline" onClick={() => {
+						++markRequest.current;
+						setMarkSymbol(null);
+					}}>
 						Отмена
 					</Button>
+					{markError !== null && <p className="text-destructive text-sm" role="alert">{markError}</p>}
 				</div>
 			)}
 
@@ -245,7 +272,9 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 									</div>
 								</TableCell>
 								<TableCell>
-									{position.isOpen ? (
+									{/* Пометки закрытия редактируются на desktop; чтение доступно с телефона. */}
+									{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
+									{position.isOpen && isMobile === false ? (
 										<Button variant="outline" size="sm" disabled={markPending} onClick={() => void beginMark(position.symbol)}>
 											закрыть пометкой…
 										</Button>

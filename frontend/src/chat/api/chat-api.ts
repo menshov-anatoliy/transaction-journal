@@ -5,8 +5,8 @@ import { decodeChatStreamFrame, type ChatStreamEvent } from "@/chat/sse/chat-str
 /**
  * Тонкий типизированный клиент API чата агента поверх /api/v1.
  *
- * Ожидаемый бэкенд-контракт (реализация — change add-agent-chat + задача 5.3;
- * эндпоинтов пока нет, пути и формы зафиксированы здесь):
+ * Бэкенд-контракт реализован AgentEndpoints; полноценный ИИ-конвейер
+ * подключается отдельно в change add-agent-chat:
  *
  *   GET    /api/v1/chats?status=active|completed
  *          → ChatDto[] — списки активных и завершённых чатов
@@ -23,6 +23,8 @@ import { decodeChatStreamFrame, type ChatStreamEvent } from "@/chat/sse/chat-str
  *          → ChatDto — ручное завершение чата владельцем
  *   DELETE /api/v1/chats/{chatId}/completion
  *          → ChatDto — продолжение: снятие метки завершения
+ *   DELETE /api/v1/chats/{chatId}
+ *          → 204 — удаление чата целиком вместе с сообщениями
  */
 
 /** Базовый префикс API из задачи 2.1: версия контракта в маршруте. */
@@ -203,6 +205,16 @@ export async function resumeChat(chatId: string): Promise<ChatDto> {
 	});
 	await ensureOk(response, "продолжение чата");
 	return (await response.json()) as ChatDto;
+}
+
+/** Удаление чата целиком после подтверждения владельцем. */
+// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+export async function deleteChat(chatId: string): Promise<void> {
+	const response = await fetch(`${API_PREFIX}/chats/${encodeURIComponent(chatId)}`, {
+		method: "DELETE",
+		headers: { accept: "application/json" },
+	});
+	await ensureOk(response, "удаление чата");
 }
 
 async function ensureOk(response: Response, what: string): Promise<void> {

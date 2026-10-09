@@ -10,6 +10,7 @@ import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { DASH } from "@/lib/format/degradation";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatAmount } from "@/lib/format/quantity";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Таблица сделок карточки по концепции §4: атрибуты биржевой записи с
 // inline-комментарием MD-рендером; действия строки — возврат во «Входящие»
@@ -33,6 +34,7 @@ export interface TradesTableProps {
 }
 
 export function TradesTable({ constructionId, trades, actionsPending, onReturn, onMove, onSaveComment }: TradesTableProps) {
+	const isMobile = useIsMobile();
 	const [moveExecId, setMoveExecId] = React.useState<string | null>(null);
 	const [moveTargetId, setMoveTargetId] = React.useState<number | null>(null);
 	const [commentTarget, setCommentTarget] = React.useState<ConstructionCardTrade | null>(null);
@@ -51,17 +53,20 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 	};
 
 	const submitMove = () => {
-		if (moveExecId === null || moveTargetId === null) {
+		const targetId = moveTargetId ?? targetsQuery.data?.[0]?.constructionId;
+		if (moveExecId === null || targetId === undefined) {
 			return;
 		}
 
-		onMove({ execId: moveExecId, targetConstructionId: moveTargetId });
+		// Первая загруженная цель доступна без лишней смены значения select.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		onMove({ execId: moveExecId, targetConstructionId: targetId });
 		setMoveExecId(null);
 	};
 
 	return (
 		<section data-slot="trades-table" className="flex flex-col gap-2">
-			{moveExecId !== null && (
+			{isMobile === false && moveExecId !== null && (
 				// Форма переноса: выбор целевой конструкции из активных без текущей.
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
 					{targetsQuery.isPending && <span className="text-muted-foreground text-sm">чтение конструкций…</span>}
@@ -159,14 +164,16 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 									</div>
 								</TableCell>
 								<TableCell>
-									<div className="flex gap-1.5">
+									{/* Распределение сделок — desktop-операция, чтение доступно с телефона. */}
+									{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
+									{isMobile === false && <div className="flex gap-1.5">
 										<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => onReturn(trade.execId)}>
 											Во «Входящие»
 										</Button>
 										<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => beginMove(trade.execId)}>
 											Перенести…
 										</Button>
-									</div>
+									</div>}
 								</TableCell>
 							</TableRow>
 						))

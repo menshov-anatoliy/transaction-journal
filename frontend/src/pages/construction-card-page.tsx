@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, ExternalLink, Pencil } from "lucide-react";
 import { fetchConstructionCard } from "@/lib/api/construction-card";
 import { applyHint, dismissHint, fetchConstructionHintsPanel, markHintSeen } from "@/lib/api/hints";
 import { ConstructionStatusChip } from "@/components/constructions/construction-status-chip";
@@ -17,7 +17,7 @@ import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { MarkdownEditDialog } from "@/components/markdown/markdown-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/http";
-import type { ConstructionCard } from "@/lib/api/construction-card";
+import type { ConstructionCard, TargetUnit } from "@/lib/api/construction-card";
 
 // Карточка конструкции — маршрут /constructions/{id} по концепции §4: полная
 // информация и всё управление (паритет №3–№9). Шапка с именем, статусом и
@@ -34,12 +34,25 @@ const cardKey = (constructionId: number) => ["construction-card", constructionId
 export function ConstructionCardPage() {
 	const { constructionId } = useParams<{ constructionId: string }>();
 	const id = Number(constructionId);
+	const validId = Number.isSafeInteger(id) && id > 0;
 
 	const cardQuery = useQuery({
 		queryKey: cardKey(id),
 		queryFn: () => fetchConstructionCard(id),
-		enabled: Number.isFinite(id) && id > 0,
+		enabled: validId,
 	});
+
+	// Некорректный маршрут не запускает запрос и не зависает в «чтении».
+	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+	if (validId === false) {
+		return (
+			<section className="flex flex-col gap-3 p-6">
+				<h1 className="page-title">Карточка конструкции</h1>
+				<p>Конструкция не найдена — некорректный идентификатор.</p>
+				<Link to="/">Вернуться к списку конструкций</Link>
+			</section>
+		);
+	}
 
 	if (cardQuery.isPending) {
 		return (
@@ -74,7 +87,7 @@ export function ConstructionCardPage() {
 		);
 	}
 
-	return <ConstructionCardBody card={cardQuery.data} />;
+	return <ConstructionCardBody key={id} card={cardQuery.data} />;
 }
 
 /** Тело карточки с данными: снимок уже прочитан. */
@@ -224,6 +237,8 @@ function ConstructionHeader({
 	const [boundForm, setBoundForm] = React.useState<"risk" | "profit" | null>(null);
 	const [percentValue, setPercentValue] = React.useState("");
 	const [usdtValue, setUsdtValue] = React.useState("");
+	const [boundUnit, setBoundUnit] = React.useState<TargetUnit>("percent");
+	const [inputError, setInputError] = React.useState<string | null>(null);
 	const [deleteOpen, setDeleteOpen] = React.useState(false);
 	const [deleteBackup, setDeleteBackup] = React.useState(true);
 
@@ -234,23 +249,32 @@ function ConstructionHeader({
 	const openBound = (bound: "risk" | "profit") => {
 		setPercentValue(bound === "risk" ? card.riskPercent?.toString() ?? "" : card.profitPercent?.toString() ?? "");
 		setUsdtValue(bound === "risk" ? card.riskUsdt?.toString() ?? "" : card.profitUsdt?.toString() ?? "");
+		setBoundUnit((bound === "risk" ? card.riskUnit : card.profitUnit) ?? "percent");
+		setInputError(null);
 		setBoundForm(bound);
 	};
 
-	// Граница вводится ровно в одной единице: заполнение одной ячейки
-	// очищает вторую; обе пустые равносильны удалению параметра.
+	// Сохраняется только единица последнего ввода, второе поле — эхо от
+	// капитала. Без положительного капитала перевод в проценты не определён.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 	const onPercentChange = (value: string) => {
 		setPercentValue(value);
-		if (value !== "") {
-			setUsdtValue("");
-		}
+		setBoundUnit("percent");
+		setInputError(null);
+		const percent = Number(value.replace(",", "."));
+		setUsdtValue(value.trim() !== "" && Number.isFinite(percent) && card.allocatedCapitalUsdt !== null
+			? String(percent * card.allocatedCapitalUsdt / 100)
+			: "");
 	};
 
 	const onUsdtChange = (value: string) => {
 		setUsdtValue(value);
-		if (value !== "") {
-			setPercentValue("");
-		}
+		setBoundUnit("usdt");
+		setInputError(null);
+		const usdt = Number(value.replace(",", "."));
+		setPercentValue(value.trim() !== "" && Number.isFinite(usdt) && card.allocatedCapitalUsdt !== null && card.allocatedCapitalUsdt > 0
+			? String(usdt / card.allocatedCapitalUsdt * 100)
+			: "");
 	};
 
 	const submitBound = () => {
@@ -258,25 +282,33 @@ function ConstructionHeader({
 			return;
 		}
 
-		const percent = percentValue.trim() === "" ? null : Number(percentValue.replace(",", "."));
-		const usdt = usdtValue.trim() === "" ? null : Number(usdtValue.replace(",", "."));
-		const percentKnown = percent !== null && !Number.isNaN(percent);
-		const usdtKnown = usdt !== null && !Number.isNaN(usdt);
-		const value = percentKnown ? percent : usdtKnown ? usdt : null;
-		const unit = percentKnown ? ("percent" as const) : usdtKnown ? ("usdt" as const) : null;
-		if (boundForm === "risk") {
-			commands.risk.mutate({ value, unit });
-		} else {
-			commands.profit.mutate({ value, unit });
+		const text = boundUnit === "percent" ? percentValue : usdtValue;
+		const value = text.trim() === "" ? null : Number(text.replace(",", "."));
+		if (value !== null && Number.isFinite(value) === false) {
+			setInputError("Введите число для риска или профита; пустое поле убирает параметр.");
+			return;
 		}
 
-		setBoundForm(null);
+		const input = { value, unit: value === null ? null : boundUnit };
+		const onSuccess = () => setBoundForm(null);
+		if (boundForm === "risk") {
+			commands.risk.mutate(input, { onSuccess });
+		} else {
+			commands.profit.mutate(input, { onSuccess });
+		}
 	};
 
+	// Ошибочный ввод не снимает капитал; ноль сохраняется, пустое поле
+	// снимает параметр. При отказе сервера форма остаётся с введённым текстом.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 	const submitCapital = () => {
 		const capital = capitalValue.trim() === "" ? null : Number(capitalValue.replace(",", "."));
-		commands.capital.mutate(capital !== null && !Number.isNaN(capital) ? capital : null);
-		setCapitalOpen(false);
+		if (capital !== null && Number.isFinite(capital) === false) {
+			setInputError("Введите число для капитала; пустое поле убирает капитал.");
+			return;
+		}
+		setInputError(null);
+		commands.capital.mutate(capital, { onSuccess: () => setCapitalOpen(false) });
 	};
 
 	const submitDelete = () => {
@@ -313,6 +345,14 @@ function ConstructionHeader({
 			    статуса (включая архив и возврат из архива), капитал, плановые
 			    границы и удаление пустой с подтверждением и флажком бэкапа. */}
 			<div className="flex flex-wrap items-center gap-2">
+				{/* Карточка доступна отдельным окном без транзитной вкладки. */}
+				{/* Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid */}
+				<Button variant="outline" size="sm" asChild>
+					<Link to={`/constructions/${card.constructionId}`} target="_blank" rel="noopener noreferrer">
+						<ExternalLink aria-hidden />
+						В новом окне
+					</Link>
+				</Button>
 				{renameOpen ? (
 					<div className="flex items-center gap-2">
 						<input
@@ -325,8 +365,7 @@ function ConstructionHeader({
 							size="sm"
 							disabled={busy || renameValue.trim() === ""}
 							onClick={() => {
-								commands.rename.mutate(renameValue.trim());
-								setRenameOpen(false);
+								commands.rename.mutate(renameValue.trim(), { onSuccess: () => setRenameOpen(false) });
 							}}
 						>
 							Сохранить имя
@@ -336,7 +375,10 @@ function ConstructionHeader({
 						</Button>
 					</div>
 				) : (
-					<Button variant="outline" size="sm" disabled={busy} onClick={() => setRenameOpen(true)}>
+					<Button variant="outline" size="sm" disabled={busy} onClick={() => {
+						setRenameValue(card.name);
+						setRenameOpen(true);
+					}}>
 						Переименовать
 					</Button>
 				)}
@@ -380,7 +422,11 @@ function ConstructionHeader({
 						</Button>
 					</div>
 				) : (
-					<Button variant="outline" size="sm" disabled={busy} onClick={() => setCapitalOpen(true)}>
+					<Button variant="outline" size="sm" disabled={busy} onClick={() => {
+						setCapitalValue(card.allocatedCapitalUsdt?.toString() ?? "");
+						setInputError(null);
+						setCapitalOpen(true);
+					}}>
 						Изменить капитал
 					</Button>
 				)}
@@ -400,8 +446,7 @@ function ConstructionHeader({
 			</div>
 
 			{boundForm !== null && (
-				// Форма плановой границы: значение ровно в одной единице — вторая
-				// ячейка очищается заполнением первой; обе пустые — «Убрать».
+				// Правка любой единицы обновляет эхо второй; пустой ввод убирает обе.
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
 					<span className="text-sm font-medium">{boundForm === "risk" ? "риск" : "профит"} конструкции</span>
 					<label className="flex flex-col gap-1 text-sm">
@@ -426,7 +471,7 @@ function ConstructionHeader({
 					<Button size="sm" variant="outline" onClick={() => setBoundForm(null)}>
 						Отмена
 					</Button>
-					<span className="text-muted-foreground text-xs">одна единица ввода; обе пустые — убрать параметр</span>
+					<span className="text-muted-foreground text-xs">сохраняется единица ввода, вторая пересчитывается; обе пустые — убрать параметр</span>
 				</div>
 			)}
 
@@ -450,6 +495,9 @@ function ConstructionHeader({
 				</div>
 			)}
 
+			{inputError !== null && (capitalOpen || boundForm !== null) && (
+				<p className="text-destructive text-sm" role="alert">{inputError}</p>
+			)}
 			{actionError !== null && (
 				<p className="text-destructive text-sm" role="alert">
 					Действие не выполнено: {actionError}

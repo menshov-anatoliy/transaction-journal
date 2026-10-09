@@ -7,6 +7,7 @@ import { formatMoment } from "@/lib/format/display-time";
 import { formatAmount, formatSignedAmount } from "@/lib/format/quantity";
 import { toLocalInputValue } from "./positions-table";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/lib/use-mobile";
 
 // Таблица закрывающих записей карточки по концепции §4: единый поток
 // delivery, экспираций OTM и ручных пометок; предупреждения об избыточных
@@ -50,14 +51,17 @@ function toneClass(value: number): string {
 }
 
 export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditMark, onDeleteMark }: ClosingEntriesTableProps) {
+	const isMobile = useIsMobile();
 	const [editMark, setEditMark] = React.useState<ConstructionCardClosingEntry | null>(null);
 	const [editPrice, setEditPrice] = React.useState("");
 	const [editTime, setEditTime] = React.useState("");
+	const [editError, setEditError] = React.useState<string | null>(null);
 
 	const beginEdit = (entry: ConstructionCardClosingEntry) => {
 		setEditMark(entry);
-		setEditPrice(entry.price === null ? "" : formatAmount(entry.price));
+		setEditPrice(entry.price === null ? "" : String(entry.price));
 		setEditTime(toLocalInputValue(entry.closedAt));
+		setEditError(null);
 	};
 
 	const submitEdit = () => {
@@ -66,9 +70,17 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 		}
 
 		const price = editPrice.trim() === "" ? null : Number(editPrice.replace(",", "."));
+		const time = new Date(editTime);
+		// Неизвестная цена допустима только при пустом вводе, а ошибочные
+		// число и дата оставляют форму открытой с пояснением.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		if ((price !== null && Number.isFinite(price) === false) || Number.isFinite(time.getTime()) === false) {
+			setEditError("Введите корректную цену и время пометки.");
+			return;
+		}
 		onEditMark({
 			markId: editMark.manualMarkId,
-			mark: { symbol: editMark.symbol, markedAt: new Date(editTime).toISOString(), price: Number.isNaN(price) ? null : price },
+			mark: { symbol: editMark.symbol, markedAt: time.toISOString(), price },
 		});
 		setEditMark(null);
 	};
@@ -84,7 +96,7 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 				</p>
 			))}
 
-			{editMark !== null && (
+			{isMobile === false && editMark !== null && (
 				// Правка ручной пометки: цена и время предзаполнены эффективными
 				// значениями записи; пустая цена возвращает пометку к последней марке.
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
@@ -113,6 +125,7 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 					<Button size="sm" variant="outline" onClick={() => setEditMark(null)}>
 						Отмена
 					</Button>
+					{editError !== null && <p className="text-destructive text-sm" role="alert">{editError}</p>}
 				</div>
 			)}
 
@@ -161,7 +174,9 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 									)}
 								</TableCell>
 								<TableCell>
-									{entry.manualMarkId !== null ? (
+									{/* Правка ручных пометок относится к desktop-операциям. */}
+									{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
+									{entry.manualMarkId !== null && isMobile === false ? (
 										<div className="flex gap-1.5">
 											<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => onDeleteMark(entry.manualMarkId!)}>
 												удалить

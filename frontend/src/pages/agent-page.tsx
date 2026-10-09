@@ -1,5 +1,6 @@
-import { ChevronDown, ExternalLink, Globe, Link, Search } from "lucide-react";
+import { ChevronDown, Globe, Link, Search } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgentChatThread } from "@/chat/components/agent-chat-thread";
 import { chatParamsFromForm, CHAT_DATA_SOURCES, DEFAULT_CHAT_MODEL } from "@/chat/chat-params";
@@ -8,9 +9,10 @@ import { chatKeys } from "@/chat/chat-queries";
 import { createChat, listChats } from "@/chat/api/chat-api";
 import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
 import type { ChatDataSource, ChatDto } from "@/chat/types";
-import { SessionItem, SourceChip, StatusChip } from "@/components/design";
+import { SessionItem, SourceChip } from "@/components/design";
+import { RuleFullCard, RuleBriefPopup, RULE_CHARACTER_LABELS, RULE_CLARITY_LABELS, RULE_SUBJECT_LABELS, ruleCharacterLabel } from "@/components/agent/rule-cards";
 import { Button } from "@/components/ui/button";
-import { listRules, readRule, type AgentRuleCard, type AgentRuleListItem } from "@/lib/api/agent-rules";
+import { listRules, readRule } from "@/lib/api/agent-rules";
 import { formatMoment } from "@/lib/format/display-time";
 import { useIsMobile } from "@/lib/use-mobile";
 import { cn } from "@/lib/utils";
@@ -45,49 +47,7 @@ const initialRuleFilters: RuleFilters = {
 	search: "",
 };
 
-/*
-	Подписи таксономии корпуса правил для пилюль-атрибутов и чипов фильтров
-	мастера Body #7: характер — тот же закрытый справочник десяти значений,
-	что и в подсказках (HintCharacterLabels); чёткость crisp/fuzzy — пара
-	«Однозначное»/«Формальное» мастера; субъект construction/portfolio —
-	«конструкция»/«журнал». Незнакомое значение показывается как есть.
-*/
-const RULE_CHARACTER_LABELS: Readonly<Record<string, string>> = {
-	"risk-mode": "лимиты и режим риска",
-	"profit-target": "цель по прибыли",
-	"profit-protection": "защита прибыли",
-	"risk-reduction": "снижение риска",
-	rolling: "роллирование",
-	entry: "возможность входа",
-	exit: "возможность выхода",
-	"futures-leg": "фьючерсная нога",
-	"rebuild-dismantle": "перестройка и разборка",
-	other: "прочее",
-};
-
 const RULE_CHARACTER_ORDER = Object.keys(RULE_CHARACTER_LABELS);
-
-const RULE_CLARITY_LABELS: Readonly<Record<string, string>> = {
-	crisp: "Однозначное",
-	fuzzy: "Формальное",
-};
-
-const RULE_SUBJECT_LABELS: Readonly<Record<string, string>> = {
-	construction: "конструкция",
-	portfolio: "журнал",
-};
-
-function ruleCharacterLabel(character: string): string {
-	return RULE_CHARACTER_LABELS[character] ?? character;
-}
-
-function ruleClarityLabel(clarity: string): string {
-	return RULE_CLARITY_LABELS[clarity] ?? clarity;
-}
-
-function ruleSubjectWord(subject: string): string {
-	return RULE_SUBJECT_LABELS[subject] ?? subject;
-}
 
 /** Русская форма множественного числа для счётчика корпуса (нода Cnt). */
 function ruleCountWord(count: number): string {
@@ -102,11 +62,15 @@ function ruleCountWord(count: number): string {
 
 export function AgentPage() {
 	const isMobile = useIsMobile();
-	const [tab, setTab] = React.useState<AgentTab>("chats");
+	const [searchParams] = useSearchParams();
+	// Ссылка из полной карточки источника открывает каталог с выбранным правилом.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
+	const initialRuleId = searchParams.get("rule");
+	const [tab, setTab] = React.useState<AgentTab>(initialRuleId === null ? "chats" : "rules");
 	const [mobileHistoryOpen, setMobileHistoryOpen] = React.useState(false);
 	const [selectedChatId, setSelectedChatId] = React.useState<string | null>(null);
 	const [hoveredRuleId, setHoveredRuleId] = React.useState<string | null>(null);
-	const [openedRuleId, setOpenedRuleId] = React.useState<string | null>(null);
+	const [openedRuleId, setOpenedRuleId] = React.useState<string | null>(initialRuleId);
 	const [rulesFilters, setRulesFilters] = React.useState<RuleFilters>(initialRuleFilters);
 	const [constructionIdDraft, setConstructionIdDraft] = React.useState("");
 	const [model, setModel] = React.useState(DEFAULT_CHAT_MODEL);
@@ -588,8 +552,14 @@ export function AgentPage() {
 						)}
 					</div>
 					<div>
-						{openedRuleQuery.data !== undefined ? (
+						{/* Прямая ссылка на источник различает загрузку, недоступность и отсутствие выбора. */}
+						{/* Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent */}
+						{openedRuleId !== null && openedRuleQuery.isError ? (
+							<p className="text-destructive text-sm" role="alert">Правило недоступно: {openedRuleQuery.error.message}</p>
+						) : openedRuleQuery.data !== undefined ? (
 							<RuleFullCard rule={openedRuleQuery.data} detail={openedRuleQuery.data} />
+						) : openedRuleId !== null ? (
+							<p className="text-muted-foreground text-sm" role="status">Чтение полной карточки правила…</p>
 						) : (
 							<p className="text-muted-foreground text-sm">Выберите карточку правила в списке.</p>
 						)}
@@ -723,141 +693,5 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
 		>
 			{label}
 		</button>
-	);
-}
-
-/*
-	«Карточка правила/Полная» (reusable Zes7z, инстансы R:1–R:4 Body #7):
-	$surface, кайма $border, радиус 12, паддинги 18, вертикальный гэп 12.
-	Шапка HLLTo (гэп 10): заголовок 14.5/600 $textPrimary + id 11/normal
-	$textMuted. Пилюли-атрибуты Meta V3si6 (гэп 8) — примитив «Чип/Статус»
-	(aa6cK, радиус 999, [4,10], 11.5/500): характер — пара $riskSoft/$risk
-	(инстанс nrPzY «Мягкое»; пара $negSoft/$neg «Жёсткое» не имеет аналога
-	в таксономии корпуса), чёткость — $infoSoft/$info (U6mVZ
-	«Однозначное»), субъект — surface2/$textSecondary (u9Vm0h). Тело
-	GjcwT — 13/normal $textSecondary, межстрочный 1.55. Футер p4Ot2 (гэп
-	6): иконка external-link 12×12 + ссылка 12 $accentStrong «Открыть в
-	каталоге в новом окне».
-*/
-// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
-// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
-// Traceability: change:reconcile-frontend-with-design/design#D2
-function RuleFullCard({
-	rule,
-	detail,
-	onOpen,
-}: {
-	rule: Pick<AgentRuleListItem, "id" | "title" | "character" | "clarity" | "subject">;
-	detail?: AgentRuleCard;
-	onOpen?: () => void;
-}) {
-	return (
-		<article data-slot="rule-full-card" className="flex flex-col gap-3 rounded-lg border bg-card p-[18px]">
-			<header className="flex items-center gap-2.5">
-				{onOpen === undefined ? (
-					<h3 className="min-w-0 grow text-[14.5px] leading-snug font-semibold text-foreground">{rule.title}</h3>
-				) : (
-					<button
-						type="button"
-						className="min-w-0 grow cursor-pointer text-left text-[14.5px] leading-snug font-semibold text-foreground underline-offset-2 outline-none focus-visible:underline hover:underline"
-						onClick={onOpen}
-					>
-						{rule.title}
-					</button>
-				)}
-				<span className="shrink-0 text-[11px] text-text-muted">{rule.id}</span>
-			</header>
-			<div className="flex flex-wrap gap-2">
-				<StatusChip tone="risk">{ruleCharacterLabel(rule.character)}</StatusChip>
-				<StatusChip tone="info">{ruleClarityLabel(rule.clarity)}</StatusChip>
-				<StatusChip tone="neutral">Субъект: {ruleSubjectWord(rule.subject)}</StatusChip>
-			</div>
-			{detail !== undefined && <RuleCardBody detail={detail} full={onOpen === undefined} />}
-			<footer className="flex items-center gap-1.5">
-				<ExternalLink aria-hidden="true" className="size-3 shrink-0 text-accent-strong" />
-				<a
-					href={`/spa/agent?rule=${encodeURIComponent(rule.id)}`}
-					target="_blank"
-					rel="noreferrer"
-					className="text-xs text-accent-strong underline-offset-2 hover:underline"
-				>
-					Открыть в каталоге в новом окне
-				</a>
-			</footer>
-		</article>
-	);
-}
-
-/*
-	Тело карточки: в каталоге — краткое содержание мастера GjcwT (одно
-	описание действия/триггера), в правой панели — полные данные правила
-	(триггер, действие, пороги, источники) той же типографикой мастера
-	13/1.55 $textSecondary — доменное расширение состава карточки при
-	сохранении вида мастера (Non-Goals: состав данных на месте).
-*/
-function RuleCardBody({ detail, full }: { detail: AgentRuleCard; full: boolean }) {
-	const gist = detail.actionDescription ?? detail.triggerDescription;
-	if (full === false) {
-		return gist !== null ? <p className="text-[13px] leading-[1.55] text-text-secondary">{gist}</p> : null;
-	}
-
-	return (
-		<div className="flex flex-col gap-2 text-[13px] leading-[1.55] text-text-secondary">
-			{detail.triggerDescription !== null && (
-				<p>
-					<b>Триггер:</b> {detail.triggerDescription}
-				</p>
-			)}
-			{detail.actionDescription !== null && (
-				<p>
-					<b>Действие:</b> {detail.actionDescription}
-				</p>
-			)}
-			{detail.thresholds.length > 0 && (
-				<ul className="list-disc pl-4">
-					{detail.thresholds.map((threshold) => (
-						<li key={`${threshold.name}-${threshold.unit}`}>
-							{threshold.name}: {threshold.value} {threshold.unit}
-						</li>
-					))}
-				</ul>
-			)}
-			{detail.sources.length > 0 && (
-				<ul className="flex flex-col gap-1">
-					{detail.sources.map((source) => (
-						<li key={`${source.tag}-${source.file}`} className="text-[11px] text-text-muted">
-							<span className="rounded bg-surface-2 px-1 py-0.5 font-medium">{source.tag}</span> {source.file}
-						</li>
-					))}
-				</ul>
-			)}
-		</div>
-	);
-}
-
-/*
-	«Попап правила/Краткий» (reusable Lpcap, инстанс IBheJ Body #4 плавает
-	над лентой чата): $surface, кайма $border, радиус 10, паддинги 12,
-	гэп 7, тень мастера 0 8 24 #17171E20 ($textPrimary при 12% непрозрач-
-	ности — значение эффекта мастера, отдельного токена нет). Заголовок
-	oYr9W — 12.5/600 $textPrimary; мета rlwtL — 11/normal $textMuted
-	«характер · чёткость · субъект · id»; суть lidNU — 12/normal
-	$textSecondary, межстрочный 1.45.
-*/
-// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
-// Traceability: change:reconcile-frontend-with-design/design#D2
-function RuleBriefPopup({ card }: { card: AgentRuleCard }) {
-	const gist = card.actionDescription ?? card.triggerDescription;
-	return (
-		<aside
-			aria-label="Карточка правила (hover из чата)"
-			className="absolute right-3 top-3 z-10 flex w-[280px] flex-col gap-[7px] rounded-[10px] border bg-card p-3 shadow-[0_8px_24px] shadow-text-primary/12"
-		>
-			<p className="text-[12.5px] font-semibold text-foreground">{card.title}</p>
-			<p className="text-[11px] text-text-muted">
-				{ruleCharacterLabel(card.character)} · {ruleClarityLabel(card.clarity)} · {ruleSubjectWord(card.subject)} · {card.id}
-			</p>
-			{gist !== null && <p className="text-xs leading-[1.45] text-text-secondary">{gist}</p>}
-		</aside>
 	);
 }

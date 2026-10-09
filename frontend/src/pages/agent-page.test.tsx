@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentPage } from "./agent-page";
 
@@ -38,13 +39,15 @@ vi.mock("@/lib/api/agent-rules", () => ({
 	readRule: rulesApi.readRule,
 }));
 
-function renderPage() {
+function renderPage(path = "/agent") {
 	const queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
 	});
 	return render(
 		<QueryClientProvider client={queryClient}>
-			<AgentPage />
+			<MemoryRouter initialEntries={[path]}>
+				<AgentPage />
+			</MemoryRouter>
 		</QueryClientProvider>,
 	);
 }
@@ -107,6 +110,24 @@ beforeEach(() => {
 });
 
 describe("страница агента", () => {
+	// Переход из источника ответа в новом окне раскрывает именно выбранное правило.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
+	it("TryIfRuleLinkOpensCatalogWithFullCard", async () => {
+		renderPage("/agent?rule=ac-01");
+		expect(await screen.findByText("Триггер:")).toBeInTheDocument();
+		expect(screen.getByText("лимит недели")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Правила" })).toHaveAttribute("aria-pressed", "true");
+		expect(rulesApi.readRule).toHaveBeenCalledWith("ac-01", expect.any(AbortSignal));
+	});
+
+	// Недоступность источника по прямой ссылке не маскируется приглашением выбрать правило.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
+	it("ThrowOnRuleLinkReadFailure", async () => {
+		rulesApi.readRule.mockRejectedValue(new Error("HTTP 404"));
+		renderPage("/agent?rule=missing");
+		expect(await screen.findByRole("alert")).toHaveTextContent("Правило недоступно: HTTP 404");
+		expect(screen.queryByText("Выберите карточку правила в списке.")).not.toBeInTheDocument();
+	});
 	it("показывает форму нового чата, историю и каталог правил", async () => {
 		const user = userEvent.setup();
 		renderPage();
@@ -385,9 +406,9 @@ describe("страница агента", () => {
 		// Assert: тело карточки (нода Body GjcwT: 13/normal $textSecondary,
 		// межстрочный 1.55) приходит полной карточкой GET /rules/{id}.
 		const body = await within(article!).findByText(/Остановить наращивание риска до конца периода/i);
-		expect(body.className).toContain("text-[13px]");
-		expect(body.className).toContain("leading-[1.55]");
-		expect(body.className).toContain("text-text-secondary");
+		expect(body.closest("div")?.className).toContain("text-[13px]");
+		expect(body.closest("div")?.className).toContain("leading-[1.55]");
+		expect(body.closest("div")?.className).toContain("text-text-secondary");
 
 		// Assert: футер (p4Ot2): иконка external-link 12 $accentStrong и
 		// ссылка «Открыть в каталоге в новом окне» 12 $accentStrong.
@@ -448,7 +469,7 @@ describe("страница агента", () => {
 		expect(metaLine.className).toContain("text-[11px]");
 		expect(metaLine.className).toContain("text-text-muted");
 		const gist = screen.getByText(/Остановить наращивание риска/i);
-		expect(gist.className).toContain("text-xs");
-		expect(gist.className).toContain("leading-[1.45]");
+		expect(gist.closest("div")?.className).toContain("text-xs");
+		expect(gist.closest("div")?.className).toContain("leading-[1.45]");
 	});
 });

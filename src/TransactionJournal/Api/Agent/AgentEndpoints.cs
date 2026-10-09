@@ -109,6 +109,13 @@ public static class AgentEndpoints
 			return Results.Json(ToChatDto(chat!));
 		});
 
+		// Удаление привязанного чата убирает всю историю, а не только его статус.
+		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+		chats.MapDelete("/{chatId}", (string chatId, AgentChatStore store) =>
+			store.TryDelete(chatId)
+				? Results.NoContent()
+				: Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound));
+
 		var rules = api.MapGroup("/rules").WithTags("Агент: корпус правил");
 
 		// Каталог корпуса правил в разделе «Агент»: read-only фильтры и поиск
@@ -420,7 +427,24 @@ public sealed class AgentChatStore
 		}
 	}
 
-	private void Persist() => File.WriteAllText(_storagePath, JsonSerializer.Serialize(_chats, JsonOptions));
+	/// <summary>Удаляет чат вместе с сообщениями и сохраняет результат в существующем хранилище.</summary>
+	// Удалённый чат не должен восстанавливаться при повторном чтении JSON.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+	public bool TryDelete(string chatId)
+	{
+		lock (_sync)
+		{
+			var index = _chats.FindIndex(chat => string.Equals(chat.Id, chatId, StringComparison.Ordinal));
+			if (index < 0)
+				return false;
+			Persist(_chats.Where(chat => string.Equals(chat.Id, chatId, StringComparison.Ordinal) == false));
+			_chats.RemoveAt(index);
+			return true;
+		}
+	}
+
+	private void Persist(IEnumerable<AgentChat>? chats = null) =>
+		File.WriteAllText(_storagePath, JsonSerializer.Serialize(chats ?? _chats, JsonOptions));
 
 	private static List<AgentChat> Load(string path)
 	{
