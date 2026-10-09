@@ -1,6 +1,9 @@
 namespace TransactionJournal.Tests.Chats;
 
 using System.Xml.Linq;
+using Does = NUnit.Framework.Does;
+using Is = NUnit.Framework.Is;
+using NUnitAssert = NUnit.Framework.Assert;
 
 /// <summary>
 /// Структурные тесты проекта окружения Chats: состав проектов решения и
@@ -39,15 +42,15 @@ public class SolutionStructureTests
 	// Состав решения фиксирован: пять базовых проектов DDD-слоёв и два проекта
 	// окружений; чат агента живёт в собственном проекте, а не в слоях.
 	// Traceability: openspec:architecture/solution-structure#requirement-solution-five-projects
-	public void SolutionConsistsOfLayerAndEnvironmentProjects()
+	public void TryIfSolutionConsistsOfLayerAndEnvironmentProjects()
 	{
 		var solutionText = File.ReadAllText(Path.Combine(FindSolutionRoot().FullName, "TransactionJournal.sln"));
 
 		var actualProjects = ReadSolutionProjects(solutionText);
 
-		CollectionAssert.AreEquivalent(
-			SolutionProjects,
+		NUnitAssert.That(
 			actualProjects,
+			Is.EquivalentTo(SolutionProjects),
 			"Состав проектов решения изменился: ожидались базовые проекты DDD-слоёв плюс окружения Hints и Chats.");
 	}
 
@@ -72,13 +75,13 @@ public class SolutionStructureTests
 	// ни о его типах; направление зависимости только внутрь слоёв.
 	// Traceability: openspec:chats/history#requirement-chat-environment-record
 	// Traceability: openspec:chats/history#scenario-chat-domain-agnostic
-	public void DomainDoesNotReferenceChats()
+	public void TryIfDomainDoesNotReferenceChats()
 	{
 		var references = ReadProjectReferences(Path.Combine(FindSolutionRoot().FullName, DomainProjectPath));
 
-		CollectionAssert.DoesNotContain(
+		NUnitAssert.That(
 			references,
-			@"..\TransactionJournal.Chats\TransactionJournal.Chats.csproj",
+			Does.Not.Contain(@"..\TransactionJournal.Chats\TransactionJournal.Chats.csproj"),
 			"Домен не должен ссылаться на проект чатов: чат — запись окружения.");
 	}
 
