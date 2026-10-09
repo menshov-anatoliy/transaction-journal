@@ -12,12 +12,15 @@ using TransactionJournal.Infrastructure.ReadModels;
 /// <summary>
 /// Адаптер снимка контекста чата: собирает детерминированный
 /// markdown-снимок из read-моделей деталей конструкции и метрик журнала плюс
-/// компактного индекса корпуса правил. Каждый раздел несёт собственную as-of
+/// компактного индекса корпуса правил; чат без привязки получает
+/// портфельный уровень — агрегаты и лимиты журнала с индексом корпуса без
+/// раздела конструкции. Каждый раздел несёт собственную as-of
 /// отметку сборки, живые подсказки движка в снимок не попадают вовсе —
 /// контекст формируется только из фактов журнала и канона правил.
 /// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
 /// Traceability: openspec:chats/context#scenario-chat-context-construction-snapshot-with-asof
 /// Traceability: openspec:chats/context#scenario-chat-context-hints-excluded
+/// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
 /// </summary>
 public sealed class ChatContextReader : IChatContextReader
 {
@@ -53,22 +56,40 @@ public sealed class ChatContextReader : IChatContextReader
 	/// чтения, а не момент вопроса. Внутри read-модель деталей сама пересчитывает
 	/// метрики конструкции; отдельное чтение метрик журнала нужно только для
 	/// портфельных агрегатов, дублирование вычисления принимается как цена
-	/// разделения read-моделей.
+	/// разделения read-моделей. Чат без привязки получает портфельный уровень:
+	/// агрегаты, лимиты журнала и индекс корпуса — без раздела конструкции.
 	/// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
+	/// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
 	/// </remarks>
 	public async Task<ChatContextSnapshot> ReadAsync(long? constructionId, CancellationToken cancellationToken = default)
 	{
-		// Чат без привязки консультируется на портфельном уровне журнала —
-		// агрегаты и лимиты с индексом корпуса без раздела конструкции.
-		// Портфельная ветка снимка появляется в change add-agent-chat; до неё
-		// запрос без привязки отвергается явно, а не молча.
+		var asOf = _timeProvider.GetUtcNow();
+
+		// Чат без привязки консультируется на портфельном уровне журнала:
+		// агрегаты, лимиты журнала и индекс корпуса — без раздела конструкции;
+		// привязки нет, поэтому пост-мортем на снимке не выбирается.
 		// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
 		if (constructionId is null)
 		{
-			throw new NotSupportedException("Снимок контекста чата без привязки к конструкции пока не поддерживается.");
+			var portfolioMetrics = await _metricsReadModel.ReadAsync(cancellationToken);
+			var portfolioRuleIndex = await _ruleCorpusReader.ListIndexAsync(cancellationToken);
+			var journalLimits = await _ruleCorpusReader.ReadCardThresholdsAsync(JournalRiskLimitsCardId, cancellationToken);
+
+			var portfolioMarkdown = new StringBuilder();
+			portfolioMarkdown.AppendLine($"# Снимок контекста чата {AsOfTag(asOf)}");
+			portfolioMarkdown.AppendLine();
+			AppendPortfolioSection(portfolioMarkdown, portfolioMetrics, asOf);
+			AppendJournalLimitsSection(portfolioMarkdown, portfolioMetrics, journalLimits, asOf);
+			AppendRuleIndexSection(portfolioMarkdown, portfolioRuleIndex, asOf);
+
+			return new ChatContextSnapshot
+			{
+				Markdown = portfolioMarkdown.ToString(),
+				AsOf = asOf,
+				IsConstructionClosed = false,
+			};
 		}
 
-		var asOf = _timeProvider.GetUtcNow();
 		var detail = await _detailReadModel.ReadAsync(constructionId.Value, cancellationToken);
 		var metrics = await _metricsReadModel.ReadAsync(cancellationToken);
 		var ruleIndex = await _ruleCorpusReader.ListIndexAsync(cancellationToken);
@@ -222,6 +243,63 @@ public sealed class ChatContextReader : IChatContextReader
 	}
 
 	/// <summary>
+	/// Раздел лимитов журнала: совокупный выделенный капитал портфеля и
+	/// периодные лимиты риска из карточки корпуса с денежным масштабом;
+	/// отсутствие порогов в корпусе не ломает снимок — раздел деградирует
+	/// явным текстом.
+	/// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+	/// </summary>
+	private static void AppendJournalLimitsSection(StringBuilder markdown, JournalMetrics metrics, IReadOnlyList<RuleCardThreshold> thresholds, DateTimeOffset asOf)
+	{
+		markdown.AppendLine($"## Лимиты журнала {AsOfTag(asOf)}");
+		markdown.AppendLine();
+
+		// Совокупный выделенный капитал — процентная база лимитов периода:
+		// тот же принцип масштабирования, что и у триггера лимитов периода движка.
+		var totalCapital = metrics.Constructions
+			.Select(construction => construction.AllocatedCapitalUsdt)
+			.Sum(capital => capital ?? 0m);
+		markdown.AppendLine(totalCapital > 0m
+			? $"- Совокупный выделенный капитал: {Num(totalCapital)} USDT"
+			: "- Совокупный выделенный капитал: не задан");
+
+		var weekly = ThresholdPercent(thresholds, "weeklyRiskLimit");
+		var monthly = ThresholdPercent(thresholds, "monthlyRiskLimit");
+		var quarterly = ThresholdPercent(thresholds, "quarterlyRiskLimit");
+		if (weekly is null && monthly is null && quarterly is null)
+		{
+			markdown.AppendLine("- Периодные лимиты риска в корпусе не заданы");
+			markdown.AppendLine();
+			return;
+		}
+
+		markdown.AppendLine(JournalLimitLine("на неделю", weekly, totalCapital));
+		markdown.AppendLine(JournalLimitLine("на месяц", monthly, totalCapital));
+		markdown.AppendLine(JournalLimitLine("на квартал", quarterly, totalCapital));
+		markdown.AppendLine();
+	}
+
+	/// <summary>Процентный порог лимита периода по имени; порога нет, единица не проценты или величина не число — null.</summary>
+	private static decimal? ThresholdPercent(IReadOnlyList<RuleCardThreshold> thresholds, string name) =>
+		thresholds
+			.Where(threshold => string.Equals(threshold.Name, name, StringComparison.Ordinal) && string.Equals(threshold.Unit, "percent", StringComparison.Ordinal))
+			.Select(threshold => decimal.TryParse(threshold.Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var parsed) ? parsed : (decimal?)null)
+			.FirstOrDefault(value => value is not null);
+
+	/// <summary>Строка лимита периода: процент капитала и денежный масштаб при заданном капитале.</summary>
+	private static string JournalLimitLine(string period, decimal? percent, decimal totalCapital)
+	{
+		if (percent is null)
+		{
+			return $"- Лимит убытка {period}: не задан";
+		}
+
+		return totalCapital > 0m
+			? $"- Лимит убытка {period}: {Num(percent.Value)}% капитала (= {Num(percent.Value / 100m * totalCapital)} USDT)"
+			: $"- Лимит убытка {period}: {Num(percent.Value)}% капитала";
+	}
+
+	/// <summary>
 	/// Раздел индекса корпуса правил: компактный перечень карточек без полного
 	/// текста — полное содержание читается отдельным инструментом по id.
 	/// Traceability: openspec:chats/context#scenario-chat-context-card-index-only
@@ -245,6 +323,14 @@ public sealed class ChatContextReader : IChatContextReader
 
 	/// <summary>Текст недоступной нереализованной оценки при сбое марок.</summary>
 	private const string UnavailableMarkText = "оценка недоступна: сбой марок";
+
+	/// <summary>
+	/// Карточка корпуса — источник периодных лимитов риска журнала: та же
+	/// карточка, что читает триггер лимитов периода движка; пороги в коде
+	/// не дублируются, значения берутся из канона на каждом чтении.
+	/// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+	/// </summary>
+	private const string JournalRiskLimitsCardId = "ac-01";
 
 	/// <summary>Единый формат as-of отметки раздела снимка.</summary>
 	private static string AsOfTag(DateTimeOffset moment) => $"(as-of: {Stamp(moment)})";

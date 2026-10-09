@@ -139,6 +139,76 @@ public class ChatContextReaderTests
 	}
 
 	[TestMethod]
+	[Description("Снимок чата без привязки к конструкции несёт портфельный уровень: агрегаты, лимиты журнала и индекс корпуса без раздела конструкции")]
+	// Проверяем сценарий портфельного снимка: ReadAsync без привязки отдаёт
+	// агрегаты журнала, периодные лимиты риска из карточки ac-01 с денежным
+	// масштабом от совокупного капитала и индекс корпуса — раздела конструкции
+	// и её лимитов в markdown нет, пост-мортем не выбран.
+	// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+	public async Task TryIfUnboundChatSnapshotCarriesPortfolioLevelWithoutConstructionSection()
+	{
+		// Arrange: журнал с одной конструкцией (капитал 1000) и позицией
+		// с реализованным и нереализованным результатом; корпус с порогами
+		// периодных лимитов риска карточки ac-01 — 1/5/10% капитала.
+		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
+		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus(
+		[
+			new RuleCardThreshold { Name = "weeklyRiskLimit", Value = "1", Unit = "percent" },
+			new RuleCardThreshold { Name = "monthlyRiskLimit", Value = "5", Unit = "percent" },
+			new RuleCardThreshold { Name = "quarterlyRiskLimit", Value = "10", Unit = "percent" },
+		]));
+
+		// Act: собираем снимок контекста чата без привязки к конструкции.
+		var snapshot = await reader.ReadAsync(null);
+		var markdown = snapshot.Markdown;
+
+		// Assert: портфельный снимок датирован моментом сборки и несёт
+		// агрегаты, лимиты журнала и индекс корпуса — разделов конструкции нет.
+		Assert.That(snapshot.AsOf, Is.EqualTo(Now));
+		Assert.That(snapshot.IsConstructionClosed, Is.False);
+		Assert.That(markdown, Does.Contain($"# Снимок контекста чата (as-of: {AsOfStamp})"));
+		Assert.That(markdown, Does.Contain($"## Портфельные агрегаты (as-of: {AsOfStamp})"));
+		Assert.That(markdown, Does.Contain("- Конструкций в журнале: 1, из них с открытыми позициями: 1"));
+		Assert.That(markdown, Does.Contain("- Реализованный PnL журнала: -1 USDT"));
+		Assert.That(markdown, Does.Contain("- Нереализованный PnL журнала: 200 USDT"));
+		Assert.That(markdown, Does.Contain($"## Лимиты журнала (as-of: {AsOfStamp})"));
+		Assert.That(markdown, Does.Contain("- Совокупный выделенный капитал: 1000 USDT"));
+		Assert.That(markdown, Does.Contain("- Лимит убытка на неделю: 1% капитала (= 10 USDT)"));
+		Assert.That(markdown, Does.Contain("- Лимит убытка на месяц: 5% капитала (= 50 USDT)"));
+		Assert.That(markdown, Does.Contain("- Лимит убытка на квартал: 10% капитала (= 100 USDT)"));
+		Assert.That(markdown, Does.Contain($"## Индекс корпуса правил (as-of: {AsOfStamp})"));
+		Assert.That(markdown, Does.Contain("read_rule_card"));
+		Assert.That(markdown, Does.Not.Contain("## Конструкция «"));
+		Assert.That(markdown, Does.Not.Contain("## Лимиты конструкции"));
+	}
+
+	[TestMethod]
+	[Description("Отсутствие порогов лимитов в корпусе не ломает портфельный снимок")]
+	// Проверяем деградацию раздела лимитов журнала: без карточки порогов
+	// снимок всё равно собирается — агрегаты и индекс присутствуют, раздел
+	// лимитов журнала деградирует явным текстом.
+	// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+	public async Task TryIfMissingJournalLimitsKeepPortfolioSnapshotUsable()
+	{
+		// Arrange: журнал с одной конструкцией и пустым набором порогов корпуса.
+		await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
+		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+
+		// Act: собираем портфельный снимок без карточки лимитов.
+		var snapshot = await reader.ReadAsync(null);
+
+		// Assert: снимок пригоден — агрегаты и индекс на месте, лимиты
+		// журнала деградировали явным текстом.
+		Assert.That(snapshot.Markdown, Does.Contain($"## Лимиты журнала (as-of: {AsOfStamp})"));
+		Assert.That(snapshot.Markdown, Does.Contain("- Совокупный выделенный капитал: 1000 USDT"));
+		Assert.That(snapshot.Markdown, Does.Contain("- Периодные лимиты риска в корпусе не заданы"));
+		Assert.That(snapshot.Markdown, Does.Contain("## Портфельные агрегаты"));
+		Assert.That(snapshot.Markdown, Does.Contain("## Индекс корпуса правил"));
+	}
+
+	[TestMethod]
 	[Description("Живые подсказки движка не попадают в снимок, даже когда они есть в хранилище")]
 	// Проверяем сценарий исключения подсказок: в хранилище есть живая
 	// new-подсказка по конструкции, но снимок собран без обращения к подсказкам —
@@ -292,9 +362,10 @@ public class ChatContextReaderTests
 
 	/// <summary>
 	/// Заглушка читателя корпуса: индекс из двух карточек — активной и выведенной;
-	/// чтение полного текста в снимке запрещено — заглушка падает при обращении.
+	/// чтение полного текста в снимке запрещено — заглушка падает при обращении;
+	/// пороги отдаются только при заданном наборе, пустой список — порогов нет.
 	/// </summary>
-	private sealed class StubRuleCorpus : IRuleCorpusReader
+	private sealed class StubRuleCorpus(IReadOnlyList<RuleCardThreshold>? thresholds = null) : IRuleCorpusReader
 	{
 		public Task<IReadOnlyList<RuleCardSummary>> ListIndexAsync(CancellationToken cancellationToken = default) =>
 			Task.FromResult<IReadOnlyList<RuleCardSummary>>(
@@ -305,6 +376,9 @@ public class ChatContextReaderTests
 
 		public Task<RuleCardContent?> ReadCardAsync(string cardId, CancellationToken cancellationToken = default) =>
 			throw new InvalidOperationException("Снимок контекста не должен читать полный текст карточек");
+
+		public Task<IReadOnlyList<RuleCardThreshold>> ReadCardThresholdsAsync(string cardId, CancellationToken cancellationToken = default) =>
+			Task.FromResult(thresholds ?? (IReadOnlyList<RuleCardThreshold>)[]);
 	}
 
 	#endregion

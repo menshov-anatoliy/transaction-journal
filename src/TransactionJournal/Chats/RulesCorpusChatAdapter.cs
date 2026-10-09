@@ -71,6 +71,29 @@ public sealed class RulesCorpusChatAdapter : IRuleCorpusReader
 		return Task.FromResult<RuleCardContent?>(content);
 	}
 
+	/// <inheritdoc />
+	public Task<IReadOnlyList<RuleCardThreshold>> ReadCardThresholdsAsync(string cardId, CancellationToken cancellationToken = default)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(cardId);
+		var snapshot = _loader.Load();
+		var card = snapshot.ExecutableCards
+			.Concat(snapshot.UnimplementedCards)
+			.Concat(snapshot.RetiredCards)
+			.FirstOrDefault(candidate => string.Equals(candidate.Id, cardId, StringComparison.Ordinal));
+		if (card is null)
+		{
+			return Task.FromResult<IReadOnlyList<RuleCardThreshold>>([]);
+		}
+
+		// Пороги отданы парами имя-величина-единица без рендеринга полного
+		// текста: снимку нужен только числовой канон карточки.
+		// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+		var thresholds = card.Thresholds
+			.Select(threshold => new RuleCardThreshold { Name = threshold.Name, Value = threshold.Value, Unit = threshold.Unit })
+			.ToArray();
+		return Task.FromResult<IReadOnlyList<RuleCardThreshold>>(thresholds);
+	}
+
 	/// <summary>
 	/// Краткое содержание — первые фразы описаний триггера и действия: «условие
 	/// → действие»; при отсутствии описаний откат к шаблону подсказки или названию.

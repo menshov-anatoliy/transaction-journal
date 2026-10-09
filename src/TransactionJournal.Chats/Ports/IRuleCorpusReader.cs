@@ -19,6 +19,17 @@ public interface IRuleCorpusReader
 	/// <param name="cardId">Идентификатор карточки — имя файла без расширения.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	Task<RuleCardContent?> ReadCardAsync(string cardId, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Пороговые значения карточки по идентификатору без полного текста:
+	/// полный текст по-прежнему читается только инструментом чтения,
+	/// карточки нет или порогов нет — пустой список. Пороги нужны снимку
+	/// контекста для раздела лимитов журнала на портфельном уровне чата.
+	/// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+	/// </summary>
+	/// <param name="cardId">Идентификатор карточки — имя файла без расширения.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task<IReadOnlyList<RuleCardThreshold>> ReadCardThresholdsAsync(string cardId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Запись компактного индекса корпуса: id карточки и её краткое содержание.</summary>
@@ -45,4 +56,17 @@ public sealed record RuleCardContent
 
 	/// <summary>Полный текст карточки.</summary>
 	public required string Text { get; init; }
+}
+
+/// <summary>Пороговое значение карточки правила: имя, величина и единица измерения.</summary>
+public sealed record RuleCardThreshold
+{
+	/// <summary>Имя порога, как объявлено в карточке (например, weeklyRiskLimit).</summary>
+	public required string Name { get; init; }
+
+	/// <summary>Величина порога строкой — канон карточки без интерпретации портом.</summary>
+	public required string Value { get; init; }
+
+	/// <summary>Единица измерения порога (например, percent).</summary>
+	public required string Unit { get; init; }
 }
