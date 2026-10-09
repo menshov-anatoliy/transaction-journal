@@ -531,7 +531,8 @@ internal static class SectionApiServiceExtensions
 /// Хост раздела «Конструкции» для интеграционных проверок API: реальная точка
 /// входа Program на временной базе SQLite, доменные read-модели раздела
 /// подменяются заглушками через ConfigureTestServices — проверяется
-/// HTTP-контракт, а не доменные вычисления.
+/// HTTP-контракт, а не доменные вычисления. Тест может доопределить значения
+/// конфигурации: они перекрывают appsettings и переменные окружения.
 /// </summary>
 internal sealed class SectionApiFactory : WebApplicationFactory<Program>
 {
@@ -541,21 +542,31 @@ internal sealed class SectionApiFactory : WebApplicationFactory<Program>
 
 	private readonly Action<IServiceCollection>? _configureServices;
 
-	public SectionApiFactory(Action<IServiceCollection>? configureServices = null)
+	private readonly Action<IDictionary<string, string?>>? _configureConfiguration;
+
+	public SectionApiFactory(
+		Action<IServiceCollection>? configureServices = null,
+		Action<IDictionary<string, string?>>? configureConfiguration = null)
 	{
 		_configureServices = configureServices;
+		_configureConfiguration = configureConfiguration;
 	}
 
 	protected override void ConfigureWebHost(IWebHostBuilder builder)
 	{
 		// Development: без HSTS и производственного обработчика ошибок.
 		builder.UseEnvironment("Development");
-		// Временная база каталога прогона вместо App_Data журнала.
-		builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
-			new Dictionary<string, string?>
+		// Временная база каталога прогона вместо App_Data журнала; тестовые
+		// значения добавляются тем же источником и перекрывают окружение.
+		builder.ConfigureAppConfiguration((_, config) =>
+		{
+			var settings = new Dictionary<string, string?>
 			{
 				["ConnectionStrings:Journal"] = $"Data Source={_databasePath}",
-			}));
+			};
+			_configureConfiguration?.Invoke(settings);
+			config.AddInMemoryCollection(settings);
+		});
 		// Стабильные заглушки доменных зависимостей поверх реальных регистраций.
 		builder.ConfigureTestServices(services => _configureServices?.Invoke(services));
 	}

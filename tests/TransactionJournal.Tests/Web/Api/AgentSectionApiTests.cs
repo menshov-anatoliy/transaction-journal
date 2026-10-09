@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
@@ -78,11 +79,7 @@ public sealed class AgentSectionApiTests
 		}
 		finally
 		{
-			// Пул подключений SQLite держит файл базы до очистки пула;
-			// без неё удаление каталога падает блокировкой chats.db.
-			Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-			if (Directory.Exists(directory))
-				Directory.Delete(directory, recursive: true);
+			CleanupChatStoreDirectory(directory);
 		}
 	}
 
@@ -278,11 +275,7 @@ public sealed class AgentSectionApiTests
 		}
 		finally
 		{
-			// Пул подключений SQLite держит файл базы до очистки пула;
-			// без неё удаление каталога падает блокировкой chats.db.
-			Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-			if (Directory.Exists(directory))
-				Directory.Delete(directory, recursive: true);
+			CleanupChatStoreDirectory(directory);
 		}
 	}
 
@@ -344,11 +337,71 @@ public sealed class AgentSectionApiTests
 		}
 		finally
 		{
-			// Пул подключений SQLite держит файл базы до очистки пула;
-			// без неё удаление каталога падает блокировкой chats.db.
-			Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-			if (Directory.Exists(directory))
-				Directory.Delete(directory, recursive: true);
+			CleanupChatStoreDirectory(directory);
+		}
+	}
+
+	[TestMethod]
+	[Description("Незастроенный ключ модели деградирует кадром ошибки SSE-канала, история чатов доступна")]
+	// Ключ Llm:ApiKey пуст: keyed-клиент хоста строится заглушкой Program.cs
+	// (UnconfiguredChatClient) — обращение к модели даёт транспортный кадр
+	// event: error по тому же соединению, а чат с зафиксированными вопросами
+	// владельца остаётся в списке активных.
+	// Traceability: openspec:http-api/transport#scenario-chat-error-delivered-as-sse-event
+	// Traceability: openspec:config/llm-provider#scenario-llm-provider-missing-key-lazy
+	public async Task TryIfUnconfiguredApiKeyDegradesStreamWithErrorAndKeepsChatHistory()
+	{
+		// Arrange: изолированное хранилище; keyed-клиент модели не подменяется —
+		// работает реальная проводка Program.cs на незастроенном ключе,
+		// контекстный читатель подменён, чтобы сбой пришёл именно от модели.
+		var directory = Path.Combine(AppContext.BaseDirectory, $"agent-unconfigured-{Guid.NewGuid():N}");
+		Directory.CreateDirectory(directory);
+		try
+		{
+			// IChatStore-тип важен: AddSingleton выводит тип сервиса из
+			// статического типа аргумента, и заглушка Program.cs для
+			// незастроенного ключа остаётся единственным keyed-клиентом.
+			IChatStore store = new ChatStore(Path.Combine(directory, "chats.db"));
+			await using var factory = new SectionApiFactory(
+				services =>
+				{
+					services.RemoveAll<IChatStore>();
+					services.AddSingleton(store);
+					services.RemoveAll<IChatContextReader>();
+					services.AddSingleton<IChatContextReader>(new RecordingContextReader());
+				},
+				settings => settings["Llm:ApiKey"] = string.Empty);
+			using var client = factory.CreateClient();
+			var chatId = await CreateChatAsync(client, "Проверь конструкцию без ключа модели", "7", ["journal"]);
+
+			// Act: стриминг ответа на следующее сообщение владельца при
+			// незастроенном ключе модели.
+			using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/chats/{chatId}/messages/stream")
+			{
+				Content = JsonContent.Create(new { text = "Уточни по лимитам конструкции", model = "glm-5.3" }),
+			};
+			using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+			// Assert: канал открыт как SSE, деградация доставлена кадром
+			// события ошибки с сообщением о незастроенном ключе.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+			Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo("text/event-stream"));
+			var frames = ParseFrames(await response.Content.ReadAsStringAsync());
+			Assert.That(frames[0].EventName, Is.EqualTo("start"));
+			var error = frames.Single(frame => frame.EventName == "error");
+			Assert.That(error.Data!["message"]!.GetValue<string>(), Does.Contain("API-ключ"));
+
+			// Assert: история доступна: чат остаётся в списке активных, оба
+			// вопроса владельца зафиксированы до сбоя генерации.
+			var active = await (await client.GetAsync("/api/v1/chats?status=active")).Content.ReadFromJsonAsync<JsonArray>();
+			Assert.That(active!.Any(node => node!["id"]!.GetValue<string>() == chatId), Is.True);
+			var history = await (await client.GetAsync($"/api/v1/chats/{chatId}/messages")).Content.ReadFromJsonAsync<JsonArray>();
+			Assert.That(history!, Has.Count.EqualTo(2));
+			Assert.That(history!.Select(node => node!["role"]!.GetValue<string>()), Is.All.EqualTo("user"));
+		}
+		finally
+		{
+			CleanupChatStoreDirectory(directory);
 		}
 	}
 
@@ -390,6 +443,18 @@ public sealed class AgentSectionApiTests
 		Assert.That(paths, Does.Contain("/api/v1/chats/{chatId}/messages"));
 		Assert.That(paths, Does.Contain("/api/v1/chats/{chatId}/messages/stream"));
 		Assert.That(paths, Does.Contain("/api/v1/rules"));
+	}
+
+	/// <summary>
+	/// Убирает изолированный каталог хранилища после теста: пул подключений
+	/// SQLite держит файл базы до очистки пула, без неё удаление каталога
+	/// падает блокировкой chats.db.
+	/// </summary>
+	private static void CleanupChatStoreDirectory(string directory)
+	{
+		SqliteConnection.ClearAllPools();
+		if (Directory.Exists(directory))
+			Directory.Delete(directory, recursive: true);
 	}
 
 	/// <summary>Создаёт чат первым сообщением владельца и возвращает строковый идентификатор.</summary>

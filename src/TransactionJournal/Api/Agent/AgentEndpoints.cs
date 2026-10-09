@@ -32,7 +32,6 @@ public static class AgentEndpoints
 			string status,
 			ChatService pipeline,
 			IChatStore store,
-			AgentRulesCatalog catalog,
 			CancellationToken cancellationToken) =>
 		{
 			if (TryParseStatus(status, out var parsed) == false)
@@ -47,8 +46,7 @@ public static class AgentEndpoints
 			var items = new List<AgentChatDto>(records.Count);
 			foreach (var record in records)
 			{
-				var messages = await store.ListMessagesAsync(record.Id, cancellationToken);
-				items.Add(ToChatDto(record, messages));
+				items.Add(await BuildChatDtoAsync(record, store, cancellationToken));
 			}
 
 			return Results.Json(items);
@@ -78,8 +76,13 @@ public static class AgentEndpoints
 				Sources = ParseSources(request.Params.Sources),
 			};
 			var userMessage = await pipeline.AppendUserMessageAsync(null, start, request.Text.Trim(), cancellationToken);
-			var chat = await store.FindChatAsync(userMessage.ChatId, cancellationToken);
-			return Results.Json(ToChatDto(chat!, [userMessage]));
+
+			// Чат только что создан этим же сообщением: отсутствие записи —
+			// нарушение договора хранилища, отвечает тем же отказом, что и
+			// прочие чтения чата.
+			if (await store.FindChatAsync(userMessage.ChatId, cancellationToken) is not { } chat)
+				return Results.Json(new AgentChatNotFoundResponse(userMessage.ChatId.ToString(CultureInfo.InvariantCulture)), statusCode: StatusCodes.Status404NotFound);
+			return Results.Json(ToChatDto(chat, [userMessage]));
 		});
 
 		// Полная история одного чата: истории соседних чатов в выборку не
@@ -170,15 +173,14 @@ public static class AgentEndpoints
 			string chatId,
 			ChatService pipeline,
 			IChatStore store,
-			AgentRulesCatalog catalog,
 			CancellationToken cancellationToken) =>
 		{
-			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is null)
+			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is not { } chat)
 				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
 			await pipeline.CompleteAsync(id, cancellationToken);
-			var chat = await store.FindChatAsync(id, cancellationToken);
-			var messages = await store.ListMessagesAsync(id, cancellationToken);
-			return Results.Json(ToChatDto(chat!, messages));
+			// Статус изменила операция завершения: локальная запись дополняется
+			// им без повторного чтения чата, история перечитывается helper'ом.
+			return Results.Json(await BuildChatDtoAsync(chat with { Status = ChatStatus.Completed }, store, cancellationToken));
 		});
 
 		// Продолжение завершённого чата: возвращается в активные ещё до
@@ -188,15 +190,14 @@ public static class AgentEndpoints
 			string chatId,
 			ChatService pipeline,
 			IChatStore store,
-			AgentRulesCatalog catalog,
 			CancellationToken cancellationToken) =>
 		{
-			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is null)
+			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is not { } chat)
 				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
 			await pipeline.ResumeAsync(id, cancellationToken);
-			var chat = await store.FindChatAsync(id, cancellationToken);
-			var messages = await store.ListMessagesAsync(id, cancellationToken);
-			return Results.Json(ToChatDto(chat!, messages));
+			// Статус изменила операция продолжения: локальная запись дополняется
+			// им без повторного чтения чата, история перечитывается helper'ом.
+			return Results.Json(await BuildChatDtoAsync(chat with { Status = ChatStatus.Active }, store, cancellationToken));
 		});
 
 		// Смена модели на лету: параметр чата обновляется самим действием
@@ -208,16 +209,17 @@ public static class AgentEndpoints
 			ChangeAgentChatModelRequest request,
 			ChatService pipeline,
 			IChatStore store,
-			AgentRulesCatalog catalog,
 			CancellationToken cancellationToken) =>
 		{
 			if (string.IsNullOrWhiteSpace(request.Model))
 				return Results.Json(new AgentChatErrorResponse("Модель чата не задана."), statusCode: StatusCodes.Status400BadRequest);
 			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is null)
 				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
+
+			// Операция возвращает чат с обновлённой моделью: повторное чтение
+			// чата не требуется.
 			var chat = await pipeline.ChangeModelAsync(id, request.Model.Trim(), cancellationToken);
-			var messages = await store.ListMessagesAsync(id, cancellationToken);
-			return Results.Json(ToChatDto(chat, messages));
+			return Results.Json(await BuildChatDtoAsync(chat, store, cancellationToken));
 		});
 
 		// Удаление привязанного чата убирает всю историю, а не только его статус.
@@ -296,6 +298,21 @@ public static class AgentEndpoints
 		}
 
 		return false;
+	}
+
+	/// <summary>
+	/// Собирает DTO чата вместе с его историей: сообщения перечитываются
+	/// из хранилища после операции конвейера, сам чат передаётся уже
+	/// обновлённым — завершение и продолжение дополняют локальную запись
+	/// статусом операции вместо повторного чтения чата.
+	/// </summary>
+	private static async Task<AgentChatDto> BuildChatDtoAsync(
+		ChatRecord chat,
+		IChatStore store,
+		CancellationToken cancellationToken)
+	{
+		var messages = await store.ListMessagesAsync(chat.Id, cancellationToken);
+		return ToChatDto(chat, messages);
 	}
 
 	private static AgentChatDto ToChatDto(ChatRecord chat, IReadOnlyList<ChatMessage> messages)
