@@ -89,6 +89,8 @@
 	--risk-zone: #EFB6AE;
 	--profit-zone: #B9E7CC;
 	--super-zone: #F3D68C;
+	--super-label: #8a6a1f;
+	--unreal-loss: #EFB6AE;
 	/* Токены accent (#1FA36B) и border (#E5E5DF) не дублируются: их значения
 		живут напрямую в одноимённых смыслу слотах shadcn --primary и --border. */
 
@@ -117,7 +119,8 @@
 	--ring: var(--primary);
 
 	/* Палитра индикатора финрезультата наследует токены design.pen
-		(riskZone/profitZone/superZone/accent/neg/mint) вместо собственных hex. */
+		(riskZone/profitZone/superZone/superLabel/unrealLoss/accent/neg/mint)
+		вместо собственных hex. */
 	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
 	--fin-risk-zone: var(--risk-zone);
 	--fin-profit-zone: var(--profit-zone);
@@ -126,11 +129,13 @@
 	--fin-positive-strong: var(--accent-strong);
 	--fin-negative: var(--neg);
 	--fin-unreal-positive: var(--mint);
-	/* Минор-заливка убытка использует riskZone до выделения собственного
-		дизайн-токена в backlog #73; вне-токенный оттенок не сохраняется. */
-	/* Traceability: issue:#73 */
-	/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */
-	--fin-unreal-negative: var(--risk-zone);
+	--fin-super-label: var(--super-label);
+	/* Минор-заливка нереализованного убытка и подпись сверхприбыли используют
+		собственные токены design.pen: unrealLoss — дизайн-пара к mint,
+		superLabel — тёмный цвет подписи зоны сверхприбыли из мастера; заимствование
+		riskZone и хардкод цвета подписи устранены, вне-токенных цветов не осталось. */
+	/* Traceability: change:add-finresult-design-tokens/specs/ui/design-system/spec#scenario-finresult-colors-use-own-tokens */
+	--fin-unreal-negative: var(--unreal-loss);
 }
 
 @theme inline {
@@ -174,6 +179,8 @@
 	--color-risk-zone: var(--risk-zone);
 	--color-profit-zone: var(--profit-zone);
 	--color-super-zone: var(--super-zone);
+	--color-super-label: var(--super-label);
+	--color-unreal-loss: var(--unreal-loss);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);

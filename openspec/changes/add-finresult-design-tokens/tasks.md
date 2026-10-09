@@ -10,8 +10,8 @@
 
 ## 2. Frontend: токен-слой и индикатор
 
-- [ ] 2.1 `frontend/src/index.css`: добавить `--super-label: #8a6a1f` и `--unreal-loss: #EFB6AE` в блок дизайн-токенов, утилиты `@theme inline` (`--color-super-label`, `--color-unreal-loss`), в блоке `--fin-*` — `--fin-super-label: var(--super-label)` и перенаправление `--fin-unreal-negative: var(--unreal-loss)`; удалить временный комментарий про backlog #73 (design.md D3). Проверка: `npm run build` в `frontend/` проходит; греп `#8a6a1f` по `frontend/src` пуст.
-- [ ] 2.2 `frontend/src/components/finresult/fin-result-indicator.tsx`: заменить хардкод `text-[#8a6a1f]` на `text-[color:var(--fin-super-label)]`; комментарий-исключение и `Traceability: issue:#73` замещаются человекочитаемым пояснением и меткой на обновлённое требование дизайн-системы. Проверка: греп `text-\[#` по компоненту пуст; `npm test` в `frontend/` проходит.
+- [x] 2.1 `frontend/src/index.css`: добавить `--super-label: #8a6a1f` и `--unreal-loss: #EFB6AE` в блок дизайн-токенов, утилиты `@theme inline` (`--color-super-label`, `--color-unreal-loss`), в блоке `--fin-*` — `--fin-super-label: var(--super-label)` и перенаправление `--fin-unreal-negative: var(--unreal-loss)`; удалить временный комментарий про backlog #73 (design.md D3). Проверка: `npm run build` в `frontend/` проходит; греп `#8a6a1f` по `frontend/src` пуст.
+- [x] 2.2 `frontend/src/components/finresult/fin-result-indicator.tsx`: заменить хардкод `text-[#8a6a1f]` на `text-[color:var(--fin-super-label)]`; комментарий-исключение и `Traceability: issue:#73` замещаются человекочитаемым пояснением и меткой на обновлённое требование дизайн-системы. Проверка: греп `text-\[#` по компоненту пуст; `npm test` в `frontend/` проходит.
 
 ## 3. Повторная сверка и приёмка
 

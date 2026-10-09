@@ -158,13 +158,13 @@ function ScaleLabels({ geometry, preset }: { geometry: FinResultGeometry; preset
 				</span>
 			)}
 			{geometry.labels.superEnd !== null && (
-				// Подпись сверхприбыли сохраняет точный цвет макета: собственного
-				// токена пока нет; его добавление запланировано в дизайн-backlog #73.
-				// Traceability: issue:#73
-				// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+				// Подпись сверхприбыли красится собственным токеном superLabel
+				// design.pen — тёмным текстовым цветом зоны сверхприбыли из мастера,
+				// без хардкода и заимствования чужих по смыслу токенов.
+				// Traceability: change:add-finresult-design-tokens/specs/ui/design-system/spec#scenario-finresult-colors-use-own-tokens
 				<span
 					data-part="super-scale"
-					className="absolute right-0 translate-x-1/2 text-[#8a6a1f]"
+					className="absolute right-0 translate-x-1/2 text-[color:var(--fin-super-label)]"
 				>
 					{geometry.labels.superEnd}
 				</span>
