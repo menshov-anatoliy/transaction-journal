@@ -1,7 +1,31 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Transaction Journal (API + React)" type="CompoundRunConfigurationType">
-    <toRun name="Backend API" type="LaunchSettings" />
-    <toRun name="Frontend React" type="js.build_tools.npm" />
+  <configuration default="false" name="Transaction Journal (API + React)" type="com.intellij.execution.configurations.multilaunch" factoryName="MultiLaunchConfiguration">
+    <rows>
+      <ExecutableRowSnapshot>
+        <option name="condition">
+          <ConditionSnapshot>
+            <option name="type" value="immediately" />
+          </ConditionSnapshot>
+        </option>
+        <option name="executable">
+          <ExecutableSnapshot>
+            <option name="id" value="runConfig:.NET Launch Settings Profile.Backend API" />
+          </ExecutableSnapshot>
+        </option>
+      </ExecutableRowSnapshot>
+      <ExecutableRowSnapshot>
+        <option name="condition">
+          <ConditionSnapshot>
+            <option name="type" value="afterPreviousStarted" />
+          </ConditionSnapshot>
+        </option>
+        <option name="executable">
+          <ExecutableSnapshot>
+            <option name="id" value="runConfig:npm.Frontend React" />
+          </ExecutableSnapshot>
+        </option>
+      </ExecutableRowSnapshot>
+    </rows>
     <method v="2">
       <option name="Build" />
     </method>
