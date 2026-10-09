@@ -2,6 +2,7 @@ namespace TransactionJournal.Infrastructure.Chats;
 
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
 
 /// <summary>
@@ -69,7 +70,7 @@ public sealed class ChatStore : IChatStore
 			{
 				Model = NormalizeModel(start.Model),
 				ConstructionId = start.ConstructionId,
-				SourcesJson = JsonSerializer.Serialize(NormalizeSources(start.Sources), JsonOptions),
+				SourcesJson = SerializeSources(NormalizeSources(start.Sources)),
 				Status = ChatStatus.Active.ToString(),
 				CreatedAt = message.AsOf,
 			};
@@ -272,14 +273,17 @@ public sealed class ChatStore : IChatStore
 		return model.Trim();
 	}
 
-	/// <summary>Источники триммятся и дедуплицируются с сохранением порядка; пустой набор — ошибка.</summary>
-	private static IReadOnlyList<string> NormalizeSources(IReadOnlyList<string> sources)
+	/// <summary>
+	/// Источники нормализуются в подмножество закрытого справочника:
+	/// дедупликация с сохранением порядка, повторные категории дают одну
+	/// запись; пустой набор — ошибка, чат обязан выбирать хотя бы одну
+	/// категорию справочника.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	/// </summary>
+	private static IReadOnlyList<ChatDataSource> NormalizeSources(IReadOnlyList<ChatDataSource> sources)
 	{
-		var normalized = sources
-			.Select(source => source.Trim())
-			.Where(source => source.Length > 0)
-			.Distinct()
-			.ToList();
+		ArgumentNullException.ThrowIfNull(sources);
+		var normalized = sources.Distinct().ToList();
 		if (normalized.Count == 0)
 		{
 			throw new ArgumentException("Набор источников данных чата не может быть пустым.");
@@ -288,12 +292,27 @@ public sealed class ChatStore : IChatStore
 		return normalized;
 	}
 
+	/// <summary>Источники хранятся JSON-списком имён категорий справочника — стабильнее числовых кодов.</summary>
+	private static string SerializeSources(IReadOnlyList<ChatDataSource> sources)
+	{
+		var names = sources.Select(source => source.ToString()).ToList();
+		return JsonSerializer.Serialize(names, JsonOptions);
+	}
+
+	/// <summary>Имя категории справочника, неизвестное справочнику, — повреждённые данные, а не тишина.</summary>
+	private static ChatDataSource ParseSource(string name) =>
+		Enum.TryParse<ChatDataSource>(name, out var source)
+			? source
+			: throw new InvalidOperationException($"Неизвестный источник данных чата: «{name}».");
+
 	private static ChatRecord ToRecord(ChatEntity entity) => new()
 	{
 		Id = entity.Id,
 		Model = entity.Model,
 		ConstructionId = entity.ConstructionId,
-		Sources = JsonSerializer.Deserialize<List<string>>(entity.SourcesJson, JsonOptions) ?? [],
+		Sources = JsonSerializer.Deserialize<List<string>>(entity.SourcesJson, JsonOptions)?
+				.Select(ParseSource)
+				.ToList() ?? [],
 		Status = Enum.Parse<ChatStatus>(entity.Status),
 		CreatedAt = entity.CreatedAt,
 	};

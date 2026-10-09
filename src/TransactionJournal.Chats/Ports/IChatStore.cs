@@ -112,8 +112,14 @@ public sealed record ChatStartParameters
 	/// <summary>Идентификатор конструкции привязки; null — чат без привязки, портфельный уровень журнала.</summary>
 	public long? ConstructionId { get; init; }
 
-	/// <summary>Набор источников данных чата — ключи закрытого справочника источников.</summary>
-	public required IReadOnlyList<string> Sources { get; init; }
+	/// <summary>
+	/// Набор источников данных чата — подмножество закрытого справочника
+	/// источников; владелец выбирает его при создании, дефолт — все три
+	/// категории.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	// Traceability: openspec:chats/sources#scenario-sources-three-categories
+	/// </summary>
+	public IReadOnlyList<ChatDataSource> Sources { get; init; } = ChatDataSourceCatalog.All;
 }
 
 /// <summary>Чат агента: плоская полная история обмена с параметрами и статусом.</summary>
@@ -128,8 +134,8 @@ public sealed record ChatRecord
 	/// <summary>Идентификатор конструкции привязки; null — чат без привязки.</summary>
 	public long? ConstructionId { get; init; }
 
-	/// <summary>Набор источников данных чата — ключи закрытого справочника источников.</summary>
-	public required IReadOnlyList<string> Sources { get; init; }
+	/// <summary>Набор источников данных чата — подмножество закрытого справочника источников.</summary>
+	public required IReadOnlyList<ChatDataSource> Sources { get; init; }
 
 	/// <summary>Статус жизненного цикла: активен или завершён.</summary>
 	public ChatStatus Status { get; init; }

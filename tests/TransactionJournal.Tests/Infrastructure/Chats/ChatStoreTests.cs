@@ -2,6 +2,7 @@ namespace TransactionJournal.Tests.Infrastructure.Chats;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
+using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
 using TransactionJournal.Tests.Chats;
 using Assert = NUnit.Framework.Assert;
@@ -21,12 +22,12 @@ using Does = NUnit.Framework.Does;
 public class ChatStoreTests : ChatDatabaseTests
 {
 
-	/// <summary>Параметры создания чата: модель по умолчанию, привязка и набор источников.</summary>
-	private static ChatStartParameters Start(long? constructionId = 7, params string[] sources) => new()
+	/// <summary>Параметры создания чата: модель по умолчанию, привязка и набор источников; без набора — все три категории справочника.</summary>
+	private static ChatStartParameters Start(long? constructionId = 7, params ChatDataSource[] sources) => new()
 	{
 		Model = "glm-5.3",
 		ConstructionId = constructionId,
-		Sources = sources.Length == 0 ? ["journal", "rules-corpus", "market"] : sources,
+		Sources = sources.Length == 0 ? ChatDataSourceCatalog.All : sources,
 	};
 
 	/// <summary>Черновик сообщения владельца с фиксированным as-of.</summary>
@@ -47,7 +48,7 @@ public class ChatStoreTests : ChatDatabaseTests
 	{
 		// Arrange
 		var store = CreateStore();
-		var start = Start(7, "journal", "rules-corpus");
+		var start = Start(7, ChatDataSource.Journal, ChatDataSource.RulesCorpus);
 
 		// Act: сообщение без идентификатора чата создаёт новый чат.
 		var message = await store.AppendMessageAsync(null, start, UserDraft());
@@ -58,11 +59,56 @@ public class ChatStoreTests : ChatDatabaseTests
 		Assert.That(chat, Is.Not.Null);
 		Assert.That(chat!.Model, Is.EqualTo("glm-5.3"));
 		Assert.That(chat.ConstructionId, Is.EqualTo(7));
-		Assert.That(chat.Sources, Is.EqualTo(new[] { "journal", "rules-corpus" }));
+		Assert.That(chat.Sources, Is.EqualTo(new[] { ChatDataSource.Journal, ChatDataSource.RulesCorpus }));
 		Assert.That(chat.Status, Is.EqualTo(ChatStatus.Active));
 		Assert.That(chat.CreatedAt, Is.EqualTo(FixedNow));
 		var messages = await store.ListMessagesAsync(message.ChatId);
 		Assert.That(messages.Select(stored => stored.Text), Is.EqualTo(new[] { "Первый вопрос." }));
+	}
+
+	[TestMethod]
+	[Description("Чат без явного выбора источников получает все три категории справочника")]
+	// Дефолт набора источников — закрытый справочник целиком: параметры
+	// создания без явного выбора означают все три категории.
+	// Traceability: openspec:chats/sources#scenario-sources-three-categories
+	public async Task TryIfChatCreatedWithoutSourcesParameter_DefaultsToAllThreeSources()
+	{
+		// Arrange: параметры без явного набора источников.
+		var store = CreateStore();
+		var start = new ChatStartParameters
+		{
+			Model = "glm-5.3",
+			ConstructionId = 7,
+		};
+
+		// Act
+		var message = await store.AppendMessageAsync(null, start, UserDraft());
+
+		// Assert: набор источников чата — полный справочник.
+		var chat = await store.FindChatAsync(message.ChatId);
+		Assert.That(chat, Is.Not.Null);
+		Assert.That(chat!.Sources, Is.EqualTo(ChatDataSourceCatalog.All));
+	}
+
+	[TestMethod]
+	[Description("Пустой набор источников отвергается при создании чата")]
+	// Подмножество справочника не бывает пустым: чат обязан выбрать хотя бы
+	// одну категорию источников.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	public void ThrowOnNewChatWithEmptySources()
+	{
+		// Arrange: параметры с пустым набором источников.
+		var store = CreateStore();
+		var start = new ChatStartParameters
+		{
+			Model = "glm-5.3",
+			ConstructionId = 7,
+			Sources = [],
+		};
+
+		// Act + Assert
+		Assert.ThrowsAsync<ArgumentException>(async () =>
+			await store.AppendMessageAsync(null, start, UserDraft()));
 	}
 
 	[TestMethod]

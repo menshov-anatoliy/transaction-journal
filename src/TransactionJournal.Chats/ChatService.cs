@@ -178,7 +178,10 @@ public sealed class ChatService
 		var traceRecorder = new ChatMarketTraceRecorder();
 		var answer = new StringBuilder();
 		await foreach (var update in _agent
-			.StreamAnswerAsync(snapshot, history, userMessage.Text, traceRecorder, cancellationToken)
+			// Реестр инструментов агентного цикла — из набора источников чата:
+			// только read-only функции выбранных категорий справочника.
+			// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
+			.StreamAnswerAsync(snapshot, history, userMessage.Text, chat.Sources, traceRecorder, cancellationToken)
 			.ConfigureAwait(false))
 		{
 			answer.Append(update.Text);

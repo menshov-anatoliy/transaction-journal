@@ -20,7 +20,7 @@ internal sealed class ChatEntity
 	/// <summary>Идентификатор конструкции привязки значением; null — чат без привязки.</summary>
 	public long? ConstructionId { get; set; }
 
-	/// <summary>Набор источников данных чата в JSON — ключи закрытого справочника источников.</summary>
+	/// <summary>Набор источников данных чата в JSON — имена категорий закрытого справочника источников.</summary>
 	public required string SourcesJson { get; set; }
 
 	/// <summary>Статус жизненного цикла, хранится строкой: Active или Completed.</summary>

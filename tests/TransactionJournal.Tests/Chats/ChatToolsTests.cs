@@ -11,10 +11,12 @@ namespace TransactionJournal.Tests.Chats;
 
 /// <summary>
 /// Проверки реестра инструментов чата: реестр содержит ровно три
-/// read-only функции, карточка правила читается полным текстом только по id,
-/// доска опционов отдаётся компактной проекцией вместо сырых данных, а
-/// недоступность биржи отдаётся структурированным «недоступно» с последней
-/// кэшированной проекцией марок и её as-of.
+/// read-only функции, собирается из набора источников чата — только
+/// инструменты выбранных категорий закрытого справочника, карточка правила
+/// читается полным текстом только по id, доска опционов отдаётся компактной
+/// проекцией вместо сырых данных, а недоступность биржи отдаётся
+/// структурированным «недоступно» с последней кэшированной проекцией марок
+/// и её as-of.
 /// </summary>
 [TestClass]
 public sealed class ChatToolsTests
@@ -45,6 +47,103 @@ public sealed class ChatToolsTests
 		Assert.That(
 			functions.Select(function => function.Name),
 			Has.All.Matches<string>(name => name is "read_rule_card" or "get_market_snapshot" or "get_option_board"));
+	}
+
+	[TestMethod]
+	[Description("Закрытый справочник источников содержит ровно три категории в каноническом порядке")]
+	// Справочник источников закрыт: журнал, корпус правил, рынок Bybit — и
+	// ничего сверх него; полный набор служит дефолтом чата.
+	// Traceability: openspec:chats/sources#scenario-sources-three-categories
+	public void TryIfClosedCatalog_ContainsExactlyThreeCategories()
+	{
+		// Assert: полный набор — все три категории справочника в каноническом порядке.
+		Assert.That(ChatDataSourceCatalog.All, Is.EqualTo(new[]
+		{
+			ChatDataSource.Journal,
+			ChatDataSource.RulesCorpus,
+			ChatDataSource.BybitMarket,
+		}));
+		Assert.That(Enum.GetValues<ChatDataSource>(), Has.Length.EqualTo(3));
+	}
+
+	[TestMethod]
+	[Description("Набор источников — параметр: реестр собирается только из инструментов выбранных категорий")]
+	// Владелец выбирает подмножество справочника; реестр показывает ровно те
+	// инструменты, что обслуживают выбранные источники: журнал читается
+	// снимком контекста без тула, корпус даёт карточку правила, рынок —
+	// снимок фьючерсов и доску опционов.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	[DataRow(new ChatDataSource[] { ChatDataSource.Journal }, new string[] { })]
+	[DataRow(new ChatDataSource[] { ChatDataSource.RulesCorpus }, new string[] { ChatTools.ReadRuleCardToolName })]
+	[DataRow(new ChatDataSource[] { ChatDataSource.BybitMarket }, new string[] { ChatTools.GetMarketSnapshotToolName, ChatTools.GetOptionBoardToolName })]
+	[DataRow(new ChatDataSource[] { ChatDataSource.RulesCorpus, ChatDataSource.BybitMarket }, new string[] { ChatTools.ReadRuleCardToolName, ChatTools.GetMarketSnapshotToolName, ChatTools.GetOptionBoardToolName })]
+	public void TryIfSourcesSubset_RegistryContainsOnlySelectedSourceTools(ChatDataSource[] sources, string[] expectedToolNames)
+	{
+		// Act: собираем реестр из подмножества справочника.
+		var functions = CreateTools().CreateTools(sources);
+
+		// Assert: состав и порядок реестра совпадают с выбранными источниками.
+		Assert.That(functions.Select(function => function.Name), Is.EqualTo(expectedToolNames));
+	}
+
+	[TestMethod]
+	[Description("Пустой набор источников не собирает реестр")]
+	// Чат обязан выбрать хотя бы одну категорию справочника: пустой набор —
+	// ошибка параметров.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	public void ThrowOnCreateToolsWithEmptySources()
+	{
+		// Assert
+		Assert.Throws<ArgumentException>(() => CreateTools().CreateTools([]));
+	}
+
+	[TestMethod]
+	[Description("Реестр чата без источника «рынок Bybit» не содержит рыночных инструментов")]
+	// Реестр совпадает с набором источников чата: без рыночной категории ни
+	// снимок фьючерсов, ни доска опционов не попадают в реестр.
+	// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
+	public void TryIfRegistryWithoutMarketSource_ContainsNoMarketTools()
+	{
+		// Arrange: чат только с журналом и корпусом правил.
+		var sources = new[] { ChatDataSource.Journal, ChatDataSource.RulesCorpus };
+
+		// Act
+		var functions = CreateTools().CreateTools(sources);
+
+		// Assert: остаётся только чтение карточки правила.
+		Assert.That(functions.Select(function => function.Name), Is.EqualTo([ChatTools.ReadRuleCardToolName]));
+	}
+
+	[TestMethod]
+	[Description("При любом наборе источников реестр содержит только три read-only инструмента")]
+	// Источники read-only: ни один набор справочника не порождает пишущих
+	// или посторонних инструментов — реестр всегда подмножество тройки чтения.
+	// Traceability: openspec:chats/sources#scenario-sources-write-never
+	public void TryIfAnySourceSet_RegistryKeepsOnlyReadOnlyTools()
+	{
+		// Arrange: все непустые подмножества закрытого справочника.
+		var all = ChatDataSourceCatalog.All;
+
+		// Act + Assert
+		for (var mask = 1; mask < (1 << all.Count); mask++)
+		{
+			var sources = Enumerable.Range(0, all.Count)
+				.Where(index => (mask & (1 << index)) != 0)
+				.Select(index => all[index])
+				.ToList();
+			var functions = CreateTools().CreateTools(sources);
+			var selectedNames = string.Join(", ", sources);
+
+			Assert.That(
+				functions.Select(function => function.Name),
+				Is.SubsetOf(new[]
+				{
+					ChatTools.ReadRuleCardToolName,
+					ChatTools.GetMarketSnapshotToolName,
+					ChatTools.GetOptionBoardToolName,
+				}),
+				$"Набор источников: {selectedNames}");
+		}
 	}
 
 	[TestMethod]

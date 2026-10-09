@@ -12,13 +12,17 @@ using TransactionJournal.Domain.Materialization;
 /// <summary>
 /// Реестр инструментов чата: ровно три read-only инструмента —
 /// чтение карточки правила по id, снимок фьючерсного рынка и компактная
-/// проекция доски опционов по базовому активу. Пишущих инструментов и
+/// проекция доски опционов по базовому активу. Реестр чата собирается из
+/// его набора источников: рыночные инструменты появляются только при
+/// источнике «рынок Bybit», чтение карточки — при источнике «корпус
+/// правил», журнал инструментами не читается. Пишущих инструментов и
 /// инструментов по чужим конструкциям нет: реестр собирается только из
 /// этих трёх функций, каждое рыночное чтение выполняет ровно один биржевой
 /// запрос через порт рыночных данных. Результаты инструментов — markdown:
 /// компактная проекция вместо сырых данных биржи.
 // Traceability: openspec:chats/sources#requirement-sources-read-only-tool-registry
 // Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
+// Traceability: openspec:chats/sources#requirement-sources-closed-catalog
 /// </summary>
 public sealed class ChatTools
 {
@@ -59,27 +63,54 @@ public sealed class ChatTools
 	}
 
 	/// <summary>
-	/// Собирает реестр инструментов ассистента: ровно три read-only функции
-	/// с фиксированными именами; проверка реестра показывает отсутствие
-	/// пишущих инструментов. Накопитель следа опционален: каждый вызов тула
-	/// записывается в него в момент исполнения — вместе с as-of отданных данных.
+	/// Собирает реестр инструментов ассистента из набора источников чата:
+	/// корпус правил даёт чтение карточки по id, рынок Bybit — снимок
+	/// фьючерсов и проекцию доски опционов; факты журнала приходят в промпт
+	/// детерминированным снимком контекста и инструментов не требуют.
+	/// Пишущих инструментов нет ни при каком наборе: реестр собирается только
+	/// из трёх read-only функций. Дефолт — полный набор источников, все три
+	/// категории, тогда реестр содержит все три инструмента.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
 	// Traceability: openspec:chats/sources#scenario-sources-write-never
-	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	/// </summary>
+	/// <param name="sources">Набор источников чата; null — дефолт, все три категории.</param>
 	/// <param name="traceRecorder">Накопитель рыночного следа ответа; null — вызовы не записываются.</param>
-	/// <returns>Список из трёх функций инструментов.</returns>
-	public IReadOnlyList<AIFunction> CreateTools(ChatMarketTraceRecorder? traceRecorder = null) =>
-	[
-		AIFunctionFactory.Create(
-			ReadRuleCardAsync,
-			new AIFunctionFactoryOptions { Name = ReadRuleCardToolName, Description = "Возвращает полный текст карточки правила корпуса по её id из индекса.", ConfigureParameterBinding = TraceBinding(traceRecorder) }),
-		AIFunctionFactory.Create(
-			GetMarketSnapshotAsync,
-			new AIFunctionFactoryOptions { Name = GetMarketSnapshotToolName, Description = "Возвращает снимок фьючерсного рынка по базовому активу: марка, бид-аск, открытый интерес, ставка фандинга.", ConfigureParameterBinding = TraceBinding(traceRecorder) }),
-		AIFunctionFactory.Create(
-			GetOptionBoardAsync,
-			new AIFunctionFactoryOptions { Name = GetOptionBoardToolName, Description = "Возвращает компактную проекцию доски опционов по базовому активу: страйки с IV, греками, открытым интересом и бид-аском.", ConfigureParameterBinding = TraceBinding(traceRecorder) }),
-	];
+	/// <returns>Функции инструментов только выбранных источников.</returns>
+	/// <exception cref="ArgumentException">Набор источников пуст.</exception>
+	public IReadOnlyList<AIFunction> CreateTools(
+		IReadOnlyList<ChatDataSource>? sources = null,
+		ChatMarketTraceRecorder? traceRecorder = null)
+	{
+		// Дефолт набора — закрытый справочник целиком: чат без явного выбора
+		// источников получает все три категории.
+		// Traceability: openspec:chats/sources#scenario-sources-three-categories
+		var selected = sources ?? ChatDataSourceCatalog.All;
+		if (selected.Count == 0)
+		{
+			throw new ArgumentException("Набор источников данных чата не может быть пустым.", nameof(sources));
+		}
+
+		var functions = new List<AIFunction>();
+		if (selected.Contains(ChatDataSource.RulesCorpus))
+		{
+			functions.Add(AIFunctionFactory.Create(
+				ReadRuleCardAsync,
+				new AIFunctionFactoryOptions { Name = ReadRuleCardToolName, Description = "Возвращает полный текст карточки правила корпуса по её id из индекса.", ConfigureParameterBinding = TraceBinding(traceRecorder) }));
+		}
+
+		if (selected.Contains(ChatDataSource.BybitMarket))
+		{
+			functions.Add(AIFunctionFactory.Create(
+				GetMarketSnapshotAsync,
+				new AIFunctionFactoryOptions { Name = GetMarketSnapshotToolName, Description = "Возвращает снимок фьючерсного рынка по базовому активу: марка, бид-аск, открытый интерес, ставка фандинга.", ConfigureParameterBinding = TraceBinding(traceRecorder) }));
+			functions.Add(AIFunctionFactory.Create(
+				GetOptionBoardAsync,
+				new AIFunctionFactoryOptions { Name = GetOptionBoardToolName, Description = "Возвращает компактную проекцию доски опционов по базовому активу: страйки с IV, греками, открытым интересом и бид-аском.", ConfigureParameterBinding = TraceBinding(traceRecorder) }));
+		}
+
+		return functions;
+	}
 
 	/// <summary>
 	/// Привязка накопителя следа к вызову тула: параметр — обвязка вызова, а не

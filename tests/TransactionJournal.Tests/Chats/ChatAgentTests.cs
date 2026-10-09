@@ -189,7 +189,7 @@ public sealed class ChatAgentTests
 		var traceRecorder = new ChatMarketTraceRecorder();
 
 		// Act: вопрос провоцирует модель обратиться к рыночному инструменту.
-		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?", traceRecorder));
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?", traceRecorder: traceRecorder));
 
 		// Assert: вызов записан в момент исполнения — имя, компактные аргументы
 		// и as-of данных, отданных инструментом.
@@ -216,7 +216,7 @@ public sealed class ChatAgentTests
 		var traceRecorder = new ChatMarketTraceRecorder();
 
 		// Act
-		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", traceRecorder));
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Как структура?", traceRecorder: traceRecorder));
 
 		// Assert
 		Assert.That(traceRecorder.Build(), Is.Null);

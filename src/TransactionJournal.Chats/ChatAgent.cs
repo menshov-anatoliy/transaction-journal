@@ -57,8 +57,9 @@ public sealed class ChatAgent
 	/// <summary>
 	/// Стримит ответ ассистента на вопрос владельца: инструкции задают
 	/// поведение, история диалога передаётся как есть, вопрос отправляется
-	/// вместе со снимком контекста; инструменты агентного цикла — ровно три
-	/// read-only функции реестра. Накопитель следа заполняется тул-вызовами
+	/// вместе со снимком контекста; инструменты агентного цикла — реестр,
+	/// собранный из набора источников чата: только read-only функции
+	/// выбранных категорий. Накопитель следа заполняется тул-вызовами
 	/// в момент их исполнения — по завершении стрима из него строится
 	/// рыночный след сообщения ассистента.
 	// Traceability: openspec:chats/sources#requirement-sources-read-only-tool-registry
@@ -67,6 +68,7 @@ public sealed class ChatAgent
 	/// <param name="context">Снимок контекста конструкции, собранный кодом без LLM.</param>
 	/// <param name="history">Предыдущие сообщения текущего диалога в порядке следования.</param>
 	/// <param name="question">Вопрос владельца.</param>
+	/// <param name="sources">Набор источников чата; null — дефолт, все три категории.</param>
 	/// <param name="traceRecorder">Накопитель рыночного следа ответа; null — вызовы не записываются.</param>
 	/// <param name="cancellationToken">Токен отмены генерации.</param>
 	/// <returns>Поток обновлений ответа: текстовые чанки и tool-вызовы.</returns>
@@ -74,6 +76,7 @@ public sealed class ChatAgent
 		ChatContextSnapshot context,
 		IReadOnlyList<Ports.ChatMessage> history,
 		string question,
+		IReadOnlyList<ChatDataSource>? sources = null,
 		ChatMarketTraceRecorder? traceRecorder = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
@@ -92,8 +95,10 @@ public sealed class ChatAgent
 
 		var options = new ChatOptions
 		{
-			// Реестр фиксирован контрактоном: три read-only инструмента, пишущих нет.
-			Tools = [.. _tools.CreateTools(traceRecorder)],
+			// Реестр собирается из набора источников чата: только read-only
+			// функции выбранных категорий, пишущих инструментов нет.
+			// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
+			Tools = [.. _tools.CreateTools(sources, traceRecorder)],
 			ToolMode = ChatToolMode.Auto,
 		};
 

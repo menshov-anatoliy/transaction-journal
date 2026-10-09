@@ -46,7 +46,7 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 			{
 				Model = "glm-5.3",
 				ConstructionId = 7,
-				Sources = ["journal", "rules-corpus"],
+				Sources = [ChatDataSource.Journal, ChatDataSource.RulesCorpus],
 			},
 			"Первый вопрос.");
 
@@ -56,7 +56,7 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 		Assert.That(chat, Is.Not.Null);
 		Assert.That(chat!.Model, Is.EqualTo("glm-5.3"));
 		Assert.That(chat.ConstructionId, Is.EqualTo(7));
-		Assert.That(chat.Sources, Is.EqualTo(new[] { "journal", "rules-corpus" }));
+		Assert.That(chat.Sources, Is.EqualTo(new[] { ChatDataSource.Journal, ChatDataSource.RulesCorpus }));
 		Assert.That(chat.Status, Is.EqualTo(ChatStatus.Active));
 		var messages = await CreateStore().ListMessagesAsync(message.ChatId);
 		Assert.That(messages.Select(stored => stored.Text), Is.EqualTo(new[] { "Первый вопрос." }));
@@ -389,12 +389,76 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 			await service.DeleteAsync(999));
 	}
 
+	[TestMethod]
+	[Description("Чат без источника «рынок Bybit» не отправляет модели рыночных инструментов")]
+	// Реестр, уходящий модели, собирается из набора источников чата: без
+	// рыночной категории в опциях запроса нет ни снимка фьючерсов, ни доски
+	// опционов — модель физически не может читать рынок мимо набора.
+	// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
+	public async Task TryIfChatCreatedWithoutMarketSource_RegistryHasNoMarketTools()
+	{
+		// Arrange: конвейер и чат с журналом и корпусом правил.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по журналу.")]];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Loose);
+		var service = CreateService(chatClient, market, out _);
+		var userMessage = await service.AppendUserMessageAsync(
+			null,
+			new ChatStartParameters
+			{
+				Model = "glm-5.3",
+				ConstructionId = 7,
+				Sources = [ChatDataSource.Journal, ChatDataSource.RulesCorpus],
+			},
+			"Первый вопрос.");
+
+		// Act: ответ помощника проходит конвейер.
+		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
+
+		// Assert: в опциях запроса только чтение карточки правила.
+		Assert.That(chatClient.Options, Has.Count.EqualTo(1));
+		var toolNames = chatClient.Options[0]!.Tools!.Select(tool => tool.Name).ToList();
+		Assert.That(toolNames, Is.EqualTo([ChatTools.ReadRuleCardToolName]));
+	}
+
+	[TestMethod]
+	[Description("Подмножество источников чата задаёт состав реестра инструментов запроса")]
+	// Набор источников — параметр чата: чат только с рынком Bybit получает
+	// только рыночные инструменты, и ничего кроме них.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
+	public async Task TryIfChatCreatedWithSubset_RegistryContainsOnlySelectedSourceTools()
+	{
+		// Arrange: конвейер и чат только с источником «рынок Bybit».
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по рынку.")]];
+		var market = new Mock<IChatMarketReader>(MockBehavior.Loose);
+		var service = CreateService(chatClient, market, out _);
+		var userMessage = await service.AppendUserMessageAsync(
+			null,
+			new ChatStartParameters
+			{
+				Model = "glm-5.3",
+				ConstructionId = 7,
+				Sources = [ChatDataSource.BybitMarket],
+			},
+			"Что с маркой BTC?");
+
+		// Act: ответ помощника проходит конвейер.
+		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
+
+		// Assert: в опциях запроса ровно рыночные инструменты без чтения правил.
+		Assert.That(chatClient.Options, Has.Count.EqualTo(1));
+		var toolNames = chatClient.Options[0]!.Tools!.Select(tool => tool.Name).ToList();
+		Assert.That(toolNames, Is.EqualTo([ChatTools.GetMarketSnapshotToolName, ChatTools.GetOptionBoardToolName]));
+	}
+
 	/// <summary>Параметры создания чата с дефолтной моделью и полным набором источников.</summary>
 	private static ChatStartParameters Start(long? constructionId) => new()
 	{
 		Model = "glm-5.3",
 		ConstructionId = constructionId,
-		Sources = ["journal", "rules-corpus", "market"],
+		Sources = ChatDataSourceCatalog.All,
 	};
 
 	/// <summary>Собирает стрим обновлений в список для проверок.</summary>
@@ -457,7 +521,8 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 	/// <summary>
 	/// Подмена клиента модели: на каждый запрос отдаёт кадры текущей сцены
 	/// (сцена — один ответ модели, кадры — его стрим-чанки), при исчерпании
-	/// повторяет последнюю сцену, копии запросов сохраняет для проверок.
+	/// повторяет последнюю сцену, копии запросов и опций с реестром
+	/// инструментов сохраняет для проверок.
 	/// Кадры создаются фабриками — один и тот же экземпляр обновления нельзя
 	/// скармливать дважды.
 	/// </summary>
@@ -469,6 +534,9 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 		/// <summary>Запросы, полученные клиентом, в порядке поступления.</summary>
 		public List<List<ChatMessage>> Requests { get; } = [];
 
+		/// <summary>Опции запросов с реестром инструментов, в порядке поступления.</summary>
+		public List<ChatOptions?> Options { get; } = [];
+
 		public Task<ChatResponse> GetResponseAsync(
 			IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
 			throw new NotSupportedException("Агентный цикл обязан использовать стриминг.");
@@ -479,6 +547,7 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 			[EnumeratorCancellation] CancellationToken cancellationToken = default)
 		{
 			Requests.Add([.. messages]);
+			Options.Add(options);
 			await Task.Yield();
 			var scene = Script[Math.Min(Requests.Count - 1, Script.Count - 1)];
 			foreach (var frame in scene)
