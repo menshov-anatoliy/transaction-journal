@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using NUnit.Framework;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
@@ -166,6 +167,50 @@ public class ConstructionAssemblyServiceTests
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			Assert.That(db.Constructions.Count(), Is.EqualTo(1), "Конструкция собрана заново из inbox");
+		}
+	}
+
+	[TestMethod]
+	[Description("Сбой плана после стирания чатов откатывает и стирание чатов, и журнал")]
+	// Стирание чатов пересбором координировано с планом журнала: удаления
+	// копятся в области хранилища чатов и фиксируются только после фиксации
+	// плана — сбой плана откатывает обе операции, привязанный чат переживает
+	// вместе со старой записью конструкции.
+	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+	public async Task TryIfPlanFailsAfterChatWipe_ChatsAndJournalRollBack()
+	{
+		// Arrange: сырьё собрано в конструкцию, владелец ведёт привязанный чат;
+		// хранилище-обёртка выполняет первое удаление области и срывается.
+		SeedRawStorage();
+		await CreateService().RebuildAsync();
+		var realStore = CreateChatStore();
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var constructionId = db.Constructions.Single().Id;
+			await realStore.AppendMessageAsync(null, StartChat(constructionId), UserDraft("Вопрос по конструкции."));
+		}
+
+		var failingStore = new Mock<IChatStore>(MockBehavior.Loose);
+		failingStore
+			.Setup(store => store.BeginRebuildWipeAsync(It.IsAny<CancellationToken>()))
+			.ReturnsAsync((CancellationToken _) => new ThrowingRebuildWipe(realStore));
+		var failingService = CreateService(chatStore: failingStore.Object);
+
+		// Act: пересбор срывается на плане после стирания чатов.
+		Assert.ThrowsAsync<InvalidOperationException>(async () => await failingService.RebuildAsync());
+
+		// Assert: привязанный чат пережил сбой со всей историей, журнал цел —
+		// старая запись конструкции и её привязки на месте.
+		var chat = await realStore.FindChatAsync(1);
+		Assert.That(chat, Is.Not.Null, "Привязанный чат пережил откат стирания");
+		Assert.That(
+			(await realStore.ListMessagesAsync(1)).Single().Text,
+			Is.EqualTo("Вопрос по конструкции."),
+			"История пережитого чата цела");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.Constructions.Count(), Is.EqualTo(1), "Старая запись конструкции на месте");
+			Assert.That(db.TradeUserdata.Count(), Is.GreaterThan(0), "Привязки старой записи на месте");
 		}
 	}
 
@@ -809,11 +854,14 @@ public class ConstructionAssemblyServiceTests
 	#region Помощники
 
 	/// <summary>Команда пересбора над настоящим адаптером сырого хранилища и единым хранилищем чатов, как в работе.</summary>
-	private ConstructionAssemblyService CreateService(TimeProvider? timeProvider = null, StubJournalBackupService? backupService = null) => new(
+	private ConstructionAssemblyService CreateService(
+		TimeProvider? timeProvider = null,
+		StubJournalBackupService? backupService = null,
+		IChatStore? chatStore = null) => new(
 		new JournalSyncStore(CreateOptions()),
 		backupService ?? new StubJournalBackupService(),
 		CreateOptions(),
-		CreateChatStore(),
+		chatStore ?? CreateChatStore(),
 		timeProvider ?? new FixedTimeProvider(Now));
 
 	/// <summary>Создаёт опции контекста журнала над временной SQLite-базой проверки.</summary>
@@ -839,6 +887,40 @@ public class ConstructionAssemblyServiceTests
 		Text = text,
 		AsOf = Now,
 	};
+
+	/// <summary>
+	/// Область стирания с инъекцией сбоя: первое удаление выполняется
+	/// настоящим хранилищем чатов, затем область срывается — имитация сбоя
+	/// плана пересбора после того, как стирание чатов уже выполнено.
+	/// </summary>
+	private sealed class ThrowingRebuildWipe : IChatRebuildWipe
+	{
+		private readonly IChatStore _realStore;
+		private IChatRebuildWipe? _realWipe;
+
+		public ThrowingRebuildWipe(IChatStore realStore) => _realStore = realStore;
+
+		public async Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default)
+		{
+			// Удаление привязанных чатов выполняется по-настоящему — только так
+			// проверяется откат уже применённого стирания.
+			_realWipe ??= await _realStore.BeginRebuildWipeAsync(cancellationToken);
+			await _realWipe.DeleteForConstructionAsync(constructionId, cancellationToken);
+			throw new InvalidOperationException("Сбой плана пересбора после стирания чатов.");
+		}
+
+		public Task CommitAsync(CancellationToken cancellationToken = default) =>
+			throw new NotSupportedException("Область со сбоем не фиксируется.");
+
+		public async ValueTask DisposeAsync()
+		{
+			// Откат настоящей области стирания при закрытии без фиксации.
+			if (_realWipe is not null)
+			{
+				await _realWipe.DisposeAsync();
+			}
+		}
+	}
 
 	/// <summary>Наполняет сырьё: справочник инструментов, стреддл, его закрытия и сделки робота.</summary>
 	private void SeedRawStorage()

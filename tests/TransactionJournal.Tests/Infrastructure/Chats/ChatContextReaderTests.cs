@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Application.Analytics;
+using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.Data;
@@ -182,6 +183,107 @@ public class ChatContextReaderTests
 		Assert.That(markdown, Does.Contain("read_rule_card"));
 		Assert.That(markdown, Does.Not.Contain("## Конструкция «"));
 		Assert.That(markdown, Does.Not.Contain("## Лимиты конструкции"));
+	}
+
+	[TestMethod]
+	[Description("Подмножество источников только с рынком Bybit оставляет в снимке одну шапку")]
+	// Набор источников чата режет состав снимка: без журнала и корпуса правил
+	// в промпте нет ни конструкции, ни агрегатов, ни лимитов, ни индекса
+	// корпуса — только шапка снимка.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	public async Task TryIfOnlyMarketSourceSelected_SnapshotKeepsHeaderOnly()
+	{
+		// Arrange: конструкция с привязанной сделкой и заглушка корпуса.
+		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
+		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+
+		// Act: снимок по набору источников чата — только рынок Bybit.
+		var snapshot = await reader.ReadAsync(construction.Id, [ChatDataSource.BybitMarket]);
+
+		// Assert: в снимке осталась только шапка, журнальные и корпусные
+		// разделы отсечены.
+		Assert.That(snapshot.Markdown, Does.Contain($"# Снимок контекста чата (as-of: {AsOfStamp})"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Конструкция «"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Портфельные агрегаты"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Лимиты"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Индекс корпуса правил"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("read_rule_card"));
+	}
+
+	[TestMethod]
+	[Description("Подмножество источников только с журналом даёт журнальные разделы конструкции без индекса корпуса")]
+	// Источник «корпус правил» не выбран — карточный индекс в снимок не
+	// попадает; журнальные разделы конструкции, агрегатов и лимитов остаются.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	public async Task TryIfOnlyJournalSourceSelected_SnapshotKeepsJournalSectionsWithoutRuleIndex()
+	{
+		// Arrange: конструкция с привязанной сделкой и заглушка корпуса.
+		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
+		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+
+		// Act: снимок по набору источников чата — только журнал.
+		var snapshot = await reader.ReadAsync(construction.Id, [ChatDataSource.Journal]);
+
+		// Assert: журнальные разделы на месте, корпусных нет.
+		Assert.That(snapshot.Markdown, Does.Contain("## Конструкция «"));
+		Assert.That(snapshot.Markdown, Does.Contain("## Портфельные агрегаты"));
+		Assert.That(snapshot.Markdown, Does.Contain("## Лимиты конструкции"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Индекс корпуса правил"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("read_rule_card"));
+	}
+
+	[TestMethod]
+	[Description("Чат без привязки с одним источником «журнал» получает агрегаты и лимиты журнала без индекса корпуса")]
+	// На портфельном уровне набор источников режет только корпусный раздел:
+	// журнальные агрегаты и лимиты остаются, индекс корпуса отсечён.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	public async Task TryIfUnboundChatWithOnlyJournalSource_KeepsPortfolioSectionsWithoutRuleIndex()
+	{
+		// Arrange: журнал с конструкцией и позицией; корпус с недельным
+		// порогом лимита риска.
+		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
+		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus(
+		[
+			new RuleCardThreshold { Name = "weeklyRiskLimit", Value = "1", Unit = "percent" },
+		]));
+
+		// Act: снимок чата без привязки по набору источников — только журнал.
+		var snapshot = await reader.ReadAsync(null, [ChatDataSource.Journal]);
+
+		// Assert: агрегаты и лимиты журнала на месте, корпусных разделов нет.
+		Assert.That(snapshot.Markdown, Does.Contain("## Портфельные агрегаты"));
+		Assert.That(snapshot.Markdown, Does.Contain("## Лимиты журнала"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Конструкция «"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Индекс корпуса правил"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("read_rule_card"));
+	}
+
+	[TestMethod]
+	[Description("Чат без привязки с одним источником «корпус правил» получает только индекс корпуса")]
+	// Без источника «журнал» журнальные разделы отсечены даже у портфельного
+	// снимка: остаётся шапка и индекс корпуса правил.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	public async Task TryIfUnboundChatWithOnlyRuleCorpusSource_KeepsRuleIndexWithoutJournalSections()
+	{
+		// Arrange: журнал с одной конструкцией, заглушка корпуса.
+		await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
+		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+
+		// Act: снимок чата без привязки по набору источников — только корпус.
+		var snapshot = await reader.ReadAsync(null, [ChatDataSource.RulesCorpus]);
+
+		// Assert: только шапка и индекс корпуса; журнальных разделов нет.
+		Assert.That(snapshot.Markdown, Does.Contain("## Индекс корпуса правил"));
+		Assert.That(snapshot.Markdown, Does.Contain("ac-01 — Лимиты риска на период"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Портфельные агрегаты"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Лимиты журнала"));
+		Assert.That(snapshot.Markdown, Does.Not.Contain("## Конструкция «"));
 	}
 
 	[TestMethod]

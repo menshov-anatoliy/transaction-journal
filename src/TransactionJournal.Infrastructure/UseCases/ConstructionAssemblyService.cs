@@ -486,20 +486,25 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 		// конструкции заново с новыми ключами, поэтому чаты, привязанные к
 		// старым записям конструкций, стираются вместе с ними; чаты без
 		// привязки пересбор переживают. Идентификаторы старых записей читаются
-		// до вычищения таблиц, стирание идёт через хранилище чатов — оно живёт
-		// в своей SQLite-базе и не участвует в транзакции журнала. Прежние
-		// per-construction базы консультаций не мигрируют: поддержка снята
-		// без конвертации истории, пересбор стирает только чаты единого
-		// хранилища (чистый лист).
+		// до вычищения таблиц. Стирание идёт в собственной транзакции
+		// хранилища чатов (базы журнала и чатов раздельные, атомарной
+		// транзакции над двумя базами нет): удаления копятся в области и
+		// фиксируются только после фиксации плана журнала — сбой плана
+		// откатывает и журнал, и стирание, пережитых привязанных чатов не
+		// остаётся; сбой фиксации стирания после плана оставляет привязанный
+		// чат до следующего пересбора. Прежние per-construction базы
+		// консультаций не мигрируют: поддержка снята без конвертации истории,
+		// пересбор стирает только чаты единого хранилища (чистый лист).
 		// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
 		// Traceability: openspec:chats/history#scenario-chat-unbound-chat-survives-rebuild
 		var oldConstructionIds = await db.Constructions
 			.Select(construction => construction.Id)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
+		await using var chatWipe = await _chatStore.BeginRebuildWipeAsync(cancellationToken).ConfigureAwait(false);
 		foreach (var constructionId in oldConstructionIds)
 		{
-			await _chatStore.DeleteForConstructionAsync(constructionId, cancellationToken).ConfigureAwait(false);
+			await chatWipe.DeleteForConstructionAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		}
 
 		// Дочерние записи вычищаются перед конструкциями: внешние ключи привязок и
@@ -542,7 +547,12 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 			}));
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+		// Сначала фиксируется план журнала, затем стирание чатов: сбой до этой
+		// строки откатывает и журнал, и стирание чатов, привязанные чаты
+		// остаются жить вместе со старыми записями конструкций.
+		// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
 		await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+		await chatWipe.CommitAsync(cancellationToken).ConfigureAwait(false);
 	}
 
 	/// <summary>

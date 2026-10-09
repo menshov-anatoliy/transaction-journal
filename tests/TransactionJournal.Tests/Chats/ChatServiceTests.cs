@@ -523,6 +523,68 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 	}
 
 	[TestMethod]
+	[Description("Чат без источника «журнал» запрашивает снимок только по выбранному рынку и не пишет as-of журнала")]
+	// Подмножество источников режет состав снимка: чат только с рынком Bybit
+	// не получает журнальных секций, и след ответа не приписывает ответу
+	// данные журнала, которых в промпте не было.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	public async Task TryIfChatHasOnlyMarketSource_SnapshotAndTraceSkipJournal()
+	{
+		// Arrange: конвейер и чат только с источником «рынок Bybit», модель
+		// отвечает текстом без инструментальных вызовов.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по рынку.")]];
+		var service = CreateService(chatClient, new Mock<IChatMarketReader>(MockBehavior.Loose), out var contextReader);
+		var userMessage = await service.AppendUserMessageAsync(null, Start(7, [ChatDataSource.BybitMarket]), "Что с маркой BTC?");
+
+		// Act: ответ помощника проходит конвейер.
+		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
+
+		// Assert: снимок запрошен по набору источников чата — только рынок,
+		// без журнала и корпуса правил.
+		Assert.That(contextReader.RequestedConstructionIds, Is.EqualTo(new long?[] { 7 }));
+		Assert.That(
+			contextReader.RequestedSources,
+			Is.EqualTo(new IReadOnlyList<ChatDataSource>[] { [ChatDataSource.BybitMarket] }));
+
+		// Assert: источник «журнал» не выбран — as-of журнала в следе нет.
+		var messages = await CreateStore().ListMessagesAsync(userMessage.ChatId);
+		var storedAssistant = messages.Single(message => message.Role == ChatMessageRole.Assistant);
+		Assert.That(storedAssistant.SourceTrace, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Чат с одним источником «журнал» запрашивает снимок по журналу и пишет as-of снимка в след")]
+	// Журнальные секции промпта есть, когда источник «журнал» выбран:
+	// as-of снимка журнала в следе отражает реально включённые данные,
+	// корпуса правил и рынка в наборе нет.
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+	public async Task TryIfChatHasOnlyJournalSource_TraceKeepsJournalAsOf()
+	{
+		// Arrange: конвейер и чат только с источником «журнал», модель отвечает
+		// текстом без инструментальных вызовов.
+		var chatClient = new FakeChatClient();
+		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по журналу.")]];
+		var service = CreateService(chatClient, new Mock<IChatMarketReader>(MockBehavior.Loose), out var contextReader);
+		var userMessage = await service.AppendUserMessageAsync(null, Start(7, [ChatDataSource.Journal]), "Как структура?");
+
+		// Act: ответ помощника проходит конвейер.
+		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
+
+		// Assert: снимок запрошен по набору источников чата — только журнал.
+		Assert.That(
+			contextReader.RequestedSources,
+			Is.EqualTo(new IReadOnlyList<ChatDataSource>[] { [ChatDataSource.Journal] }));
+
+		// Assert: данные журнала вошли в промпт — as-of снимка записан в следе.
+		var messages = await CreateStore().ListMessagesAsync(userMessage.ChatId);
+		var storedAssistant = messages.Single(message => message.Role == ChatMessageRole.Assistant);
+		Assert.That(storedAssistant.SourceTrace, Is.Not.Null);
+		Assert.That(storedAssistant.SourceTrace!.JournalAsOf, Is.EqualTo(FixedNow));
+	}
+
+	[TestMethod]
 	[Description("Смена модели на лету переключает модель следующих сообщений, история не переписывается")]
 	// Модель — параметр чата: первый обмен уходит модели из параметров создания,
 	// после смены следующий вопрос с историей уходит новой модели, а записанная
@@ -579,12 +641,12 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 			await service.ChangeModelAsync(999, "glm-5.2"));
 	}
 
-	/// <summary>Параметры создания чата с дефолтной моделью и полным набором источников.</summary>
-	private static ChatStartParameters Start(long? constructionId) => new()
+	/// <summary>Параметры создания чата с дефолтной моделью; набор источников задаёт вызывающий, дефолт — полный.</summary>
+	private static ChatStartParameters Start(long? constructionId, IReadOnlyList<ChatDataSource>? sources = null) => new()
 	{
 		Model = "glm-5.3",
 		ConstructionId = constructionId,
-		Sources = ChatDataSourceCatalog.All,
+		Sources = sources ?? ChatDataSourceCatalog.All,
 	};
 
 	/// <summary>Собирает стрим обновлений в список для проверок.</summary>
@@ -640,9 +702,16 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 		/// <summary>Привязки, по которым запрашивался снимок, в порядке обращений.</summary>
 		public List<long?> RequestedConstructionIds { get; } = [];
 
-		public Task<ChatContextSnapshot> ReadAsync(long? constructionId, CancellationToken cancellationToken = default)
+		/// <summary>Наборы источников, по которым запрашивался снимок, в порядке обращений.</summary>
+		public List<IReadOnlyList<ChatDataSource>> RequestedSources { get; } = [];
+
+		public Task<ChatContextSnapshot> ReadAsync(
+			long? constructionId,
+			IReadOnlyList<ChatDataSource>? sources = null,
+			CancellationToken cancellationToken = default)
 		{
 			RequestedConstructionIds.Add(constructionId);
+			RequestedSources.Add(sources ?? ChatDataSourceCatalog.All);
 			return Task.FromResult(new ChatContextSnapshot
 			{
 				Markdown = "# Снимок контекста",

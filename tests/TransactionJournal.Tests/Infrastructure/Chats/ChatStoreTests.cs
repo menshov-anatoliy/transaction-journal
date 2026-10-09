@@ -436,6 +436,43 @@ public class ChatStoreTests : ChatDatabaseTests
 	}
 
 	[TestMethod]
+	[Description("Область стирания применяет удаления только после фиксации; закрытие без фиксации откатывает их")]
+	// Стирание пересбором координируется с транзакцией журнала: удаления
+	// фиксируются явным CommitAsync области, закрытие без фиксации откатывает
+	// их целиком — сбой плана журнала не оставляет пережитых привязанных чатов.
+	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+	public async Task TryIfRebuildWipeScopeNotCommitted_WipeRollsBackUntilCommit()
+	{
+		// Arrange: привязанный и непривязанный чаты с историей.
+		var store = CreateStore();
+		var bound = await store.AppendMessageAsync(null, Start(7), UserDraft("Вопрос конструкции 7."));
+		var unbound = await store.AppendMessageAsync(null, Start(null), UserDraft("Портфельный вопрос."));
+
+		// Act: стирание в области без фиксации — закрытие области откатывает.
+		await using (var wipe = await store.BeginRebuildWipeAsync())
+		{
+			await wipe.DeleteForConstructionAsync(7);
+		}
+
+		// Assert: привязанный чат со своей историей жив, стирание не применилось.
+		Assert.That(await store.FindChatAsync(bound.ChatId), Is.Not.Null, "Стирание без фиксации откатилось");
+		Assert.That((await store.ListMessagesAsync(bound.ChatId)).Single().Text, Is.EqualTo("Вопрос конструкции 7."));
+
+		// Act: стирание в области с фиксацией.
+		await using (var wipe = await store.BeginRebuildWipeAsync())
+		{
+			await wipe.DeleteForConstructionAsync(7);
+			await wipe.CommitAsync();
+		}
+
+		// Assert: привязанный чат стёрт, непривязанный переживает.
+		Assert.That(await store.FindChatAsync(bound.ChatId), Is.Null, "Фиксированное стирание удалило привязанный чат");
+		var surviving = await store.FindChatAsync(unbound.ChatId);
+		Assert.That(surviving, Is.Not.Null, "Непривязанный чат переживает");
+		Assert.That(surviving!.ConstructionId, Is.Null, "Привязка непривязанного чата не изменилась");
+	}
+
+	[TestMethod]
 	[Description("Сообщения сами по себе чат не завершают: автоматического завершения нет")]
 	// Автоматического завершения нет: ни отправка сообщений, ни поздний as-of
 	// не меняют активный статус — чат завершает только ручное действие

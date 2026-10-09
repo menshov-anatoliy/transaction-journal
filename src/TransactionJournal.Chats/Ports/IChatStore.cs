@@ -108,6 +108,38 @@ public interface IChatStore
 	/// <param name="constructionId">Идентификатор стираемой конструкции.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Открывает область стирания чатов пересбором: удаления привязанных
+	/// чатов накапливаются в транзакции хранилища чатов и применяются только
+	/// CommitAsync; закрытие области без фиксации откатывает их целиком.
+	/// Область нужна, чтобы стирание чатов конструкции уехало в той же
+	/// координированной фиксации, что и план пересбора журнала: сбой плана
+	/// откатывает и журнал, и стирание, пережитых привязанных чатов не остаётся.
+	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+	/// </summary>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	/// <returns>Область стирания; CommitAsync фиксирует удаления, dispose без фиксации — откат.</returns>
+	Task<IChatRebuildWipe> BeginRebuildWipeAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Область стирания чатов пересбором: группирует удаления привязанных
+/// чатов в одной транзакции хранилища чатов. Фиксация области — отдельное
+/// явное действие, вызываемое строго после фиксации плана журнала; закрытие
+/// области без фиксации откатывает все её удаления.
+// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+/// </summary>
+public interface IChatRebuildWipe : IAsyncDisposable
+{
+	/// <summary>Стирает чаты конструкции со всеми историями внутри области.</summary>
+	/// <param name="constructionId">Идентификатор стираемой конструкции.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default);
+
+	/// <summary>Фиксирует удаления области: после фиксации стёртые чаты не восстанавливаются.</summary>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task CommitAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>Статус жизненного цикла чата: активен или завершён владельцем.</summary>

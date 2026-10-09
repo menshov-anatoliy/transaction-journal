@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
+using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
 using TransactionJournal.Domain;
 using TransactionJournal.Infrastructure.Analytics;
@@ -16,11 +17,15 @@ using TransactionJournal.Infrastructure.ReadModels;
 /// портфельный уровень — агрегаты и лимиты журнала с индексом корпуса без
 /// раздела конструкции. Каждый раздел несёт собственную as-of
 /// отметку сборки, живые подсказки движка в снимок не попадают вовсе —
-/// контекст формируется только из фактов журнала и канона правил.
+/// контекст формируется только из фактов журнала и канона правил. Состав
+/// снимка режется набором источников чата: журнальные секции — только
+/// с источником «журнал», индекс корпуса — только с источником
+/// «корпус правил».
 /// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
 /// Traceability: openspec:chats/context#scenario-chat-context-construction-snapshot-with-asof
 /// Traceability: openspec:chats/context#scenario-chat-context-hints-excluded
 /// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+/// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
 /// </summary>
 public sealed class ChatContextReader : IChatContextReader
 {
@@ -58,12 +63,28 @@ public sealed class ChatContextReader : IChatContextReader
 	/// портфельных агрегатов, дублирование вычисления принимается как цена
 	/// разделения read-моделей. Чат без привязки получает портфельный уровень:
 	/// агрегаты, лимиты журнала и индекс корпуса — без раздела конструкции.
+	/// Набор источников чата решает, какие секции попадут в снимок: журнал —
+	/// источник фактов, без него не попадает ни конструкция, ни агрегаты,
+	/// ни лимиты; корпус — только индекс карточек.
 	/// Traceability: openspec:chats/context#requirement-chat-context-deterministic-snapshot
 	/// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
+	/// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
 	/// </remarks>
-	public async Task<ChatContextSnapshot> ReadAsync(long? constructionId, CancellationToken cancellationToken = default)
+	public async Task<ChatContextSnapshot> ReadAsync(
+		long? constructionId,
+		IReadOnlyList<ChatDataSource>? sources = null,
+		CancellationToken cancellationToken = default)
 	{
 		var asOf = _timeProvider.GetUtcNow();
+
+		// Набор источников чата режет состав снимка: секции журнала (конструкция,
+		// портфельные агрегаты, лимиты) попадают в промпт только с источником
+		// «журнал», индекс корпуса — только с источником «корпус правил»;
+		// набор не задан — дефолт, все три категории справочника.
+		// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+		var selected = sources is { Count: > 0 } ? sources : ChatDataSourceCatalog.All;
+		var includeJournal = selected.Contains(ChatDataSource.Journal);
+		var includeRuleCorpus = selected.Contains(ChatDataSource.RulesCorpus);
 
 		// Чат без привязки консультируется на портфельном уровне журнала:
 		// агрегаты, лимиты журнала и индекс корпуса — без раздела конструкции;
@@ -71,16 +92,22 @@ public sealed class ChatContextReader : IChatContextReader
 		// Traceability: openspec:chats/context#scenario-chat-context-portfolio-snapshot-without-construction
 		if (constructionId is null)
 		{
-			var portfolioMetrics = await _metricsReadModel.ReadAsync(cancellationToken);
-			var portfolioRuleIndex = await _ruleCorpusReader.ListIndexAsync(cancellationToken);
-			var journalLimits = await _ruleCorpusReader.ReadCardThresholdsAsync(JournalRiskLimitsCardId, cancellationToken);
-
 			var portfolioMarkdown = new StringBuilder();
 			portfolioMarkdown.AppendLine($"# Снимок контекста чата {AsOfTag(asOf)}");
 			portfolioMarkdown.AppendLine();
-			AppendPortfolioSection(portfolioMarkdown, portfolioMetrics, asOf);
-			AppendJournalLimitsSection(portfolioMarkdown, portfolioMetrics, journalLimits, asOf);
-			AppendRuleIndexSection(portfolioMarkdown, portfolioRuleIndex, asOf);
+			if (includeJournal)
+			{
+				var portfolioMetrics = await _metricsReadModel.ReadAsync(cancellationToken);
+				var journalLimits = await _ruleCorpusReader.ReadCardThresholdsAsync(JournalRiskLimitsCardId, cancellationToken);
+				AppendPortfolioSection(portfolioMarkdown, portfolioMetrics, asOf);
+				AppendJournalLimitsSection(portfolioMarkdown, portfolioMetrics, journalLimits, asOf);
+			}
+
+			if (includeRuleCorpus)
+			{
+				var portfolioRuleIndex = await _ruleCorpusReader.ListIndexAsync(cancellationToken);
+				AppendRuleIndexSection(portfolioMarkdown, portfolioRuleIndex, asOf);
+			}
 
 			return new ChatContextSnapshot
 			{
@@ -91,8 +118,6 @@ public sealed class ChatContextReader : IChatContextReader
 		}
 
 		var detail = await _detailReadModel.ReadAsync(constructionId.Value, cancellationToken);
-		var metrics = await _metricsReadModel.ReadAsync(cancellationToken);
-		var ruleIndex = await _ruleCorpusReader.ListIndexAsync(cancellationToken);
 
 		// Конструкции не в открытом статусе уже разобраны: снимок строится по
 		// финальному состоянию, промпт пост-мортема выбирает другой режим работы.
@@ -102,10 +127,23 @@ public sealed class ChatContextReader : IChatContextReader
 		var markdown = new StringBuilder();
 		markdown.AppendLine($"# Снимок контекста чата {AsOfTag(asOf)}");
 		markdown.AppendLine();
-		AppendConstructionSection(markdown, detail, asOf);
-		AppendPortfolioSection(markdown, metrics, asOf);
-		AppendLimitsSection(markdown, detail, asOf);
-		AppendRuleIndexSection(markdown, ruleIndex, asOf);
+		if (includeJournal)
+		{
+			// Разделы конструкции — журнального происхождения: позиции, результат
+			// и лимиты считаны из журнала, поэтому без источника «журнал» они
+			// в промпт не попадают даже у привязанного чата.
+			// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+			AppendConstructionSection(markdown, detail, asOf);
+			var metrics = await _metricsReadModel.ReadAsync(cancellationToken);
+			AppendPortfolioSection(markdown, metrics, asOf);
+			AppendLimitsSection(markdown, detail, asOf);
+		}
+
+		if (includeRuleCorpus)
+		{
+			var ruleIndex = await _ruleCorpusReader.ListIndexAsync(cancellationToken);
+			AppendRuleIndexSection(markdown, ruleIndex, asOf);
+		}
 
 		return new ChatContextSnapshot
 		{

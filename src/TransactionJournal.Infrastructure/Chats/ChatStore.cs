@@ -2,6 +2,7 @@ namespace TransactionJournal.Infrastructure.Chats;
 
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
 
@@ -227,30 +228,99 @@ public sealed class ChatStore : IChatStore
 	public async Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default)
 	{
 		EnsureConstructionId(constructionId);
-		using var db = CreateContext();
-		var boundChatIds = await db.Chats
-			.Where(chat => chat.ConstructionId == constructionId)
-			.Select(chat => chat.Id)
-			.ToListAsync(cancellationToken)
-			.ConfigureAwait(false);
-		if (boundChatIds.Count == 0)
+
+		// Разовое стирание поверх области: та же логика удаления привязанных
+		// чатов, транзакция открыта и зафиксирована внутри вызова — для
+		// вызывающих порт ведёт себя как прежде.
+		await using var wipe = await BeginRebuildWipeAsync(cancellationToken).ConfigureAwait(false);
+		await wipe.DeleteForConstructionAsync(constructionId, cancellationToken).ConfigureAwait(false);
+		await wipe.CommitAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <inheritdoc cref="IChatStore.BeginRebuildWipeAsync" />
+	// Стирание чатов пересбором делит судьбу с планом журнала: область держит
+	// транзакцию хранилища чатов, фиксируемую строго после фиксации плана, —
+	// сбой плана откатывает и журнал, и стирание.
+	// Traceability: openspec:chats/history#scenario-chat-rebuild-wipes-bound-chats
+	public async Task<IChatRebuildWipe> BeginRebuildWipeAsync(CancellationToken cancellationToken = default)
+	{
+		var db = CreateContext();
+		var transaction = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+		return new RebuildWipe(db, transaction);
+	}
+
+	#region Область стирания пересбором
+
+	/// <summary>
+	/// Область стирания над одним короткоживущим контекстом: удаления идут
+	/// в одной транзакции, фиксируются явным CommitAsync; закрытие области
+	/// без фиксации откатывает их целиком.
+	/// </summary>
+	private sealed class RebuildWipe : IChatRebuildWipe
+	{
+		private readonly ChatDbContext _db;
+		private readonly IDbContextTransaction _transaction;
+		private bool _committed;
+
+		public RebuildWipe(ChatDbContext db, IDbContextTransaction transaction)
 		{
-			return;
+			_db = db;
+			_transaction = transaction;
 		}
 
-		// Стирание как у удаления владельцем — целиком без корзины: сначала
-		// все сообщения привязанных чатов, затем сами чаты. Чаты без привязки
-		// и чаты других конструкций в выборку не попадают и переживают.
-		// Traceability: openspec:chats/history#scenario-chat-unbound-chat-survives-rebuild
-		await db.Messages
-			.Where(message => boundChatIds.Contains(message.ChatId))
-			.ExecuteDeleteAsync(cancellationToken)
-			.ConfigureAwait(false);
-		await db.Chats
-			.Where(chat => chat.ConstructionId == constructionId)
-			.ExecuteDeleteAsync(cancellationToken)
-			.ConfigureAwait(false);
+		/// <summary>Стирание привязанных чатов: сообщения и чаты конструкции
+		/// удаляются, остальные чаты не затрагиваются.</summary>
+		public async Task DeleteForConstructionAsync(long constructionId, CancellationToken cancellationToken = default)
+		{
+			// Чат — запись окружения: пересбор стирает чаты, привязанные к
+			// конструкции, вместе с её старой записью; портфельные чаты без
+			// привязки и чаты других конструкций пересбор переживают.
+			// Traceability: openspec:chats/history#scenario-chat-unbound-chat-survives-rebuild
+			var boundChatIds = await _db.Chats
+				.Where(chat => chat.ConstructionId == constructionId)
+				.Select(chat => chat.Id)
+				.ToListAsync(cancellationToken)
+				.ConfigureAwait(false);
+			if (boundChatIds.Count == 0)
+			{
+				return;
+			}
+
+			// Стирание как у удаления владельцем — целиком без корзины: сначала
+			// все сообщения привязанных чатов, затем сами чаты. Чаты без привязки
+			// и чаты других конструкций в выборку не попадают и переживают.
+			// Traceability: openspec:chats/history#scenario-chat-unbound-chat-survives-rebuild
+			await _db.Messages
+				.Where(message => boundChatIds.Contains(message.ChatId))
+				.ExecuteDeleteAsync(cancellationToken)
+				.ConfigureAwait(false);
+			await _db.Chats
+				.Where(chat => chat.ConstructionId == constructionId)
+				.ExecuteDeleteAsync(cancellationToken)
+				.ConfigureAwait(false);
+		}
+
+		/// <summary>Фиксация области: после неё стёртые чаты не восстанавливаются.</summary>
+		public async Task CommitAsync(CancellationToken cancellationToken = default)
+		{
+			await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+			_committed = true;
+		}
+
+		/// <summary>Закрытие области: без фиксации транзакция откатывается.</summary>
+		public async ValueTask DisposeAsync()
+		{
+			await using var transaction = _transaction;
+			if (_committed == false)
+			{
+				await transaction.RollbackAsync().ConfigureAwait(false);
+			}
+
+			await _db.DisposeAsync().ConfigureAwait(false);
+		}
 	}
+
+	#endregion
 
 	#region Служебные выборки хранилища
 

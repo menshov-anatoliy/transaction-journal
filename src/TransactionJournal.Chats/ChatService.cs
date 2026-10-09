@@ -50,58 +50,58 @@ public sealed class ChatService
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
-		/// <summary>
-		/// Завершает чат вручную владельца: чат уходит из списка активных в
-		/// список завершённых, история сохраняется; автоматического завершения
-		/// нет — статус меняет только это действие.
-		// Traceability: openspec:chats/history#scenario-chat-completion-hides-to-completed-list
-		/// </summary>
-		/// <param name="chatId">Идентификатор завершаемого чата.</param>
-		/// <param name="cancellationToken">Токен отмены.</param>
-		public Task CompleteAsync(long chatId, CancellationToken cancellationToken = default) =>
-			_store.CompleteChatAsync(chatId, cancellationToken);
+	/// <summary>
+	/// Завершает чат вручную владельца: чат уходит из списка активных в
+	/// список завершённых, история сохраняется; автоматического завершения
+	/// нет — статус меняет только это действие.
+	// Traceability: openspec:chats/history#scenario-chat-completion-hides-to-completed-list
+	/// </summary>
+	/// <param name="chatId">Идентификатор завершаемого чата.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	public Task CompleteAsync(long chatId, CancellationToken cancellationToken = default) =>
+		_store.CompleteChatAsync(chatId, cancellationToken);
 
-		/// <summary>
-		/// Продолжает завершённый чат: он возвращается в список активных ещё до
-		/// отправки нового сообщения.
-		// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
-		/// </summary>
-		/// <param name="chatId">Идентификатор продолжаемого чата.</param>
-		/// <param name="cancellationToken">Токен отмены.</param>
-		public Task ResumeAsync(long chatId, CancellationToken cancellationToken = default) =>
-			_store.ResumeChatAsync(chatId, cancellationToken);
+	/// <summary>
+	/// Продолжает завершённый чат: он возвращается в список активных ещё до
+	/// отправки нового сообщения.
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+	/// </summary>
+	/// <param name="chatId">Идентификатор продолжаемого чата.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	public Task ResumeAsync(long chatId, CancellationToken cancellationToken = default) =>
+		_store.ResumeChatAsync(chatId, cancellationToken);
 
-		/// <summary>
-		/// Удаляет чат целиком со всеми сообщениями: явное действие владельца,
-		/// корзины нет — восстановление невозможно.
-		// Traceability: openspec:chats/history#scenario-chat-hard-delete
-		/// </summary>
-		/// <param name="chatId">Идентификатор удаляемого чата.</param>
-		/// <param name="cancellationToken">Токен отмены.</param>
-		public Task DeleteAsync(long chatId, CancellationToken cancellationToken = default) =>
-			_store.DeleteChatAsync(chatId, cancellationToken);
+	/// <summary>
+	/// Удаляет чат целиком со всеми сообщениями: явное действие владельца,
+	/// корзины нет — восстановление невозможно.
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	/// </summary>
+	/// <param name="chatId">Идентификатор удаляемого чата.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	public Task DeleteAsync(long chatId, CancellationToken cancellationToken = default) =>
+		_store.DeleteChatAsync(chatId, cancellationToken);
 
-		/// <summary>Активные чаты в порядке создания.</summary>
-		/// <param name="cancellationToken">Токен отмены.</param>
-		public Task<IReadOnlyList<ChatRecord>> ListActiveAsync(CancellationToken cancellationToken = default) =>
-			_store.ListActiveChatsAsync(cancellationToken);
+	/// <summary>Активные чаты в порядке создания.</summary>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	public Task<IReadOnlyList<ChatRecord>> ListActiveAsync(CancellationToken cancellationToken = default) =>
+		_store.ListActiveChatsAsync(cancellationToken);
 
-		/// <summary>Завершённые владельцем чаты в порядке создания.</summary>
-		/// <param name="cancellationToken">Токен отмены.</param>
-		public Task<IReadOnlyList<ChatRecord>> ListCompletedAsync(CancellationToken cancellationToken = default) =>
-			_store.ListCompletedChatsAsync(cancellationToken);
+	/// <summary>Завершённые владельцем чаты в порядке создания.</summary>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	public Task<IReadOnlyList<ChatRecord>> ListCompletedAsync(CancellationToken cancellationToken = default) =>
+		_store.ListCompletedChatsAsync(cancellationToken);
 
-		/// <summary>
-		/// Меняет модель существующего чата: последующие сообщения уходят выбранной
-		/// модели, история не переписывается; возвращает чат с обновлённой моделью.
-		// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
-		/// </summary>
-		/// <param name="chatId">Идентификатор чата.</param>
-		/// <param name="model">Новый идентификатор модели в API провайдера.</param>
-		/// <param name="cancellationToken">Токен отмены.</param>
-		/// <returns>Чат с обновлённой моделью.</returns>
-		public Task<ChatRecord> ChangeModelAsync(long chatId, string model, CancellationToken cancellationToken = default) =>
-			_store.ChangeChatModelAsync(chatId, model, cancellationToken);
+	/// <summary>
+	/// Меняет модель существующего чата: последующие сообщения уходят выбранной
+	/// модели, история не переписывается; возвращает чат с обновлённой моделью.
+	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+	/// </summary>
+	/// <param name="chatId">Идентификатор чата.</param>
+	/// <param name="model">Новый идентификатор модели в API провайдера.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	/// <returns>Чат с обновлённой моделью.</returns>
+	public Task<ChatRecord> ChangeModelAsync(long chatId, string model, CancellationToken cancellationToken = default) =>
+		_store.ChangeChatModelAsync(chatId, model, cancellationToken);
 
 	/// <summary>
 	/// Фиксирует сообщение владельца и возвращает его с присвоенными ключами:
@@ -136,12 +136,14 @@ public sealed class ChatService
 	/// <summary>
 	/// Стримит ответ ИИ-помощника на зафиксированное сообщение владельца:
 	/// читается чат и его собственная история до вопроса, снимок контекста
-	/// собирается по привязке чата — с конструкцией или портфельный уровень,
+	/// собирается по привязке чата и его набору источников — с конструкцией
+	/// или портфельный уровень и только выбранные категории данных,
 	/// инструменты агентного цикла пишут след источников, по завершении
 	/// стрима ответ фиксируется с as-of и следом. Отмена генерации оставляет
 	/// чат без ответа помощника.
 	// Traceability: openspec:chats/history#scenario-chat-neighbour-isolation
 	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
 	/// </summary>
 	/// <param name="chatId">Идентификатор чата, в котором оставлено сообщение владельца.</param>
 	/// <param name="userMessage">Зафиксированное сообщение владельца, на которое отвечает помощник.</param>
@@ -184,17 +186,25 @@ public sealed class ChatService
 		var history = allMessages
 			.TakeWhile(message => message.Id != userMessage.Id)
 			.ToList();
+		// Снимок собирается по привязке и набору источников чата: состав секций
+		// промпта — подмножество закрытого справочника, выбранное владельцем
+		// при создании чата, а не весь справочник.
+		// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
 		var snapshot = await _contextReader
-			.ReadAsync(chat.ConstructionId, cancellationToken)
+			.ReadAsync(chat.ConstructionId, chat.Sources, cancellationToken)
 			.ConfigureAwait(false);
 
 		var traceRecorder = new ChatSourceTraceRecorder();
 
-		// As-of данных журнала записывается на каждый ответ: снимок контекста
-		// собран детерминированным кодом и уже вошёл в промпт — данные журнала
-		// использованы ответом независимо от того, звала ли модель инструменты.
+		// As-of данных журнала записывается, когда данные журнала действительно
+		// вошли в снимок: источник «журнал» не выбран — журнальных секций в
+		// промпте нет, и след не приписывает ответу данные, которых в нём не было.
 		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
-		traceRecorder.RecordJournal(snapshot.AsOf);
+		// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+		if (chat.Sources.Contains(ChatDataSource.Journal))
+		{
+			traceRecorder.RecordJournal(snapshot.AsOf);
+		}
 
 		var answer = new StringBuilder();
 		await foreach (var update in _agent
