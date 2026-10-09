@@ -30,10 +30,10 @@
     <!-- Корпус правил деплоится рядом с exe: дефолтный путь загрузчика — rules/ в BaseDirectory. -->
     <None Include="..\..\rules\**\*.yaml" CopyToOutputDirectory="PreserveNewest" Link="rules\%(Filename)%(Extension)" />
     <!-- Инструкции агента чата деплоятся рядом с rules/: дефолтный
-         путь читателя — consultation-prompt.md в BaseDirectory, владелец правит
+         путь читателя — agent-prompt.md в BaseDirectory, владелец правит
          файл без пересборки, отсутствие или битость оставляет встроенный дефолт. -->
     <!-- Traceability: openspec:chats/context#requirement-chat-context-agent-instructions-file -->
-    <None Include="..\..\consultation-prompt.md" CopyToOutputDirectory="PreserveNewest" Link="consultation-prompt.md" />
+    <None Include="..\..\agent-prompt.md" CopyToOutputDirectory="PreserveNewest" Link="agent-prompt.md" />
   </ItemGroup>
 
   <ItemGroup>

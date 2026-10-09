@@ -254,7 +254,7 @@ public sealed class ChatAgentTests
 		new(
 			chatClient,
 			new ChatTools(new Mock<IRuleCorpusReader>(MockBehavior.Loose).Object, market.Object),
-			new ChatInstructions(Path.Combine(Path.GetTempPath(), "no-such-consultation-prompt.md")));
+			new ChatInstructions(Path.Combine(Path.GetTempPath(), "no-such-agent-prompt.md")));
 
 	/// <summary>
 	/// Подмена клиента модели: на каждый запрос отдаёт кадры текущей сцены

@@ -2,7 +2,7 @@ namespace TransactionJournal.Chats;
 
 /// <summary>
 /// Инструкции агента чата: поведение ассистента задаётся редактируемым
-/// файлом <c>consultation-prompt.md</c> — отдельный настраиваемый путь, по
+/// файлом <c>agent-prompt.md</c> — отдельный настраиваемый путь, по
 /// умолчанию файл лежит рядом с каталогом <c>rules/</c>; валидный файл
 /// переопределяет встроенный минимальный дефолт, отсутствие или нечитаемость
 /// файла чат не ломает — работает встроенный дефолт. Файл перечитывается на
@@ -13,7 +13,7 @@ namespace TransactionJournal.Chats;
 public sealed class ChatInstructions
 {
 	/// <summary>Имя файла инструкций по умолчанию, размещаемого рядом с rules/.</summary>
-	public const string DefaultFileName = "consultation-prompt.md";
+	public const string DefaultFileName = "agent-prompt.md";
 
 	/// <summary>
 	/// Встроенный минимальный дефолт инструкций: обязательные принципы поведения
@@ -59,7 +59,7 @@ public sealed class ChatInstructions
 	private readonly string _path;
 
 	/// <summary>Создаёт источник инструкций агента по пути файла.</summary>
-	/// <param name="path">Путь файла инструкций (дефолт consultation-prompt.md рядом с rules/, переопределяется настройкой).</param>
+	/// <param name="path">Путь файла инструкций (дефолт agent-prompt.md рядом с rules/, переопределяется настройкой).</param>
 	public ChatInstructions(string path)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(path);

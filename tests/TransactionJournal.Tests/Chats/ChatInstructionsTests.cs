@@ -21,7 +21,7 @@ public class ChatInstructionsTests
 	private const string WebProjectPath = @"src\TransactionJournal\TransactionJournal.csproj";
 
 	/// <summary>Относительный путь деплоимого файла инструкций в репозитории.</summary>
-	private const string PromptFilePath = "consultation-prompt.md";
+	private const string PromptFilePath = "agent-prompt.md";
 
 	[TestMethod]
 	[Description("Встроенный дефолт инструкций несёт все обязательные принципы")]
@@ -61,7 +61,7 @@ public class ChatInstructionsTests
 
 	[TestMethod]
 	[Description("Валидный файл инструкций переопределяет встроенный дефолт")]
-	// Проверяем сценарий переопределения: непустой consultation-prompt.md рядом
+	// Проверяем сценарий переопределения: непустой agent-prompt.md рядом
 	// с rules/ используется ассистентом вместо встроенного дефолта.
 	// Traceability: openspec:chats/context#scenario-chat-context-instructions-override
 	public async Task TryIfValidFileOverridesBuiltInDefault()
@@ -160,7 +160,7 @@ public class ChatInstructionsTests
 
 	[TestMethod]
 	[Description("Деплоимый файл инструкций лежит в корне решения и копируется рядом с rules/")]
-	// Проверяем дефолтное размещение: consultation-prompt.md находится рядом с
+	// Проверяем дефолтное размещение: agent-prompt.md находится рядом с
 	// каталогом rules/ в репозитории, а проект Web копирует его в BaseDirectory
 	// при сборке — файл доступен для правки владельцем без пересборки кода.
 	// Traceability: openspec:chats/context#requirement-chat-context-agent-instructions-file
@@ -173,9 +173,9 @@ public class ChatInstructionsTests
 		// Act: проверяем наличие файла рядом с rules и правила деплоя в csproj.
 
 		// Assert: файл лежит рядом с rules/, csproj копирует его в корень вывода.
-		Assert.That(File.Exists(Path.Combine(root, PromptFilePath)), Is.True, "Файл consultation-prompt.md отсутствует рядом с rules/ в корне решения.");
-		StringAssert.Contains(projectText, @"..\..\consultation-prompt.md", "Проект Web не деплоит consultation-prompt.md.");
-		StringAssert.Contains(projectText, "CopyToOutputDirectory", "Деплой consultation-prompt.md должен копировать файл в вывод сборки.");
+		Assert.That(File.Exists(Path.Combine(root, PromptFilePath)), Is.True, "Файл agent-prompt.md отсутствует рядом с rules/ в корне решения.");
+		StringAssert.Contains(projectText, @"..\..\agent-prompt.md", "Проект Web не деплоит agent-prompt.md.");
+		StringAssert.Contains(projectText, "CopyToOutputDirectory", "Деплой agent-prompt.md должен копировать файл в вывод сборки.");
 	}
 
 	[TestMethod]
