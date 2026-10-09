@@ -5,8 +5,8 @@ import { decodeChatStreamFrame, type ChatStreamEvent } from "@/chat/sse/chat-str
 /**
  * Тонкий типизированный клиент API чата агента поверх /api/v1.
  *
- * Бэкенд-контракт реализован AgentEndpoints; полноценный ИИ-конвейер
- * подключается отдельно в change add-agent-chat:
+ * Бэкенд-контракт реализован AgentEndpoints поверх доменного конвейера
+ * change add-agent-chat (единое SQLite-хранилище, агентный цикл над моделью):
  *
  *   GET    /api/v1/chats?status=active|completed
  *          → ChatDto[] — списки активных и завершённых чатов

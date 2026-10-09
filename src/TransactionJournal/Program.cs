@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.FileProviders;
+using OpenAI;
+using System.ClientModel;
 using TransactionJournal;
 using TransactionJournal.Api;
 using TransactionJournal.Api.Constructions;
@@ -292,13 +295,6 @@ builder.Services.AddSingleton<IHintPassRunner>(sp => sp.GetRequiredService<HintA
 // Traceability: openspec:ui/screens#requirement-ui-hint-section-groups
 builder.Services.AddSingleton<IHintDisplayReadModel, HintDisplayReadModel>();
 builder.Services.AddSingleton<AgentRulesCatalog>();
-// Хранилище раздела «Агент» получает дефолт модели чата из подсекции
-// Llm:Chat: чат, созданный без выбора модели, работает на конфигурируемой
-// модели без правки кода.
-// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
-builder.Services.AddSingleton(sp => new AgentChatStore(
-	dataDirectory,
-	sp.GetRequiredService<ChatModelOptions>()));
 
 // Единое SQLite-хранилище чатов агента: плоские чаты с параметрами и полной
 // историей сообщений одним файлом рядом с базой журнала — per-construction
@@ -354,6 +350,55 @@ builder.Services.AddSingleton(ChatModelOptions.Resolve(
 	llmSettings.BaseUrl,
 	llmSettings.ApiKey,
 	builder.Configuration["Llm:Chat:Model"]));
+
+// Конвейер чатов add-agent-chat подключается к разделу «Агент»:
+// ключевой клиент модели "chats" — OpenAI-совместимый доступ из общих
+// настроек секции Llm (эндпоинт, ключ, рабочая модель); незастроенный ключ
+// обнаруживается лениво, в момент обращения к модели, и деградирует
+// событием ошибки SSE-канала, историю чата он не ломает.
+// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
+builder.Services.AddKeyedSingleton<IChatClient>(ChatAgent.ChatClientServiceKey, static (sp, _) =>
+{
+	var options = sp.GetRequiredService<ChatModelOptions>();
+	if (string.IsNullOrWhiteSpace(options.ApiKey))
+	{
+		return new UnconfiguredChatClient();
+	}
+
+	return new OpenAIClient(new ApiKeyCredential(options.ApiKey), new OpenAIClientOptions
+	{
+		Endpoint = new Uri(options.BaseUrl),
+	})
+	.GetChatClient(options.Model)
+	.AsIChatClient();
+});
+// Инструменты чата: читатели связываются в composition root — корпус правил
+// через адаптер над загрузчиком, рынок Bybit поверх единого клиента тикеров
+// и кэша марок журнала.
+// Traceability: openspec:chats/sources#requirement-sources-read-only-tool-registry
+builder.Services.AddSingleton<IRuleCorpusReader>(sp =>
+	new RulesCorpusChatAdapter(sp.GetRequiredService<RulesCorpusLoader>()));
+builder.Services.AddSingleton<IChatMarketReader>(sp => new BybitChatMarketReader(
+	sp.GetRequiredService<BybitTickersClient>(),
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+// Снимок контекста чата: конструкция либо портфельный уровень из read-моделей
+// журнала; для закрытой конструкции конвейер сам ведёт пост-мортем.
+// Traceability: openspec:chats/context#requirement-chat-context-postmortem-mode
+builder.Services.AddSingleton<IChatContextReader>(sp => new ChatContextReader(
+	sp.GetRequiredService<IConstructionDetailReadModel>(),
+	sp.GetRequiredService<IJournalMetricsReadModel>(),
+	sp.GetRequiredService<IRuleCorpusReader>()));
+// Инструкции агента: agent-prompt.md рядом с rules/, перечитывается на каждое
+// сообщение; отсутствие файла оставляет встроенный дефолт.
+// Traceability: openspec:chats/context#requirement-chat-context-agent-instructions-file
+builder.Services.AddSingleton(_ => new ChatInstructions(
+	Path.Combine(AppContext.BaseDirectory, ChatInstructions.DefaultFileName)));
+// Агентный цикл и сервис конвейера: стриминг ответа, след источников,
+// жизненный цикл чатов — единственный путь HTTP-раздела к данным чатов.
+// Traceability: openspec:chats/history#requirement-chat-flat-full-history
+builder.Services.AddSingleton<ChatTools>();
+builder.Services.AddSingleton<ChatAgent>();
+builder.Services.AddSingleton<ChatService>();
 
 var app = builder.Build();
 

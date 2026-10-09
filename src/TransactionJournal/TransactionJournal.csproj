@@ -14,6 +14,9 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.12" />
+    <!-- Адаптер OpenAI-совместимого провайдера к IChatClient конвейера чатов:
+         ключевой клиент "chats" строится из общих настроек секции Llm. -->
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
   </ItemGroup>
 
   <ItemGroup>

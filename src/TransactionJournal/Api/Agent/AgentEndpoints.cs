@@ -1,19 +1,21 @@
 namespace TransactionJournal.Api.Agent;
 
-using System.Collections.Immutable;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Builder;
+using System.Globalization;
 using TransactionJournal.Api.Sse;
 using TransactionJournal.Chats;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Hints.Corpus;
 
 /// <summary>
-/// Эндпоинты раздела «Агент»: история чатов с жизненным циклом active/completed,
-/// стриминг ответа в SSE и read-only каталог корпуса правил с фильтрами и поиском.
-/// Доменный контур чатов из change add-agent-chat ещё развивается, поэтому
-/// здесь реализован тонкий прикладной слой без новой доменной логики.
+/// Эндпоинты раздела «Агент»: чаты работают поверх доменного конвейера
+/// TransactionJournal.Chats (change add-agent-chat) — единая SQLite-база
+/// чатов, агентный цикл над keyed IChatClient модели, след источников
+/// ответа; HTTP-слой хранит прежний контракт SPA (строковые идентификаторы,
+/// SSE start/token/done/error) и отображает доменные записи в DTO. Рядом —
+/// read-only каталог корпуса правил с фильтрами и поиском.
 /// </summary>
+// Traceability: openspec:chats/history#requirement-chat-flat-full-history
+// Traceability: openspec:http-api/transport#scenario-chat-tokens-stream-over-sse
 public static class AgentEndpoints
 {
 	/// <summary>Подключает эндпоинты раздела «Агент» к версионированной группе API.</summary>
@@ -26,33 +28,88 @@ public static class AgentEndpoints
 		// Списки active/completed и ручные продолжить/завершить закреплены
 		// концепцией раздела «Агент».
 		// Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
-		// Traceability: change:add-agent-chat/proposal#what-changes
-		chats.MapGet("/", (string status, AgentChatStore store) =>
+		chats.MapGet("/", async (
+			string status,
+			ChatService pipeline,
+			IChatStore store,
+			AgentRulesCatalog catalog,
+			CancellationToken cancellationToken) =>
 		{
 			if (TryParseStatus(status, out var parsed) == false)
 				return Results.Json(new AgentChatErrorResponse("Неизвестный статус списка чатов."), statusCode: StatusCodes.Status400BadRequest);
-			return Results.Json(store.List(parsed).Select(ToChatDto).ToArray());
+
+			// Списки берутся у конвейера; момент последнего сообщения чата —
+			// as-of его последнего сообщения: отдельного поля хранилище
+			// не ведёт, а список чатов мал, и лишнее чтение истории дёшево.
+			var records = parsed == ChatStatus.Active
+				? await pipeline.ListActiveAsync(cancellationToken)
+				: await pipeline.ListCompletedAsync(cancellationToken);
+			var items = new List<AgentChatDto>(records.Count);
+			foreach (var record in records)
+			{
+				var messages = await store.ListMessagesAsync(record.Id, cancellationToken);
+				items.Add(ToChatDto(record, messages));
+			}
+
+			return Results.Json(items);
 		});
 
-		chats.MapPost("/", (CreateAgentChatRequest request, AgentChatStore store) =>
+		// Чат создаётся первым сообщением владельца вместе с параметрами:
+		// модель без выбора получает дефолт подсекции Llm:Chat, привязка к
+		// конструкции и набор источников фиксируются при создании.
+		// Traceability: openspec:chats/history#scenario-chat-created-by-first-message
+		// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
+		chats.MapPost("/", async (
+			CreateAgentChatRequest request,
+			ChatService pipeline,
+			IChatStore store,
+			ChatModelOptions modelOptions,
+			CancellationToken cancellationToken) =>
 		{
 			if (ValidateCreateRequest(request, out var error))
 				return Results.Json(new AgentChatErrorResponse(error), statusCode: StatusCodes.Status400BadRequest);
-			var created = store.Create(request.Text.Trim(), request.Params);
-			return Results.Json(ToChatDto(created));
+			if (TryParseConstructionId(request.Params.ConstructionId, out var constructionId, out var constructionError) == false)
+				return Results.Json(new AgentChatErrorResponse(constructionError), statusCode: StatusCodes.Status400BadRequest);
+
+			var start = new ChatStartParameters
+			{
+				Model = string.IsNullOrWhiteSpace(request.Params.Model) ? modelOptions.Model : request.Params.Model.Trim(),
+				ConstructionId = constructionId,
+				Sources = ParseSources(request.Params.Sources),
+			};
+			var userMessage = await pipeline.AppendUserMessageAsync(null, start, request.Text.Trim(), cancellationToken);
+			var chat = await store.FindChatAsync(userMessage.ChatId, cancellationToken);
+			return Results.Json(ToChatDto(chat!, [userMessage]));
 		});
 
-		chats.MapGet("/{chatId}/messages", (string chatId, AgentChatStore store) =>
+		// Полная история одного чата: истории соседних чатов в выборку не
+		// попадают, след источников ответов ассистента переносится в DTO.
+		// Traceability: openspec:chats/history#requirement-chat-message-composition
+		chats.MapGet("/{chatId}/messages", async (
+			string chatId,
+			IChatStore store,
+			AgentRulesCatalog catalog,
+			CancellationToken cancellationToken) =>
 		{
-			if (store.TryGet(chatId, out var chat) == false)
+			if (TryParseChatId(chatId, out var id) == false)
 				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
-			return Results.Json(chat!.Messages.Select(ToMessageDto).ToArray());
+			if (await store.FindChatAsync(id, cancellationToken) is null)
+				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
+			var messages = await store.ListMessagesAsync(id, cancellationToken);
+			return Results.Json(messages.Select(message => ToMessageDto(message, catalog)).ToArray());
 		});
 
+		// Стриминг ответа настоящего ИИ-конвейера: сообщение владельца
+		// фиксируется до генерации, токены уходят в SSE по мере стрима,
+		// конвейер сам фиксирует ответ ассистента со следом источников по
+		// завершении; done несёт финальное сообщение с тем же следом.
+		// Traceability: openspec:http-api/transport#scenario-chat-tokens-stream-over-sse
+		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 		chats.MapPost("/{chatId}/messages/stream", async (
 			string chatId,
 			ChatMessageStreamRequest request,
-			AgentChatStore store,
+			ChatService pipeline,
+			IChatStore store,
 			AgentRulesCatalog catalog,
 			HttpContext http,
 			CancellationToken cancellationToken) =>
@@ -64,71 +121,119 @@ public static class AgentEndpoints
 				return;
 			}
 
-			if (store.TryGet(chatId, out var chat) == false)
+			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is not { } chat)
 			{
 				http.Response.StatusCode = StatusCodes.Status404NotFound;
 				await http.Response.WriteAsJsonAsync(new AgentChatNotFoundResponse(chatId), cancellationToken);
 				return;
 			}
 
-			var userMessage = store.AppendUserMessage(chatId, request.Text.Trim(), request.Model);
-			var assistant = AgentAssistantReply.Compose(chat!, request.Text.Trim(), catalog, DateTimeOffset.UtcNow);
+			// Модель в теле запроса — текущий выбор владельца: отличие от
+			// параметра чата применяет смену на лету тем же действием, без
+			// отдельного вызова PUT /model; история не переписывается.
+			// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+			var requestedModel = request.Model?.Trim();
+			if (string.IsNullOrWhiteSpace(requestedModel) == false &&
+				string.Equals(chat.Model, requestedModel, StringComparison.Ordinal) == false)
+			{
+				await pipeline.ChangeModelAsync(id, requestedModel, cancellationToken);
+			}
 
-			// SSE-стрим задачи 4.1: start/token/done/error по протоколу API 2.1.
-			// Traceability: openspec:http-api/transport#scenario-chat-tokens-stream-over-sse
-			// Тонкая деградация: пока доменный конвейер add-agent-chat не подключён,
-			// раздел отвечает детерминированным read-only резюме по выбранным
-			// источникам и сохраняет след источников.
-			// Traceability: change:add-agent-chat/proposal#what-changes
+			var userMessage = await pipeline.AppendUserMessageAsync(id, null, request.Text.Trim(), cancellationToken);
+
+			// Сбой генерации (включая незастроенный ключ модели) доставляется
+			// транспортным событием ошибки того же соединения: история чата
+			// с зафиксированным вопросом владельца сохраняется.
+			// Traceability: openspec:http-api/transport#scenario-chat-error-delivered-as-sse-event
 			async IAsyncEnumerable<ChatStreamEvent> Events()
 			{
-				yield return ChatStreamEvents.Start();
-				foreach (var token in AgentAssistantReply.Tokenize(assistant.Text))
+				await foreach (var update in pipeline.StreamAssistantAnswerAsync(id, userMessage, cancellationToken))
 				{
-					yield return ChatStreamEvents.Token(token);
-					await Task.Delay(6, cancellationToken);
+					if (string.IsNullOrEmpty(update.Text) == false)
+						yield return ChatStreamEvents.Token(update.Text);
 				}
 
-				var saved = store.AppendAssistantMessage(chatId, assistant.Text, assistant.Trace, request.Model, userMessage.AsOf);
-				yield return new ChatStreamEvent(ChatStreamEvents.DoneName, new { message = ToMessageDto(saved) });
+				// Ответ ассистента уже зафиксирован конвейером: финальное
+				// сообщение перечитывается из истории как последнее.
+				var messages = await store.ListMessagesAsync(id, cancellationToken);
+				var assistant = messages[^1];
+				yield return new ChatStreamEvent(ChatStreamEvents.DoneName, new { message = ToMessageDto(assistant, catalog) });
 			}
 
 			await ChatSseStream.WriteStreamAsync(http.Response, Events(), cancellationToken);
 		});
 
-		chats.MapPost("/{chatId}/completion", (string chatId, AgentChatStore store) =>
+		// Ручное завершение чата владельцем: активный чат уходит в завершённые,
+		// история сохраняется; автоматики завершения нет.
+		// Traceability: openspec:chats/history#scenario-chat-completion-hides-to-completed-list
+		chats.MapPost("/{chatId}/completion", async (
+			string chatId,
+			ChatService pipeline,
+			IChatStore store,
+			AgentRulesCatalog catalog,
+			CancellationToken cancellationToken) =>
 		{
-			if (store.TrySetStatus(chatId, AgentChatStatus.Completed, out var chat) == false)
+			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is null)
 				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
-			return Results.Json(ToChatDto(chat!));
+			await pipeline.CompleteAsync(id, cancellationToken);
+			var chat = await store.FindChatAsync(id, cancellationToken);
+			var messages = await store.ListMessagesAsync(id, cancellationToken);
+			return Results.Json(ToChatDto(chat!, messages));
 		});
 
-		chats.MapDelete("/{chatId}/completion", (string chatId, AgentChatStore store) =>
+		// Продолжение завершённого чата: возвращается в активные ещё до
+		// отправки нового сообщения.
+		// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+		chats.MapDelete("/{chatId}/completion", async (
+			string chatId,
+			ChatService pipeline,
+			IChatStore store,
+			AgentRulesCatalog catalog,
+			CancellationToken cancellationToken) =>
 		{
-			if (store.TrySetStatus(chatId, AgentChatStatus.Active, out var chat) == false)
+			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is null)
 				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
-			return Results.Json(ToChatDto(chat!));
+			await pipeline.ResumeAsync(id, cancellationToken);
+			var chat = await store.FindChatAsync(id, cancellationToken);
+			var messages = await store.ListMessagesAsync(id, cancellationToken);
+			return Results.Json(ToChatDto(chat!, messages));
 		});
 
 		// Смена модели на лету: параметр чата обновляется самим действием
 		// владельца, история остаётся как есть — последующие сообщения уходят
 		// выбранной модели.
 		// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
-		chats.MapPut("/{chatId}/model", (string chatId, ChangeAgentChatModelRequest request, AgentChatStore store) =>
+		chats.MapPut("/{chatId}/model", async (
+			string chatId,
+			ChangeAgentChatModelRequest request,
+			ChatService pipeline,
+			IChatStore store,
+			AgentRulesCatalog catalog,
+			CancellationToken cancellationToken) =>
 		{
 			if (string.IsNullOrWhiteSpace(request.Model))
 				return Results.Json(new AgentChatErrorResponse("Модель чата не задана."), statusCode: StatusCodes.Status400BadRequest);
-			if (store.TryChangeModel(chatId, request.Model, out var chat) == false)
+			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is null)
 				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
-			return Results.Json(ToChatDto(chat!));
+			var chat = await pipeline.ChangeModelAsync(id, request.Model.Trim(), cancellationToken);
+			var messages = await store.ListMessagesAsync(id, cancellationToken);
+			return Results.Json(ToChatDto(chat, messages));
 		});
 
 		// Удаление привязанного чата убирает всю историю, а не только его статус.
+		// Traceability: openspec:chats/history#scenario-chat-hard-delete
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-		chats.MapDelete("/{chatId}", (string chatId, AgentChatStore store) =>
-			store.TryDelete(chatId)
-				? Results.NoContent()
-				: Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound));
+		chats.MapDelete("/{chatId}", async (
+			string chatId,
+			ChatService pipeline,
+			IChatStore store,
+			CancellationToken cancellationToken) =>
+		{
+			if (TryParseChatId(chatId, out var id) == false || await store.FindChatAsync(id, cancellationToken) is null)
+				return Results.Json(new AgentChatNotFoundResponse(chatId), statusCode: StatusCodes.Status404NotFound);
+			await pipeline.DeleteAsync(id, cancellationToken);
+			return Results.NoContent();
+		});
 
 		var rules = api.MapGroup("/rules").WithTags("Агент: корпус правил");
 
@@ -193,36 +298,142 @@ public static class AgentEndpoints
 		return false;
 	}
 
-	private static AgentChatDto ToChatDto(AgentChat chat) => new(
-		chat.Id,
-		chat.Status == AgentChatStatus.Active ? "active" : "completed",
-		chat.Params,
-		chat.CreatedAt,
-		chat.LastMessageAt);
-
-	private static AgentChatMessageDto ToMessageDto(AgentChatMessage message) => new(
-		message.Id,
-		message.Role,
-		message.Text,
-		message.AsOf,
-		message.SourceTrace);
-
-	private static bool TryParseStatus(string raw, out AgentChatStatus status)
+	private static AgentChatDto ToChatDto(ChatRecord chat, IReadOnlyList<ChatMessage> messages)
 	{
-		status = AgentChatStatus.Active;
+		// Момент последнего сообщения — as-of последнего сообщения истории;
+		// у только что созданного чата это его первое сообщение владельца.
+		var lastMessageAt = messages.Count == 0 ? chat.CreatedAt : messages[^1].AsOf;
+		return new AgentChatDto(
+			chat.Id.ToString(CultureInfo.InvariantCulture),
+			chat.Status == ChatStatus.Active ? "active" : "completed",
+			new AgentChatParams(
+				chat.Model,
+				chat.ConstructionId?.ToString(CultureInfo.InvariantCulture),
+				[.. chat.Sources.Select(ToWireSource)]),
+			chat.CreatedAt,
+			lastMessageAt);
+	}
+
+	private static AgentChatMessageDto ToMessageDto(ChatMessage message, AgentRulesCatalog catalog)
+	{
+		if (message.SourceTrace is not { } trace)
+			return new AgentChatMessageDto(
+				message.Id.ToString(CultureInfo.InvariantCulture),
+				ToWireRole(message.Role),
+				message.Text,
+				message.AsOf,
+				null);
+
+		// Вызовы инструментов переносятся как есть: as-of данных инструмента
+		// домен выражает, пометку деградации — нет, поле остаётся пустым.
+		var toolCalls = trace.Invocations
+			.Select(invocation => new AgentSourceToolCall(invocation.ToolName, invocation.Arguments, invocation.DataAsOf, null))
+			.ToArray();
+
+		// Прочитанные карточки правил — ссылки «правило»: заголовок берётся из
+		// каталога корпуса, as-of ссылки — момент фиксации ответа ассистента.
+		var references = new List<AgentSourceReference>(trace.RuleCards.Count + 1);
+		foreach (var cardId in trace.RuleCards)
+		{
+			catalog.TryRead(cardId, out var card);
+			references.Add(new AgentSourceReference("rule-card", cardId, card?.Title ?? cardId, message.AsOf));
+		}
+
+		// As-of данных журнала в снимке — ссылка «журнал»: происхождение фактов
+		// ответа проверяемо постфактум.
+		if (trace.JournalAsOf is { } journalAsOf)
+			references.Add(new AgentSourceReference("journal", "journal", "Журнал сделок", journalAsOf));
+
+		return new AgentChatMessageDto(
+			message.Id.ToString(CultureInfo.InvariantCulture),
+			ToWireRole(message.Role),
+			message.Text,
+			message.AsOf,
+			new AgentSourceTrace(toolCalls, references));
+	}
+
+	private static string ToWireRole(ChatMessageRole role) => role switch
+	{
+		ChatMessageRole.User => "user",
+		ChatMessageRole.Assistant => "assistant",
+		_ => throw new ArgumentOutOfRangeException(nameof(role), role, null),
+	};
+
+	private static string ToWireSource(ChatDataSource source) => source switch
+	{
+		ChatDataSource.Journal => "journal",
+		ChatDataSource.RulesCorpus => "rules-corpus",
+		ChatDataSource.BybitMarket => "market",
+		_ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
+	};
+
+	/// <summary>
+	/// Набор источников провода отображается в закрытый справочник домена:
+	/// неизвестные категории отбрасываются, пустой выбор разворачивается в
+	/// полный справочник — дефолт чата, все три категории.
+	/// </summary>
+	// Traceability: openspec:chats/sources#scenario-sources-three-categories
+	private static IReadOnlyList<ChatDataSource> ParseSources(IEnumerable<string>? raw)
+	{
+		var parsed = new List<ChatDataSource>();
+		foreach (var item in raw ?? [])
+		{
+			switch (item.Trim())
+			{
+				case "journal":
+					parsed.Add(ChatDataSource.Journal);
+					break;
+				case "rules-corpus":
+					parsed.Add(ChatDataSource.RulesCorpus);
+					break;
+				case "market":
+					parsed.Add(ChatDataSource.BybitMarket);
+					break;
+			}
+		}
+
+		// Пустой выбор нормализуется полным справочником источников.
+		// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+		return parsed.Count == 0 ? ChatDataSourceCatalog.All : parsed;
+	}
+
+	private static bool TryParseStatus(string raw, out ChatStatus status)
+	{
+		status = ChatStatus.Active;
 		if (string.Equals(raw, "active", StringComparison.Ordinal))
 		{
-			status = AgentChatStatus.Active;
+			status = ChatStatus.Active;
 			return true;
 		}
 
 		if (string.Equals(raw, "completed", StringComparison.Ordinal))
 		{
-			status = AgentChatStatus.Completed;
+			status = ChatStatus.Completed;
 			return true;
 		}
 
 		return false;
+	}
+
+	/// <summary>Идентификатор чата в проводе — строка десятичного ключа домена.</summary>
+	private static bool TryParseChatId(string raw, out long chatId) =>
+		long.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out chatId);
+
+	/// <summary>Привязка к конструкции в проводе опциональна; непустое значение обязано быть ключом журнала.</summary>
+	private static bool TryParseConstructionId(string? raw, out long? constructionId, out string error)
+	{
+		constructionId = null;
+		error = string.Empty;
+		if (string.IsNullOrWhiteSpace(raw))
+			return true;
+		if (long.TryParse(raw.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) == false)
+		{
+			error = "Идентификатор конструкции должен быть числом.";
+			return false;
+		}
+
+		constructionId = parsed;
+		return true;
 	}
 }
 
@@ -290,234 +501,6 @@ public sealed record AgentSourceTrace(
 public sealed record AgentSourceToolCall(string Tool, string Argument, DateTimeOffset? AsOf, bool? Degraded);
 
 public sealed record AgentSourceReference(string Kind, string Id, string Title, DateTimeOffset AsOf);
-
-public enum AgentChatStatus
-{
-	Active,
-	Completed,
-}
-
-public sealed record AgentChatMessage(
-	string Id,
-	string Role,
-	string Text,
-	DateTimeOffset AsOf,
-	string Model,
-	AgentSourceTrace? SourceTrace);
-
-public sealed class AgentChat
-{
-	public required string Id { get; init; }
-
-	public required AgentChatStatus Status { get; set; }
-
-	public required AgentChatParams Params { get; set; }
-
-	public required DateTimeOffset CreatedAt { get; init; }
-
-	public required DateTimeOffset LastMessageAt { get; set; }
-
-	public required List<AgentChatMessage> Messages { get; init; }
-}
-
-/// <summary>
-/// Хранилище чатов раздела «Агент»: минимальная прикладная персистентность
-/// в JSON-файле App_Data без доменного расширения.
-/// </summary>
-public sealed class AgentChatStore
-{
-	private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-	{
-		WriteIndented = false,
-	};
-
-	private readonly object _sync = new();
-
-	private readonly string _storagePath;
-
-	private readonly List<AgentChat> _chats;
-
-	/// <summary>Дефолт модели чата из подсекции Llm:Chat:Model; без опций — встроенный GLM-5.3.</summary>
-	private readonly string _defaultModel;
-
-	public AgentChatStore(string dataDirectory, ChatModelOptions? chatModelOptions = null)
-	{
-		Directory.CreateDirectory(dataDirectory);
-		_storagePath = Path.Combine(dataDirectory, "agent-chats.json");
-		_chats = Load(_storagePath);
-		_defaultModel = chatModelOptions?.Model ?? ChatModelOptions.DefaultModel;
-	}
-
-	public IReadOnlyList<AgentChat> List(AgentChatStatus status)
-	{
-		lock (_sync)
-		{
-			return _chats
-				.Where(chat => chat.Status == status)
-				.OrderByDescending(chat => chat.LastMessageAt)
-				.ToArray();
-		}
-	}
-
-	public bool TryGet(string chatId, out AgentChat? chat)
-	{
-		lock (_sync)
-		{
-			chat = _chats.FirstOrDefault(item => string.Equals(item.Id, chatId, StringComparison.Ordinal));
-			return chat is not null;
-		}
-	}
-
-	public AgentChat Create(string firstMessageText, AgentChatParams rawParams)
-	{
-		lock (_sync)
-		{
-			var now = DateTimeOffset.UtcNow;
-			var normalized = NormalizeParams(rawParams);
-			var chat = new AgentChat
-			{
-				Id = $"chat-{Guid.NewGuid():N}",
-				Status = AgentChatStatus.Active,
-				Params = normalized,
-				CreatedAt = now,
-				LastMessageAt = now,
-				Messages =
-				[
-					new AgentChatMessage(
-						Id: $"msg-{Guid.NewGuid():N}",
-						Role: "user",
-						Text: firstMessageText,
-						AsOf: now,
-						Model: normalized.Model,
-						SourceTrace: null),
-				],
-			};
-			_chats.Add(chat);
-			Persist();
-			return chat;
-		}
-	}
-
-	public AgentChatMessage AppendUserMessage(string chatId, string text, string? model)
-	{
-		lock (_sync)
-		{
-			var chat = _chats.First(item => item.Id == chatId);
-			if (chat.Status == AgentChatStatus.Completed)
-				chat.Status = AgentChatStatus.Active;
-			var now = DateTimeOffset.UtcNow;
-			var resolvedModel = string.IsNullOrWhiteSpace(model) ? chat.Params.Model : model.Trim();
-			var next = new AgentChatMessage($"msg-{Guid.NewGuid():N}", "user", text, now, resolvedModel, null);
-			chat.Messages.Add(next);
-			chat.LastMessageAt = now;
-			chat.Params = chat.Params with { Model = resolvedModel };
-			Persist();
-			return next;
-		}
-	}
-
-	public AgentChatMessage AppendAssistantMessage(string chatId, string text, AgentSourceTrace trace, string? model, DateTimeOffset asOf)
-	{
-		lock (_sync)
-		{
-			var chat = _chats.First(item => item.Id == chatId);
-			var now = DateTimeOffset.UtcNow;
-			var resolvedModel = string.IsNullOrWhiteSpace(model) ? chat.Params.Model : model.Trim();
-			var next = new AgentChatMessage($"msg-{Guid.NewGuid():N}", "assistant", text, asOf, resolvedModel, trace);
-			chat.Messages.Add(next);
-			chat.LastMessageAt = now;
-			chat.Params = chat.Params with { Model = resolvedModel };
-			Persist();
-			return next;
-		}
-	}
-
-	public bool TrySetStatus(string chatId, AgentChatStatus status, out AgentChat? chat)
-	{
-		lock (_sync)
-		{
-			chat = _chats.FirstOrDefault(item => item.Id == chatId);
-			if (chat is null)
-				return false;
-			chat.Status = status;
-			Persist();
-			return true;
-		}
-	}
-
-	/// <summary>
-	/// Смена модели существующего чата на лету: меняется только параметр чата,
-	/// история сообщений не трогается — последующие сообщения уходят новой
-	/// модели. Неизвестный идентификатор даёт отказ без изменений.
-	// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
-	/// </summary>
-	public bool TryChangeModel(string chatId, string model, out AgentChat? chat)
-	{
-		lock (_sync)
-		{
-			chat = _chats.FirstOrDefault(item => item.Id == chatId);
-			if (chat is null)
-				return false;
-			chat.Params = chat.Params with { Model = model.Trim() };
-			Persist();
-			return true;
-		}
-	}
-
-	/// <summary>Удаляет чат вместе с сообщениями и сохраняет результат в существующем хранилище.</summary>
-	// Удалённый чат не должен восстанавливаться при повторном чтении JSON.
-	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-	public bool TryDelete(string chatId)
-	{
-		lock (_sync)
-		{
-			var index = _chats.FindIndex(chat => string.Equals(chat.Id, chatId, StringComparison.Ordinal));
-			if (index < 0)
-				return false;
-			Persist(_chats.Where(chat => string.Equals(chat.Id, chatId, StringComparison.Ordinal) == false));
-			_chats.RemoveAt(index);
-			return true;
-		}
-	}
-
-	private void Persist(IEnumerable<AgentChat>? chats = null) =>
-		File.WriteAllText(_storagePath, JsonSerializer.Serialize(chats ?? _chats, JsonOptions));
-
-	private static List<AgentChat> Load(string path)
-	{
-		if (File.Exists(path) == false)
-			return [];
-		try
-		{
-			return JsonSerializer.Deserialize<List<AgentChat>>(File.ReadAllText(path), JsonOptions) ?? [];
-		}
-		catch (JsonException)
-		{
-			return [];
-		}
-	}
-
-	/// <summary>
-	/// Параметры создания нормализуются: модель без выбора владельца получает
-	/// дефолт из подсекции Llm:Chat:Model (GLM-5.3), источники — подмножество
-	/// закрытого справочника, пустой выбор разворачивается во все три.
-	// Traceability: openspec:chats/sources#scenario-sources-default-model-glm
-	/// </summary>
-	private AgentChatParams NormalizeParams(AgentChatParams raw)
-	{
-		var model = string.IsNullOrWhiteSpace(raw.Model) ? _defaultModel : raw.Model.Trim();
-		var constructionId = string.IsNullOrWhiteSpace(raw.ConstructionId) ? null : raw.ConstructionId!.Trim();
-		var sources = raw.Sources
-			.Select(source => source.Trim())
-			.Where(source => source is "journal" or "rules-corpus" or "market")
-			.Distinct(StringComparer.Ordinal)
-			.ToImmutableArray();
-		var normalizedSources = sources.Length == 0
-			? ImmutableArray.Create("journal", "rules-corpus", "market")
-			: sources;
-		return new AgentChatParams(model, constructionId, normalizedSources);
-	}
-}
 
 public sealed class AgentRulesCatalog
 {
@@ -593,55 +576,3 @@ public sealed record AgentRuleCard(
 	string? ActionDescription,
 	IReadOnlyList<RuleThreshold> Thresholds,
 	IReadOnlyList<RuleSource> Sources);
-
-internal static class AgentAssistantReply
-{
-	private static readonly Regex RuleIdRegex = new(@"\bac-\d{2}\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-	public static (string Text, AgentSourceTrace Trace) Compose(
-		AgentChat chat,
-		string prompt,
-		AgentRulesCatalog catalog,
-		DateTimeOffset asOf)
-	{
-		var tools = new List<AgentSourceToolCall>();
-		var references = new List<AgentSourceReference>();
-
-		if (chat.Params.Sources.Contains("journal", StringComparer.Ordinal))
-			tools.Add(new AgentSourceToolCall("read_journal_snapshot", chat.Params.ConstructionId ?? "portfolio", asOf, null));
-		if (chat.Params.Sources.Contains("rules-corpus", StringComparer.Ordinal))
-			tools.Add(new AgentSourceToolCall("read_rule_card", "search", asOf, null));
-		if (chat.Params.Sources.Contains("market", StringComparer.Ordinal))
-			tools.Add(new AgentSourceToolCall("get_market_snapshot", "bybit", asOf, true));
-
-		if (chat.Params.Sources.Contains("rules-corpus", StringComparer.Ordinal))
-		{
-			var matchedRuleId = RuleIdRegex.Match(prompt);
-			if (matchedRuleId.Success && catalog.TryRead(matchedRuleId.Value.ToLowerInvariant(), out var matchedRule))
-			{
-				references.Add(new AgentSourceReference("rule-card", matchedRule!.Id, matchedRule.Title, asOf));
-			}
-			else
-			{
-				var first = catalog.List(null, null, null, null).FirstOrDefault();
-				if (first is not null)
-					references.Add(new AgentSourceReference("rule-card", first.Id, first.Title, asOf));
-			}
-		}
-
-		var scope = chat.Params.ConstructionId is null ? "портфельному уровню" : $"конструкции {chat.Params.ConstructionId}";
-		var text = $"Контекст подготовлен по {scope}. " +
-			$"Временный ответ 5.3: доменный конвейер add-agent-chat ещё подключается, поэтому сейчас я даю краткое резюме запроса «{prompt}» " +
-			$"и фиксирую след источников. Уточните вопрос — ответ разверну шагами «если/то».";
-
-		return (text, new AgentSourceTrace(tools, references));
-	}
-
-	public static IReadOnlyList<string> Tokenize(string text)
-	{
-		var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-		if (words.Length == 0)
-			return [text];
-		return words.Select(word => $"{word} ").ToArray();
-	}
-}
