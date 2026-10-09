@@ -90,6 +90,15 @@ public sealed class ChatStore : IChatStore
 				.FirstOrDefaultAsync(candidate => candidate.Id == chatId.Value, cancellationToken)
 				.ConfigureAwait(false)
 				?? throw new InvalidOperationException($"Чат {chatId} не найден.");
+
+			// Продолжение завершённого чата возвращает его в активные: сообщение
+			// владельца — ручное действие продолжения; само по себе оно чат не
+			// завершает, автоматического завершения нет.
+			// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+			if (chat.Status == ChatStatus.Completed.ToString())
+			{
+				chat.Status = ChatStatus.Active.ToString();
+			}
 		}
 
 		var entity = new ChatMessageEntity
@@ -136,6 +145,95 @@ public sealed class ChatStore : IChatStore
 			.ConfigureAwait(false);
 		return entities.Select(ToRecord).ToList();
 	}
+
+	/// <inheritdoc cref="IChatStore.CompleteChatAsync" />
+	public async Task CompleteChatAsync(long chatId, CancellationToken cancellationToken = default)
+	{
+		EnsureChatId(chatId);
+		using var db = CreateContext();
+		var chat = await LoadChatAsync(db, chatId, cancellationToken).ConfigureAwait(false);
+
+		// Завершение — только ручное действие владельца: активный чат исчезает
+		// из списка активных и появляется в списке завершённых, история
+		// сохраняется; автоматического завершения нет.
+		// Traceability: openspec:chats/history#scenario-chat-completion-hides-to-completed-list
+		chat.Status = ChatStatus.Completed.ToString();
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <inheritdoc cref="IChatStore.ResumeChatAsync" />
+	public async Task ResumeChatAsync(long chatId, CancellationToken cancellationToken = default)
+	{
+		EnsureChatId(chatId);
+		using var db = CreateContext();
+		var chat = await LoadChatAsync(db, chatId, cancellationToken).ConfigureAwait(false);
+
+		// Продолжение возвращает завершённый чат в активные ещё до отправки
+		// нового сообщения.
+		// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+		chat.Status = ChatStatus.Active.ToString();
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <inheritdoc cref="IChatStore.DeleteChatAsync" />
+	public async Task DeleteChatAsync(long chatId, CancellationToken cancellationToken = default)
+	{
+		EnsureChatId(chatId);
+		using var db = CreateContext();
+		var chat = await LoadChatAsync(db, chatId, cancellationToken).ConfigureAwait(false);
+
+		// Удаление целиком без корзины: сначала все сообщения чата, затем сам
+		// чат — ни записей, ни возможности восстановления не остаётся.
+		// Traceability: openspec:chats/history#scenario-chat-hard-delete
+		await db.Messages
+			.Where(message => message.ChatId == chatId)
+			.ExecuteDeleteAsync(cancellationToken)
+			.ConfigureAwait(false);
+		db.Chats.Remove(chat);
+		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <inheritdoc cref="IChatStore.ListActiveChatsAsync" />
+	public async Task<IReadOnlyList<ChatRecord>> ListActiveChatsAsync(CancellationToken cancellationToken = default) =>
+		await ListByStatusAsync(ChatStatus.Active, cancellationToken).ConfigureAwait(false);
+
+	/// <inheritdoc cref="IChatStore.ListCompletedChatsAsync" />
+	public async Task<IReadOnlyList<ChatRecord>> ListCompletedChatsAsync(CancellationToken cancellationToken = default) =>
+		await ListByStatusAsync(ChatStatus.Completed, cancellationToken).ConfigureAwait(false);
+
+	#region Служебные выборки хранилища
+
+	/// <summary>Загружает чат на изменение; отсутствующий чат — ошибка состояния.</summary>
+	/// <param name="db">Контекст базы чатов.</param>
+	/// <param name="chatId">Идентификатор чата.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	private static async Task<ChatEntity> LoadChatAsync(
+		ChatDbContext db,
+		long chatId,
+		CancellationToken cancellationToken) =>
+		await db.Chats
+			.FirstOrDefaultAsync(candidate => candidate.Id == chatId, cancellationToken)
+			.ConfigureAwait(false)
+			?? throw new InvalidOperationException($"Чат {chatId} не найден.");
+
+	/// <summary>Чаты одного статуса в порядке создания — списки активных и завершённых.</summary>
+	/// <param name="status">Отбираемый статус жизненного цикла.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	private async Task<IReadOnlyList<ChatRecord>> ListByStatusAsync(
+		ChatStatus status,
+		CancellationToken cancellationToken)
+	{
+		using var db = CreateContext();
+		var entities = await db.Chats
+			.AsNoTracking()
+			.Where(candidate => candidate.Status == status.ToString())
+			.OrderBy(candidate => candidate.Id)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+		return entities.Select(ToRecord).ToList();
+	}
+
+	#endregion
 
 	#region Разворот схемы и отображение записей порта
 

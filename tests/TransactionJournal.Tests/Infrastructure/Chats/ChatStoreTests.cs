@@ -13,6 +13,9 @@ using Does = NUnit.Framework.Does;
 /// с выбранными параметрами, живёт без привязки к конструкции, истории
 /// соседних чатов изолированы, привязка и параметры неизменяемы после
 /// создания, след источников ответа ИИ-помощника сохраняется в сообщении.
+/// Жизненный цикл управляется только ручными действиями владельца:
+/// завершение скрывает чат в завершённые, продолжение возвращает в активные,
+/// удаление стирает чат с историей целиком без корзины.
 /// </summary>
 [TestClass]
 public class ChatStoreTests : ChatDatabaseTests
@@ -221,5 +224,177 @@ public class ChatStoreTests : ChatDatabaseTests
 		// Assert
 		Assert.That(chat, Is.Null);
 		Assert.That(messages, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Ручное завершение скрывает чат в список завершённых, история сохраняется")]
+	// Завершение — ручное действие владельца: активный чат исчезает из списка
+	// активных и появляется в списке завершённых, полная история сохраняется.
+	// Traceability: openspec:chats/history#scenario-chat-completion-hides-to-completed-list
+	public async Task TryIfCompletion_HidesChatToCompletedListAndKeepsHistory()
+	{
+		// Arrange: активный чат с историей из двух сообщений.
+		var store = CreateStore();
+		var first = await store.AppendMessageAsync(null, Start(), UserDraft());
+		await store.AppendMessageAsync(first.ChatId, null, UserDraft("Второе сообщение."));
+
+		// Act: владелец завершает чат вручную.
+		await store.CompleteChatAsync(first.ChatId);
+
+		// Assert: статус завершён, чат в списке завершённых и не в активных,
+		// история сохранена целиком.
+		var chat = await store.FindChatAsync(first.ChatId);
+		Assert.That(chat!.Status, Is.EqualTo(ChatStatus.Completed));
+		var active = await store.ListActiveChatsAsync();
+		var completed = await store.ListCompletedChatsAsync();
+		Assert.That(active.Select(stored => stored.Id), Does.Not.Contain(first.ChatId));
+		Assert.That(completed.Select(stored => stored.Id), Does.Contain(first.ChatId));
+		var messages = await store.ListMessagesAsync(first.ChatId);
+		Assert.That(messages.Select(stored => stored.Text), Is.EqualTo(new[] { "Первый вопрос.", "Второе сообщение." }));
+	}
+
+	[TestMethod]
+	[Description("Сообщение владельца в завершённый чат возвращает его в активные")]
+	// Продолжение завершённого чата — отправка сообщения: чат возвращается в
+	// список активных, история ведётся дальше в том же чате.
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+	public async Task TryIfMessageToCompletedChat_ReturnsChatToActiveList()
+	{
+		// Arrange: завершённый владельцем чат.
+		var store = CreateStore();
+		var first = await store.AppendMessageAsync(null, Start(), UserDraft());
+		await store.CompleteChatAsync(first.ChatId);
+
+		// Act: владелец продолжает чат сообщением.
+		var second = await store.AppendMessageAsync(first.ChatId, null, UserDraft("Продолжаю."));
+
+		// Assert: тот же чат снова активен и в списке активных, из завершённых
+		// исчез; продолжение не создало нового чата.
+		Assert.That(second.ChatId, Is.EqualTo(first.ChatId));
+		var chat = await store.FindChatAsync(first.ChatId);
+		Assert.That(chat!.Status, Is.EqualTo(ChatStatus.Active));
+		var active = await store.ListActiveChatsAsync();
+		var completed = await store.ListCompletedChatsAsync();
+		Assert.That(active.Select(stored => stored.Id), Does.Contain(first.ChatId));
+		Assert.That(completed.Select(stored => stored.Id), Does.Not.Contain(first.ChatId));
+	}
+
+	[TestMethod]
+	[Description("Ручное продолжение возвращает завершённый чат в активные без сообщения")]
+	// Продолжение доступно и отдельным действием владельца: завершённый чат
+	// возвращается в активные ещё до отправки следующего сообщения.
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+	public async Task TryIfExplicitResume_ReturnsCompletedChatToActiveList()
+	{
+		// Arrange: завершённый владельцем чат.
+		var store = CreateStore();
+		var first = await store.AppendMessageAsync(null, Start(), UserDraft());
+		await store.CompleteChatAsync(first.ChatId);
+
+		// Act: владелец продолжает чат без нового сообщения.
+		await store.ResumeChatAsync(first.ChatId);
+
+		// Assert: чат снова активен и в списке активных.
+		var chat = await store.FindChatAsync(first.ChatId);
+		Assert.That(chat!.Status, Is.EqualTo(ChatStatus.Active));
+		var active = await store.ListActiveChatsAsync();
+		Assert.That(active.Select(stored => stored.Id), Does.Contain(first.ChatId));
+	}
+
+	[TestMethod]
+	[Description("Удаление убирает активный и завершённый чаты со всеми сообщениями без восстановления")]
+	// Удаление — явное действие владельца: чат и вся его история исчезают
+	// целиком, корзины нет — ни по идентификатору, ни в списках, ни в
+	// сообщениях чата больше ничего не остаётся.
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	public async Task TryIfHardDelete_RemovesChatWithMessagesWithoutRecovery()
+	{
+		// Arrange: активный и завершённый чаты, у каждого своя история.
+		var store = CreateStore();
+		var activeChat = await store.AppendMessageAsync(null, Start(), UserDraft("Вопрос активного."));
+		var completedChat = await store.AppendMessageAsync(null, Start(constructionId: null), UserDraft("Вопрос завершённого."));
+		await store.CompleteChatAsync(completedChat.ChatId);
+
+		// Act: владелец удаляет оба чата целиком.
+		await store.DeleteChatAsync(activeChat.ChatId);
+		await store.DeleteChatAsync(completedChat.ChatId);
+
+		// Assert: ни чатов, ни сообщений — ни в выборках, ни в списках статусов.
+		Assert.That(await store.FindChatAsync(activeChat.ChatId), Is.Null);
+		Assert.That(await store.FindChatAsync(completedChat.ChatId), Is.Null);
+		Assert.That(await store.ListMessagesAsync(activeChat.ChatId), Is.Empty);
+		Assert.That(await store.ListMessagesAsync(completedChat.ChatId), Is.Empty);
+		Assert.That(await store.ListActiveChatsAsync(), Is.Empty);
+		Assert.That(await store.ListCompletedChatsAsync(), Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Сообщения сами по себе чат не завершают: автоматического завершения нет")]
+	// Автоматического завершения нет: ни отправка сообщений, ни поздний as-of
+	// не меняют активный статус — чат завершает только ручное действие
+	// владельца.
+	// Traceability: openspec:chats/history#requirement-chat-manual-completion-and-deletion
+	public async Task TryIfMessagesAppended_ChatStaysActiveWithoutAutoCompletion()
+	{
+		// Arrange: активный чат с первым сообщением.
+		var store = CreateStore();
+		var first = await store.AppendMessageAsync(null, Start(), UserDraft());
+
+		// Act: продолжение с сильно поздним as-of — «прошло время», но ручного
+		// завершения владелец не делал.
+		await store.AppendMessageAsync(first.ChatId, null, new ChatMessageDraft
+		{
+			Role = ChatMessageRole.User,
+			Text = "Поздний вопрос.",
+			AsOf = FixedNow.AddDays(30),
+		});
+
+		// Assert: чат остался активным и в списке активных, в завершённых пусто.
+		var chat = await store.FindChatAsync(first.ChatId);
+		Assert.That(chat!.Status, Is.EqualTo(ChatStatus.Active));
+		var active = await store.ListActiveChatsAsync();
+		Assert.That(active.Select(stored => stored.Id), Does.Contain(first.ChatId));
+		Assert.That(await store.ListCompletedChatsAsync(), Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Завершение несуществующего чата отвергается исключением")]
+	// Ручное завершение применяется только к существующему чату: неизвестный
+	// идентификатор — ошибка состояния, а не молчаливый успех.
+	public void ThrowOnCompleteUnknownChat()
+	{
+		// Arrange
+		var store = CreateStore();
+
+		// Act — Assert
+		Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			await store.CompleteChatAsync(999));
+	}
+
+	[TestMethod]
+	[Description("Продолжение несуществующего чата отвергается исключением")]
+	// Ручное продолжение применяется только к существующему чату.
+	public void ThrowOnResumeUnknownChat()
+	{
+		// Arrange
+		var store = CreateStore();
+
+		// Act — Assert
+		Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			await store.ResumeChatAsync(999));
+	}
+
+	[TestMethod]
+	[Description("Удаление несуществующего чата отвергается исключением")]
+	// Удаление применяется только к существующему чату: неизвестный
+	// идентификатор — ошибка состояния.
+	public void ThrowOnDeleteUnknownChat()
+	{
+		// Arrange
+		var store = CreateStore();
+
+		// Act — Assert
+		Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			await store.DeleteChatAsync(999));
 	}
 }

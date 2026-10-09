@@ -19,7 +19,9 @@ using Does = NUnit.Framework.Does;
 /// владельца создаёт новый чат с выбранными параметрами, ответ ИИ-помощника
 /// фиксируется по завершении стрима с as-of и следом источников, агенту
 /// передаётся история только собственного чата, а снимок контекста
-/// собирается по привязке чата.
+/// собирается по привязке чата. Жизненный цикл — ручные действия владельца:
+/// завершение скрывает чат в завершённые, продолжение возвращает в активные,
+/// удаление стирает чат с историей целиком.
 /// </summary>
 [TestClass]
 public sealed class ChatServiceTests : ChatDatabaseTests
@@ -231,6 +233,160 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 		// в неё не попали.
 		var messages = await CreateStore().ListMessagesAsync(second.ChatId);
 		Assert.That(messages.Select(stored => stored.Text), Is.EqualTo(new[] { "Вопрос чата два." }));
+	}
+
+	[TestMethod]
+	[Description("Ручное завершение через конвейер скрывает чат в список завершённых, история сохраняется")]
+	// Завершение — ручное действие владельца на уровне приложения: чат уходит
+	// из активных в завершённые, история остаётся доступной.
+	// Traceability: openspec:chats/history#scenario-chat-completion-hides-to-completed-list
+	public async Task TryIfCompleteAsync_HidesChatToCompletedListAndKeepsHistory()
+	{
+		// Arrange: активный чат с вопросом владельца.
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+		var question = await service.AppendUserMessageAsync(null, Start(7), "Вопрос по конструкции.");
+
+		// Act: владелец завершает чат.
+		await service.CompleteAsync(question.ChatId);
+
+		// Assert: чат в списке завершённых, из активных исчез, история цела.
+		var active = await service.ListActiveAsync();
+		var completed = await service.ListCompletedAsync();
+		Assert.That(active.Select(stored => stored.Id), Does.Not.Contain(question.ChatId));
+		Assert.That(completed.Select(stored => stored.Id), Does.Contain(question.ChatId));
+		var messages = await CreateStore().ListMessagesAsync(question.ChatId);
+		Assert.That(messages.Select(stored => stored.Text), Is.EqualTo(new[] { "Вопрос по конструкции." }));
+	}
+
+	[TestMethod]
+	[Description("Ручное продолжение через конвейер возвращает завершённый чат в активные")]
+	// Продолжение — ручное действие владельца: завершённый чат возвращается
+	// в активные ещё до отправки нового сообщения.
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+	public async Task TryIfResumeAsync_ReturnsCompletedChatToActiveList()
+	{
+		// Arrange: завершённый владельцем чат.
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+		var question = await service.AppendUserMessageAsync(null, Start(7), "Вопрос по конструкции.");
+		await service.CompleteAsync(question.ChatId);
+
+		// Act: владелец продолжает чат.
+		await service.ResumeAsync(question.ChatId);
+
+		// Assert: чат снова в списке активных и не в завершённых.
+		var active = await service.ListActiveAsync();
+		var completed = await service.ListCompletedAsync();
+		Assert.That(active.Select(stored => stored.Id), Does.Contain(question.ChatId));
+		Assert.That(completed.Select(stored => stored.Id), Does.Not.Contain(question.ChatId));
+	}
+
+	[TestMethod]
+	[Description("Сообщение владельца в завершённый чат продолжает его и возвращает в активные")]
+	// Продолжение завершённого чата — отправка сообщения через конвейер:
+	// тот же чат возвращается в активные, вопрос дописан в его историю.
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+	public async Task TryIfUserMessageToCompletedChat_ReturnsChatToActiveList()
+	{
+		// Arrange: завершённый владельцем чат.
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+		var question = await service.AppendUserMessageAsync(null, Start(7), "Вопрос по конструкции.");
+		await service.CompleteAsync(question.ChatId);
+
+		// Act: владелец продолжает чат новым сообщением.
+		var continuation = await service.AppendUserMessageAsync(question.ChatId, null, "Продолжаю разговор.");
+
+		// Assert: тот же чат снова активен, в активных списках, вопрос в истории.
+		Assert.That(continuation.ChatId, Is.EqualTo(question.ChatId));
+		var chat = await CreateStore().FindChatAsync(question.ChatId);
+		Assert.That(chat!.Status, Is.EqualTo(ChatStatus.Active));
+		var active = await service.ListActiveAsync();
+		var completed = await service.ListCompletedAsync();
+		Assert.That(active.Select(stored => stored.Id), Does.Contain(question.ChatId));
+		Assert.That(completed.Select(stored => stored.Id), Does.Not.Contain(question.ChatId));
+	}
+
+	[TestMethod]
+	[Description("Удаление через конвейер стирает чат с историей целиком без восстановления")]
+	// Удаление — явное действие владельца: чат и все его сообщения исчезают
+	// целиком, корзины нет.
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	public async Task TryIfDeleteAsync_RemovesChatWithHistoryEntirely()
+	{
+		// Arrange: активный чат с вопросом владельца.
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+		var question = await service.AppendUserMessageAsync(null, Start(7), "Вопрос по конструкции.");
+
+		// Act: владелец удаляет чат целиком.
+		await service.DeleteAsync(question.ChatId);
+
+		// Assert: ни чата, ни истории, ни в списках статусов.
+		Assert.That(await CreateStore().FindChatAsync(question.ChatId), Is.Null);
+		Assert.That(await CreateStore().ListMessagesAsync(question.ChatId), Is.Empty);
+		Assert.That(await service.ListActiveAsync(), Is.Empty);
+		Assert.That(await service.ListCompletedAsync(), Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Списки активных и завершённых чатов не пересекаются")]
+	// Разделение чатов по статусу: активные и завершённые попадают только в
+	// свои списки, порядок — по созданию.
+	// Traceability: openspec:chats/history#requirement-chat-manual-completion-and-deletion
+	public async Task TryIfLists_SplitActiveAndCompletedChats()
+	{
+		// Arrange: активный и завершённый чаты.
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+		var activeQuestion = await service.AppendUserMessageAsync(null, Start(7), "Вопрос активного.");
+		var completedQuestion = await service.AppendUserMessageAsync(null, Start(null), "Вопрос завершённого.");
+		await service.CompleteAsync(completedQuestion.ChatId);
+
+		// Act: читаются оба списка.
+		var active = await service.ListActiveAsync();
+		var completed = await service.ListCompletedAsync();
+
+		// Assert: каждый чат ровно в своём списке, статусы согласованы.
+		Assert.That(active.Select(stored => stored.Id), Is.EqualTo(new[] { activeQuestion.ChatId }));
+		Assert.That(completed.Select(stored => stored.Id), Is.EqualTo(new[] { completedQuestion.ChatId }));
+		Assert.That(active.Single().Status, Is.EqualTo(ChatStatus.Active));
+		Assert.That(completed.Single().Status, Is.EqualTo(ChatStatus.Completed));
+	}
+
+	[TestMethod]
+	[Description("Завершение несуществующего чата через конвейер отвергается исключением")]
+	// Ручное завершение применяется только к существующему чату.
+	public void ThrowOnCompleteUnknownChat()
+	{
+		// Arrange
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+
+		// Act — Assert
+		Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			await service.CompleteAsync(999));
+	}
+
+	[TestMethod]
+	[Description("Продолжение несуществующего чата через конвейер отвергается исключением")]
+	// Ручное продолжение применяется только к существующему чату.
+	public void ThrowOnResumeUnknownChat()
+	{
+		// Arrange
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+
+		// Act — Assert
+		Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			await service.ResumeAsync(999));
+	}
+
+	[TestMethod]
+	[Description("Удаление несуществующего чата через конвейер отвергается исключением")]
+	// Удаление применяется только к существующему чату.
+	public void ThrowOnDeleteUnknownChat()
+	{
+		// Arrange
+		var service = CreateService(new FakeChatClient(), new Mock<IChatMarketReader>(MockBehavior.Loose), out _);
+
+		// Act — Assert
+		Assert.ThrowsAsync<InvalidOperationException>(async () =>
+			await service.DeleteAsync(999));
 	}
 
 	/// <summary>Параметры создания чата с дефолтной моделью и полным набором источников.</summary>

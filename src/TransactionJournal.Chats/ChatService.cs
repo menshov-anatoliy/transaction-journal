@@ -14,9 +14,12 @@ using ChatMessage = TransactionJournal.Chats.Ports.ChatMessage;
 /// вызывались и с какими as-of их данные. Агенту передаётся история только
 /// собственного чата: истории соседних чатов ему не видны. Рендер чанков,
 /// троттлинг перерисовок и отмена — ответственность UI, конвейер отдаёт
-/// поток обновлений модели как есть.
+/// поток обновлений модели как есть. Жизненный цикл чата — только ручные
+/// действия владельца: завершение, продолжение, удаление целиком;
+/// автоматического завершения нет.
 // Traceability: openspec:chats/history#requirement-chat-flat-full-history
 // Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+// Traceability: openspec:chats/history#requirement-chat-manual-completion-and-deletion
 /// </summary>
 public sealed class ChatService
 {
@@ -45,6 +48,47 @@ public sealed class ChatService
 		_agent = agent ?? throw new ArgumentNullException(nameof(agent));
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
+
+		/// <summary>
+		/// Завершает чат вручную владельца: чат уходит из списка активных в
+		/// список завершённых, история сохраняется; автоматического завершения
+		/// нет — статус меняет только это действие.
+		// Traceability: openspec:chats/history#scenario-chat-completion-hides-to-completed-list
+		/// </summary>
+		/// <param name="chatId">Идентификатор завершаемого чата.</param>
+		/// <param name="cancellationToken">Токен отмены.</param>
+		public Task CompleteAsync(long chatId, CancellationToken cancellationToken = default) =>
+			_store.CompleteChatAsync(chatId, cancellationToken);
+
+		/// <summary>
+		/// Продолжает завершённый чат: он возвращается в список активных ещё до
+		/// отправки нового сообщения.
+		// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+		/// </summary>
+		/// <param name="chatId">Идентификатор продолжаемого чата.</param>
+		/// <param name="cancellationToken">Токен отмены.</param>
+		public Task ResumeAsync(long chatId, CancellationToken cancellationToken = default) =>
+			_store.ResumeChatAsync(chatId, cancellationToken);
+
+		/// <summary>
+		/// Удаляет чат целиком со всеми сообщениями: явное действие владельца,
+		/// корзины нет — восстановление невозможно.
+		// Traceability: openspec:chats/history#scenario-chat-hard-delete
+		/// </summary>
+		/// <param name="chatId">Идентификатор удаляемого чата.</param>
+		/// <param name="cancellationToken">Токен отмены.</param>
+		public Task DeleteAsync(long chatId, CancellationToken cancellationToken = default) =>
+			_store.DeleteChatAsync(chatId, cancellationToken);
+
+		/// <summary>Активные чаты в порядке создания.</summary>
+		/// <param name="cancellationToken">Токен отмены.</param>
+		public Task<IReadOnlyList<ChatRecord>> ListActiveAsync(CancellationToken cancellationToken = default) =>
+			_store.ListActiveChatsAsync(cancellationToken);
+
+		/// <summary>Завершённые владельцем чаты в порядке создания.</summary>
+		/// <param name="cancellationToken">Токен отмены.</param>
+		public Task<IReadOnlyList<ChatRecord>> ListCompletedAsync(CancellationToken cancellationToken = default) =>
+			_store.ListCompletedChatsAsync(cancellationToken);
 
 	/// <summary>
 	/// Фиксирует сообщение владельца и возвращает его с присвоенными ключами:

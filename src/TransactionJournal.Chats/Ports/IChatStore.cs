@@ -7,9 +7,12 @@ namespace TransactionJournal.Chats.Ports;
 /// опциональная привязка к конструкции, набор источников; параметры
 /// фиксируются при создании и повторно не передаются, сменить контекст
 /// можно только новым чатом. ИИ-помощник видит историю только собственного
-/// чата. Чат — запись окружения: домен журнала порт не видит.
+/// чата. Жизненный цикл чата управляется только ручными действиями
+/// владельца — завершение, продолжение, удаление; автоматического
+/// завершения нет. Чат — запись окружения: домен журнала порт не видит.
 // Traceability: openspec:chats/history#requirement-chat-flat-full-history
 // Traceability: openspec:chats/history#requirement-chat-environment-record
+// Traceability: openspec:chats/history#requirement-chat-manual-completion-and-deletion
 /// </summary>
 public interface IChatStore
 {
@@ -18,9 +21,11 @@ public interface IChatStore
 	/// Отдельной команды создания чата нет: сообщение без идентификатора чата
 	/// создаёт новый чат с переданными параметрами; сообщение существующего
 	/// чата параметры не принимает — привязка и набор источников неизменяемы,
-	/// перепривязка означает начало нового чата.
+	/// перепривязка означает начало нового чата. Сообщение в завершённый
+	/// чат продолжает его и возвращает в активные.
 	// Traceability: openspec:chats/history#scenario-chat-created-by-first-message
 	// Traceability: openspec:chats/history#scenario-chat-binding-cannot-change
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
 	/// </summary>
 	/// <param name="chatId">Идентификатор чата; null — создаётся новый чат этим сообщением.</param>
 	/// <param name="start">Параметры создания чата: обязательны при новом чате, запрещены для существующего.</param>
@@ -45,6 +50,42 @@ public interface IChatStore
 	/// <param name="chatId">Идентификатор чата.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	Task<IReadOnlyList<ChatMessage>> ListMessagesAsync(long chatId, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Ручное завершение чата владельцем: активный чат исчезает из списка
+	/// активных и появляется в списке завершённых, история сохраняется.
+	/// Единственный способ завершить чат — это действие; автоматики нет.
+	// Traceability: openspec:chats/history#scenario-chat-completion-hides-to-completed-list
+	/// </summary>
+	/// <param name="chatId">Идентификатор завершаемого чата.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task CompleteChatAsync(long chatId, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Ручное продолжение завершённого чата: он возвращается в список
+	/// активных ещё до отправки нового сообщения.
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+	/// </summary>
+	/// <param name="chatId">Идентификатор продолжаемого чата.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task ResumeChatAsync(long chatId, CancellationToken cancellationToken = default);
+
+	/// <summary>
+	/// Явное удаление чата владельцем: чат и все его сообщения исчезают
+	/// целиком, корзины нет — восстановление невозможно.
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	/// </summary>
+	/// <param name="chatId">Идентификатор удаляемого чата.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task DeleteChatAsync(long chatId, CancellationToken cancellationToken = default);
+
+	/// <summary>Активные чаты в порядке создания.</summary>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task<IReadOnlyList<ChatRecord>> ListActiveChatsAsync(CancellationToken cancellationToken = default);
+
+	/// <summary>Завершённые владельцем чаты в порядке создания.</summary>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	Task<IReadOnlyList<ChatRecord>> ListCompletedChatsAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>Статус жизненного цикла чата: активен или завершён владельцем.</summary>
