@@ -246,8 +246,13 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 		[],
 	);
 
+	// Выделение строки сохраняет ссылку на данные: иначе автосброс состояния
+	// TanStack Table запускает бесконечные перерисовки при каждом новом массиве.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
+	const data = React.useMemo(() => [...rows], [rows]);
+
 	const table = useReactTable({
-		data: [...rows],
+		data,
 		columns,
 		state: { sorting },
 		onSortingChange: setSorting,

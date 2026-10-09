@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { Profiler } from "react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -206,6 +207,41 @@ beforeEach(() => {
 });
 
 describe("раздел «Конструкции»", () => {
+	// Выделение конструкции должно завершать обновление списка, а не запускать бесконечный рендер.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
+	it("ThrowOnSelectionRenderLoop: клик по конструкции не зацикливает страницу", async () => {
+		// Arrange: ограничитель останавливает цикл до исчерпания памяти тестового процесса.
+		const user = userEvent.setup();
+		const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		let commits = 0;
+		render(
+			<QueryClientProvider client={queryClient}>
+				<MemoryRouter>
+					<Profiler id="constructions" onRender={() => {
+						commits += 1;
+						if (commits > 30) {
+							throw new Error("Выделение конструкции вызвало бесконечное обновление страницы");
+						}
+					}}>
+						<ConstructionsPage />
+					</Profiler>
+				</MemoryRouter>
+			</QueryClientProvider>,
+		);
+		await screen.findByRole("row", { name: /ETH-240628/ });
+
+		// Act: клик и завершение отложенных обновлений таблицы и превью.
+		await user.click(screen.getByRole("row", { name: /ETH-240628/ }));
+		await screen.findByRole("link", { name: /открыть карточку/i });
+		await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+		const settledCommits = commits;
+		await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+
+		// Assert: выбранная строка и превью остаются доступны, рендер прекратился.
+		expect(screen.getByRole("row", { name: /ETH-240628/ })).toHaveAttribute("aria-selected", "true");
+		expect(commits).toBe(settledCommits);
+	});
+
 	it("оформляет титул раздела по дизайн-системе: Inter 21/600", async () => {
 		// Титул раздела — H1 дизайн-экранов Body #1..#8 ($font 21/600),
 		// а не дефолтный text-2xl (24px): кегль сведён к дизайн-токену.

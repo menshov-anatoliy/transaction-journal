@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
+import { Profiler, useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ConstructionRow } from "@/lib/api/constructions";
@@ -52,6 +53,40 @@ const closedRow: ConstructionRow = {
 };
 
 describe("таблица конструкций", () => {
+	// Изменение выделения не должно запускать повторные обновления неизменных строк.
+	// Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
+	it("ThrowOnSelectionRenderLoop: выделение единственной строки не зацикливает таблицу", async () => {
+		// Arrange: минимальный сценарий без запросов API и контекстных панелей.
+		const user = userEvent.setup();
+		const rows = [openRow];
+		let commits = 0;
+		function Selection() {
+			const [selectedId, setSelectedId] = useState<number | null>(null);
+			return <ConstructionsTable rows={rows} selectedId={selectedId} onSelect={setSelectedId} />;
+		}
+		render(
+			<Profiler id="table" onRender={() => {
+				commits += 1;
+				if (commits > 30) {
+					throw new Error("Выделение строки вызвало бесконечное обновление таблицы");
+				}
+			}}>
+				<Selection />
+			</Profiler>,
+		);
+		await act(async () => { await Promise.resolve(); });
+
+		// Act: выделение строки и завершение отложенных обновлений.
+		await user.click(screen.getByRole("row", { name: /ETH-240628/ }));
+		await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+		const settledCommits = commits;
+		await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+
+		// Assert: выделение сохранено, таблица перестала перерисовываться.
+		expect(screen.getByRole("row", { name: /ETH-240628/ })).toHaveAttribute("aria-selected", "true");
+		expect(commits).toBe(settledCommits);
+	});
+
 	// Все состояния конструкции показаны единым StatusChip в дизайн-тонах.
 	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 	it("показывает открытый, закрытый и архивный статусы пилюлями", () => {
