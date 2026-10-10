@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Application.Analytics;
 using Assert = NUnit.Framework.Assert;
@@ -9,9 +9,10 @@ namespace TransactionJournal.Tests.Analytics;
 /// <summary>
 /// Проверки калькулятора реального риска: дебетовый вертикальный спред даёт
 /// нетто-дебет, группы разных экспираций суммируются консервативно,
-/// неограниченный худший случай и неразобранный символ оставляют величину
-/// отсутствующей, сбой марок на метрику не влияет, без открытых остатков риск
-/// нулевой, а null-набор позиций отклоняется.
+/// неограниченный худший случай и неполные исходные данные различаются
+/// состояниями типизированного результата, сбой марок на метрику не влияет,
+/// без открытых остатков риск конечен и нулевой, а null-набор позиций
+/// отклоняется.
 /// </summary>
 [TestClass]
 public class RealRiskCalculatorTests
@@ -46,10 +47,10 @@ public class RealRiskCalculatorTests
 		};
 
 		// Act
-		var realRisk = _calculator.Calculate(positions);
+		var result = _calculator.CalculateResult(positions);
 
-		// Assert: ниже нижнего страйка платёж равен −150, риск положителен.
-		Assert.That(realRisk, Is.EqualTo(150m));
+		// Assert: ниже нижнего страйка платёж равен −150, риск конечен и положителен.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(150m)));
 	}
 
 	[TestMethod]
@@ -68,19 +69,20 @@ public class RealRiskCalculatorTests
 		};
 
 		// Act
-		var realRisk = _calculator.Calculate(positions);
+		var result = _calculator.CalculateResult(positions);
 
-		// Assert: −100 + (−50) = −150 — суммарный худший исход, риск 150.
-		Assert.That(realRisk, Is.EqualTo(150m));
+		// Assert: −100 + (−50) = −150 — суммарный худший исход, риск конечен и равен 150.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(150m)));
 	}
 
 	[TestMethod]
 	[Description("Неограниченный худший случай возвращает отсутствие величины")]
-	public void TryIfUnboundedWorstCaseYieldsNull()
+	public void TryIfUnboundedWorstCaseOmitsValue()
 	{
 		// Arrange: одна экспирация — короткие коллы (−2) перекрывают длинный (+1):
 		// суммарная позиция по коллам нетто-короткая, платёж убывает до −∞.
-		// Требование: минимум платежа не ограничен — величина отсутствует.
+		// Требование: минимум платежа не ограничен — величина отсутствует,
+		// статус результата «не ограничен».
 		// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
 		var positions = new[]
 		{
@@ -89,15 +91,65 @@ public class RealRiskCalculatorTests
 		};
 
 		// Act
-		var realRisk = _calculator.Calculate(positions);
+		var result = _calculator.CalculateResult(positions);
 
-		// Assert: наклон платежа на +∞ отрицателен — минимум не ограничен снизу.
-		Assert.That(realRisk, Is.Null);
+		// Assert: наклон платежа на +∞ отрицателен — статус unbounded без числа.
+		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unbounded));
+		Assert.That(result.Usdt, Is.Null);
 	}
 
 	[TestMethod]
-	[Description("Неразобранный символ возвращает отсутствие величины")]
-	public void TryIfUnparseableSymbolYieldsNull()
+	[Description("Одинокий короткий колл после закрытия длинной ноги неограничен")]
+	public void TryIfLoneShortCallAfterClosedLongYieldsUnbounded()
+	{
+		// Arrange: защитная длинная нога закрыта — её остаток нулевой и средней
+		// цены остатка у неё больше нет; остался только короткий колл при
+		// положительном реализованном результате конструкции.
+		// Требование: нулевой остаток исключается из групп и не делает данные
+		// неполными, а оставшийся нетто-короткий колл даёт неограниченный риск
+		// независимо от реализованного итога.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+		// Traceability: change:show-unbounded-finresult-risk/design#d4
+		var positions = new[]
+		{
+			ClosedPosition("BTC-27DEC24-65000-C"),
+			OpenResidual("BTC-27DEC24-70000-C", -1m, 150m),
+		};
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: закрытая нога не маскирует неограниченный хвост короткого колла.
+		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unbounded));
+		Assert.That(result.Usdt, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Неизвестные данные при наличии короткого колла дают недоступность")]
+	public void TryIfUnknownDataTakePrecedenceOverShortCallTail()
+	{
+		// Arrange: один открытый остаток не разбирается как символ опциона, а в
+		// известной группе есть нетто-короткий колл.
+		// Требование: неполнота данных обнаруживается раньше классификации
+		// хвостов групп — статус «не рассчитан», а не «не ограничен».
+		// Traceability: openspec:analytics/performance#scenario-real-risk-unknown-group-takes-precedence
+		var positions = new[]
+		{
+			OpenResidual("BTCUSDT", 1m, 300m),
+			OpenResidual("BTC-27DEC24-70000-C", -1m, 150m),
+		};
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: отсутствие данных не маскируется выводом о неограниченности конструкции.
+		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unavailable));
+		Assert.That(result.Usdt, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Неразобранный символ возвращает состояние недоступности")]
+	public void TryIfUnparseableSymbolYieldsUnavailable()
 	{
 		// Arrange: открытый остаток с символом линейного инструмента, который не
 		// разбирается как символ опциона.
@@ -106,10 +158,30 @@ public class RealRiskCalculatorTests
 		var positions = new[] { OpenResidual("BTCUSDT", 1m, 300m) };
 
 		// Act
-		var realRisk = _calculator.Calculate(positions);
+		var result = _calculator.CalculateResult(positions);
 
-		// Assert: величина отсутствует целиком, а не обнуляется частично.
-		Assert.That(realRisk, Is.Null);
+		// Assert: статус «не рассчитан» без числа, а не ноль.
+		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unavailable));
+		Assert.That(result.Usdt, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Нет средней цены открытого остатка — риск не рассчитан")]
+	public void TryIfMissingOpenPriceYieldsUnavailable()
+	{
+		// Arrange: символ открытого остатка разбирается, но средняя цена остатка
+		// отсутствует.
+		// Требование: без средней цены платеж ноги не определён — числовой
+		// результат не вычисляется.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-missing-open-price-unavailable
+		var positions = new[] { OpenResidualWithoutOpenPrice("BTC-27DEC24-65000-C", 1m) };
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: статус «не рассчитан» без числа.
+		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unavailable));
+		Assert.That(result.Usdt, Is.Null);
 	}
 
 	[TestMethod]
@@ -118,7 +190,7 @@ public class RealRiskCalculatorTests
 	{
 		// Arrange: один и тот же дебетовый спред в двух наборах — с оценёнными
 		// марками и без них (марочные поля null, как при сбое котировок).
-		// Требование: величина выводится из структуры ног и средних цен остатков,
+		// Требование: результат выводится из структуры ног и средних цен остатков,
 		// а не из оценок марок.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
 		var withMarks = new[]
@@ -133,20 +205,20 @@ public class RealRiskCalculatorTests
 		};
 
 		// Act
-		var evaluated = _calculator.Calculate(withMarks);
-		var failed = _calculator.Calculate(withoutMarks);
+		var evaluated = _calculator.CalculateResult(withMarks);
+		var failed = _calculator.CalculateResult(withoutMarks);
 
-		// Assert: сбой марок не меняет величину — она определена структурой ног.
-		Assert.That(evaluated, Is.EqualTo(150m));
+		// Assert: сбой марок не меняет ни величину, ни состояние результата.
+		Assert.That(evaluated, Is.EqualTo(RealRiskResult.Finite(150m)));
 		Assert.That(failed, Is.EqualTo(evaluated));
 	}
 
 	[TestMethod]
-	[Description("Без открытых остатков реальный риск нулевой")]
-	public void TryIfNoOpenResidualsYieldsZero()
+	[Description("Без открытых остатков реальный риск конечен и нулевой")]
+	public void TryIfNoOpenResidualsYieldFiniteZero()
 	{
 		// Arrange: обе позиции конструкции закрыты — открытых остатков нет.
-		// Требование: худшего исхода на экспирацию больше нет, риск нулевой.
+		// Требование: худшего исхода на экспирацию больше нет, риск конечен и нулевой.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-zero-without-open-residuals
 		var positions = new[]
 		{
@@ -155,16 +227,53 @@ public class RealRiskCalculatorTests
 		};
 
 		// Act
-		var realRisk = _calculator.Calculate(positions);
+		var result = _calculator.CalculateResult(positions);
 
-		// Assert: риск нулевой, а не отсутствующий.
-		Assert.That(realRisk, Is.EqualTo(0m));
+		// Assert: риск конечен и нулевой, а не отсутствующий.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(0m)));
 	}
 
 	[TestMethod]
-	[Description("Null-набор позиций отклоняется")]
+	[Description("Переходная числовая обёртка повторяет типизированный результат")]
+	public void TryIfLegacyNullableWrapperMirrorsTypedResult()
+	{
+		// Arrange: конечный спред, неограниченный короткий колл и неразобранный
+		// символ — три состояния типизированного результата.
+		// Требование: пока потребители не переведены на типизированный контракт,
+		// числовая обёртка отдаёт число только для конечного риска.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		var finite = new[]
+		{
+			OpenResidual("BTC-27DEC24-65000-C", 1m, 300m),
+			OpenResidual("BTC-27DEC24-70000-C", -1m, 150m),
+		};
+		var unbounded = new[] { OpenResidual("BTC-27DEC24-70000-C", -1m, 150m) };
+		var unavailable = new[] { OpenResidual("BTCUSDT", 1m, 300m) };
+
+		// Act
+		var finiteValue = _calculator.Calculate(finite);
+		var unboundedValue = _calculator.Calculate(unbounded);
+		var unavailableValue = _calculator.Calculate(unavailable);
+
+		// Assert: число сопровождает только конечный риск, остальные состояния дают null.
+		Assert.That(finiteValue, Is.EqualTo(150m));
+		Assert.That(unboundedValue, Is.Null);
+		Assert.That(unavailableValue, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Null-набор позиций отклоняется типизированным расчётом")]
 	[ExpectedException(typeof(ArgumentNullException))]
-	public void ThrowOnNullPositions()
+	public void ThrowOnNullPositionsInTypedResult()
+	{
+		// Arrange — Act — Assert
+		_calculator.CalculateResult(null!);
+	}
+
+	[TestMethod]
+	[Description("Null-набор позиций отклоняется переходной обёрткой")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public void ThrowOnNullPositionsInLegacyWrapper()
 	{
 		// Arrange — Act — Assert
 		_calculator.Calculate(null!);
@@ -196,6 +305,26 @@ public class RealRiskCalculatorTests
 		MarkPrice = markPrice,
 		UnrealizedPnL = unrealizedPnL,
 		MarkValue = markValue,
+		OpenedAt = BaseAt,
+		ClosedAt = null,
+		Duration = null,
+	};
+
+	/// <summary>Строит метрики открытого остатка без средней цены: она не вычислена или не оценена.</summary>
+	private static PositionMetrics OpenResidualWithoutOpenPrice(string symbol, decimal residual) => new()
+	{
+		ConstructionId = ConstructionId,
+		Symbol = symbol,
+		Residual = residual,
+		RealizedPnL = 0m,
+		AccumulatedFees = 0.03m,
+		AverageOpenPrice = null,
+		AverageEntryPrice = null,
+		AverageClosePrice = null,
+		TotalPnL = null,
+		MarkPrice = null,
+		UnrealizedPnL = null,
+		MarkValue = null,
 		OpenedAt = BaseAt,
 		ClosedAt = null,
 		Duration = null,
