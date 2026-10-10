@@ -3,7 +3,8 @@ import * as React from "react";
 import { Lightbulb, Loader2, RefreshCw } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import type { ConstructionsOverview } from "@/lib/api/constructions";
-import { fetchConstructionPreview, fetchConstructionsOverview } from "@/lib/api/constructions";
+import { fetchConstructionPreview } from "@/lib/api/constructions";
+import { constructionsOverviewQueryKey, useConstructionsOverviewQuery } from "@/lib/api/constructions-overview-query";
 import { runHintsPass, type HintPassResult } from "@/lib/api/hints";
 import { runSync, type SyncRunSummary } from "@/lib/api/sync";
 import { ConstructionPreviewCard } from "@/components/constructions/construction-preview";
@@ -26,8 +27,7 @@ import { cn } from "@/lib/utils";
 // Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
 // Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
 
-/** Ключи запросов раздела для согласованных инвалидаций кэша. */
-const overviewKey = ["constructions-overview"] as const;
+/** Ключ запроса превью для согласованных инвалидаций кэша карточки. */
 const previewKey = (constructionId: number) => ["construction-preview", constructionId] as const;
 
 /** Область видимости списка: только открытые или весь журнал. */
@@ -54,14 +54,17 @@ export function ConstructionsPage() {
 			? Number(constructionParam)
 			: null;
 
-	// Обзор раздела: сводка шапки и строки таблицы одним запросом.
-	const overviewQuery = useQuery({ queryKey: overviewKey, queryFn: fetchConstructionsOverview });
+	// Обзор раздела: сводка шапки и строки таблицы одним запросом. Хук читает
+	// общий кэш с итогом в топбаре каркаса (один ключ — один запрос), поэтому
+	// сводка списка не плодит дублирующих обращений к API.
+	// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
+	const overviewQuery = useConstructionsOverviewQuery();
 
 	// Синхронизация из шапки: после закрытого запуска раздел перечитывает
 	// обзор — новые сделки меняют итог и строки.
 	const syncMutation = useMutation({
 		mutationFn: runSync,
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: overviewKey }),
+		onSuccess: () => queryClient.invalidateQueries({ queryKey: constructionsOverviewQueryKey }),
 	});
 
 	// Ручной проход подсказок из тулбара: по завершению перечитываются
@@ -71,7 +74,7 @@ export function ConstructionsPage() {
 		mutationFn: runHintsPass,
 		onSuccess: () => {
 			void queryClient.invalidateQueries({ queryKey: ["hints-panel"] });
-			void queryClient.invalidateQueries({ queryKey: overviewKey });
+			void queryClient.invalidateQueries({ queryKey: constructionsOverviewQueryKey });
 		},
 	});
 
@@ -287,8 +290,9 @@ function ConstructionsHeader({
 
 	return (
 		<header className="flex flex-col gap-2">
-			{/* Итог журнала — единственное место постоянного показа: с разбивкой
-			    на реализованную и нереализованную части. */}
+			{/* Детальная сводка раздела: итог с разбивкой, отметка времени марок
+			    и счётчики; компактный итог на любом экране живёт в топбаре каркаса
+			    и читает тот же кэш обзора. */}
 			{/* Шапка итога — одна строка по референсу design.pen (фрейм списка):
 			    итог 18/600 $accentStrong, разбивка 11 $textSecondary, котировки и
 			    счётчики 11 $textMuted; паддинги [14,16]; сегменты выравнены по

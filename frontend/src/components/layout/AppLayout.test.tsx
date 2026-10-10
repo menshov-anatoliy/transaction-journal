@@ -1,8 +1,9 @@
 ﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RouterProvider, createMemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ConstructionsOverview, ConstructionsSummary } from "@/lib/api/constructions";
 import { appSections } from "@/config/sections";
 import { AppLayout } from "./AppLayout";
 import { useContextPanel } from "./context-panel";
@@ -12,7 +13,13 @@ vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 	fetchInboxCount: vi.fn(),
 }));
 
+vi.mock("@/lib/api/constructions", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/constructions")>()),
+	fetchConstructionsOverview: vi.fn(),
+}));
+
 const inboxApi = vi.mocked(await import("@/lib/api/inbox"));
+const constructionsApi = vi.mocked(await import("@/lib/api/constructions"));
 
 // Геометрия панелей переживает перезагрузку в localStorage, поэтому между
 // тестами файла накопленное состояние обязательно сбрасывается, иначе
@@ -20,19 +27,38 @@ const inboxApi = vi.mocked(await import("@/lib/api/inbox"));
 beforeEach(() => {
 	localStorage.clear();
 	inboxApi.fetchInboxCount.mockResolvedValue(0);
+	constructionsApi.fetchConstructionsOverview.mockResolvedValue(makeOverview());
 	setViewport(1280);
 });
 
 // Проверяется каркас приложения по концепции §2: тонкий топбар с брендом
-// «Журнал Bybit» (итог журнала здесь не размещается), левая панель с пятью
-// разделами и сворачивание панели до иконок.
+// «Журнал Bybit» и компактным итогом журнала (разбивка P&L видна на любом
+// экране), левая панель с пятью разделами и сворачивание панели до иконок.
 // Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
+// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
 // Слой сверки с design.pen (задача 3.1): топбар, бренд и нав-пункты «Каркаса»
 // g0z20 перенесены по мастер-нодам jGvOM/WBYbU (54, [0,24], 14/600) и
 // примитиву NavItem (apcZH/Vx9C2/q35Tj9), бейдж — на акцентной паре мастера.
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 // Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 // Traceability: change:reconcile-frontend-with-design/design#D2
+
+/** Обзор раздела «Конструкции» с настраиваемой сводкой для моков сети. */
+function makeOverview(summary: Partial<ConstructionsSummary> = {}): ConstructionsOverview {
+	return {
+		summary: {
+			totalPnL: 214.32,
+			realizedPnL: 156.1,
+			unrealizedPnL: 58.22,
+			marksAsOf: "2026-10-10T12:00:00+00:00",
+			hasMarkFailure: false,
+			constructionCount: 3,
+			openCount: 2,
+			...summary,
+		},
+		items: [],
+	};
+}
 
 /**
  * Экран-проверка: регистрирует контекст правой панели, чтобы каркас
@@ -209,6 +235,53 @@ describe("раскладка каркаса приложения", () => {
 		await user.click(screen.getByRole("link", { name: "Подсказки" }));
 		expect(await screen.findByRole("heading", { name: "Подсказки" })).toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Закрыть меню" })).not.toBeInTheDocument();
+	});
+});
+
+// Итог журнала в топбаре каркаса: разбивка на реализованный и
+// нереализованный P&L обязательна на любом экране, при сбое марок гаснет
+// только нереализованная часть; детальная сводка остаётся в шапке списка.
+// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
+// Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
+describe("итог журнала в топбаре", () => {
+	it("показывает итог с разбивкой на реализованный и нереализованный P&L на любом экране", async () => {
+		constructionsApi.fetchConstructionsOverview.mockResolvedValue(makeOverview());
+		const user = userEvent.setup();
+		renderLayout();
+
+		// Assert: итог живёт в топбаре (banner) и несёт обе части разбивки;
+		// детальные счётчики и отметка марок остаются сводке списка.
+		const banner = screen.getByRole("banner");
+		expect(await within(banner).findByText("+214.32 USDT")).toBeInTheDocument();
+		const total = within(banner).getByTestId("journal-total");
+		expect(total).toHaveTextContent("+214.32 USDT");
+		expect(total).toHaveTextContent("реализов. +156.1 / нереализов. +58.22");
+		expect(total).not.toHaveTextContent("конструкци");
+
+		// Act: переход на другой экран («Подсказки») — итог остаётся видимым
+		// из общего кэша без повторного запроса.
+		await user.click(screen.getByRole("link", { name: "Подсказки" }));
+		expect(await screen.findByRole("heading", { name: "Подсказки" })).toBeInTheDocument();
+		expect(within(screen.getByRole("banner")).getByTestId("journal-total")).toHaveTextContent("+214.32 USDT");
+	});
+
+	it("при сбое марок помечает итог неполным, нереализованный P&L — признаком сбоя, реализованный остаётся", async () => {
+		// Arrange: провайдер котировок не оценил остатки — нереализованная
+		// часть и итог непостроены, реализованный P&L известен.
+		constructionsApi.fetchConstructionsOverview.mockResolvedValue(
+			makeOverview({ totalPnL: null, unrealizedPnL: null, marksAsOf: null, hasMarkFailure: true }),
+		);
+		renderLayout();
+
+		// Assert: итог помечен неполным, нереализованная часть получила
+		// признак сбоя, реализованная часть и сам итог остаются видимыми.
+		const banner = screen.getByRole("banner");
+		expect(await within(banner).findByText("сбой котировок")).toBeInTheDocument();
+		const total = within(banner).getByTestId("journal-total");
+		expect(total).toHaveTextContent("недоступен");
+		expect(total).toHaveTextContent("неполный");
+		expect(total).toHaveTextContent("сбой котировок");
+		expect(total).toHaveTextContent("реализов. +156.1");
 	});
 });
 

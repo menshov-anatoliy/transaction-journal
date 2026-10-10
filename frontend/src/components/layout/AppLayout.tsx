@@ -7,6 +7,8 @@ import { NavItem } from "@/components/design";
 import { appSections } from "@/config/sections";
 import { cn } from "@/lib/utils";
 import { fetchInboxCount } from "@/lib/api/inbox";
+import { useConstructionsOverviewQuery } from "@/lib/api/constructions-overview-query";
+import { formatSignedAmount } from "@/lib/format/quantity";
 import { useIsMobile } from "@/lib/use-mobile";
 import { PanelIconColumn } from "./PanelIconColumn";
 import { PanelResizer } from "./PanelResizer";
@@ -23,11 +25,16 @@ import type { ContextPanelApi, ContextPanelRegistration } from "./context-panel"
  * иконочную колонку у внутреннего края; сворачивание — последняя иконка
  * колонки, топбар панелями больше не управляет (на мобильном остаётся
  * только кнопка drawer-шторки, механика панелей на мобильный не
- * расширяется — Non-Goals design.md). Слой дизайн-системы: топбар и
- * нав-пункты по мастер-нодам «Каркаса» g0z20, пункты панели — примитив
- * NavItem.
+ * расширяется — Non-Goals design.md). Топбар, кроме бренда, несёт
+ * компактный итог журнала с разбивкой на реализованный и нереализованный
+ * P&L — он обязателен на любом экране и читает общий с экраном списка
+ * кэш обзора «Конструкций» (детальная сводка с отметкой времени марок
+ * остаётся в шапке списка). Слой дизайн-системы: топбар и нав-пункты по
+ * мастер-нодам «Каркаса» g0z20, пункты панели — примитив NavItem.
  *
  * Traceability: openspec:ui/screens#requirement-app-frame-navigation
+ * Traceability: openspec:ui/screens#scenario-journal-total-always-visible
+ * Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
  * Traceability: openspec:ui/screens#scenario-frame-panel-geometry-persists
  * Traceability: openspec:ui/screens#scenario-frame-collapse-icon-in-panel-column
  * Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
@@ -135,9 +142,12 @@ export function AppLayout() {
 		Свернуть/развернуть левую панель топбар больше не может: управление
 		свёрнутостью переехало в иконочную колонку самой панели (последняя
 		иконка). Кнопка в топбаре остаётся только на мобильном — это управление
-		drawer-шторкой, а не панелью каркаса.
+		drawer-шторкой, а не панелью каркаса. Справа — компактный итог журнала:
+		по требованию каркаса он виден на любом экране, поэтому дополняет
+		бренд мастер-ноды, а детальная сводка остаётся в шапке списка.
 	*/
 	// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+	// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
 	// Traceability: openspec:ui/screens#scenario-frame-collapse-icon-in-panel-column
 	// Traceability: change:reconcile-frontend-with-design/design#D2
 	return (
@@ -154,6 +164,7 @@ export function AppLayout() {
 					</Button>
 				)}
 				<span className="text-sm font-semibold">Журнал Bybit</span>
+				<JournalTotal />
 			</header>
 			<div className="flex min-h-0 flex-1">
 				{isMobile == false && (
@@ -238,6 +249,49 @@ export function AppLayout() {
 					</aside>
 				)}
 			</div>
+		</div>
+	);
+}
+
+/**
+ * Компактный итог журнала в правом крае топбара: итог с разбивкой на
+ * реализованный и нереализованный P&L обязателен на любом экране. Данные
+ * читаются из общего с экраном «Конструкции» кэша React Query (один ключ —
+ * один запрос), поэтому дублирующих обращений к API не появляется, а
+ * детальная сводка с отметкой времени марок и счётчиками остаётся в шапке
+ * списка. Токены каркаса: итог 14/600 $accentStrong, разбивка 11
+ * $textMuted, признак сбоя — деструктивный цвет дизайн-системы.
+ */
+// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
+// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+function JournalTotal() {
+	const overviewQuery = useConstructionsOverviewQuery();
+	const summary = overviewQuery.data?.summary;
+
+	return (
+		<div data-slot="journal-total" data-testid="journal-total" className="ml-auto flex items-baseline gap-x-2">
+			{summary === undefined ? (
+				<span className="text-[11px] text-text-muted">чтение журнала…</span>
+			) : (
+				<>
+					{/*
+						Итог всегда виден; при сбое марок он помечается неполным,
+						нереализованная часть получает признак сбоя, реализованная
+						часть не исчезает.
+					*/}
+					{/* Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only */}
+					<span className="text-sm font-semibold text-accent-strong">
+						{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
+					</span>
+					{summary.hasMarkFailure && <span className="text-[11px] text-text-muted">неполный</span>}
+					<span className="text-[11px] text-text-muted">
+						{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. `}
+						<span className={summary.unrealizedPnL === null ? "text-destructive" : undefined}>
+							{summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)}
+						</span>
+					</span>
+				</>
+			)}
 		</div>
 	);
 }
