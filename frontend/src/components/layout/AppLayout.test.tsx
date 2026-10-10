@@ -2,9 +2,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RouterProvider, createMemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appSections } from "@/config/sections";
 import { AppLayout } from "./AppLayout";
+import { useContextPanel } from "./context-panel";
 
 vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/inbox")>()),
@@ -12,6 +13,15 @@ vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 }));
 
 const inboxApi = vi.mocked(await import("@/lib/api/inbox"));
+
+// Геометрия панелей переживает перезагрузку в localStorage, поэтому между
+// тестами файла накопленное состояние обязательно сбрасывается, иначе
+// свёрнутость из прошлого теста искажает следующий рендер.
+beforeEach(() => {
+	localStorage.clear();
+	inboxApi.fetchInboxCount.mockResolvedValue(0);
+	setViewport(1280);
+});
 
 // Проверяется каркас приложения по концепции §2: тонкий топбар с брендом
 // «Журнал Bybit» (итог журнала здесь не размещается), левая панель с пятью
@@ -24,7 +34,16 @@ const inboxApi = vi.mocked(await import("@/lib/api/inbox"));
 // Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 // Traceability: change:reconcile-frontend-with-design/design#D2
 
-function renderLayout() {
+/**
+ * Экран-проверка: регистрирует контекст правой панели, чтобы каркас
+ * показал контекстную зону.
+ */
+function ContextRegisteringScreen() {
+	useContextPanel({ content: <div>контекст экрана</div> });
+	return <div>главная</div>;
+}
+
+function renderLayout(withContext = false) {
 	const queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	});
@@ -32,7 +51,7 @@ function renderLayout() {
 		[{
 			element: <AppLayout />,
 			children: [
-				{ index: true, element: <div>главная</div> },
+				{ index: true, element: withContext ? <ContextRegisteringScreen /> : <div>главная</div> },
 				{ path: "hints", element: <h1>Подсказки</h1> },
 			],
 		}],
@@ -190,5 +209,89 @@ describe("раскладка каркаса приложения", () => {
 		await user.click(screen.getByRole("link", { name: "Подсказки" }));
 		expect(await screen.findByRole("heading", { name: "Подсказки" })).toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Закрыть меню" })).not.toBeInTheDocument();
+	});
+});
+
+// Геометрия и управление панелями каркаса: сворачивание живёт иконочной
+// колонкой у внутреннего края панели, ширины ограничены диапазонами и
+// восстанавливаются из localStorage между сессиями.
+// Traceability: openspec:ui/screens#scenario-frame-collapse-icon-in-panel-column
+// Traceability: openspec:ui/screens#scenario-frame-panel-geometry-persists
+// Traceability: change:rework-spa-shell-and-screens/design#D1
+describe("панели каркаса", () => {
+	it("кнопка сворачивания левой панели — последняя иконка её колонки", () => {
+		renderLayout();
+
+		// Assert: в иконочной колонке левой панели кнопка сворачивания стоит
+		// последней; в топбаре панельных кнопок больше нет.
+		const column = document.querySelector('[data-slot="panel-icon-column"][data-side="left"]');
+		expect(column).not.toBeNull();
+		const buttons = Array.from(column!.querySelectorAll("button"));
+		const toggle = screen.getByRole("button", { name: "Свернуть панель навигации" });
+		expect(buttons).not.toHaveLength(0);
+		expect(buttons[buttons.length - 1]).toBe(toggle);
+	});
+
+	it("топбар не содержит кнопок сворачивания панелей", () => {
+		renderLayout();
+
+		// Assert: у топбара не осталось ни одной панельной кнопки — сворачивание
+		// переехало в иконочные колонки панелей.
+		const bannerButtons = Array.from(screen.getByRole("banner").querySelectorAll("button"));
+		for (const button of bannerButtons) {
+			expect(button.textContent).not.toMatch(/панел[ьи]/i);
+			expect(button.getAttribute("aria-label") ?? "").not.toMatch(/панел[ьи]/i);
+		}
+	});
+
+	it("восстанавливает геометрию левой панели из localStorage на монтировании", async () => {
+		const user = userEvent.setup();
+		// Arrange: в прошлой сессии панель сужена до 10 rem и свёрнута.
+		localStorage.setItem("tj.layout.left", JSON.stringify({ width: 10, collapsed: true }));
+
+		renderLayout();
+
+		// Assert: панель снова свёрнута (подписи скрыты), после разворачивания
+		// восстанавливается и сохранённая ширина 10 rem.
+		const panel = screen.getByTestId("layout-panel-left");
+		expect(panel.style.width).toBe("6.5rem");
+		for (const section of appSections) {
+			expect(screen.queryByText(section.label)).not.toBeInTheDocument();
+		}
+		await user.click(screen.getByRole("button", { name: "Развернуть панель навигации" }));
+		expect(panel.style.width).toBe("10rem");
+	});
+
+	it("сплиттер левой панели меняет ширину стрелками и сохраняет её", async () => {
+		const user = userEvent.setup();
+		renderLayout();
+
+		// Act: растягиваем левую панель клавиатурой (drag в jsdom недоступен).
+		const panel = screen.getByTestId("layout-panel-left");
+		expect(panel.style.width).toBe("16rem");
+		const separator = screen.getByRole("separator", { name: "Изменить ширину панели навигации" });
+		separator.focus();
+		await user.keyboard("{ArrowRight}");
+
+		// Assert: ширина выросла на шаг 0.5 rem, значение сохранено, URL чист.
+		expect(panel.style.width).toBe("16.5rem");
+		const stored = JSON.parse(localStorage.getItem("tj.layout.left") ?? "{}") as { width?: number };
+		expect(stored.width).toBe(16.5);
+		expect(window.location.search).toBe("");
+	});
+
+	it("ограничивает ширину правой панели диапазоном 20–40 rem стрелками", async () => {
+		const user = userEvent.setup();
+		localStorage.setItem("tj.layout.right", JSON.stringify({ width: 20, collapsed: false }));
+		renderLayout(true);
+
+		// Act: панель уже на нижней границе 20 rem, пробуем сузить дальше.
+		const panel = screen.getByTestId("context-panel");
+		const separator = screen.getByRole("separator", { name: "Изменить ширину контекстной панели" });
+		separator.focus();
+		await user.keyboard("{ArrowRight}");
+
+		// Assert: для правой панели ArrowRight сужает, clamp не даёт уйти ниже 20.
+		expect(panel.style.width).toBe("20rem");
 	});
 });
