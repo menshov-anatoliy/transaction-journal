@@ -5,6 +5,7 @@ import type { ConstructionCardTrade } from "@/lib/api/construction-card";
 import { fetchMoveTargets } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { GridSection } from "./grid-section";
 import { MarkdownEditDialog } from "@/components/markdown/markdown-edit-dialog";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { DASH } from "@/lib/format/degradation";
@@ -65,7 +66,10 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 	};
 
 	return (
-		<section data-slot="trades-table" className="flex flex-col gap-2">
+		// Секция-карточка сетки сделок по мастеру design.pen: головка с
+		// заголовком и счётчиком «10 колонок · N».
+		// Traceability: change:rework-spa-shell-and-screens/design#D7
+		<GridSection dataSlot="trades-table" title="Сделки" columnCount={10} rowCount={trades.length}>
 			{isMobile === false && moveExecId !== null && (
 				// Форма переноса: выбор целевой конструкции из активных без текущей.
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
@@ -105,11 +109,14 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 				</div>
 			)}
 
-			{/* Плотность Body #2 (yHC4d): все таблицы карточки — ячейки 7/12, шрифт 12. */}
+			{/* Плотность Body #2: ячейки 7/6 кегль 11, заголовки 9.5/600 на
+			    заливке surface-2; значения вторичным текстом, инструмент —
+			    основным. */}
 			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
-			<Table density="compact">
-				<TableHeader>
-					<TableRow>
+			{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
+			<Table density="compact" className="text-text-secondary">
+				<TableHeader className="bg-surface-2">
+					<TableRow className="border-divider">
 						<TableHead>Время</TableHead>
 						<TableHead>execId</TableHead>
 						<TableHead>Инструмент</TableHead>
@@ -131,12 +138,13 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 						</TableRow>
 					) : (
 						trades.map((trade) => (
-							<TableRow key={trade.execId}>
+							// Разделитель строк — токен divider #EBEBE5 по мастеру Body #2.
+							<TableRow key={trade.execId} className="border-divider">
 								<TableCell>{formatMoment(trade.executedAt)}</TableCell>
 								{/* Идентификаторы сделок используют основной шрифт дизайна, Inter 11. */}
 								{/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
 								<TableCell className="font-sans text-[11px]">{trade.execId}</TableCell>
-								<TableCell className="font-medium">{trade.symbol}</TableCell>
+								<TableCell className="font-medium text-foreground">{trade.symbol}</TableCell>
 								<TableCell>{trade.isBuy ? "покупка" : "продажа"}</TableCell>
 								<TableCell className="tabular-nums">{formatAmount(trade.quantity)}</TableCell>
 								<TableCell className="tabular-nums">{formatAmount(trade.price)}</TableCell>
@@ -151,15 +159,16 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 												<MarkdownViewer text={trade.comment} />
 											)}
 										</div>
+										{/* Иконка правки комментария — pencil 12 приглушённым текстом. */}
 										<Button
 											variant="ghost"
 											size="icon"
-											className="size-7"
+											className="size-5"
 											aria-label={`комментарий сделки ${trade.execId}`}
 											title="Править комментарий"
 											onClick={() => setCommentTarget(trade)}
 										>
-											<Pencil aria-hidden />
+											<Pencil aria-hidden className="size-3 text-text-muted" />
 										</Button>
 									</div>
 								</TableCell>
@@ -167,10 +176,23 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 									{/* Распределение сделок — desktop-операция, чтение доступно с телефона. */}
 									{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
 									{isMobile === false && <div className="flex gap-1.5">
-										<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => onReturn(trade.execId)}>
+										{/* Мелкие кнопки действия строки: радиус 6, паддинг [3,7], кегль 9.5. */}
+										<Button
+											variant="outline"
+											size="sm"
+											className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
+											disabled={actionsPending}
+											onClick={() => onReturn(trade.execId)}
+										>
 											Во «Входящие»
 										</Button>
-										<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => beginMove(trade.execId)}>
+										<Button
+											variant="outline"
+											size="sm"
+											className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
+											disabled={actionsPending}
+											onClick={() => beginMove(trade.execId)}
+										>
 											Перенести…
 										</Button>
 									</div>}
@@ -200,6 +222,6 @@ export function TradesTable({ constructionId, trades, actionsPending, onReturn, 
 					}
 				}}
 			/>
-		</section>
+		</GridSection>
 	);
 }

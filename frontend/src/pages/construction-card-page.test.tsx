@@ -569,8 +569,10 @@ describe("карточка конструкции", () => {
 		expect(screen.getAllByText("ручная пометка").length).toBeGreaterThan(0);
 		expect(screen.getByText("PnL робота grid-ETH")).toBeInTheDocument();
 
-		// Предупреждение об избыточной закрывающей записи видно.
-		expect(screen.getByText(/избыточная закрывающая запись/i)).toBeInTheDocument();
+		// Предупреждение об избыточной закрывающей записи — чип в головке
+		// секции по мастеру design.pen, details унесены в подсказку.
+		// Traceability: change:rework-spa-shell-and-screens/specs/ui/screens/spec#scenario-detail-grids-match-design
+		expect(screen.getByRole("alert")).toHaveTextContent("⚠ 1 избыточная");
 	});
 
 	it("показывает панель подсказок конструкции", async () => {

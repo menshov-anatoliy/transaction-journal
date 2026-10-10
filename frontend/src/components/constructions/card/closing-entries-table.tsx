@@ -2,6 +2,7 @@ import * as React from "react";
 import type { ConstructionCardClosingEntry, ConstructionCardClosingWarning } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { GridSection } from "./grid-section";
 import { DASH } from "@/lib/format/degradation";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatAmount, formatSignedAmount } from "@/lib/format/quantity";
@@ -50,6 +51,26 @@ function toneClass(value: number): string {
 	return value < 0 ? "text-[color:var(--fin-negative)]" : "";
 }
 
+/** Полное пояснение предупреждения об избыточной записи (для подсказки чипа). */
+function warningText(warning: ConstructionCardClosingWarning): string {
+	return `Избыточная закрывающая запись: ${kindText(warning.kind)} «${warning.symbol}» на ${formatMoment(warning.closedAt)} — остаток позиции уже нулевой, запись не применена.`;
+}
+
+/** Склонение слова «избыточная» для чипа: 1 избыточная, 2 избыточные, 5 избыточных. */
+function excessiveLabel(count: number): string {
+	const mod10 = count % 10;
+	const mod100 = count % 100;
+	if (mod10 === 1 && mod100 !== 11) {
+		return "избыточная";
+	}
+
+	if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+		return "избыточные";
+	}
+
+	return "избыточных";
+}
+
 export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditMark, onDeleteMark }: ClosingEntriesTableProps) {
 	const isMobile = useIsMobile();
 	const [editMark, setEditMark] = React.useState<ConstructionCardClosingEntry | null>(null);
@@ -86,16 +107,28 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 	};
 
 	return (
-		<section data-slot="closing-entries-table" className="flex flex-col gap-2">
-			{warnings.map((warning) => (
+		// Секция-карточка сетки закрывающих записей по мастеру design.pen:
+		// головка с заголовком, счётчиком «6 колонок · N» и чипом предупреждений.
+		// Traceability: change:rework-spa-shell-and-screens/design#D7
+		<GridSection
+			dataSlot="closing-entries-table"
+			title="Закрывающие записи"
+			columnCount={6}
+			rowCount={entries.length}
+			headExtra={warnings.length > 0 ? (
 				// Избыточная закрывающая запись не применяется и не блокирует
-				// чтение: предупреждение объясняет расхождение.
-				<p key={`${warning.symbol}-${warning.closedAt}`} className="text-destructive text-sm" role="alert">
-					Избыточная закрывающая запись: {kindText(warning.kind)} «{warning.symbol}» на{" "}
-					{formatMoment(warning.closedAt)} — остаток позиции уже нулевой, запись не применена.
-				</p>
-			))}
-
+				// чтение: предупреждение объясняет расхождение. По мастеру —
+				// чип risk в головке секции, детали в подсказке.
+				// Traceability: change:rework-spa-shell-and-screens/specs/ui/screens/spec#scenario-detail-grids-match-design
+				<span
+					className="bg-risk-soft text-risk rounded-full px-2 py-[3px] text-[10.5px]"
+					role="alert"
+					title={warnings.map(warningText).join("\n")}
+				>
+					⚠ {warnings.length} {excessiveLabel(warnings.length)}
+				</span>
+			) : null}
+		>
 			{isMobile === false && editMark !== null && (
 				// Правка ручной пометки: цена и время предзаполнены эффективными
 				// значениями записи; пустая цена возвращает пометку к последней марке.
@@ -129,11 +162,14 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 				</div>
 			)}
 
-			{/* Плотность Body #2 (yHC4d): все таблицы карточки — ячейки 7/12, шрифт 12. */}
+			{/* Плотность Body #2: ячейки 7/6 кегль 11, заголовки 9.5/600 на
+			    заливке surface-2; значения вторичным текстом, инструмент —
+			    основным. */}
 			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
-			<Table density="compact">
-				<TableHeader>
-					<TableRow>
+			{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
+			<Table density="compact" className="text-text-secondary">
+				<TableHeader className="bg-surface-2">
+					<TableRow className="border-divider">
 						<TableHead>Время</TableHead>
 						<TableHead>Тип</TableHead>
 						<TableHead>Инструмент</TableHead>
@@ -151,10 +187,11 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 						</TableRow>
 					) : (
 						entries.map((entry) => (
-							<TableRow key={`${entry.kind}-${entry.closedAt}-${entry.symbol}-${entry.manualMarkId ?? "x"}`}>
+							// Разделитель строк — токен divider #EBEBE5 по мастеру Body #2.
+							<TableRow key={`${entry.kind}-${entry.closedAt}-${entry.symbol}-${entry.manualMarkId ?? "x"}`} className="border-divider">
 								<TableCell>{formatMoment(entry.closedAt)}</TableCell>
 								<TableCell>{kindText(entry.kind)}</TableCell>
-								<TableCell className="font-medium">{entry.symbol}</TableCell>
+								<TableCell className="font-medium text-foreground">{entry.symbol}</TableCell>
 								<TableCell>
 									{entry.price === null ? (
 										<span className="text-muted-foreground" title="Марка инструмента неизвестна — сумма закрытия не вычислена">
@@ -177,11 +214,24 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 									{/* Правка ручных пометок относится к desktop-операциям. */}
 									{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
 									{entry.manualMarkId !== null && isMobile === false ? (
+										// Мелкие кнопки действия строки: радиус 6, паддинг [3,7], кегль 9.5.
 										<div className="flex gap-1.5">
-											<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => onDeleteMark(entry.manualMarkId!)}>
+											<Button
+												variant="outline"
+												size="sm"
+												className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
+												disabled={actionsPending}
+												onClick={() => onDeleteMark(entry.manualMarkId!)}
+											>
 												удалить
 											</Button>
-											<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => beginEdit(entry)}>
+											<Button
+												variant="outline"
+												size="sm"
+												className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
+												disabled={actionsPending}
+												onClick={() => beginEdit(entry)}
+											>
 												править
 											</Button>
 										</div>
@@ -194,6 +244,6 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 					)}
 				</TableBody>
 			</Table>
-		</section>
+		</GridSection>
 	);
 }

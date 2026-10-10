@@ -4,6 +4,7 @@ import type { ConstructionCardPosition } from "@/lib/api/construction-card";
 import { fetchLastInstrumentMark } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { GridSection } from "./grid-section";
 import { MarkdownEditDialog } from "@/components/markdown/markdown-edit-dialog";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { DASH } from "@/lib/format/degradation";
@@ -121,7 +122,10 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 	};
 
 	return (
-		<section data-slot="positions-table" className="flex flex-col gap-2">
+		// Секция-карточка сетки позиций по мастеру design.pen: головка с
+		// заголовком и счётчиком «15 колонок · N».
+		// Traceability: change:rework-spa-shell-and-screens/design#D7
+		<GridSection dataSlot="positions-table" title="Позиции" columnCount={15} rowCount={positions.length}>
 			{isMobile === false && markSymbol !== null && (
 				// Форма ручной пометки закрытия: цена — последняя марка или пусто
 				// (марка подставится при чтении), время — пикер даты-времени.
@@ -161,23 +165,26 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 				</div>
 			)}
 
-			{/* Плотность Body #2 (yHC4d): все таблицы карточки — ячейки 7/12, шрифт 12. */}
+			{/* Плотность Body #2: ячейки 7/6 кегль 11, заголовки 9.5/600 на
+			    заливке surface-2; значения вторичным текстом, инструмент —
+			    основным. */}
 			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
-			<Table density="compact">
-				<TableHeader>
-					<TableRow>
+			{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
+			<Table density="compact" className="text-text-secondary">
+				<TableHeader className="bg-surface-2">
+					<TableRow className="border-divider">
 						<TableHead>Инструмент</TableHead>
 						<TableHead>Остаток</TableHead>
-						<TableHead>Сред. цена входа</TableHead>
-						<TableHead>Сред. цена закрытия</TableHead>
+						<TableHead>Вх. цена</TableHead>
+						<TableHead>Закр. цена</TableHead>
 						<TableHead>Стоимость</TableHead>
-						<TableHead>Изм. цены, %</TableHead>
+						<TableHead>Изм., %</TableHead>
 						<TableHead>Реализ. P&L</TableHead>
 						<TableHead>Нереализ. P&L</TableHead>
 						<TableHead>Общий P&L</TableHead>
-						<TableHead>Всего комиссий</TableHead>
-						<TableHead>Время открытия</TableHead>
-						<TableHead>Время закрытия</TableHead>
+						<TableHead>Комиссии</TableHead>
+						<TableHead>Открыта</TableHead>
+						<TableHead>Закрыта</TableHead>
 						<TableHead>Статус</TableHead>
 						<TableHead>Комментарий</TableHead>
 						<TableHead>Действия</TableHead>
@@ -192,8 +199,9 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 						</TableRow>
 					) : (
 						positions.map((position) => (
-							<TableRow key={position.symbol}>
-								<TableCell className="font-medium">{position.symbol}</TableCell>
+							// Разделитель строк — токен divider #EBEBE5 по мастеру Body #2.
+							<TableRow key={position.symbol} className="border-divider">
+								<TableCell className="font-medium text-foreground">{position.symbol}</TableCell>
 								<TableCell className="tabular-nums">{formatAmount(position.residual)}</TableCell>
 								<TableCell className="tabular-nums">{position.averageEntryPrice === null ? DASH : formatAmount(position.averageEntryPrice)}</TableCell>
 								<TableCell className="tabular-nums">{position.averageClosePrice === null ? DASH : formatAmount(position.averageClosePrice)}</TableCell>
@@ -246,7 +254,8 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 								<TableCell>{formatMoment(position.openedAt)}</TableCell>
 								<TableCell>{position.closedAt === null ? DASH : formatMoment(position.closedAt)}</TableCell>
 								<TableCell>
-									<span className={position.isOpen ? "text-primary" : "text-muted-foreground"}>
+									{/* Статус — нейтральный приглушённый текст в обоих состояниях. */}
+									<span className="text-muted-foreground">
 										{position.isOpen ? "открыта" : "закрыта"}
 									</span>
 								</TableCell>
@@ -259,15 +268,16 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 												<MarkdownViewer text={position.comment} />
 											)}
 										</div>
+										{/* Иконка правки комментария — pencil 12 приглушённым текстом. */}
 										<Button
 											variant="ghost"
 											size="icon"
-											className="size-7"
+											className="size-5"
 											aria-label={`комментарий позиции ${position.symbol}`}
 											title="Править комментарий"
 											onClick={() => setCommentTarget(position)}
 										>
-											<Pencil aria-hidden />
+											<Pencil aria-hidden className="size-3 text-text-muted" />
 										</Button>
 									</div>
 								</TableCell>
@@ -275,7 +285,14 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 									{/* Пометки закрытия редактируются на desktop; чтение доступно с телефона. */}
 									{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
 									{position.isOpen && isMobile === false ? (
-										<Button variant="outline" size="sm" disabled={markPending} onClick={() => void beginMark(position.symbol)}>
+										// Мелкая кнопка действия строки: радиус 6, паддинг [3,7], кегль 9.5.
+										<Button
+											variant="outline"
+											size="sm"
+											className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
+											disabled={markPending}
+											onClick={() => void beginMark(position.symbol)}
+										>
 											закрыть пометкой…
 										</Button>
 									) : (
@@ -308,6 +325,6 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 					}
 				}}
 			/>
-		</section>
+		</GridSection>
 	);
 }

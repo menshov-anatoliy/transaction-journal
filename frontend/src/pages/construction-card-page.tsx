@@ -158,50 +158,41 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 				<div className="flex min-w-0 flex-col gap-6">
 					<ConstructionHintsArea constructionId={constructionId} />
 
-					<section className="flex flex-col gap-2">
-						<h2 className="text-base font-semibold">Позиции</h2>
-						<PositionsTable
-							constructionId={constructionId}
-							positions={card.positions}
-							markPending={commands.addCloseMark.isPending}
-							onAddCloseMark={(mark) => commands.addCloseMark.mutate(mark)}
-							onSaveComment={(input) => commands.positionComment.mutate(input)}
-						/>
-					</section>
+					{/* Заголовки и счётчики сеток живут в головках секций-карточек
+					    (GridSection) по мастеру design.pen; внешние h2 убраны. */}
+					{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
+					<PositionsTable
+						constructionId={constructionId}
+						positions={card.positions}
+						markPending={commands.addCloseMark.isPending}
+						onAddCloseMark={(mark) => commands.addCloseMark.mutate(mark)}
+						onSaveComment={(input) => commands.positionComment.mutate(input)}
+					/>
 
-					<section className="flex flex-col gap-2">
-						<h2 className="text-base font-semibold">Сделки</h2>
-						<TradesTable
-							constructionId={constructionId}
-							trades={card.trades}
-							actionsPending={commands.returnTrade.isPending || commands.moveTrade.isPending}
-							onReturn={(execId) => commands.returnTrade.mutate(execId)}
-							onMove={(input) => commands.moveTrade.mutate(input)}
-							onSaveComment={(input) => commands.tradeComment.mutate(input)}
-						/>
-					</section>
+					<TradesTable
+						constructionId={constructionId}
+						trades={card.trades}
+						actionsPending={commands.returnTrade.isPending || commands.moveTrade.isPending}
+						onReturn={(execId) => commands.returnTrade.mutate(execId)}
+						onMove={(input) => commands.moveTrade.mutate(input)}
+						onSaveComment={(input) => commands.tradeComment.mutate(input)}
+					/>
 
-					<section className="flex flex-col gap-2">
-						<h2 className="text-base font-semibold">Закрывающие записи</h2>
-						<ClosingEntriesTable
-							entries={card.closingEntries}
-							warnings={card.closingWarnings}
-							actionsPending={commands.editCloseMark.isPending || commands.deleteCloseMark.isPending}
-							onEditMark={(input) => commands.editCloseMark.mutate(input)}
-							onDeleteMark={(markId) => commands.deleteCloseMark.mutate(markId)}
-						/>
-					</section>
+					<ClosingEntriesTable
+						entries={card.closingEntries}
+						warnings={card.closingWarnings}
+						actionsPending={commands.editCloseMark.isPending || commands.deleteCloseMark.isPending}
+						onEditMark={(input) => commands.editCloseMark.mutate(input)}
+						onDeleteMark={(markId) => commands.deleteCloseMark.mutate(markId)}
+					/>
 
-					<section className="flex flex-col gap-2">
-						<h2 className="text-base font-semibold">Корректировки PnL</h2>
-						<AdjustmentsTable
-							adjustments={card.adjustments}
-							actionsPending={commands.addAdjustment.isPending || commands.editAdjustment.isPending || commands.deleteAdjustment.isPending}
-							onAdd={(adjustment) => commands.addAdjustment.mutate(adjustment)}
-							onEdit={(input) => commands.editAdjustment.mutate(input)}
-							onDelete={(adjustmentId) => commands.deleteAdjustment.mutate(adjustmentId)}
-						/>
-					</section>
+					<AdjustmentsTable
+						adjustments={card.adjustments}
+						actionsPending={commands.addAdjustment.isPending || commands.editAdjustment.isPending || commands.deleteAdjustment.isPending}
+						onAdd={(adjustment) => commands.addAdjustment.mutate(adjustment)}
+						onEdit={(input) => commands.editAdjustment.mutate(input)}
+						onDelete={(adjustmentId) => commands.deleteAdjustment.mutate(adjustmentId)}
+					/>
 				</div>
 
 				{/* Правая скрываемая область чатов с автопривязкой к конструкции. */}

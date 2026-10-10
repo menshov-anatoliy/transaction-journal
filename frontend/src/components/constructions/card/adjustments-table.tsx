@@ -2,6 +2,7 @@ import * as React from "react";
 import type { AdjustmentInput, ConstructionCardAdjustment } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { GridSection } from "./grid-section";
 import { DASH } from "@/lib/format/degradation";
 import { formatDay } from "@/lib/format/display-time";
 import { formatSignedAmount } from "@/lib/format/quantity";
@@ -131,7 +132,11 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 	};
 
 	return (
-		<section data-slot="adjustments-table" className="flex flex-col gap-2">
+		// Секция-карточка сетки корректировок по мастеру design.pen: головка
+		// с заголовком и счётчиком «5 колонок · N»; кнопка добавления и формы
+		// остаются транзиентным контентом над таблицей.
+		// Traceability: change:rework-spa-shell-and-screens/design#D7
+		<GridSection dataSlot="adjustments-table" title="Корректировки PnL" columnCount={5} rowCount={adjustments.length}>
 			{/* Изменение корректировок — desktop-операция, суммы доступны на мобильном. */}
 			{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
 			{isMobile ? null : addForm === null ? (
@@ -190,11 +195,13 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 				</div>
 			)}
 
-			{/* Плотность Body #2 (yHC4d): все таблицы карточки — ячейки 7/12, шрифт 12. */}
+			{/* Плотность Body #2: ячейки 7/6 кегль 11, заголовки 9.5/600 на
+			    заливке surface-2; значения вторичным текстом, описание — тоже. */}
 			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
-			<Table density="compact">
-				<TableHeader>
-					<TableRow>
+			{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
+			<Table density="compact" className="text-text-secondary">
+				<TableHeader className="bg-surface-2">
+					<TableRow className="border-divider">
 						<TableHead>Дата</TableHead>
 						<TableHead>Описание</TableHead>
 						<TableHead>Источник</TableHead>
@@ -268,7 +275,8 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 									</TableCell>
 								</TableRow>
 							) : (
-								<TableRow key={adjustment.adjustmentId}>
+								// Разделитель строк — токен divider #EBEBE5 по мастеру Body #2.
+								<TableRow key={adjustment.adjustmentId} className="border-divider">
 									<TableCell>{formatDay(adjustment.date)}</TableCell>
 									<TableCell>{adjustment.description ?? <span className="text-muted-foreground">{DASH}</span>}</TableCell>
 									<TableCell>{sourceText(adjustment.source)}</TableCell>
@@ -279,9 +287,11 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 									</TableCell>
 									<TableCell>
 										{isMobile === false && <div className="flex gap-1.5">
+											{/* Мелкие кнопки действия строки: радиус 6, паддинг [3,7], кегль 9.5. */}
 											<Button
 												variant="outline"
 												size="sm"
+												className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
 												disabled={actionsPending}
 												onClick={() => {
 													setEditTarget(adjustment);
@@ -291,7 +301,13 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 											>
 												править
 											</Button>
-											<Button variant="outline" size="sm" disabled={actionsPending} onClick={() => onDelete(adjustment.adjustmentId)}>
+											<Button
+												variant="outline"
+												size="sm"
+												className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
+												disabled={actionsPending}
+												onClick={() => onDelete(adjustment.adjustmentId)}
+											>
 												удалить
 											</Button>
 										</div>}
@@ -302,6 +318,6 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 					)}
 				</TableBody>
 			</Table>
-		</section>
+		</GridSection>
 	);
 }
