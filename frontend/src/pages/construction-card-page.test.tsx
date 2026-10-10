@@ -166,6 +166,17 @@ function renderCardPage(
 	);
 }
 
+// Диалоги капитала, риска и профита открываются только через меню
+// «Параметры» шапки карточки.
+// Traceability: openspec:ui/screens#scenario-detail-params-menu
+async function openParamsDialog(
+	user: ReturnType<typeof userEvent.setup>,
+	name: "Капитал…" | "Риск…" | "Профит…",
+) {
+	await user.click(await screen.findByRole("button", { name: "Параметры" }));
+	await user.click(screen.getByRole("menuitem", { name }));
+}
+
 beforeEach(() => {
 	vi.resetAllMocks();
 	cardApi.fetchConstructionCard.mockResolvedValue(card);
@@ -177,14 +188,62 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("карточка конструкции: действия и ввод", () => {
-	// Карточка открывается отдельным окном без транзитной вкладки.
-	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-	it("TryIfCardCanOpenInNewWindow", async () => {
+	// Отдельного действия «В новом окне» в шапке карточки нет.
+	// Traceability: openspec:ui/screens#scenario-detail-no-new-window-button
+	it("TryIfHeaderHasNoNewWindowAction", async () => {
 		renderCardPage();
-		const link = await screen.findByRole("link", { name: "В новом окне" });
-		expect(link).toHaveAttribute("href", "/constructions/7");
-		expect(link).toHaveAttribute("target", "_blank");
-		expect(link).toHaveAttribute("rel", "noopener noreferrer");
+		await screen.findByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i });
+		expect(screen.queryByRole("link", { name: "В новом окне" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "В новом окне" })).not.toBeInTheDocument();
+	});
+
+	// Меню «Параметры» открывает существующие диалоги капитала, риска
+	// и профита; отдельных кнопок этих параметров в шапке больше нет.
+	// Traceability: openspec:ui/screens#scenario-detail-params-menu
+	it("TryIfParamsMenuOpensExistingDialogs", async () => {
+		const user = userEvent.setup();
+		renderCardPage();
+
+		await openParamsDialog(user, "Капитал…");
+		expect(screen.getByLabelText("выделенный капитал, USDT")).toBeInTheDocument();
+
+		await openParamsDialog(user, "Риск…");
+		expect(screen.getByLabelText("%", { exact: true })).toBeInTheDocument();
+
+		await openParamsDialog(user, "Профит…");
+		expect(screen.getByLabelText("USDT", { exact: true })).toBeInTheDocument();
+
+		expect(screen.queryByRole("button", { name: "Изменить капитал" })).not.toBeInTheDocument();
+	});
+
+	// Meta-строка под заголовком: плановые риск/профит, реальный риск числом
+	// при конечном статусе, капитал и дата открытия.
+	// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
+	it("TryIfHeaderMetaLineShowsPlannedAndRealValues", async () => {
+		renderCardPage();
+		await screen.findByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i });
+		const meta = document.querySelector('[data-slot="construction-header-meta"]');
+		expect(meta?.textContent).toContain("плановый риск 90 / плановый профит 240");
+		expect(meta?.textContent).toContain("реальный риск 45");
+		expect(meta?.textContent).toContain("капитал 3000 USDT");
+		expect(meta?.textContent).toMatch(/открыта 2026-06-18 \d{2}:05/);
+	});
+
+	// Неконечный реальный риск показывается канонической подписью статуса:
+	// неограниченный хвост и сбой расчёта не превращаются в прочерк или ноль.
+	// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
+	it.each([
+		["unbounded", "реальный риск не ограничен"],
+		["unavailable", "реальный риск не удалось рассчитать"],
+	] as const)("TryIfHeaderMetaLineShowsNonFiniteRealRiskStatus %s", async (status, label) => {
+		cardApi.fetchConstructionCard.mockResolvedValue({
+			...card, metrics: { ...card.metrics, realRiskUsdt: null, realRiskStatus: status },
+		});
+		renderCardPage();
+		await screen.findByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i });
+		const meta = document.querySelector('[data-slot="construction-header-meta"]');
+		expect(meta?.textContent).toContain(label);
+		expect(meta?.textContent).not.toContain("реальный риск 45");
 	});
 
 	// Невалидный маршрут показывает «не найдена», а не вечное чтение.
@@ -206,7 +265,7 @@ describe("карточка конструкции: действия и ввод"
 		cardApi.changeProfit.mockResolvedValue(undefined);
 		const user = userEvent.setup();
 		renderCardPage();
-		await user.click(await screen.findByRole("button", { name: button }));
+		await openParamsDialog(user, button);
 		await user.clear(screen.getByLabelText(field, { exact: true }));
 		await user.type(screen.getByLabelText(field, { exact: true }), text);
 		expect(screen.getByLabelText(echo, { exact: true })).toHaveValue(expected);
@@ -221,7 +280,7 @@ describe("карточка конструкции: действия и ввод"
 		cardApi.changeProfit.mockResolvedValue(undefined);
 		const user = userEvent.setup();
 		renderCardPage();
-		await user.click(await screen.findByRole("button", { name: "Профит…" }));
+		await openParamsDialog(user, "Профит…");
 		await user.click(screen.getByRole("button", { name: "Сохранить" }));
 		await waitFor(() => expect(cardApi.changeProfit).toHaveBeenCalledWith(7, 240, "usdt"));
 	});
@@ -232,7 +291,7 @@ describe("карточка конструкции: действия и ввод"
 		cardApi.changeRisk.mockResolvedValue(undefined);
 		const user = userEvent.setup();
 		renderCardPage();
-		await user.click(await screen.findByRole("button", { name: "Риск…" }));
+		await openParamsDialog(user, "Риск…");
 		await user.clear(screen.getByLabelText("%", { exact: true }));
 		expect(screen.getByLabelText("USDT", { exact: true })).toHaveValue("");
 		await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -246,7 +305,7 @@ describe("карточка конструкции: действия и ввод"
 		cardApi.changeRisk.mockResolvedValue(undefined);
 		const user = userEvent.setup();
 		renderCardPage();
-		await user.click(await screen.findByRole("button", { name: "Риск…" }));
+		await openParamsDialog(user, "Риск…");
 		await user.clear(screen.getByLabelText("USDT", { exact: true }));
 		await user.type(screen.getByLabelText("USDT", { exact: true }), "75");
 		expect(screen.getByLabelText("%", { exact: true })).toHaveValue("");
@@ -259,7 +318,7 @@ describe("карточка конструкции: действия и ввод"
 	it.each(["не число", "Infinity"])("ThrowOnInvalidBound %s", async (text) => {
 		const user = userEvent.setup();
 		renderCardPage();
-		await user.click(await screen.findByRole("button", { name: "Риск…" }));
+		await openParamsDialog(user, "Риск…");
 		await user.clear(screen.getByLabelText("%", { exact: true }));
 		await user.type(screen.getByLabelText("%", { exact: true }), text);
 		await user.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -273,7 +332,7 @@ describe("карточка конструкции: действия и ввод"
 		cardApi.changeAllocatedCapital.mockResolvedValue(undefined);
 		const user = userEvent.setup();
 		renderCardPage();
-		await user.click(await screen.findByRole("button", { name: "Изменить капитал" }));
+		await openParamsDialog(user, "Капитал…");
 		const input = screen.getByLabelText("выделенный капитал, USDT");
 		await user.clear(input);
 		if (text !== "") await user.type(input, text);
@@ -286,7 +345,7 @@ describe("карточка конструкции: действия и ввод"
 	it("ThrowOnInvalidCapital", async () => {
 		const user = userEvent.setup();
 		renderCardPage();
-		await user.click(await screen.findByRole("button", { name: "Изменить капитал" }));
+		await openParamsDialog(user, "Капитал…");
 		const input = screen.getByLabelText("выделенный капитал, USDT");
 		await user.clear(input);
 		await user.type(input, "ошибка");
@@ -302,7 +361,7 @@ describe("карточка конструкции: действия и ввод"
 		cardApi.changeRisk.mockRejectedValue(new Error("риск недопустим"));
 		const user = userEvent.setup();
 		renderCardPage();
-		await user.click(await screen.findByRole("button", { name: "Риск…" }));
+		await openParamsDialog(user, "Риск…");
 		await user.click(screen.getByRole("button", { name: "Сохранить" }));
 		expect(await screen.findByText(/Действие не выполнено: риск недопустим/)).toHaveAttribute("role", "alert");
 		expect(screen.getByLabelText("%", { exact: true })).toHaveValue("3");
@@ -442,7 +501,7 @@ describe("карточка конструкции: действия и ввод"
 		renderCardPage("/constructions/7", client);
 
 		// Act: изменение капитала затрагивает сводные показатели.
-		await user.click(await screen.findByRole("button", { name: "Изменить капитал" }));
+		await openParamsDialog(user, "Капитал…");
 		await user.click(screen.getByRole("button", { name: "Сохранить капитал" }));
 
 		// Assert: каждое представление помечено для перечитывания при открытии.

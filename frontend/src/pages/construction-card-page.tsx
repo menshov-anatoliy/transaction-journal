@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { ArrowLeft, ExternalLink, Pencil } from "lucide-react";
+import { ArrowLeft, Coins, Pencil, ShieldAlert, TrendingUp } from "lucide-react";
 import { fetchConstructionCard } from "@/lib/api/construction-card";
 import { applyHint, dismissHint, fetchConstructionHintsPanel, markHintSeen } from "@/lib/api/hints";
 import { ConstructionStatusChip } from "@/components/constructions/construction-status-chip";
@@ -12,11 +12,15 @@ import { TradesTable } from "@/components/constructions/card/trades-table";
 import { ClosingEntriesTable } from "@/components/constructions/card/closing-entries-table";
 import { AdjustmentsTable } from "@/components/constructions/card/adjustments-table";
 import { ConstructionChatsPanel } from "@/components/constructions/card/construction-chats-panel";
+import { ParamsMenu } from "@/components/constructions/card/params-menu";
 import { HintsPanel } from "@/components/hints/hints-panel";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { MarkdownEditDialog } from "@/components/markdown/markdown-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/http";
+import { DASH } from "@/lib/format/degradation";
+import { formatAmount } from "@/lib/format/quantity";
+import { formatMoment } from "@/lib/format/display-time";
 import type { ConstructionCard, TargetUnit } from "@/lib/api/construction-card";
 
 // Карточка конструкции — маршрут /constructions/{id} по концепции §4: полная
@@ -218,6 +222,42 @@ function firstError(...mutations: readonly { isError: boolean; error: Error | nu
 	return null;
 }
 
+// Текст реального риска в Meta-строке: число при конечном статусе,
+// каноническая подпись статуса иначе — по подписям resolveRiskStateLabel
+// геометрии финрезультата; прочерк здесь не используется, чтобы сбой
+// расчёта и неограниченный хвост не выглядели как «нет данных».
+// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
+function realRiskMetaText(card: ConstructionCard): string {
+	if (card.metrics.realRiskStatus === "unbounded") {
+		return "не ограничен";
+	}
+
+	if (card.metrics.realRiskStatus === "unavailable" || card.metrics.realRiskUsdt === null) {
+		return "не удалось рассчитать";
+	}
+
+	return formatAmount(card.metrics.realRiskUsdt);
+}
+
+// Meta-строка под заголовком (мастер Uw04r Meta): плановый риск/профит,
+// реальный риск со статусом, капитал и дата открытия; пустые плановые
+// значения и капитал — прочерк, дату и числа выводит проектный слой
+// формата, чтобы подписи не разъезжались с таблицами и сводкой.
+// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
+function headerMeta(card: ConstructionCard): string {
+	const planLine = `плановый риск ${card.riskUsdt === null ? DASH : formatAmount(card.riskUsdt)} / плановый профит ${card.profitUsdt === null ? DASH : formatAmount(card.profitUsdt)}`;
+	const capitalLine = card.allocatedCapitalUsdt === null
+		? `капитал ${DASH}`
+		: `капитал ${formatAmount(card.allocatedCapitalUsdt)} USDT`;
+
+	return [
+		planLine,
+		`реальный риск ${realRiskMetaText(card)}`,
+		capitalLine,
+		`открыта ${formatMoment(card.metrics.openedAt)}`,
+	].join(" · ");
+}
+
 /** Шапка карточки: имя, статус, действия и отказы домена причиной. */
 function ConstructionHeader({
 	card,
@@ -333,26 +373,42 @@ function ConstructionHeader({
 			</Button>
 
 			{/* Титул с именем и статусом-пилюлей: строка TitleRow мастера Body #2
-			    (Uw04r) — имя 21/600 и чип статуса с зазором 10, выравнивание по
-			    центру строки. */}
+			    (Uw04r) — имя 21/600, чип статуса и кнопка меню «Параметры»
+			    с зазором 10, выравнивание по центру строки. */}
 			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
-			<h1 className="page-title flex flex-wrap items-center gap-2.5">
-				{card.name}
-				<ConstructionStatusChip status={card.status} />
-			</h1>
+			<div className="flex flex-wrap items-center gap-2.5">
+				<h1 className="page-title flex flex-wrap items-center gap-2.5">
+					{card.name}
+					<ConstructionStatusChip status={card.status} />
+				</h1>
+				{/* Существующие диалоги капитала, риска и профита собраны
+				    в меню «Параметры» шапки. */}
+				{/* Traceability: openspec:ui/screens#scenario-detail-params-menu */}
+				<ParamsMenu
+					label="Параметры"
+					disabled={busy}
+					items={[
+						{
+							label: "Капитал…",
+							icon: Coins,
+							onSelect: () => {
+								setCapitalValue(card.allocatedCapitalUsdt?.toString() ?? "");
+								setInputError(null);
+								setCapitalOpen(true);
+							},
+						},
+						{ label: "Риск…", icon: ShieldAlert, onSelect: () => openBound("risk") },
+						{ label: "Профит…", icon: TrendingUp, onSelect: () => openBound("profit") },
+					]}
+				/>
+			</div>
 
-			{/* Действия конструкции в шапке: переименование, смена ручного
-			    статуса (включая архив и возврат из архива), капитал, плановые
-			    границы и удаление пустой с подтверждением и флажком бэкапа. */}
-			<div className="flex flex-wrap items-center gap-2">
-				{/* Карточка доступна отдельным окном без транзитной вкладки. */}
-				{/* Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid */}
-				<Button variant="outline" size="sm" asChild>
-					<Link to={`/constructions/${card.constructionId}`} target="_blank" rel="noopener noreferrer">
-						<ExternalLink aria-hidden />
-						В новом окне
-					</Link>
-				</Button>
+			{/* Иконочные действия шапки по Row2 мастера Uw04r: переименование
+			    (ghost с карандашом), смена ручного статуса (secondary), архив
+			    и возврат из архива (ghost), удаление пустой конструкции
+			    (destructive). Отдельного действия «В новом окне» в шапке нет. */}
+			{/* Traceability: openspec:ui/screens#scenario-detail-no-new-window-button */}
+			<div className="flex flex-wrap items-center justify-end gap-2">
 				{renameOpen ? (
 					<div className="flex items-center gap-2">
 						<input
@@ -375,10 +431,11 @@ function ConstructionHeader({
 						</Button>
 					</div>
 				) : (
-					<Button variant="outline" size="sm" disabled={busy} onClick={() => {
+					<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => {
 						setRenameValue(card.name);
 						setRenameOpen(true);
 					}}>
+						<Pencil aria-hidden className="size-3.5" />
 						Переименовать
 					</Button>
 				)}
@@ -386,64 +443,59 @@ function ConstructionHeader({
 				{/* Смена ручного статуса — свободные переходы; возврат из архива
 				    восстанавливает статус «закрыта». */}
 				{card.status === "open" && (
-					<Button variant="outline" size="sm" disabled={busy} onClick={() => commands.status.mutate("closed")}>
+					<Button variant="secondary" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("closed")}>
 						Закрыть
 					</Button>
 				)}
 				{card.status === "closed" && (
-					<Button variant="outline" size="sm" disabled={busy} onClick={() => commands.status.mutate("open")}>
+					<Button variant="secondary" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("open")}>
 						Открыть
 					</Button>
 				)}
 				{card.status !== "archived" ? (
-					<Button variant="outline" size="sm" disabled={busy} onClick={() => commands.status.mutate("archived")}>
+					<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("archived")}>
 						В архив
 					</Button>
 				) : (
-					<Button variant="outline" size="sm" disabled={busy} onClick={() => commands.status.mutate("closed")}>
+					<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("closed")}>
 						Вернуть из архива
 					</Button>
 				)}
 
-				{capitalOpen ? (
-					<div className="flex items-center gap-2">
-						<input
-							className="border-input bg-background h-8 w-32 rounded-md border px-2 text-sm"
-							placeholder="пусто — не задан"
-							value={capitalValue}
-							onChange={(event) => setCapitalValue(event.target.value)}
-							aria-label="выделенный капитал, USDT"
-						/>
-						<Button size="sm" disabled={busy} onClick={submitCapital}>
-							Сохранить капитал
-						</Button>
-						<Button size="sm" variant="outline" onClick={() => setCapitalOpen(false)}>
-							Отмена
-						</Button>
-					</div>
-				) : (
-					<Button variant="outline" size="sm" disabled={busy} onClick={() => {
-						setCapitalValue(card.allocatedCapitalUsdt?.toString() ?? "");
-						setInputError(null);
-						setCapitalOpen(true);
-					}}>
-						Изменить капитал
-					</Button>
-				)}
-
-				<Button variant="outline" size="sm" disabled={busy} onClick={() => openBound("risk")}>
-					Риск…
-				</Button>
-				<Button variant="outline" size="sm" disabled={busy} onClick={() => openBound("profit")}>
-					Профит…
-				</Button>
-
 				{canDelete && (
-					<Button variant="destructive" size="sm" disabled={busy} onClick={() => setDeleteOpen(true)}>
-						Удалить…
+					<Button variant="destructive" size="sm" className="text-xs" disabled={busy} onClick={() => setDeleteOpen(true)}>
+						Удалить
 					</Button>
 				)}
 			</div>
+
+			{/* Meta-строка под заголовком (Meta мастера Uw04r): плановые
+			    риск/профит, реальный риск со статусом состояния, капитал и дата
+			    открытия; пустые значения — прочерк проектного слоя формата. */}
+			{/* Traceability: openspec:ui/screens#scenario-detail-header-meta-line */}
+			<p data-slot="construction-header-meta" className="text-text-muted text-xs">
+				{headerMeta(card)}
+			</p>
+
+			{/* Форма капитала открывается пунктом меню «Параметры»; пустое
+			    поле снимает капитал, ошибка ввода форму не закрывает. */}
+			{capitalOpen && (
+				<div className="flex items-center gap-2">
+					<input
+						className="border-input bg-background h-8 w-32 rounded-md border px-2 text-sm"
+						placeholder="пусто — не задан"
+						value={capitalValue}
+						onChange={(event) => setCapitalValue(event.target.value)}
+						aria-label="выделенный капитал, USDT"
+					/>
+					<Button size="sm" disabled={busy} onClick={submitCapital}>
+						Сохранить капитал
+					</Button>
+					<Button size="sm" variant="outline" onClick={() => setCapitalOpen(false)}>
+						Отмена
+					</Button>
+				</div>
+			)}
 
 			{boundForm !== null && (
 				// Правка любой единицы обновляет эхо второй; пустой ввод убирает обе.
