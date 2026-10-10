@@ -4,9 +4,11 @@
     {
       "type": "frame",
       "id": "D76Cvv",
-      "x": 0,
+      "x": 1331,
       "y": 0,
       "name": "Компоненты",
+      "width": 2029,
+      "height": 2029,
       "layout": "vertical",
       "gap": 48,
       "padding": 24,
@@ -469,152 +471,865 @@
             },
             {
               "type": "frame",
-              "id": "t4nFb",
-              "name": "Панель/Навигация",
-              "reusable": true,
-              "width": 240,
+              "id": "GkCUh",
+              "name": "Ряд каркаса",
+              "width": "fill_container",
               "height": "fill_container",
-              "fill": "$bg",
-              "stroke": "$divider",
-              "strokeWidth": {
-                "right": 1
-              },
-              "layout": "vertical",
-              "gap": 4,
-              "padding": [
-                16,
-                12
-              ],
               "children": [
                 {
-                  "type": "text",
-                  "id": "mf0oM",
-                  "name": "SectionLabel",
-                  "fill": "$textMuted",
-                  "content": "РАЗДЕЛЫ",
-                  "fontFamily": "$font",
-                  "fontSize": 10,
-                  "fontWeight": "normal",
-                  "letterSpacing": 0.6
-                },
-                {
-                  "id": "UpuFE",
-                  "type": "ref",
-                  "ref": "Vx9C2",
-                  "name": "NavActive",
-                  "width": "fill_container",
-                  "descendants": {
-                    "CCP3Z": {
-                      "icon": "layers"
+                  "type": "frame",
+                  "id": "t4nFb",
+                  "name": "Панель/Навигация",
+                  "reusable": true,
+                  "width": 240,
+                  "height": "fill_container",
+                  "fill": "$bg",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "right": 1
+                  },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "BSETB",
+                      "name": "Список разделов",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "padding": [
+                        16,
+                        8,
+                        16,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "mf0oM",
+                          "name": "SectionLabel",
+                          "fill": "$textMuted",
+                          "content": "РАЗДЕЛЫ",
+                          "fontFamily": "$font",
+                          "fontSize": 10,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.6
+                        },
+                        {
+                          "id": "UpuFE",
+                          "type": "ref",
+                          "ref": "Vx9C2",
+                          "name": "NavActive",
+                          "width": "fill_container",
+                          "descendants": {
+                            "CCP3Z": {
+                              "icon": "layers"
+                            },
+                            "jBQOd": {
+                              "content": "Конструкции"
+                            }
+                          }
+                        },
+                        {
+                          "id": "bKXol",
+                          "type": "ref",
+                          "ref": "apcZH",
+                          "name": "NavInbox",
+                          "width": "fill_container",
+                          "descendants": {
+                            "MgUqf": {
+                              "icon": "inbox"
+                            },
+                            "zsbrm": {
+                              "content": "Входящие"
+                            },
+                            "q35Tj9": {
+                              "enabled": true
+                            },
+                            "n5sV90": {
+                              "content": "12"
+                            }
+                          }
+                        },
+                        {
+                          "id": "mcgMT",
+                          "type": "ref",
+                          "ref": "apcZH",
+                          "name": "NavHints",
+                          "width": "fill_container",
+                          "descendants": {
+                            "MgUqf": {
+                              "icon": "lightbulb"
+                            },
+                            "zsbrm": {
+                              "content": "Подсказки"
+                            }
+                          }
+                        },
+                        {
+                          "id": "woGLz",
+                          "type": "ref",
+                          "ref": "apcZH",
+                          "name": "NavAgent",
+                          "width": "fill_container",
+                          "descendants": {
+                            "MgUqf": {
+                              "icon": "bot"
+                            },
+                            "zsbrm": {
+                              "content": "Агент"
+                            }
+                          }
+                        },
+                        {
+                          "id": "VMjaR",
+                          "type": "ref",
+                          "ref": "apcZH",
+                          "name": "NavSync",
+                          "width": "fill_container",
+                          "descendants": {
+                            "MgUqf": {
+                              "icon": "refresh-cw"
+                            },
+                            "zsbrm": {
+                              "content": "Синхронизация"
+                            }
+                          }
+                        }
+                      ]
                     },
-                    "jBQOd": {
-                      "content": "Конструкции"
+                    {
+                      "type": "frame",
+                      "id": "M1A5f1",
+                      "name": "Иконочная колонка",
+                      "width": 44,
+                      "height": "fill_container",
+                      "stroke": "$divider",
+                      "strokeWidth": {
+                        "left": 1
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": [
+                        14,
+                        4
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "wTCUF",
+                          "name": "Раздел:layers",
+                          "width": 30,
+                          "height": 30,
+                          "fill": "$accentSofter",
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "TDQS0",
+                              "name": "Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "layers",
+                              "library": "lucide",
+                              "fill": "$accent"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "kx4ZS",
+                          "name": "Раздел:inbox",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "v96F8q",
+                              "name": "Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "inbox",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "E4HA3u",
+                          "name": "Раздел:lightbulb",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "w910e",
+                              "name": "Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "lightbulb",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ecwIR",
+                          "name": "Раздел:bot",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "Bq7R0",
+                              "name": "Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "bot",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "l9J5A",
+                          "name": "Раздел:refresh-cw",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "r9inZ",
+                              "name": "Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "refresh-cw",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "eMdVl",
+                          "name": "Collapse",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "vBj0O",
+                              "name": "CollapseIcon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "panel-left-close",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        }
+                      ]
                     }
-                  }
-                },
-                {
-                  "id": "bKXol",
-                  "type": "ref",
-                  "ref": "apcZH",
-                  "name": "NavInbox",
-                  "width": "fill_container",
-                  "descendants": {
-                    "MgUqf": {
-                      "icon": "inbox"
-                    },
-                    "zsbrm": {
-                      "content": "Входящие"
-                    },
-                    "q35Tj9": {
-                      "enabled": true
-                    },
-                    "n5sV90": {
-                      "content": "12"
-                    }
-                  }
-                },
-                {
-                  "id": "mcgMT",
-                  "type": "ref",
-                  "ref": "apcZH",
-                  "name": "NavHints",
-                  "width": "fill_container",
-                  "descendants": {
-                    "MgUqf": {
-                      "icon": "lightbulb"
-                    },
-                    "zsbrm": {
-                      "content": "Подсказки"
-                    }
-                  }
-                },
-                {
-                  "id": "woGLz",
-                  "type": "ref",
-                  "ref": "apcZH",
-                  "name": "NavAgent",
-                  "width": "fill_container",
-                  "descendants": {
-                    "MgUqf": {
-                      "icon": "bot"
-                    },
-                    "zsbrm": {
-                      "content": "Агент"
-                    }
-                  }
-                },
-                {
-                  "id": "VMjaR",
-                  "type": "ref",
-                  "ref": "apcZH",
-                  "name": "NavSync",
-                  "width": "fill_container",
-                  "descendants": {
-                    "MgUqf": {
-                      "icon": "refresh-cw"
-                    },
-                    "zsbrm": {
-                      "content": "Синхронизация"
-                    }
-                  }
+                  ]
                 },
                 {
                   "type": "frame",
-                  "id": "aGTAU",
-                  "name": "Push",
-                  "width": 1,
-                  "height": "fill_container"
-                },
-                {
-                  "type": "frame",
-                  "id": "eMdVl",
-                  "name": "Collapse",
-                  "cornerRadius": 8,
+                  "id": "l17Vx",
+                  "name": "Контент",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "layout": "vertical",
                   "gap": 8,
-                  "padding": [
-                    8,
-                    10
-                  ],
+                  "justifyContent": "center",
                   "alignItems": "center",
                   "children": [
                     {
+                      "type": "text",
+                      "id": "KSM6N",
+                      "name": "Caption",
+                      "fill": "$textMuted",
+                      "content": "Контент экрана",
+                      "fontFamily": "$font",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    },
+                    {
                       "type": "icon",
-                      "id": "vBj0O",
-                      "name": "CollapseIcon",
-                      "width": 16,
-                      "height": 16,
-                      "icon": "panel-left-close",
+                      "id": "bPeQA",
+                      "name": "ResizeIcon",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "move-horizontal",
                       "library": "lucide",
                       "fill": "$textMuted"
                     },
                     {
                       "type": "text",
-                      "id": "rF5eu",
-                      "name": "CollapseLabel",
+                      "id": "i7AHK",
+                      "name": "ResizeNote",
                       "fill": "$textMuted",
-                      "content": "Свернуть",
+                      "content": "Ширины панелей настраиваются перетаскиванием",
                       "fontFamily": "$font",
-                      "fontSize": 12,
+                      "fontSize": 10.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "gPp4K",
+                  "name": "Панель/Контекст",
+                  "width": 360,
+                  "height": "fill_container",
+                  "fill": "$bg",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "left": 1
+                  },
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "GosgE",
+                      "name": "Иконочная колонка",
+                      "width": 44,
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": [
+                        14,
+                        4
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "l97wI6",
+                          "name": "Контекст:clipboard-list",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "WJ4EJ",
+                              "name": "Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "clipboard-list",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "m2UAQ",
+                          "name": "Контекст:message-square",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "v6bF4",
+                              "name": "Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "message-square",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "MjrQv",
+                          "name": "Контекст:book-open",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "E5Q3N5",
+                              "name": "Icon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "book-open",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "D4pzu",
+                          "name": "Collapse",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "UAxqJ",
+                              "name": "CollapseIcon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "panel-right-close",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "C2PUHj",
+                      "name": "Контекст",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "padding": [
+                        14,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "X1cFNe",
+                          "name": "Краткая карточка (схема)",
+                          "width": "fill_container",
+                          "fill": "$surface",
+                          "cornerRadius": 12,
+                          "stroke": "$border",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "padding": 12,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "U41dmw",
+                              "name": "TitleRow",
+                              "width": "fill_container",
+                              "gap": 8,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "vGFhg",
+                                  "name": "Title",
+                                  "fill": "$textPrimary",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Контртренд ETH под прикрытием",
+                                  "fontFamily": "$font",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "otWny",
+                                  "name": "Status",
+                                  "fill": "$accent",
+                                  "content": "открыта",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "MC5rk",
+                              "name": "Индикатор (схема)",
+                              "clip": true,
+                              "width": "fill_container",
+                              "height": 10,
+                              "cornerRadius": 5,
+                              "children": [
+                                {
+                                  "type": "rectangle",
+                                  "id": "KpuIL",
+                                  "name": "RiskZone",
+                                  "fill": "$riskZone",
+                                  "width": 67,
+                                  "height": "fill_container"
+                                },
+                                {
+                                  "type": "rectangle",
+                                  "id": "FdtwP",
+                                  "name": "ProfitZone",
+                                  "fill": "$profitZone",
+                                  "width": 167,
+                                  "height": "fill_container"
+                                },
+                                {
+                                  "type": "rectangle",
+                                  "id": "f5LO2m",
+                                  "name": "GoldZone",
+                                  "fill": "$superZone",
+                                  "width": 34,
+                                  "height": "fill_container"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "z5WWOz",
+                              "name": "Метрика",
+                              "width": "fill_container",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "A4nhb",
+                                  "name": "Label",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Реализов.",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "q9KvUj",
+                                  "name": "Value",
+                                  "fill": "$textSecondary",
+                                  "content": "+1 240,55",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "x4cOsN",
+                              "name": "Метрика",
+                              "width": "fill_container",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "r6ozF",
+                                  "name": "Label",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Нереализов.",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "kJ3Vf",
+                                  "name": "Value",
+                                  "fill": "$textSecondary",
+                                  "content": "−180,20",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "lX8rm",
+                              "name": "Метрика",
+                              "width": "fill_container",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "jtPHH",
+                                  "name": "Label",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Итог",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "MNfbk",
+                                  "name": "Value",
+                                  "fill": "$textSecondary",
+                                  "content": "+1 060,35 USDT",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "yqrdX",
+                              "name": "Метрика",
+                              "width": "fill_container",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "p0FeCc",
+                                  "name": "Label",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "Риск / профит",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "m8bXN",
+                                  "name": "Value",
+                                  "fill": "$textSecondary",
+                                  "content": "300 / 900",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "NAOnh",
+                              "name": "Действие",
+                              "cornerRadius": 8,
+                              "stroke": "$border",
+                              "padding": [
+                                6,
+                                10
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "t3E5yn",
+                                  "name": "Label",
+                                  "fill": "$textSecondary",
+                                  "content": "Открыть карточку",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11.5,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "TK7a8",
+                          "name": "Примечание",
+                          "fill": "$textMuted",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Контекст: краткая карточка · чаты конструкции · карточка правила",
+                          "fontFamily": "$font",
+                          "fontSize": 10.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Yh0Wo",
+              "name": "Схема состояний панелей",
+              "width": "fill_container",
+              "height": 126,
+              "gap": 64,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Uzyx6",
+                  "name": "Левая панель",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "hCgbZ",
+                      "name": "Диаграмма",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "z7VSz",
+                          "name": "Развёрнута",
+                          "width": 104,
+                          "height": 56,
+                          "fill": "$surface",
+                          "cornerRadius": 6,
+                          "stroke": "$border",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "FX8FR",
+                              "name": "Разделы",
+                              "width": "fill_container",
+                              "height": "fill_container",
+                              "layout": "vertical"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "CJWgf",
+                              "name": "Иконочная колонка",
+                              "width": 14,
+                              "height": "fill_container",
+                              "fill": "$surface2"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "K2oFg6",
+                          "name": "Arrow",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "arrow-right",
+                          "library": "lucide",
+                          "fill": "$textMuted"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "qJBBa",
+                          "name": "Свёрнута",
+                          "width": 14,
+                          "height": 56,
+                          "fill": "$surface2",
+                          "cornerRadius": 6,
+                          "stroke": "$border"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "PLgXc",
+                      "name": "Caption",
+                      "fill": "$textMuted",
+                      "content": "Развёрнута ↔ свёрнута до иконочной колонки",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "akxfz",
+                  "name": "Правая панель",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "IwVJp",
+                      "name": "Диаграмма",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "L8FMM",
+                          "name": "Развёрнута",
+                          "width": 104,
+                          "height": 56,
+                          "fill": "$surface",
+                          "cornerRadius": 6,
+                          "stroke": "$border",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "QfTbY",
+                              "name": "Иконочная колонка",
+                              "width": 14,
+                              "height": "fill_container",
+                              "fill": "$surface2"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "WSPkl",
+                              "name": "Контекст",
+                              "width": "fill_container",
+                              "height": "fill_container",
+                              "layout": "vertical"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "pTsJi",
+                          "name": "Arrow",
+                          "width": 12,
+                          "height": 12,
+                          "icon": "arrow-right",
+                          "library": "lucide",
+                          "fill": "$textMuted"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FzMEC",
+                          "name": "Свёрнута",
+                          "width": 14,
+                          "height": 56,
+                          "fill": "$surface2",
+                          "cornerRadius": 6,
+                          "stroke": "$border"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "wKDiZ",
+                      "name": "Caption",
+                      "fill": "$textMuted",
+                      "content": "Развёрнута с контекстом — 352–368 px · без контекста скрыта",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
                       "fontWeight": "normal"
                     }
                   ]
