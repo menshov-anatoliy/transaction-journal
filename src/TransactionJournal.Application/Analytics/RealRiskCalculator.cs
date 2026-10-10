@@ -141,6 +141,7 @@ public sealed class RealRiskCalculator
 		// риск.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
 		// Traceability: openspec:analytics/performance#scenario-real-risk-naked-short-linear-is-unbounded
+		// Traceability: openspec:analytics/performance#scenario-real-risk-linear-hedge-is-finite
 		foreach (var group in optionGroups.Values)
 		{
 			var netCallQuantity = group.Options.Where(leg => leg.Type == OptionType.Call).Sum(leg => leg.Quantity);

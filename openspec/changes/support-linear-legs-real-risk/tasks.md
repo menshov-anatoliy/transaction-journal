@@ -14,6 +14,6 @@
 
 ## 3. Сквозная приёмка
 
-- [ ] 3.1 Добавить traceability-комментарии к новым смысловым блокам калькулятора и парсера со ссылками на сценарии дельты (`scenario-real-risk-linear-hedge-is-finite`, `scenario-real-risk-naked-short-linear-is-unbounded`, `scenario-real-risk-linear-joins-earliest-expiry-group`, `scenario-real-risk-linear-only-construction`) и сопроводительными пояснениями; сверить, что ссылки разрешаются в `Traceability ID` дельты, а существующие комментарии не потеряны.
+- [x] 3.1 Добавить traceability-комментарии к новым смысловым блокам калькулятора и парсера со ссылками на сценарии дельты (`scenario-real-risk-linear-hedge-is-finite`, `scenario-real-risk-naked-short-linear-is-unbounded`, `scenario-real-risk-linear-joins-earliest-expiry-group`, `scenario-real-risk-linear-only-construction`) и сопроводительными пояснениями; сверить, что ссылки разрешаются в `Traceability ID` дельты, а существующие комментарии не потеряны.
 
-- [ ] 3.2 Прогнать полный набор тестов аналитики (`RealRiskCalculatorTests`, тесты парсеров) и `openspec validate support-linear-legs-real-risk`; на живом сервере убедиться, что конструкция «XAUT стреддл 30OCT26 4400» показывает конечный реальный риск, а остальные конструкции сохраняют прежние статусы.
+- [x] 3.2 Прогнать полный набор тестов аналитики (`RealRiskCalculatorTests`, тесты парсеров) и `openspec validate support-linear-legs-real-risk`; на живом сервере убедиться, что конструкция «XAUT стреддл 30OCT26 4400» показывает конечный реальный риск, а остальные конструкции сохраняют прежние статусы.

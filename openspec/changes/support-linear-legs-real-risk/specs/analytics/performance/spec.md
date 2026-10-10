@@ -36,6 +36,16 @@ Traceability ID: scenario-real-risk-unparseable-symbol-is-null
 - **WHEN** символ открытого остатка не разбирается ни как символ опциона, ни как символ линейного фьючерса
 - **THEN** `realRiskUsdt` отсутствует: совместный минимум группы не определён
 
+#### Scenario: Нет средней цены открытого остатка
+Traceability ID: scenario-real-risk-missing-open-price-unavailable
+- **WHEN** хотя бы у одного открытого остатка отсутствует средняя цена
+- **THEN** `realRiskUsdt` равно `null`, `realRiskStatus` равно `unavailable`: числовой результат не вычисляется
+
+#### Scenario: Неизвестные данные при наличии короткого колла
+Traceability ID: scenario-real-risk-unknown-group-takes-precedence
+- **WHEN** у открытого остатка не хватает данных для построения группы и другая известная группа имеет нетто-короткий колл
+- **THEN** `realRiskStatus` равно `unavailable` и `realRiskUsdt` равно `null`: отсутствие данных не маскируется заключением о полной оценке конструкции
+
 #### Scenario: Сбой марок не влияет на реальный риск
 Traceability ID: scenario-real-risk-marks-failure-independent
 - **WHEN** свежие марки недоступны при открытых остатках
