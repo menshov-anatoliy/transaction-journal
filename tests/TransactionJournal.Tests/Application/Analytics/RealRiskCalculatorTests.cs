@@ -12,7 +12,9 @@ namespace TransactionJournal.Tests.Analytics;
 /// неограниченный худший случай и неполные исходные данные различаются
 /// состояниями типизированного результата, сбой марок на метрику не влияет,
 /// без открытых остатков риск конечен и нулевой, конструкция с хедж-перпом
-/// больше не деградирует в недоступность, а null-набор позиций отклоняется.
+/// больше не деградирует в недоступность, линейная нога входит в группу
+/// ранней экспирации своей базы, перп без опций той же базы образует
+/// собственную группу, а null-набор позиций отклоняется.
 /// </summary>
 [TestClass]
 public class RealRiskCalculatorTests
@@ -171,6 +173,53 @@ public class RealRiskCalculatorTests
 		// Assert: результат типизирован и больше не «не рассчитан»; конечная
 		// величина закрепляется после полной группировки и наклонного правила.
 		Assert.That(result.Status, Is.Not.EqualTo(RealRiskStatus.Unavailable));
+	}
+
+	[TestMethod]
+	[Description("Линейная нога входит в группу ранней экспирации своей базы")]
+	public void TryIfLinearLegJoinsEarliestExpiryGroup()
+	{
+		// Arrange: опционные группы двух экспираций одной базы — длинный колл
+		// DEC24 со страйком 100 по средней 60 и длинный колл MAR25 со страйком
+		// 200 по средней 50 — и короткий перп BTCUSDT −1 по средней 90,
+		// накрытый коллом ранней экспирации.
+		// Требование: перп учитывается только в группе самой ранней экспирации,
+		// минимум второй группы не пересчитывается.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-linear-joins-earliest-expiry-group
+		var positions = new[]
+		{
+			OpenResidual("BTC-27DEC24-100-C", 1m, 60m),
+			OpenResidual("BTC-27MAR25-200-C", 1m, 50m),
+			OpenResidual("BTCUSDT", -1m, 90m),
+		};
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: ранняя группа платит минимум −70 (узел страйка 100: −60 от
+		// колла и −10 от перпа), вторая группа — −50, риск равен 70 + 50 = 120.
+		// Прикрепление перпа ко второй группе дало бы 220, отдельная группа
+		// короткого перпа — неограниченность.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(120m)));
+	}
+
+	[TestMethod]
+	[Description("Линейная нога без опций той же базы образует собственную группу")]
+	public void TryIfLinearOnlyConstructionYieldsResidualTimesAveragePrice()
+	{
+		// Arrange: единственная нога конструкции — длинный перп XAUTUSDT +0.04
+		// по средней 4100, опционных групп той же базы нет.
+		// Требование: перп образует собственную группу с узлом нулевой цены,
+		// реальный риск равен произведению остатка на среднюю цену.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-linear-only-construction
+		var positions = new[] { OpenResidual("XAUTUSDT", 0.04m, 4100m) };
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: платёж в узле нулевой цены равен −0.04 × 4100 = −164,
+		// риск конечен и равен 164.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(164m)));
 	}
 
 	[TestMethod]

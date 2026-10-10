@@ -6,7 +6,9 @@ namespace TransactionJournal.Application.Analytics;
 /// Калькулятор реального риска конструкции — наихудшего результата её открытых
 /// остатков по цене базового актива. Ноги открытых остатков классифицируются
 /// по символу: опционы группируются по паре «базовый актив × экспирация»,
-/// линейные перпы — по базовому активу; внутри группы ищется совместный
+/// линейные перпы прикрепляются к опционной группе самой ранней экспирации
+/// своего базового актива, а без опционных групп той же базы образуют
+/// собственную группу; внутри группы ищется совместный
 /// минимум суммарного платежа ног, группы суммируются консервативно.
 /// Результат типизирован: конечный, неограниченный
 /// и нерассчитанный риск различаются состояниями, число выдаётся только для
@@ -32,8 +34,10 @@ public sealed class RealRiskCalculator
 	/// в линейных группах. Для конечного риска в опционной группе платеж
 	/// f(S) = Σ ±(внутренняя стоимость(S, страйк, тип) − средняя цена остатка)
 	/// линеен между узлами, поэтому минимум ищется по узлам S = 0 и страйкам
-	/// группы; линейная группа платит qty × (S − средняя цена) и при
-	/// неотрицательном наклоне достигает минимума в узле S = 0. Единицы — те
+	/// группы; прикреплённые перпы добавляют в каждый узел прямой платёж
+	/// qty × (S − средняя цена) без новых узлов излома. Перп без опционных
+	/// групп той же базы платит ту же прямую и при неотрицательном наклоне
+	/// достигает минимума в узле S = 0. Единицы — те
 	/// же, что у стоимости по маркам: «цена × количество», без множителя
 	/// контракта. Группы суммируются консервативно: реальный риск равен сумме
 	/// минимумов групп с обратным знаком и не опускается ниже нуля. Без
@@ -65,8 +69,8 @@ public sealed class RealRiskCalculator
 		// хвостов групп.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
 		// Traceability: openspec:analytics/performance#scenario-real-risk-missing-open-price-unavailable
-		var optionGroups = new Dictionary<(string BaseCoin, DateTime ExpiryDate), List<Leg>>();
-		var linearGroups = new Dictionary<string, List<LinearLeg>>();
+		var optionGroups = new Dictionary<(string BaseCoin, DateTime ExpiryDate), ExpiryGroup>();
+		var linearLegs = new List<(LinearSymbolParts Parts, LinearLeg Leg)>();
 		foreach (var position in openPositions)
 		{
 			if (position.AverageOpenPrice is null)
@@ -77,33 +81,52 @@ public sealed class RealRiskCalculator
 			if (OptionSymbolParser.TryParse(position.Symbol, out var optionParts) && optionParts is not null)
 			{
 				var key = (optionParts.BaseCoin, optionParts.ExpiryDate.Date);
-				if (optionGroups.TryGetValue(key, out var legs) == false)
+				if (optionGroups.TryGetValue(key, out var group) == false)
 				{
-					legs = new List<Leg>();
-					optionGroups.Add(key, legs);
+					group = new ExpiryGroup();
+					optionGroups.Add(key, group);
 				}
 
-				legs.Add(new Leg(position.Residual, optionParts.Strike, optionParts.Type, position.AverageOpenPrice.Value));
+				group.Options.Add(new Leg(position.Residual, optionParts.Strike, optionParts.Type, position.AverageOpenPrice.Value));
 				continue;
 			}
 
 			if (LinearSymbolParser.TryParse(position.Symbol, out var linearParts) && linearParts is not null)
 			{
-				// Линейная нога группируется по базовому активу; пока прикрепление
-				// к опционным группам не реализовано, перпы одной базы образуют
-				// собственную группу с узлом нулевой цены.
-				// Traceability: openspec:analytics/performance#scenario-real-risk-linear-only-construction
-				if (linearGroups.TryGetValue(linearParts.BaseCoin, out var perps) == false)
-				{
-					perps = new List<LinearLeg>();
-					linearGroups.Add(linearParts.BaseCoin, perps);
-				}
-
-				perps.Add(new LinearLeg(position.Residual, position.AverageOpenPrice.Value));
+				// Линейная нога собирается без немедленной привязки: её группа
+				// определится только после полного прохода, когда известны все
+				// опционные группы её базового актива.
+				linearLegs.Add((linearParts, new LinearLeg(position.Residual, position.AverageOpenPrice.Value)));
 				continue;
 			}
 
 			return RealRiskResult.Unavailable();
+		}
+
+		// Перп прикрепляется к опционной группе самой ранней экспирации своего
+		// базового актива: совместный минимум опционов и перпа уточняет оценку
+		// и никогда её не завышает, а связь наклона коллов и перпа сохраняется
+		// для правила неограниченного хвоста. Без опционных групп той же базы
+		// перп образует собственную группу с единственным узлом нулевой цены.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-linear-joins-earliest-expiry-group
+		// Traceability: openspec:analytics/performance#scenario-real-risk-linear-only-construction
+		var linearOnlyGroups = new Dictionary<string, List<LinearLeg>>();
+		foreach (var (linearParts, linearLeg) in linearLegs)
+		{
+			var sameBaseGroups = optionGroups.Where(pair => pair.Key.BaseCoin == linearParts.BaseCoin).ToList();
+			if (sameBaseGroups.Count > 0)
+			{
+				sameBaseGroups.MinBy(pair => pair.Key.ExpiryDate).Value.AttachedLinearLegs.Add(linearLeg);
+				continue;
+			}
+
+			if (linearOnlyGroups.TryGetValue(linearParts.BaseCoin, out var perps) == false)
+			{
+				perps = new List<LinearLeg>();
+				linearOnlyGroups.Add(linearParts.BaseCoin, perps);
+			}
+
+			perps.Add(linearLeg);
 		}
 
 		// Второй проход — неограниченный хвост групп: суммарно короткая позиция
@@ -112,16 +135,16 @@ public sealed class RealRiskCalculator
 		// базового актива на +∞, поэтому риск конструкции в целом не ограничен.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
 		// Traceability: openspec:analytics/performance#scenario-real-risk-naked-short-linear-is-unbounded
-		foreach (var legs in optionGroups.Values)
+		foreach (var group in optionGroups.Values)
 		{
-			var netCallQuantity = legs.Where(leg => leg.Type == OptionType.Call).Sum(leg => leg.Quantity);
+			var netCallQuantity = group.Options.Where(leg => leg.Type == OptionType.Call).Sum(leg => leg.Quantity);
 			if (netCallQuantity < 0m)
 			{
 				return RealRiskResult.Unbounded();
 			}
 		}
 
-		foreach (var perps in linearGroups.Values)
+		foreach (var perps in linearOnlyGroups.Values)
 		{
 			if (perps.Sum(perp => perp.Quantity) < 0m)
 			{
@@ -130,21 +153,28 @@ public sealed class RealRiskCalculator
 		}
 
 		decimal worst = 0m;
-		foreach (var legs in optionGroups.Values)
+		foreach (var group in optionGroups.Values)
 		{
 			// Платёж ломаной линеен между узлами, поэтому минимум на луче S ≥ 0
 			// достигается в узле: S = 0 или один из страйков группы; хвост на +∞
 			// при неотрицательном наклоне хуже последнего узла быть не может.
 			var nodes = new List<decimal> { 0m };
-			nodes.AddRange(legs.Select(leg => leg.Strike).Distinct());
+			nodes.AddRange(group.Options.Select(leg => leg.Strike).Distinct());
 
 			var groupMinimum = decimal.MaxValue;
 			foreach (var node in nodes)
 			{
 				decimal payment = 0m;
-				foreach (var leg in legs)
+				foreach (var leg in group.Options)
 				{
 					payment += leg.Quantity * (IntrinsicValue(node, leg) - leg.AverageOpenPrice);
+				}
+
+				// Прямой платёж перпа добавляется в те же узлы: линейная добавка
+				// не создаёт новых узлов излома, минимум остаётся на узлах группы.
+				foreach (var perp in group.AttachedLinearLegs)
+				{
+					payment += perp.Quantity * (node - perp.AverageOpenPrice);
 				}
 
 				groupMinimum = Math.Min(groupMinimum, payment);
@@ -155,7 +185,7 @@ public sealed class RealRiskCalculator
 			worst += groupMinimum;
 		}
 
-		foreach (var perps in linearGroups.Values)
+		foreach (var perps in linearOnlyGroups.Values)
 		{
 			// Платёж линейной ноги — прямая без изломов; при неотрицательном
 			// наклоне (проверено вторым проходом) минимум группы достигается
@@ -188,4 +218,14 @@ public sealed class RealRiskCalculator
 
 	/// <summary>Линейная нога группы: знаковое количество и средняя цена открытого остатка.</summary>
 	private readonly record struct LinearLeg(decimal Quantity, decimal AverageOpenPrice);
+
+	/// <summary>Группа одной экспирации одного базового актива: опционные ноги и прикреплённые к группе линейные ноги.</summary>
+	private sealed class ExpiryGroup
+	{
+		/// <summary>Опционные ноги группы; их страйки задают узлы излома платежа.</summary>
+		public List<Leg> Options { get; } = new();
+
+		/// <summary>Линейные ноги, прикреплённые к группе самой ранней экспирации своего базового актива.</summary>
+		public List<LinearLeg> AttachedLinearLegs { get; } = new();
+	}
 }
