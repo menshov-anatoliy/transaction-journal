@@ -197,3 +197,46 @@ describe("MarkdownEditDialog: тематизация дизайн-системы
 		expect(cancel.className).toContain("bg-card");
 	});
 });
+
+// Габариты модального редактора: попап занимает ~80 vh (в пределах
+// max-h-[90vh]), поле ввода растянуто на всю высоту контейнера диалога,
+// live-превью — рядом в split-view.
+// Traceability: change:rework-spa-shell-and-screens/specs/ui/screens/spec#scenario-comment-editor-fills-container
+// Traceability: change:rework-spa-shell-and-screens/design#D8
+describe("MarkdownEditDialog: габариты контейнера", () => {
+	it("диалог занимает ~80 vh в пределах max-h-[90vh]", () => {
+		// Act: открытие модального редактора.
+		renderDialog();
+
+		// Assert: контейнер диалога несёт класс высоты 80vh и ограничение
+		// 90vh — окно занимает большую часть экрана, не превышая 90%
+		// высоты окна браузера.
+		const content = document.body.querySelector(
+			'[data-slot="dialog-content"]',
+		);
+		expect(content?.className).toContain("h-[80vh]");
+		expect(content?.className).toContain("max-h-[90vh]");
+	});
+
+	it("поле ввода заполняет контейнер, превью рядом в split-view", () => {
+		// Act: открытие модального редактора.
+		renderDialog();
+
+		// Assert: корень виджета тянется flex-ом в колонке попапа
+		// (flex-1 без min-h-обрезки) и запросил высоту 100% контейнера.
+		const editor = document.body.querySelector(".journal-md-editor");
+		expect(editor).not.toBeNull();
+		expect(editor?.className).toContain("flex-1");
+		expect(editor?.className).toContain("min-h-0");
+		expect(editor).toHaveStyle({ height: "100%" });
+
+		// Сплит-область между тулбаром и футером содержит textarea слева
+		// и панель live-превью справа.
+		const split = editor?.querySelector(".w-md-editor-content");
+		expect(split).not.toBeNull();
+		expect(split?.querySelector(".w-md-editor-text")).not.toBeNull();
+		expect(
+			split?.querySelector(".w-md-editor-preview"),
+		).not.toBeNull();
+	});
+});

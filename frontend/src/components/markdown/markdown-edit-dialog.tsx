@@ -144,13 +144,20 @@ export function MarkdownEditDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			{/* Стенд «MD-редактор (split)» (LeiDq): 960×680, радиус 16, тень
-			    0/16/48 поверх текстового primary. Попап собран колонкой
+			{/* Стенд «MD-редактор (split)» (LeiDq): ширина 960, радиус 16,
+			    тень 0/16/48 поверх текстового primary. Попап собран колонкой
 			    Header → Toolbar+Split → Footer без внутренних полей. */}
 			{/* Traceability: change:reconcile-frontend-with-design/design#D5 */}
+			{/* Высота попапа — ~80 vh в пределах max-h-[90vh] вместо
+			    фиксированной высоты стенда: диалог занимает большую часть
+			    экрана, но не выходит за 90% высоты окна. */}
+			{/* Traceability: change:rework-spa-shell-and-screens/design#D8 */}
+			{/* Поле ввода растянуто на всю высоту контейнера диалога,
+			    live-превью — рядом в split-view. */}
+			{/* Traceability: change:rework-spa-shell-and-screens/specs/ui/screens/spec#scenario-comment-editor-fills-container */}
 			<DialogContent
 				showCloseButton={false}
-				className="flex h-[680px] max-h-[90vh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 shadow-[0_16px_48px] shadow-text-primary/15 sm:max-w-[960px]"
+				className="flex h-[80vh] max-h-[90vh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 shadow-[0_16px_48px] shadow-text-primary/15 sm:max-w-[960px]"
 				onKeyDown={handleKeyDown}
 			>
 				{/* Header (nBfEb): [14,18], нижний divider, заголовок Inter

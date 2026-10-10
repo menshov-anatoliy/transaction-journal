@@ -25,4 +25,4 @@
 
 ## 4. MD-редактор
 
-- [ ] 4.1 Диалог: высота ~80 vh (в пределах max-h-[90vh]), поле ввода — на всю высоту контейнера, split-view и Ctrl+Enter сохраняются. Проверить: `scenario-comment-editor-fills-container`.
+- [x] 4.1 Диалог: высота ~80 vh (в пределах max-h-[90vh]), поле ввода — на всю высоту контейнера, split-view и Ctrl+Enter сохраняются. Проверить: `scenario-comment-editor-fills-container`.
