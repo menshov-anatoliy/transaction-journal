@@ -12,9 +12,11 @@ namespace TransactionJournal.Tests.Analytics;
 /// неограниченный худший случай и неполные исходные данные различаются
 /// состояниями типизированного результата, сбой марок на метрику не влияет,
 /// без открытых остатков риск конечен и нулевой, конструкция с хедж-перпом
-/// больше не деградирует в недоступность, линейная нога входит в группу
-/// ранней экспирации своей базы, перп без опций той же базы образует
-/// собственную группу, а null-набор позиций отклоняется.
+/// больше не деградирует в недоступность, хеджированный короткий перп даёт
+/// конечный риск с числовым совпадением и ручным расчётом, голый короткий
+/// перп — в опционной группе и без опций — неограничен, линейная нога входит
+/// в группу ранней экспирации своей базы, перп без опций той же базы
+/// образует собственную группу, а null-набор позиций отклоняется.
 /// </summary>
 [TestClass]
 public class RealRiskCalculatorTests
@@ -170,9 +172,77 @@ public class RealRiskCalculatorTests
 		// Act
 		var result = _calculator.CalculateResult(positions);
 
-		// Assert: результат типизирован и больше не «не рассчитан»; конечная
-		// величина закрепляется после полной группировки и наклонного правила.
-		Assert.That(result.Status, Is.Not.EqualTo(RealRiskStatus.Unavailable));
+		// Assert: наклон за последним узлом равен −1 + 1 = 0 — риск конечен
+		// и совпадает с ручным расчётом: узел нулевой цены платит
+		// +80 − 4340 − 4100 = −8360, узел страйка платит +80 + 60 + 300 = +440,
+		// минимум группы −8360.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(8360m)));
+	}
+
+	[TestMethod]
+	[Description("Хеджированный короткий перп даёт конечный риск")]
+	public void TryIfHedgedShortPerpYieldsFiniteRisk()
+	{
+		// Arrange: короткая линейная нога BTCUSDT −1 по средней 90 накрыта
+		// длинным коллом со страйком 100 по средней 60 одной экспирации.
+		// Требование: наклон платежа за последним узлом равен +1 + (−1) = 0,
+		// риск конечен и совпадает с ручным расчётом.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-linear-hedge-is-finite
+		var positions = new[]
+		{
+			OpenResidual("BTC-27DEC24-100-C", 1m, 60m),
+			OpenResidual("BTCUSDT", -1m, 90m),
+		};
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: узел нулевой цены платит −60 + 90 = +30, узел страйка 100
+		// платит −60 − 10 = −70; минимум группы −70, риск конечен и равен 70.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(70m)));
+	}
+
+	[TestMethod]
+	[Description("Голый короткий перп в опционной группе неограничен")]
+	public void TryIfNakedShortPerpInOptionGroupYieldsUnbounded()
+	{
+		// Arrange: короткая линейная нога BTCUSDT −1 по средней 90 без
+		// накрывающих коллов — в опционной группе той же базы только длинный
+		// пут со страйком 100.
+		// Требование: наклон платежа за последним узлом равен 0 + (−1) = −1,
+		// минимум платежа не ограничен — величина отсутствует.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-naked-short-linear-is-unbounded
+		var positions = new[]
+		{
+			OpenResidual("BTC-27DEC24-100-P", 1m, 5m),
+			OpenResidual("BTCUSDT", -1m, 90m),
+		};
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: короткий перп не накрыт коллами — статус unbounded без числа.
+		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unbounded));
+		Assert.That(result.Usdt, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Голый короткий перп без опций той же базы неограничен")]
+	public void TryIfNakedShortPerpWithoutOptionsYieldsUnbounded()
+	{
+		// Arrange: единственная нога конструкции — короткий перп BTCUSDT −1
+		// по средней 90, опционных групп той же базы нет.
+		// Требование: наклон прямой платежа отрицателен, минимум платежа
+		// не ограничен по росту цены базового актива.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-naked-short-linear-is-unbounded
+		var positions = new[] { OpenResidual("BTCUSDT", -1m, 90m) };
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: статус unbounded без числа, а не конечная величина.
+		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unbounded));
+		Assert.That(result.Usdt, Is.Null);
 	}
 
 	[TestMethod]
