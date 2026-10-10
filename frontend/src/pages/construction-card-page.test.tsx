@@ -41,6 +41,7 @@ const card: ConstructionCard = {
 		markValue: 500,
 		capitalUsagePercent: 16.7,
 		realRiskUsdt: 45,
+		realRiskStatus: "finite",
 		openedAt: "2026-06-18T09:05:00+00:00",
 		closedAt: null,
 		durationSeconds: 53.4 * 3600,

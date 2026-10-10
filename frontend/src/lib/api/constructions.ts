@@ -8,6 +8,9 @@ import { apiFetch } from "./http";
 /** Ручной статус конструкции в контракте API. */
 export type ConstructionStatus = "open" | "closed" | "archived";
 
+/** Состояние реального риска: число величины выдаётся только конечному риску. */
+export type RealRiskStatus = "finite" | "unbounded" | "unavailable";
+
 /** Сводка журнала для шапки раздела. */
 export interface ConstructionsSummary {
 	readonly totalPnL: number | null;
@@ -36,11 +39,14 @@ export interface ConstructionRow {
 	readonly totalPnLPercent: number | null;
 	readonly markValue: number | null;
 	readonly capitalUsagePercent: number | null;
-	// Реальный риск открытых остатков: бэкенд отдаёт null при неограниченном
-	// худшем случае или неразобранном символе — индикатор подставит заглушку
-	// плановым риском, граница не исчезает.
+	// Реальный риск открытых остатков идёт парой «величина + статус»: число
+	// выдаётся только конечному риску, null при неограниченном хвосте или
+	// неполных данных, а статус различает эти причины — угадывать finite
+	// по плановому риску нельзя.
 	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	readonly realRiskUsdt: number | null;
+	readonly realRiskStatus: RealRiskStatus;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly liveHintCount: number;
@@ -77,11 +83,13 @@ export interface ConstructionPreview {
 	readonly totalPnLPercent: number | null;
 	readonly markValue: number | null;
 	readonly capitalUsagePercent: number | null;
-	// Реальный риск открытых остатков: null при неограниченном худшем случае
-	// или неразобранном символе остатка — слой индикатора применит каскад
-	// заглушек вместо скрытия границы.
+	// Реальный риск открытых остатков идёт парой «величина + статус»: число
+	// только при конечном риске, null при неограниченном хвосте или неполных
+	// данных, а статус различает эти причины без подстановки планового риска.
 	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	readonly realRiskUsdt: number | null;
+	readonly realRiskStatus: RealRiskStatus;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly marksAsOf: string | null;
