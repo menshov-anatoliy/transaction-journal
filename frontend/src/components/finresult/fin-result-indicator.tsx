@@ -13,7 +13,7 @@ import {
 // Индикатор финансового результата конструкции: полный (карточка/превью),
 // средний (сводные блоки) и компактный (строки таблиц). Все три вида рендерят
 // одну геометрию калькулятора в долях шкалы и отличаются только пресетом
-// размеров: полоса с зонами планового риска/профита/сверхприбыли, заливки
+// размеров: полоса с зонами планового риска/профита/сверхприбыли, заливка
 // результата, насечка границы реального риска и маркер итога. У полного и
 // среднего видов подписи (деления шкалы над полосой, граница и маркер под
 // ней) размещает калькулятор: разнос по сторонам полосы, вертикальным
@@ -372,7 +372,7 @@ function labelAnchorStyle(
 	return { ...base, left, transform: "translateX(-50%)" };
 }
 
-// Полоса: тонируемые зоны в скруглённой маске, заливки результата,
+// Полоса: тонируемые зоны в скруглённой маске, единая заливка результата,
 // насечка границы и маркер итога поверх.
 function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; preset: SizePreset }) {
 	const markerHalf = preset.markerSize / 2;
@@ -419,18 +419,6 @@ function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; prese
 								: "bg-[color:var(--fin-negative)]",
 						)}
 						style={spanStyle(geometry.fillMain)}
-					/>
-				)}
-				{geometry.fillUnreal && (
-					<span
-						data-part="fill-unreal"
-						className={cn(
-							"absolute inset-y-0",
-							geometry.tone === "positive"
-								? "bg-[color:var(--fin-unreal-positive)]"
-								: "bg-[color:var(--fin-unreal-negative)]",
-						)}
-						style={spanStyle(geometry.fillUnreal)}
 					/>
 				)}
 			</div>

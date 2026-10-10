@@ -223,10 +223,11 @@ describe("компактный индикатор", () => {
 			/>,
 		);
 
-		// Assert: индикатор помечен неполным, нереализованная часть скрыта.
+		// Assert: индикатор помечен неполным; единая заливка строится по
+		// доступной части итога — состав заливки проверяют эталоны калькулятора.
 		const root = container.firstElementChild as HTMLElement;
 		expect(root.dataset.incomplete).toBe("true");
-		expect(container.querySelector('[data-part="fill-unreal"]')).toBeNull();
+		expect(container.querySelector('[data-part="fill-main"]')).not.toBeNull();
 	});
 
 	// Строки подписи границы рендерятся столбцом: модель разноса считает
@@ -262,6 +263,66 @@ describe("компактный индикатор", () => {
 		expect(borderLabel).not.toBeNull();
 		const root = container.firstElementChild as HTMLElement;
 		expect(borderLabel?.parentElement).toBe(root.firstElementChild);
+	});
+});
+
+// Единая заливка итога после упрощения рендера: отдельного слоя
+// нереализованной части больше нет, а зелёный и золотой участки
+// положительного итога стыкуются без перекрытия. Контракт общий, но
+// проверяется на каждом из трёх представлений.
+describe("заливки итога во всех представлениях", () => {
+	const views = [FullFinResultIndicator, MediumFinResultIndicator, CompactFinResultIndicator];
+
+	// fill-unreal удалён из рендера: слой нереализованной части не рисуется
+	// ни в одном представлении ни при отрицательном итоге, ни при
+	// сверхприбыли — заливка итога всегда одна (fill-main).
+	// Traceability: openspec:ui/screens#scenario-finresult-negative-total-single-fill
+	it("не рисует fill-unreal ни в одном представлении", () => {
+		// Arrange: отрицательный итог (кейс C3) и сверхприбыль (кейс C6) —
+		// раньше оба рисовали fill-unreal при ненулевой нереализованной части.
+		const cases = [CASE_C3, CASE_C6];
+
+		for (const View of views) {
+			for (const input of cases) {
+				// Act: рендер каждого представления на каждом знаке итога.
+				const { container, unmount } = render(<View input={input} />);
+
+				// Assert: fill-unreal отсутствует, единая заливка на месте.
+				expect(container.querySelector('[data-part="fill-unreal"]')).toBeNull();
+				expect(container.querySelector('[data-part="fill-main"]')).not.toBeNull();
+				unmount();
+			}
+		}
+	});
+
+	// Золотой участок видим: зелёная заливка заканчивается ровно на плановом
+	// профите, золотая тянется от профита до маркера на краю шкалы — слои
+	// стыкуются без перекрытия, видимость золота не зависит от их порядка.
+	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-marker
+	it("рисует зелёный и золотой участки встык до маркера", () => {
+		for (const View of views) {
+			// Act: кейс C6 — профит +900, итог +1 400 на краю растянутой шкалы
+			// (шкала −300…+1 400: ноль 300/1700, профит 1200/1700).
+			const { container, unmount } = render(<View input={CASE_C6} />);
+			const fill = container.querySelector<HTMLElement>('[data-part="fill-main"]');
+			const superZone = container.querySelector<HTMLElement>('[data-part="super-zone"]');
+			const marker = container.querySelector<HTMLElement>('[data-part="marker"]');
+
+			// Assert: зелёный участок от нуля до планового профита.
+			expect(fill).not.toBeNull();
+			expect(Number.parseFloat(fill?.style.left ?? "")).toBeCloseTo((300 / 1700) * 100, 3);
+			expect(
+				Number.parseFloat(fill?.style.left ?? "") + Number.parseFloat(fill?.style.width ?? ""),
+			).toBeCloseTo((1200 / 1700) * 100, 3);
+			// Assert: золотой участок от планового профита до маркера итога.
+			expect(superZone).not.toBeNull();
+			expect(Number.parseFloat(superZone?.style.left ?? "")).toBeCloseTo((1200 / 1700) * 100, 3);
+			expect(
+				Number.parseFloat(superZone?.style.left ?? "") +
+					Number.parseFloat(superZone?.style.width ?? ""),
+			).toBeCloseTo(Number.parseFloat(marker?.style.left ?? ""), 3);
+			unmount();
+		}
 	});
 });
 
