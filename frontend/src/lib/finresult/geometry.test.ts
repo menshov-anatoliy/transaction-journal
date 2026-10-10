@@ -225,6 +225,30 @@ describe("кейс C5 · нереализованная приближается
 	});
 });
 
+describe("граница сверхприбыли · итог ровно на плановом профите", () => {
+	// Золотая зона возникает только при выходе итога за +Профит: на
+	// равенстве total === plannedProfit золота ещё нет, шкала не
+	// растягивается, зелёная заливка тянется до самого плана.
+	// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+
+	it("итог +900 равен профиту: золота нет, зелёная заливка до плана", () => {
+		// Act: реализованная 150 и нереализованная 750 дают итог ровно +900.
+		const geometry = computeFinResultGeometry(caseInput({ realized: 150, unrealized: 750 }));
+
+		// Assert: равенство не считается выходом за профит — золота нет,
+		// шкала остаётся −300…+900.
+		expect(geometry.superZone).toBeNull();
+		expect(geometry.scaleMax).toBe(900);
+		expect(geometry.profitZone?.to).toBeCloseTo(1, 4);
+
+		// Assert: зелёная заливка от нуля до правого края плана, маркер —
+		// итог на профите без клипа.
+		expect(geometry.fillMain).toEqual({ from: 0.25, to: 1 });
+		expect(geometry.markerAt).toBeCloseTo(1, 4);
+		expect(geometry.markerClipped).toBe(false);
+	});
+});
+
 describe("кейс C6 · сверхприбыль: итог превысил профит", () => {
 	// Реализованная 150, нереализованная 1250, итог +1400 за +900: золотая
 	// зона тянется до самого итога (+1 400) без капа, маркер стоит на

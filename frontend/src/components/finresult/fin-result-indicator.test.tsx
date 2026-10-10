@@ -300,6 +300,12 @@ describe("заливки итога во всех представлениях",
 	// стыкуются без перекрытия, видимость золота не зависит от их порядка.
 	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-marker
 	it("рисует зелёный и золотой участки встык до маркера", () => {
+		// Доли из inline-стилей — проценты шкалы: хелперы убирают повторный
+		// разбор одних и тех же координат в ассертах ниже.
+		const leftPercent = (part: HTMLElement | null): number =>
+			Number.parseFloat(part?.style.left ?? "");
+		const widthPercent = (part: HTMLElement | null): number =>
+			Number.parseFloat(part?.style.width ?? "");
 		for (const View of views) {
 			// Act: кейс C6 — профит +900, итог +1 400 на краю растянутой шкалы
 			// (шкала −300…+1 400: ноль 300/1700, профит 1200/1700).
@@ -310,17 +316,17 @@ describe("заливки итога во всех представлениях",
 
 			// Assert: зелёный участок от нуля до планового профита.
 			expect(fill).not.toBeNull();
-			expect(Number.parseFloat(fill?.style.left ?? "")).toBeCloseTo((300 / 1700) * 100, 3);
-			expect(
-				Number.parseFloat(fill?.style.left ?? "") + Number.parseFloat(fill?.style.width ?? ""),
-			).toBeCloseTo((1200 / 1700) * 100, 3);
-			// Assert: золотой участок от планового профита до маркера итога.
+			expect(leftPercent(fill)).toBeCloseTo((300 / 1700) * 100, 3);
+			expect(leftPercent(fill) + widthPercent(fill)).toBeCloseTo((1200 / 1700) * 100, 3);
+			// Assert: золотой участок от планового профита до маркера итога;
+			// маркер проверяем явно, чтобы сбой рендера не маскировался NaN.
 			expect(superZone).not.toBeNull();
-			expect(Number.parseFloat(superZone?.style.left ?? "")).toBeCloseTo((1200 / 1700) * 100, 3);
-			expect(
-				Number.parseFloat(superZone?.style.left ?? "") +
-					Number.parseFloat(superZone?.style.width ?? ""),
-			).toBeCloseTo(Number.parseFloat(marker?.style.left ?? ""), 3);
+			expect(marker).not.toBeNull();
+			expect(leftPercent(superZone)).toBeCloseTo((1200 / 1700) * 100, 3);
+			expect(leftPercent(superZone) + widthPercent(superZone)).toBeCloseTo(
+				leftPercent(marker),
+				3,
+			);
 			unmount();
 		}
 	});
