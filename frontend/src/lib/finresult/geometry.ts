@@ -13,7 +13,9 @@ import type { RealRiskStatus } from "../api/constructions";
 // одной заливкой без разложения на реализованную и нереализованную части.
 // Насечка границы ставится только при конечном реальном риске: состояния
 // unbounded/unavailable возвращают borderAt: null со статусом состояния,
-// а плановое деление подписывается плановым риском.
+// а плановое деление подписывается плановым риском. Числовая заглушка
+// границы плановым риском не применяется ни в каком состоянии: пара
+// «число + статус» приходит из контракта API обязательными полями.
 // Traceability: openspec:ui/screens#requirement-risk-profit-hint
 // Traceability: change:show-unbounded-finresult-risk/design#d2
 
@@ -42,19 +44,18 @@ export interface FinResultInput {
 	readonly hasOpenResidual: boolean;
 	/**
 	 * Реальный риск открытых остатков в USDT (наихудший результат на
-	 * экспирации); число приходит только при статусе finite. Поле
-	 * опционально до проводки метрики из API в вызывающие компоненты.
+	 * экспирации); число приходит только при статусе finite, null —
+	 * вместе с состояниями unbounded/unavailable. Пара обязательна:
+	 * без числа геометрия не рисует насечку границы.
 	 */
-	readonly realRisk?: number | null;
+	readonly realRisk: number | null;
 	/**
 	 * Состояние реального риска из контракта API, пара к realRisk:
-	 * unbounded — неограниченный хвост, unavailable — расчёт не удался.
-	 * Отсутствие поля — вызывающий компонент ещё не проводит статус:
-	 * геометрия сохраняет прежний каскад заглушек, не выдавая его за
-	 * конечный риск.
-	 * Traceability: change:show-unbounded-finresult-risk/design#d2
+	 * finite — конечный риск с числом, unbounded — неограниченный хвост,
+	 * unavailable — расчёт не удался.
+	 * Traceability: change:show-unbounded-finresult-risk/design#d1
 	 */
-	readonly realRiskStatus?: RealRiskStatus;
+	readonly realRiskStatus: RealRiskStatus;
 }
 
 /** Диапазон шкалы в долях 0..1; from не больше to. */
@@ -119,9 +120,8 @@ export interface FinResultGeometry {
 	readonly borderAt: number | null;
 	/**
 	 * Состояние реального риска: различает конечный риск, неограниченный
-	 * хвост и нехватку данных. Отсутствие статуса во входе трактуется
-	 * конечным риском переходно, до проводки статуса в компоненты.
-	 * Traceability: change:show-unbounded-finresult-risk/design#d2
+	 * хвост и нехватку данных; пробрасывается из входа как есть.
+	 * Traceability: change:show-unbounded-finresult-risk/design#d1
 	 */
 	readonly realRiskStatus: RealRiskStatus;
 	/** Позиция маркера итога; null — данных нет. */
@@ -177,17 +177,15 @@ export function computeFinResultGeometry(
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 	const incomplete = input.quotesDegraded && input.hasOpenResidual;
 
-	// Числовая база насечки. Каскад заглушек плановым риском остаётся
-	// только переходно — для вызывающих компонентов без статуса; заданный
-	// статус unbounded/unavailable насечку не получает вовсе.
-	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
-	const realRiskEff = input.realRisk ?? input.plannedRisk ?? input.plannedProfit ?? 0;
+	// Числовая база насечки: только контрактный реальный риск, заглушка
+	// плановым риском не применяется — насечка рисуется лишь при конечном
+	// риске с числом.
+	// Traceability: change:show-unbounded-finresult-risk/design#d2
 
 	// Состояние риска без координаты на шкале: unbounded/unavailable
-	// отменяют числовую заглушку — насечка, её подпись и процент не
-	// считаются, плановая граница подписывается плановым риском, а
-	// состояние отдаётся компонентам сигналом вне шкалы.
-	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
+	// отменяют насечку вовсе — насечка, её подпись и процент не считаются,
+	// плановая граница подписывается плановым риском, а состояние отдаётся
+	// компонентам сигналом вне шкалы.
 	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
 	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
 	// Traceability: change:show-unbounded-finresult-risk/design#d2
@@ -195,27 +193,28 @@ export function computeFinResultGeometry(
 		input.realRiskStatus === "unbounded" || input.realRiskStatus === "unavailable"
 			? input.realRiskStatus
 			: null;
-	// Выходной статус: отсутствие статуса во входе трактуется конечным
-	// риском переходно, до проводки статуса в компоненты.
-	const riskStatus: RealRiskStatus = input.realRiskStatus ?? "finite";
 
 	// Нейтральная полоса: плановых границ нет — зоны и деления отсутствуют,
 	// заполнение идёт от нуля до края в сторону знака итога; состояние
 	// риска при этом остаётся в геометрии отдельно от полосы.
 	if (input.plannedRisk === null && input.plannedProfit === null) {
-		return buildNeutralGeometry(realized, total, incomplete, riskStatus, riskState, layout);
+		return buildNeutralGeometry(realized, total, incomplete, input.realRiskStatus, riskState, layout);
 	}
 
 	// Граница реального риска: «реализованный результат минус реальный
 	// риск» — где конструкция оказалась бы при худшем исходе открытых
 	// остатков с учётом уже реализованной прибыли. Насечка скрыта без
-	// данных о позиции (realized === null) и при не конечном риске:
+	// данных о позиции (realized === null), без числа реального риска
+	// (realRisk === null — пара конечного риска) и при не конечном риске:
 	// unbounded/unavailable конечной границы не имеют. Свежая позиция
 	// попадает на −реальныйРиск естественно, по формуле: спец-случай из
 	// #62 упразднён.
 	// Traceability: openspec:ui/screens#scenario-finresult-border-real-risk
 	// Traceability: openspec:ui/screens#scenario-finresult-fresh-position-real-risk
-	const borderValue = riskState === null && realized !== null ? realized - realRiskEff : null;
+	const borderValue =
+		riskState === null && realized !== null && input.realRisk !== null
+			? realized - input.realRisk
+			: null;
 
 	// Шкала: базовые зоны из плановых показателей, при сверхприбыли —
 	// золотая надбавка справа.
@@ -260,12 +259,12 @@ export function computeFinResultGeometry(
 					),
 				);
 
-	// Подпись границы есть только при конечном риске: у unbounded/
-	// unavailable нет ни числового значения реального риска, ни процента.
+	// Подпись границы есть только при конечном риске с числом: у
+	// unbounded/unavailable нет ни числового значения реального риска,
+	// ни процента.
+	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
 	const borderLabels =
-		riskState === null
-			? resolveBorderLabels(realized, input.plannedRisk, realRiskEff)
-			: null;
+		riskState === null ? resolveBorderLabels(realized, input.plannedRisk, input.realRisk) : null;
 	const markerLabel = resolveMarkerLabel(realized, unrealized, total, input.quotesDegraded);
 
 	const labels = {
@@ -316,7 +315,7 @@ export function computeFinResultGeometry(
 		profitZone,
 		superZone,
 		borderAt,
-		realRiskStatus: riskStatus,
+		realRiskStatus: input.realRiskStatus,
 		markerAt,
 		markerClipped,
 		fillMain,
@@ -436,22 +435,24 @@ function resolveRiskTickLabel(
 
 // Подпись границы: заголовок «риск есть», пока реальный риск положителен,
 // иначе «риска нет»; значение — величина реального риска «150 USDT · 50%»,
-// проценты — только при заданном плановом риске.
+// проценты — только при заданном плановом риске. Без числа реального риска
+// подписи нет: заглушка плановым риском не подставляется.
 // Traceability: openspec:ui/screens#scenario-finresult-closed-no-risk
 // Traceability: openspec:ui/screens#requirement-risk-profit-hint
+// Traceability: change:show-unbounded-finresult-risk/design#d2
 function resolveBorderLabels(
 	realized: number | null,
 	plannedRisk: number | null,
-	realRiskEff: number,
+	realRisk: number | null,
 ): { title: string; value: string } | null {
-	if (realized === null) {
+	if (realized === null || realRisk === null) {
 		return null;
 	}
 
-	const title = realRiskEff > 0 ? "риск есть" : "риска нет";
+	const title = realRisk > 0 ? "риск есть" : "риска нет";
 	const percent =
-		plannedRisk !== null && plannedRisk > 0 ? Math.round((realRiskEff / plannedRisk) * 100) : null;
-	const value = `${formatFinMagnitude(realRiskEff)} USDT${percent === null ? "" : ` · ${percent}%`}`;
+		plannedRisk !== null && plannedRisk > 0 ? Math.round((realRisk / plannedRisk) * 100) : null;
+	const value = `${formatFinMagnitude(realRisk)} USDT${percent === null ? "" : ` · ${percent}%`}`;
 
 	return { title, value };
 }

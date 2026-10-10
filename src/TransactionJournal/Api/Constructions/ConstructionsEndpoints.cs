@@ -90,7 +90,7 @@ public static class ConstructionsEndpoints
 					// Статус проходит рядом с величиной: конечный риск отличим от
 					// неограниченного хвоста и неполных данных без догадок по null.
 					// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-					SerializeRealRiskStatus(item.RealRiskStatus),
+					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt),
 					item.OpenedAt,
 					item.ClosedAt,
 					liveCounts.GetValueOrDefault(item.ConstructionId)))
@@ -146,7 +146,7 @@ public static class ConstructionsEndpoints
 				// Статус проходит рядом с величиной: конечный риск отличим от
 				// неограниченного хвоста и неполных данных без догадок по null.
 				// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-				SerializeRealRiskStatus(data.Metrics.RealRiskStatus),
+				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
 				data.MarksAsOf,
@@ -167,15 +167,6 @@ public static class ConstructionsEndpoints
 		ConstructionStatus.Open => "open",
 		ConstructionStatus.Closed => "closed",
 		ConstructionStatus.Archived => "archived",
-		_ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
-	};
-
-	/// <summary>Стабильная строка состояния реального риска в контракте API.</summary>
-	private static string SerializeRealRiskStatus(RealRiskStatus status) => status switch
-	{
-		RealRiskStatus.Finite => "finite",
-		RealRiskStatus.Unbounded => "unbounded",
-		RealRiskStatus.Unavailable => "unavailable",
 		_ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
 	};
 }

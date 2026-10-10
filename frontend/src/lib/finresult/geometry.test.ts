@@ -28,6 +28,8 @@ function expectMatchesLayout(actual: number, px: number, width: number = FULL_WI
 // как в подписях шкалы «−300 / 0 / +900» всех кейсов макета. Остатки
 // закрыты (hasOpenResidual: false) — так сбой котировок не делает
 // индикатор неполным; кейсы с открытыми остатками переопределяют флаг.
+// Пара реального риска обязательна: по умолчанию конечный риск 300 —
+// равный плановому, как в подписях границы макета «300 USDT · 100%».
 function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
 	return {
 		plannedRisk: 300,
@@ -36,6 +38,8 @@ function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
 		unrealized: 0,
 		quotesDegraded: false,
 		hasOpenResidual: false,
+		realRisk: 300,
+		realRiskStatus: "finite",
 		...overrides,
 	};
 }
@@ -407,17 +411,21 @@ describe("граница реального риска", () => {
 		expect(geometry.labels.borderValue).toBe("120 USDT · 40%");
 	});
 
-	// Переходный путь: вызывающий компонент ещё не проводит статус —
-	// прежний каскад заглушек сохранён. Заданный статус unbounded/
-	// unavailable заглушку отменяет: см. сценарии состояния риска ниже.
-	it("realRisk недоступен без статуса: переходная заглушка плановым риском 300", () => {
-		// Act: поле realRisk не передано вызывающим компонентом.
-		const geometry = computeFinResultGeometry(caseInput({ realized: 100 }));
+	// Насечка считается только по контрактному реальному риску: без числа
+	// и при не конечном статусе насечки нет — подстановка планового риска
+	// отменена спецификацией.
+	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
+	it("realRisk null: насечки и подписи границы нет", () => {
+		// Act: контракта числа реального риска нет.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 100, realRisk: null, realRiskStatus: "unavailable" }),
+		);
 
-		// Assert: граница 100 − 300 = −200, подпись по плановому риску.
-		expect(geometry.borderAt).toBeCloseTo(100 / 1200, 4);
-		expect(geometry.labels.borderTitle).toBe("риск есть");
-		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
+		// Assert: границы нет вовсе, плановое деление остаётся плановым.
+		expect(geometry.borderAt).toBeNull();
+		expect(geometry.labels.borderTitle).toBeNull();
+		expect(geometry.labels.borderValue).toBeNull();
+		expect(geometry.labels.risk).toBe("плановый риск −300");
 	});
 
 	// Сверхприбыль: золотая зона тянется до итога без капа, маркер остаётся
@@ -440,7 +448,7 @@ describe("граница реального риска", () => {
 	});
 });
 
-describe("состояние риска без числовой заглушки", () => {
+describe("состояние риска без насечки", () => {
 	// Не конечный риск (unbounded/unavailable) не изображается конечной
 	// насечкой: насечка и её подпись отсутствуют, плановое деление
 	// подписывается плановым риском, а состояние отдаётся текстом вне
@@ -455,7 +463,7 @@ describe("состояние риска без числовой заглушки
 		// Act: итог +5 942.16 при плановом риске 400 — хвост коротких
 		// коллов не ограничен, статус из API приходит unbounded.
 		const geometry = computeFinResultGeometry(
-			caseInput({ plannedRisk: 400, realized: 5942.16, unrealized: null, realRiskStatus: "unbounded" }),
+			caseInput({ plannedRisk: 400, realized: 5942.16, unrealized: null, realRisk: null, realRiskStatus: "unbounded" }),
 		);
 
 		// Assert: насечка и её подписи отсутствуют вовсе, статус состояния
@@ -488,7 +496,7 @@ describe("состояние риска без числовой заглушки
 	it("unbounded: разнос не строит размещение для отсутствующей границы", () => {
 		// Act: та же неограниченная позиция с метриками разметки.
 		const geometry = computeFinResultGeometry(
-			caseInput({ plannedRisk: 400, realized: 5942.16, unrealized: null, realRiskStatus: "unbounded" }),
+			caseInput({ plannedRisk: 400, realized: 5942.16, unrealized: null, realRisk: null, realRiskStatus: "unbounded" }),
 			{ scaleWidthPx: 936, aboveCharWidthPx: 7, belowCharWidthPx: 6.5 },
 		);
 
@@ -502,7 +510,7 @@ describe("состояние риска без числовой заглушки
 	it("unavailable: насечки нет, состояние «не удалось рассчитать», плановое деление подписано", () => {
 		// Act: расчёт риска не удался при плановом риске 300.
 		const geometry = computeFinResultGeometry(
-			caseInput({ realized: 200, unrealized: null, realRiskStatus: "unavailable" }),
+			caseInput({ realized: 200, unrealized: null, realRisk: null, realRiskStatus: "unavailable" }),
 		);
 
 		// Assert: границы нет, статус «не удалось рассчитать», плановое
@@ -547,7 +555,7 @@ describe("состояние риска без числовой заглушки
 		expect(geometry.labels.riskState).toBeNull();
 	});
 
-	it("сбой марок при unbounded: неполный режим без числовой заглушки", () => {
+	it("сбой марок при unbounded: неполный режим без насечки", () => {
 		// Act: сбой марок при открытых остатках и неограниченном хвосте.
 		const geometry = computeFinResultGeometry(
 			caseInput({
@@ -555,6 +563,7 @@ describe("состояние риска без числовой заглушки
 				unrealized: null,
 				quotesDegraded: true,
 				hasOpenResidual: true,
+				realRisk: null,
 				realRiskStatus: "unbounded",
 			}),
 		);
@@ -569,9 +578,10 @@ describe("состояние риска без числовой заглушки
 		expect(geometry.labels.marker).toBeNull();
 	});
 
-	it.each(["unbounded", "unavailable"] as const)("заданный статус %s отменяет заглушку плановым риском", (status) => {
+	it.each(["unbounded", "unavailable"] as const)("заданный статус %s не подставляет плановый риск в насечку", (status) => {
 		// Act: реального риска нет, статус задан — прежняя подстановка
 		// планового риска в насечку отменена.
+		// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
 		const geometry = computeFinResultGeometry(
 			caseInput({ realized: 100, realRisk: null, realRiskStatus: status }),
 		);
@@ -587,7 +597,7 @@ describe("состояние риска без числовой заглушки
 	it("нейтральная полоса без плановых параметров сохраняет состояние риска", () => {
 		// Act: плановых границ нет, статус unbounded.
 		const geometry = computeFinResultGeometry(
-			caseInput({ plannedRisk: null, plannedProfit: null, realized: 100, unrealized: null, realRiskStatus: "unbounded" }),
+			caseInput({ plannedRisk: null, plannedProfit: null, realized: 100, unrealized: null, realRisk: null, realRiskStatus: "unbounded" }),
 		);
 
 		// Assert: нейтральная полоса без зон и насечки, состояние риска
@@ -699,7 +709,7 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.labels.risk).toBe("−300");
 		expect(geometry.labels.profit).toBeNull();
 		expect(geometry.markerAt).toBeCloseTo(0.25, 3);
-		// Граница по заглушке плановым риском уходит за левый край — клип.
+		// Граница реальным риском (−450 = −150 − 300) уходит за левый край — клип.
 		expect(geometry.borderAt).toBe(0);
 	});
 
@@ -715,8 +725,8 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.labels.risk).toBeNull();
 		expect(geometry.labels.profit).toBe("+900");
 		expect(geometry.markerAt).toBeCloseTo(1200 / 1800, 3);
-		// Заглушка границы плановым профитом: 200 − 900 = −700.
-		expect(geometry.borderAt).toBeCloseTo(200 / 1800, 4);
+		// Насечка по реальному риску (дефолт 300): 200 − 300 = −100.
+		expect(geometry.borderAt).toBeCloseTo(800 / 1800, 4);
 	});
 
 	it("состояние 3: итог далеко за профитом — золотая зона клипуется, значение выносится", () => {
@@ -733,14 +743,15 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.labels.marker).toBe("+5\u00A0000");
 	});
 
-	it("состояние 4: нет открытых остатков — маркер на итоге, граница по заглушке", () => {
+	it("состояние 4: нет открытых остатков — маркер на итоге, граница по реальному риску", () => {
 		// Act: нереализованной части нет.
 		const geometry = computeFinResultGeometry(
 			caseInput({ realized: -250, unrealized: null }),
 		);
 
-		// Assert: маркер на итоге −250; граница по заглушке плановым риском
-		// (−550) прижата к левому краю — маркер и граница не совпадают.
+		// Assert: маркер на итоге −250; граница по реальному риску
+		// (−550 = −250 − 300) прижата к левому краю — маркер и граница
+		// не совпадают.
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.borderAt).toBe(0);
 		expect(geometry.fillMain).toEqual({ from: 50 / 1200, to: 0.25 });
@@ -760,7 +771,7 @@ describe("состояния индикатора из §9 концепта", ()
 		);
 
 		// Assert: нереализованная часть скрыта, индикатор помечен неполным;
-		// маркер — realized −250, граница по заглушке прижата к левому краю.
+		// маркер — realized −250, граница по реальному риску прижата к краю.
 		expect(geometry.incomplete).toBe(true);
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.borderAt).toBe(0);

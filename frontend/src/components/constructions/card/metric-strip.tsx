@@ -186,10 +186,13 @@ export function ConstructionMetricStrip({ card }: ConstructionMetricStripProps) 
 					// марок не делает индикатор неполным.
 					// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 					hasOpenResidual: card.hasOpenResidual,
-					// Граница реального риска карточки: метрика бэкенда, при null —
-					// каскад заглушек внутри геометрии.
+					// Пара «число + статус» из контракта API: конечный риск
+					// даёт насечку, unbounded/unavailable — состояние
+					// без насечки.
 					// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+					// Traceability: change:show-unbounded-finresult-risk/design#d1
 					realRisk: metrics.realRiskUsdt,
+					realRiskStatus: metrics.realRiskStatus,
 				}}
 			/>
 		</section>

@@ -561,15 +561,6 @@ public static class ConstructionCardEndpoints
 			_ => null,
 	};
 
-	/// <summary>Стабильная строка состояния реального риска в контракте API.</summary>
-	private static string SerializeRealRiskStatus(RealRiskStatus status) => status switch
-	{
-		RealRiskStatus.Finite => "finite",
-		RealRiskStatus.Unbounded => "unbounded",
-		RealRiskStatus.Unavailable => "unavailable",
-		_ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
-	};
-
 	/// <summary>Перевод доменного снимка деталей в контракт карточки.</summary>
 	private static ConstructionCardResponse ToCardResponse(ConstructionDetailData data) => new(
 		data.ConstructionId,
@@ -605,7 +596,7 @@ public static class ConstructionCardEndpoints
 			// Статус проходит рядом с величиной: конечный риск отличим от
 			// неограниченного хвоста и неполных данных без догадок по null.
 			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-			SerializeRealRiskStatus(data.Metrics.RealRiskStatus),
+			RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
 			data.Metrics.OpenedAt,
 			data.Metrics.ClosedAt,
 			data.Metrics.Duration is { } duration ? (long?)Math.Round(duration.TotalSeconds) : null),

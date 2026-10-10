@@ -22,6 +22,8 @@ const CASE_C3 = {
 	unrealized: 180,
 	quotesDegraded: false,
 	hasOpenResidual: true,
+	realRisk: 300,
+	realRiskStatus: "finite",
 } as const;
 
 // Вход кейса C6: сверхприбыль — итог +1 400 растягивает золотую зону,
@@ -33,10 +35,13 @@ const CASE_C6 = {
 	unrealized: 1250,
 	quotesDegraded: false,
 	hasOpenResidual: true,
+	realRisk: 300,
+	realRiskStatus: "finite",
 } as const;
 
 // Вход сценария finresult-unbounded-risk: открытый нетто-короткий колл,
-// плановый риск 400, положительный итог +5 942.16 — хвост не ограничен.
+// плановый риск 400, положительный итог +5 942.16 — хвост не ограничен,
+// числа реального риска в контракте нет.
 const CASE_UNBOUNDED = {
 	plannedRisk: 400,
 	plannedProfit: 900,
@@ -44,6 +49,7 @@ const CASE_UNBOUNDED = {
 	unrealized: null,
 	quotesDegraded: false,
 	hasOpenResidual: true,
+	realRisk: null,
 	realRiskStatus: "unbounded",
 } as const;
 
@@ -56,6 +62,7 @@ const CASE_UNAVAILABLE = {
 	unrealized: null,
 	quotesDegraded: false,
 	hasOpenResidual: true,
+	realRisk: null,
 	realRiskStatus: "unavailable",
 } as const;
 
@@ -68,6 +75,7 @@ const CASE_UNBOUNDED_WITHOUT_PLAN = {
 	unrealized: null,
 	quotesDegraded: false,
 	hasOpenResidual: true,
+	realRisk: null,
 	realRiskStatus: "unbounded",
 } as const;
 
@@ -136,6 +144,7 @@ describe("полный индикатор", () => {
 					quotesDegraded: false,
 					hasOpenResidual: true,
 					realRisk: 120,
+					realRiskStatus: "finite",
 				}}
 			/>,
 		);
@@ -161,6 +170,7 @@ describe("полный индикатор", () => {
 					quotesDegraded: false,
 					hasOpenResidual: false,
 					realRisk: 0,
+					realRiskStatus: "finite",
 				}}
 			/>,
 		);
@@ -169,30 +179,6 @@ describe("полный индикатор", () => {
 		expect(screen.getByText("риска нет")).toBeInTheDocument();
 		expect(screen.getByText("0 USDT · 0%")).toBeInTheDocument();
 		expect(screen.getByText("+945")).toBeInTheDocument();
-	});
-
-	// Нет метрики реального риска — граница считается по заглушке плановым
-	// риском, подпись показывает величину заглушки.
-	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
-	it("показывает заглушку границы плановым риском, когда метрики нет", () => {
-		// Act: поле realRisk не передано вызывающим компонентом.
-		render(
-			<FullFinResultIndicator
-				input={{
-					plannedRisk: 300,
-					plannedProfit: 900,
-					realized: 100,
-					unrealized: 0,
-					quotesDegraded: false,
-					hasOpenResidual: true,
-				}}
-			/>,
-		);
-
-		// Assert: граница по плановому риску 300, маркер — итог +100.
-		expect(screen.getByText("риск есть")).toBeInTheDocument();
-		expect(screen.getByText("300 USDT · 100%")).toBeInTheDocument();
-		expect(screen.getByText("+100")).toBeInTheDocument();
 	});
 });
 
@@ -382,7 +368,7 @@ describe("компактный индикатор", () => {
 		// Act: плановые границы не заданы.
 		const { container } = render(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, quotesDegraded: false, hasOpenResidual: true }}
+				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, quotesDegraded: false, hasOpenResidual: true, realRisk: 300, realRiskStatus: "finite" }}
 			/>,
 		);
 
@@ -400,7 +386,7 @@ describe("компактный индикатор", () => {
 		// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 		const { container } = render(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: true }}
+				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: true, realRisk: 300, realRiskStatus: "finite" }}
 			/>,
 		);
 
@@ -434,7 +420,7 @@ describe("компактный индикатор", () => {
 		// занят маркером, граница уходит наверх.
 		const { container } = render(
 			<FullFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: 520, unrealized: -100, quotesDegraded: false, hasOpenResidual: true, realRisk: 100 }}
+				input={{ plannedRisk: 300, plannedProfit: 900, realized: 520, unrealized: -100, quotesDegraded: false, hasOpenResidual: true, realRisk: 100, realRiskStatus: "finite" }}
 			/>,
 		);
 

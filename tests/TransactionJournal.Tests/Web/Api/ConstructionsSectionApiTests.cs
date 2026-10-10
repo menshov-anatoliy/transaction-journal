@@ -243,6 +243,44 @@ public sealed class ConstructionsSectionApiTests
 	}
 
 	[TestMethod]
+	[Description("Строка списка с конечным риском без числа не сериализуется — эндпоинт отвечает 500")]
+	// Нарушенная пара read-модели (finite + null) не просачивается в контракт:
+	// сериализатор падает, сервер отдаёт ошибку вместо ложного статуса.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task ThrowOnFiniteStatusWithoutNumberReturns500()
+	{
+		// Arrange: read-модель со сломанной парой конечного риска.
+		await using var factory = new SectionApiFactory(services => services.ReplaceReadModel(StubListReadModel.WithBrokenRealRiskPair(RealRiskStatus.Finite, null)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос обзора раздела.
+		var response = await client.GetAsync("/api/v1/constructions");
+
+		// Assert: эндпоинт отказывается публиковать нарушенную пару.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+	}
+
+	[TestMethod]
+	[Description("Строка списка с неограниченным риском и числом не сериализуется — эндпоинт отвечает 500")]
+	// Нарушенная пара read-модели (unbounded + величина) не попадает в контракт:
+	// числовой хвост за неограниченным риском искажал бы индикатор, сериализация падает.
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task ThrowOnUnboundedStatusWithNumberReturns500()
+	{
+		// Arrange: read-модель со сломанной парой неограниченного риска.
+		await using var factory = new SectionApiFactory(services => services.ReplaceReadModel(StubListReadModel.WithBrokenRealRiskPair(RealRiskStatus.Unbounded, 150m)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос обзора раздела.
+		var response = await client.GetAsync("/api/v1/constructions");
+
+		// Assert: эндпоинт отказывается публиковать нарушенную пару.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+	}
+
+	[TestMethod]
 	[Description("Превью открытого короткого колла публикует unbounded без числа")]
 	// Открытый нетто-короткий колл оставляет худший исход неограниченным:
 	// превью отдаёт статус unbounded, realRiskUsdt остаётся null.
@@ -839,6 +877,14 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					RealRiskUsdt: null,
 					RealRiskStatus: RealRiskStatus.Unavailable),
 			]));
+
+	/// <summary>Вариант с нарушенной парой «состояние + число»: сериализация контракта обязана упасть.</summary>
+	public static StubListReadModel WithBrokenRealRiskPair(RealRiskStatus status, decimal? usdt)
+	{
+		var data = CreateDefaultData();
+		var broken = data.Items[0] with { RealRiskUsdt = usdt, RealRiskStatus = status };
+		return new StubListReadModel(data with { Items = [broken] });
+	}
 
 	/// <summary>Вариант со сбоем марок: нереализованные величины и итоги null.</summary>
 	public static StubListReadModel WithMarkFailure() => new(new ConstructionListData(

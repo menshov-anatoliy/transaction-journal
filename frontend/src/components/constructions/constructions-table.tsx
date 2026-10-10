@@ -203,10 +203,13 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 								// Открытые остатки строки из семантики read-модели.
 								// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 								hasOpenResidual: hasOpenResidual(row.original),
-								// Граница реального риска в таблице считается по
-								// метрике бэкенда; null — заглушка плановым риском.
+								// Пара «число + статус» из контракта API: конечный
+								// риск даёт насечку, unbounded/unavailable —
+								// состояние без насечки.
 								// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+								// Traceability: change:show-unbounded-finresult-risk/design#d1
 								realRisk: row.original.realRiskUsdt,
+								realRiskStatus: row.original.realRiskStatus,
 							}}
 						/>
 					</div>

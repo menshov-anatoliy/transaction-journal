@@ -52,10 +52,13 @@ export function ConstructionPreviewCard({ preview }: ConstructionPreviewCardProp
 					// остатком: без них сбой марок не делает индикатор неполным.
 					// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 					hasOpenResidual: preview.counts.openPositions > 0,
-					// Граница реального риска превью: метрика бэкенда, при null —
-					// каскад заглушек внутри геометрии.
+					// Пара «число + статус» из контракта API: конечный риск
+					// даёт насечку, unbounded/unavailable — состояние
+					// без насечки.
 					// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+					// Traceability: change:show-unbounded-finresult-risk/design#d1
 					realRisk: preview.realRiskUsdt,
+					realRiskStatus: preview.realRiskStatus,
 				}}
 			/>
 
