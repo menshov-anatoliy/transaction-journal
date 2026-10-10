@@ -196,6 +196,23 @@ describe("таблица конструкций", () => {
 		);
 	});
 
+	it("двойной клик по строке запрашивает открытие карточки в новом окне", async () => {
+		// Двойной клик по строке — команда навигации в карточку в новом
+		// окне, отдельная от выделения одиночным кликом.
+		// Traceability: openspec:ui/screens#scenario-list-double-click-opens-new-window
+		// Arrange: шпион на window.open и обработчики таблицы.
+		const user = userEvent.setup();
+		const onSelect = vi.fn();
+		const onOpenInNewWindow = vi.fn();
+		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={onSelect} onOpenInNewWindow={onOpenInNewWindow} />);
+
+		// Act: двойной клик по строке.
+		await user.dblClick(screen.getByRole("row", { name: /ETH-240628/ }));
+
+		// Assert: идентификатор конструкции ушёл в обработчик нового окна.
+		expect(onOpenInNewWindow).toHaveBeenCalledWith(7);
+	});
+
 	it("пустой список показывает явное сообщение", () => {
 		// Act: таблица без строк.
 		render(<ConstructionsTable rows={[]} selectedId={null} onSelect={() => {}} />);

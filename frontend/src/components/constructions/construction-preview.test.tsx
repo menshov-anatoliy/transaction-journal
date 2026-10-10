@@ -1,14 +1,15 @@
-﻿import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ConstructionPreview } from "@/lib/api/constructions";
 import { ConstructionPreviewCard } from "./construction-preview";
 
-// Проверяется превью выделенной конструкции правой области по концепции §3:
-// read-only сводка метрик, полный индикатор финрезультата, период, счётчики
-// позиций/сделок/корректировок, кнопки «Открыть карточку» и «В новом окне».
-// Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
+// Проверяется краткая карточка конструкции в контекстной панели списка:
+// read-only сводка метрик с цветом по знаку, средний индикатор
+// финрезультата с приглушёнными плановыми границами, строка периода и
+// единственное действие «Открыть карточку» (открытие в новом окне —
+// команда двойного клика по строке списка).
+// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
 
 const preview: ConstructionPreview = {
 	constructionId: 7,
@@ -35,126 +36,131 @@ const preview: ConstructionPreview = {
 	counts: { positions: 2, openPositions: 1, trades: 3, adjustments: 1 },
 };
 
-function renderPreview(overrides: Partial<ConstructionPreview> = {}) {
+function renderPreview(overrides: Partial<ConstructionPreview> = {}, liveHintCount?: number) {
 	return render(
 		<MemoryRouter>
-			<ConstructionPreviewCard preview={{ ...preview, ...overrides }} />
+			<ConstructionPreviewCard preview={{ ...preview, ...overrides }} liveHintCount={liveHintCount} />
 		</MemoryRouter>,
 	);
 }
 
-describe("превью конструкции", () => {
-	it("показывает сводку метрик, период и счётчики записей", () => {
-		// Act: превью открытой конструкции.
+describe("краткая карточка конструкции", () => {
+	it("показывает имя со статусной пилюлей и сводку четырёх метрик", () => {
+		// Act: карточка открытой конструкции.
 		renderPreview();
 
-		// Assert: имя и метрики итога и производных величин видны.
-		expect(screen.getByRole("heading", { name: "ETH-240628-3200C+P" })).toBeInTheDocument();
-		// Итог в сводке: метрика содержит итог одним текстом.
-		const totalMetric = Array.from(document.querySelectorAll('[data-slot="metric-value"]')).find(
-			(el) => el.textContent === "+105.5",
-		);
-		expect(totalMetric).toBeDefined();
-		// Маркер индикатора подписан итогом realized + unrealized
-		// (+100.5; корректировки 5 входят только в сводку totalPnL 105.5).
-		const markerLabel = document.querySelector('[data-part="marker-label"]');
-		expect(markerLabel).not.toBeNull();
-		expect(markerLabel?.textContent).toContain("+100.5");
-		expect(screen.getByText("+60.25")).toBeInTheDocument();
-		// Нереализованная часть видна в сводке.
-		expect(screen.getByText("+40.25")).toBeInTheDocument();
-		expect(screen.getByText("+5")).toBeInTheDocument();
-		expect(screen.getByText("3000")).toBeInTheDocument();
-		expect(screen.getByText("+500")).toBeInTheDocument();
-		expect(screen.getByText("+16.7%")).toBeInTheDocument();
-		// Период конструкции.
-		expect(screen.getByText("2026-06-18")).toBeInTheDocument();
-		// Счётчики записей превью.
-		expect(screen.getByText("позиции: 2 (1 открыто)")).toBeInTheDocument();
-		expect(screen.getByText("сделки: 3")).toBeInTheDocument();
-		expect(screen.getByText("корректировки: 1")).toBeInTheDocument();
-	});
-
-	it("рендерит полный индикатор финрезультата с плановыми границами", () => {
-		// Act: превью открытой конструкции.
-		renderPreview();
-
-		// Assert: полный индикатор присутствует в превью.
-		expect(document.querySelector('[data-slot="fin-result-full"]')).not.toBeNull();
-	});
-
-	it("показывает отметку времени котировок", () => {
-		// Act: превью с оценёнными марками.
-		renderPreview();
-
-		// Assert: отметка «котировки на» с локальным временем.
-		expect(screen.getByText(/котировки на/i)).toBeInTheDocument();
-		expect(screen.getByText("2026-06-20 14:30")).toBeInTheDocument();
-	});
-
-	it("деградирует при сбое котировок неполным итогом", () => {
-		// Act: превью со сбоем марок.
-		renderPreview({ unrealizedPnL: null, totalPnL: null, hasMarkFailure: true, marksAsOf: null });
-
-		// Assert: признак сбоя котировок вместо величин и отметки времени.
-		expect(screen.getAllByText("неполный (сбой котировок)").length).toBeGreaterThan(0);
-		expect(screen.queryByText(/котировки на/i)).not.toBeInTheDocument();
-	});
-
-	it("ведёт «Открыть карточку» на маршрут карточки конструкции", () => {
-		// Act: превью открытой конструкции.
-		renderPreview();
-
-		// Assert: ссылка указывает на маршрут карточки.
-		expect(screen.getByRole("link", { name: /открыть карточку/i })).toHaveAttribute("href", "/constructions/7");
-	});
-
-	it("рендерит сводку метрик примитивом Metric по мастеру превью N6abN", () => {
-		// Act: превью открытой конструкции.
-		renderPreview();
-
-		// Assert: восемь показателей — примитивы Метрика, dl-грида больше нет
-		// (мастер «Карточка конструкции/Превью», секция Metrics ноды N6abN).
+		// Assert: шапка карточки — имя конструкции; метрики — примитив
+		// Метрика (мастер «Карточка конструкции/Превью», N6abN).
 		// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+		expect(screen.getByRole("heading", { name: "ETH-240628-3200C+P" })).toBeInTheDocument();
 		const metrics = document.querySelectorAll('[data-slot="metric"]');
-		expect(metrics).toHaveLength(8);
-		expect(document.querySelector("dl")).toBeNull();
-
-		// Значения — базовая типографика примитива: 15/600 textPrimary
-		// (инстансы превью не переопределяют размер и цвет значения).
-		// Из двух вхождений итога берём вхождение сводки — внутри metric-value.
-		const total = screen
-			.getAllByText("+105.5")
-			.map((element) => element.closest('[data-slot="metric-value"]'))
-			.find(Boolean);
-		expect(total?.className).toContain("text-[15px]");
-		expect(total?.className).toContain("font-semibold");
-		expect(total?.className).toContain("text-text-primary");
-
-		// Сетка показателей — две колонки с зазорами мастера: 12 по горизонтали,
-		// 10 по вертикали (MRow1/MRow2, секция Metrics ноды N6abN).
-		const grid = metrics[0]?.parentElement;
-		expect(grid?.className).toContain("grid-cols-2");
-		expect(grid?.className).toContain("gap-x-3");
-		expect(grid?.className).toContain("gap-y-2.5");
-
-		// Подписи — Caption мастера: 11/normal textMuted с трекингом 0.3.
-		const caption = metrics[0]?.querySelector("span");
-		expect(caption?.className).toContain("text-[11px]");
-		expect(caption?.className).toContain("text-text-muted");
+		expect(metrics).toHaveLength(4);
+		expect(screen.getByText("капитал")).toBeInTheDocument();
+		expect(screen.getByText("стоимость")).toBeInTheDocument();
+		expect(screen.getByText("реализов.")).toBeInTheDocument();
+		expect(screen.getByText("нереализов.")).toBeInTheDocument();
 	});
 
-	it("открывает «В новом окне» монтаж SPA карточки", async () => {
-		// Arrange: перехват открытия окна.
-		const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
-		const user = userEvent.setup();
+	it("красит величины по знаку: плюс — зелёным, минус — красным", () => {
+		// Цветовая индикация чисел краткой карточки по знаку величины:
+		// реализованная и нереализованная части окрашиваются зелёным
+		// или красным, капитал и стоимость остаются нейтральными.
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		// Act: карточка с прибылью.
+		const { unmount } = renderPreview();
+
+		// Assert: положительные величины — зелёные, нейтральные — без тона.
+		// Тон несёт вложенный span значения внутри примитива Метрика.
+		const grid = document.querySelector('[data-slot="metric"]')?.parentElement;
+		expect(grid?.className).toContain("grid-cols-2");
+		const realizedValue = grid?.querySelectorAll('[data-slot="metric"]')[2]?.querySelector('[data-slot="metric-value"]');
+		expect(realizedValue?.textContent).toBe("+60.25");
+		const realized = realizedValue?.querySelector("span");
+		expect(realized?.className).toContain("text-[color:var(--fin-positive-strong)]");
+		const capital = grid?.querySelectorAll('[data-slot="metric"]')[0]?.querySelector('[data-slot="metric-value"] span');
+		expect(capital?.className).not.toContain("text-[color:var(--fin-negative)]");
+		unmount();
+
+		// Act: карточка с убытком по обеим частям.
+		renderPreview({ realizedPnL: -12.5, unrealizedPnL: -3.5 });
+
+		// Assert: отрицательные величины — красные.
+		const lossGrid = document.querySelector('[data-slot="metric"]')?.parentElement;
+		const realizedLoss = lossGrid?.querySelectorAll('[data-slot="metric"]')[2]?.querySelector('[data-slot="metric-value"] span');
+		expect(realizedLoss?.className).toContain("text-[color:var(--fin-negative)]");
+		const unrealizedLoss = lossGrid?.querySelectorAll('[data-slot="metric"]')[3]?.querySelector('[data-slot="metric-value"] span');
+		expect(unrealizedLoss?.className).toContain("text-[color:var(--fin-negative)]");
+	});
+
+	it("показывает средний индикатор финрезультата вместо полного", () => {
+		// Краткая карточка — средний вид индикатора (мастер rMxFZ) с
+		// приглушёнными плановыми границами; полный вид остаётся в
+		// карточке конструкции.
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		// Act: карточка открытой конструкции.
 		renderPreview();
 
-		// Act: кнопка «В новом окне».
-		await user.click(screen.getByRole("button", { name: /в новом окне/i }));
+		// Assert: средний индикатор присутствует, полного нет.
+		expect(document.querySelector('[data-slot="fin-result-medium"]')).not.toBeNull();
+		expect(document.querySelector('[data-slot="fin-result-full"]')).toBeNull();
+		// Приглушённые плановые границы: подписи риска и профита на
+		// textMuted, цветными остаются граница реального риска и маркер.
+		const riskScale = document.querySelector('[data-part="risk-scale"]');
+		expect(riskScale?.className).toContain("text-text-muted");
+		expect(riskScale?.className).not.toContain("fin-negative");
+		const profitScale = document.querySelector('[data-part="profit-scale"]');
+		expect(profitScale?.className).toContain("text-text-muted");
+	});
 
-		// Assert: открыта карточка в монтаже /spa нового окна.
-		expect(openSpy).toHaveBeenCalledWith("/spa/constructions/7", "_blank");
-		openSpy.mockRestore();
+	it("показывает период, счётчики записей и живые подсказки", () => {
+		// Строка периода карточки: открытие, длительность, счётчики сделок
+		// и корректировок; сегмент живых подсказок приходит из строки
+		// обзора и опционален.
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		// Act: закрытая конструкция с известным концом периода и двумя живыми подсказками.
+		renderPreview({ closedAt: "2026-06-20T09:05:00" }, 2);
+
+		// Assert: открытие, длительность 2 дня, счётчики и сегмент подсказок.
+		expect(screen.getByText("2026-06-18")).toBeInTheDocument();
+		expect(screen.getByText(/2 дн\./)).toBeInTheDocument();
+		expect(screen.getByText(/3 сделки/)).toBeInTheDocument();
+		expect(screen.getByText(/1 корректировка/)).toBeInTheDocument();
+		expect(screen.getByText(/живых подсказок: 2/)).toBeInTheDocument();
+	});
+
+	it("скрывает сегмент живых подсказок без значения или при нуле", () => {
+		// Сегмент живых подсказок опционален: без числа из строки обзора
+		// или при нуле строка периода не показывает сегмент.
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		// Act: карточка без живых подсказок.
+		renderPreview();
+
+		// Assert: сегмента подсказок нет.
+		expect(screen.queryByText(/живых подсказок/)).not.toBeInTheDocument();
+	});
+
+	it("деградирует нереализованную оценку признаком сбоя котировок", () => {
+		// Сбой марок — видимое состояние карточки: вместо нереализованной
+		// оценки показывается признак сбоя с пояснением.
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		// Act: карточка со сбоем марок.
+		renderPreview({ unrealizedPnL: null, hasMarkFailure: true });
+
+		// Assert: признак сбоя занимает место нереализованной величины.
+		expect(screen.getByText("сбой котировок")).toBeInTheDocument();
+	});
+
+	it("содержит единственное действие «Открыть карточку»", () => {
+		// Краткая карточка не несёт команд работы с журналом: единственное
+		// действие — переход на маршрут карточки конструкции; открытие в
+		// новом окне удалено (покрыто двойным кликом по строке списка).
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		// Traceability: change:rework-spa-shell-and-screens/design#D4
+		// Act: карточка открытой конструкции.
+		renderPreview();
+
+		// Assert: одна ссылка на карточку, кнопок в новом окне нет.
+		expect(screen.getByRole("link", { name: /открыть карточку/i })).toHaveAttribute("href", "/constructions/7");
+		expect(screen.queryByText(/в новом окне/i)).not.toBeInTheDocument();
 	});
 });

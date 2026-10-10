@@ -31,6 +31,8 @@ export interface ConstructionsTableProps {
 	readonly selectedId: number | null;
 	/** Обработчик выделения строки кликом. */
 	readonly onSelect: (constructionId: number) => void;
+	/** Обработчик двойного клика: карточка конструкции в новом окне. */
+	readonly onOpenInNewWindow?: (constructionId: number) => void;
 }
 
 /** Сбой котировок строки: нереализованная часть не оценена именно из-за сбоя. */
@@ -69,7 +71,7 @@ function DegradedValue<T>({ value, format }: { value: T | null; format: (value: 
 	);
 }
 
-export function ConstructionsTable({ rows, selectedId, onSelect }: ConstructionsTableProps) {
+export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWindow }: ConstructionsTableProps) {
 	const isMobile = useIsMobile();
 	const [sorting, setSorting] = React.useState<SortingState>([]);
 
@@ -358,6 +360,10 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 							aria-selected={row.original.constructionId === selectedId}
 							className={cn("cursor-pointer", row.original.constructionId === selectedId && "bg-accent")}
 							onClick={() => onSelect(row.original.constructionId)}
+							// Двойной клик — навигация в карточку в новом окне,
+							// отдельная от выделения строк команде.
+							// Traceability: openspec:ui/screens#scenario-list-double-click-opens-new-window
+							onDoubleClick={() => onOpenInNewWindow?.(row.original.constructionId)}
 						>
 							{row.getVisibleCells().map((cell) => (
 								<TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>

@@ -192,6 +192,29 @@ describe("средний индикатор", () => {
 		expect(screen.getByText("риск есть")).toBeInTheDocument();
 		expect(screen.getByText("−70")).toBeInTheDocument();
 	});
+
+	it("подписывает плановые границы приглушённо, в отличие от полного вида", () => {
+		// Средний вид краткой карточки (мастер rMxFZ): плановые границы
+		// риска и профита подписаны приглушённым тоном — цветными
+		// остаются только граница реального риска и маркер итога.
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		// Act: один и тот же кейс в среднем и полном виде.
+		const { container: medium, unmount: unmountMedium } = render(<MediumFinResultIndicator input={CASE_C3} />);
+
+		// Assert: в среднем виде подписи плановых границ на textMuted.
+		const mediumRisk = medium.querySelector('[data-part="risk-scale"]');
+		expect(mediumRisk?.className).toContain("text-text-muted");
+		expect(mediumRisk?.className).not.toContain("fin-negative");
+		const mediumProfit = medium.querySelector('[data-part="profit-scale"]');
+		expect(mediumProfit?.className).toContain("text-text-muted");
+		unmountMedium();
+
+		const { container: full } = render(<FullFinResultIndicator input={CASE_C3} />);
+
+		// Assert: в полном виде те же подписи цветные (мастер onchD).
+		expect(full.querySelector('[data-part="risk-scale"]')?.className).toContain("text-[color:var(--fin-negative)]");
+		expect(full.querySelector('[data-part="profit-scale"]')?.className).toContain("text-[color:var(--fin-positive-strong)]");
+	});
 });
 
 describe("состояние риска в представлениях", () => {

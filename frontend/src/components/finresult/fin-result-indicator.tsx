@@ -60,6 +60,10 @@ interface SizePreset {
 	readonly scaleLabelClass: string;
 	/** Класс подписей границы и маркера. */
 	readonly markerLabelClass: string;
+	/** Класс тона подписи планового риска на шкале. */
+	readonly riskScaleToneClass: string;
+	/** Класс тона подписи планового профита на шкале. */
+	readonly profitScaleToneClass: string;
 }
 
 const FULL_PRESET: SizePreset = {
@@ -75,6 +79,11 @@ const FULL_PRESET: SizePreset = {
 	nominalWidthPx: 480,
 	scaleLabelClass: "text-[11.5px]",
 	markerLabelClass: "text-[10.5px]",
+	// Полный вид (мастер onchD): плановые границы подписаны цветами
+	// риска/профита.
+	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
+	riskScaleToneClass: "text-[color:var(--fin-negative)]",
+	profitScaleToneClass: "font-medium text-[color:var(--fin-positive-strong)]",
 };
 
 const MEDIUM_PRESET: SizePreset = {
@@ -90,6 +99,11 @@ const MEDIUM_PRESET: SizePreset = {
 	nominalWidthPx: 360,
 	scaleLabelClass: "text-[10.5px]",
 	markerLabelClass: "text-[9.5px]",
+	// Средний вид (мастер rMxFZ): плановые границы подписаны приглушённо —
+	// цветными остаются только граница реального риска и маркер итога.
+	// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+	riskScaleToneClass: "text-text-muted",
+	profitScaleToneClass: "font-medium text-text-muted",
 };
 
 const COMPACT_PRESET: SizePreset = {
@@ -105,6 +119,9 @@ const COMPACT_PRESET: SizePreset = {
 	nominalWidthPx: 132,
 	scaleLabelClass: "",
 	markerLabelClass: "",
+	// Компактному виду подписи не положены — тона шкалы не применяются.
+	riskScaleToneClass: "",
+	profitScaleToneClass: "",
 };
 
 /** Полный индикатор для карточки конструкции и превью. */
@@ -324,7 +341,10 @@ function collectLabelItems(
 		x: 0,
 		placement: placements.risk,
 		content: geometry.labels.risk,
-		className: cn(preset.scaleLabelClass, "text-[color:var(--fin-negative)]"),
+		// Тон плановой границы зависит от представления: полный — красный,
+		// средний — приглушённый (мастера onchD и rMxFZ).
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		className: cn(preset.scaleLabelClass, preset.riskScaleToneClass),
 	});
 	add({
 		part: "zero-scale",
@@ -342,7 +362,7 @@ function collectLabelItems(
 		x: geometry.profitZone === null ? geometry.zeroAt : geometry.profitZone.to,
 		placement: placements.profit,
 		content: geometry.labels.profit,
-		className: cn(preset.scaleLabelClass, "font-medium text-[color:var(--fin-positive-strong)]"),
+		className: cn(preset.scaleLabelClass, preset.profitScaleToneClass),
 	});
 	add({
 		part: "border-label",

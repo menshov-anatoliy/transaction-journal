@@ -1,47 +1,57 @@
 import { Link } from "react-router";
-import { ExternalLink } from "lucide-react";
 import type { ConstructionPreview } from "@/lib/api/constructions";
 import { Metric } from "@/components/design";
-import { FullFinResultIndicator } from "@/components/finresult/fin-result-indicator";
+import { ConstructionStatusChip } from "@/components/constructions/construction-status-chip";
+import { MediumFinResultIndicator } from "@/components/finresult/fin-result-indicator";
 import { Button } from "@/components/ui/button";
 import { DASH } from "@/lib/format/degradation";
-import { formatDay, formatMoment } from "@/lib/format/display-time";
-import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
-import { SPA_BASE_PATH } from "@/router";
+import { formatDay } from "@/lib/format/display-time";
+import { pluralForm } from "@/lib/format/plural";
+import { formatAmount, formatSignedAmount } from "@/lib/format/quantity";
+import { cn } from "@/lib/utils";
 
-// Превью выделенной конструкции правой области раздела по концепции §3:
-// read-only сводка метрик, полный индикатор финрезультата, период, счётчики
-// позиций/сделок/корректировок и кнопки «Открыть карточку» / «В новом окне».
-// Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
+// Краткая карточка конструкции в контекстной правой панели раздела по
+// мастеру «Карточка конструкции/Превью» (N6abN): шапка с именем и
+// статусной пилюлей, средний индикатор финрезультата (rMxFZ) с
+// приглушёнными плановыми границами, метрики с цветовой индикацией по
+// знаку, строка периода и единственное действие «Открыть карточку».
+// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+// Traceability: change:rework-spa-shell-and-screens/design#D4
 
-/** Пропсы превью конструкции. */
+/** Пропсы краткой карточки конструкции. */
 export interface ConstructionPreviewCardProps {
 	/** Read-only снимок выделенной конструкции из API. */
 	readonly preview: ConstructionPreview;
+	/** Число живых подсказок из строки обзора; без значения сегмент скрывается. */
+	readonly liveHintCount?: number;
 }
 
-export function ConstructionPreviewCard({ preview }: ConstructionPreviewCardProps) {
+export function ConstructionPreviewCard({ preview, liveHintCount }: ConstructionPreviewCardProps) {
 	const constructionPath = `/constructions/${preview.constructionId}`;
 
+	// Длительность периода в календарных днях: закрытая конструкция — до
+	// даты закрытия, открытая — до текущего дня.
+	const periodDays =
+		preview.openedAt === null
+			? null
+			: Math.max(0, Math.floor((Date.parse(preview.closedAt ?? new Date().toISOString()) - Date.parse(preview.openedAt)) / 86_400_000));
+
 	return (
-		<section data-slot="construction-preview" className="flex flex-col gap-4">
-			<header className="flex flex-col gap-1">
-				<h2 className="text-base leading-tight font-semibold">{preview.name}</h2>
-				{/* Котировки оценки: отметка времени или признак сбоя провайдера. */}
-				<p className="text-muted-foreground text-xs">
-					{preview.hasMarkFailure ? (
-						"неполный (сбой котировок)"
-					) : (
-						<>
-							котировки на <span>{preview.marksAsOf === null ? DASH : formatMoment(preview.marksAsOf)}</span>
-						</>
-					)}
-				</p>
+		<section data-slot="construction-preview" className="flex flex-col gap-3">
+			{/* Шапка карточки: имя Inter 14/600 на textPrimary и статусная
+			    пилюля справа (фрейм Header мастера N6abN). */}
+			<header className="flex items-center justify-between gap-2">
+				<h2 className="text-sm leading-tight font-semibold">{preview.name}</h2>
+				{/* Статус — тот же примитив пилюли, что в таблице и карточке.
+				    Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+				<ConstructionStatusChip status={preview.status} />
 			</header>
 
-			{/* Полный индикатор финрезультата: плановые границы риска/профита
-			    и текущий результат выделенной конструкции. */}
-			<FullFinResultIndicator
+			{/* Средний индикатор финрезультата: плановые границы риска/профита
+			    подписаны приглушённо (мастер rMxFZ), граница реального риска —
+			    красным, маркер итога — по знаку.
+			    Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card */}
+			<MediumFinResultIndicator
 				input={{
 					plannedRisk: preview.riskUsdt,
 					plannedProfit: preview.profitUsdt,
@@ -62,87 +72,72 @@ export function ConstructionPreviewCard({ preview }: ConstructionPreviewCardProp
 				}}
 			/>
 
-			{/* Сводка показателей — примитив Метрика (нода jtDmV) по мастеру
-			    «Карточка конструкции/Превью» (N6abN, секция Metrics): две колонки
-			    с зазорами 12/10, значения — базовая типографика примитива
-			    15/600 textPrimary; состав показателей остаётся доменным. */}
+			{/* Метрики краткой карточки — две строки примитива Метрика
+			    (MRow1/MRow2 мастера N6abN): капитал и стоимость нейтральные,
+			    реализованная и нереализованная части — цветом по знаку. */}
 			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
-			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
 			<div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
-				<Metric label="итог">
-					<SignedValue value={preview.totalPnL} degraded={preview.hasMarkFailure} format={formatSignedAmount} />
-				</Metric>
-				<Metric label="реализов.">
-					<span className="tabular-nums">{formatSignedAmount(preview.realizedPnL)}</span>
-				</Metric>
-				<Metric label="нереализов.">
-					<NullableValue value={preview.unrealizedPnL} format={formatSignedAmount} />
-				</Metric>
-				<Metric label="коррект.">
-					<span className="tabular-nums">{formatSignedAmount(preview.adjustmentsPnL)}</span>
-				</Metric>
 				<Metric label="капитал">
 					<NullableValue value={preview.allocatedCapitalUsdt} format={formatAmount} />
-				</Metric>
-				<Metric label="% капитала">
-					<NullableValue value={preview.totalPnLPercent} format={formatSignedPercent} />
 				</Metric>
 				<Metric label="стоимость">
 					<NullableValue value={preview.markValue} format={formatSignedAmount} />
 				</Metric>
-				<Metric label="занято %">
-					<NullableValue value={preview.capitalUsagePercent} format={formatSignedPercent} />
+				<Metric label="реализов.">
+					<SignedToneValue value={preview.realizedPnL} format={formatSignedAmount} />
+				</Metric>
+				<Metric label="нереализов.">
+					{preview.unrealizedPnL === null ? (
+						// Сбой марок — видимое состояние карточки: признак сбоя
+						// занимает место нереализованной оценки.
+						<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
+							сбой котировок
+						</span>
+					) : (
+						<SignedToneValue value={preview.unrealizedPnL} format={formatSignedAmount} />
+					)}
 				</Metric>
 			</div>
 
-			{/* Период конструкции: открытие и закрытие календарными днями. */}
-			<p className="text-muted-foreground text-xs">
-				открыта <span>{preview.openedAt === null ? DASH : formatDay(preview.openedAt)}</span> · закрыта{" "}
-				<span>{preview.closedAt === null ? DASH : formatDay(preview.closedAt)}</span>
+			{/* Строка периода: открытие, длительность и счётчики записей —
+			    Inter 11 на textMuted (фрейм Period мастера N6abN). */}
+			<p className="text-text-muted text-[11px] leading-[normal]">
+				открыта <span>{preview.openedAt === null ? DASH : formatDay(preview.openedAt)}</span>
+				{periodDays !== null ? ` · ${periodDays} дн.` : ""}
+				{` · ${preview.counts.trades} ${pluralForm(preview.counts.trades, { one: "сделка", few: "сделки", many: "сделок" })}`}
+				{` · ${preview.counts.adjustments} ${pluralForm(preview.counts.adjustments, {
+					one: "корректировка",
+					few: "корректировки",
+					many: "корректировок",
+				})}`}
+				{liveHintCount !== undefined && liveHintCount > 0 ? ` · живых подсказок: ${liveHintCount}` : ""}
 			</p>
 
-			{/* Счётчики записей конструкции: позиции с открытыми, сделки и корректировки. */}
-			<ul className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
-				<li>позиции: {preview.counts.positions} ({preview.counts.openPositions} открыто)</li>
-				<li>сделки: {preview.counts.trades}</li>
-				<li>корректировки: {preview.counts.adjustments}</li>
-			</ul>
-
-			<div className="flex gap-2">
+			{/* Единственное действие карточки — переход на маршрут карточки
+			    конструкции; открытие в новом окне покрывает двойной клик
+			    по строке списка.
+			    Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card */}
+			<div>
 				<Button asChild size="sm">
 					<Link to={constructionPath}>Открыть карточку</Link>
-				</Button>
-				<Button variant="outline" size="sm" onClick={() => window.open(`${SPA_BASE_PATH}${constructionPath}`, "_blank")}>
-					<ExternalLink aria-hidden />
-					В новом окне
 				</Button>
 			</div>
 		</section>
 	);
 }
 
-/** Недоступная величина — прочерк; сбой котировок у итога — «неполный». */
-function SignedValue({
-	value,
-	degraded,
-	format,
-}: {
-	value: number | null;
-	degraded: boolean;
-	format: (value: number) => string;
-}) {
-	if (value === null) {
-		return (
-			<span
-				className="text-text-muted"
-				title={degraded ? "Итог неполный: нереализованная часть не оценена из-за сбоя котировок" : undefined}
-			>
-				{degraded ? "неполный (сбой котировок)" : DASH}
-			</span>
-		);
-	}
-
-	return <span className="tabular-nums">{format(value)}</span>;
+/** Величина с цветом по знаку: плюс — зелёная, минус — красная, ноль — нейтральная. */
+function SignedToneValue({ value, format }: { value: number; format: (value: number) => string }) {
+	return (
+		<span
+			className={cn(
+				"tabular-nums",
+				value > 0 ? "text-[color:var(--fin-positive-strong)]" : value < 0 ? "text-[color:var(--fin-negative)]" : undefined,
+			)}
+		>
+			{format(value)}
+		</span>
+	);
 }
 
 /** Величина без специальной семантики сбоя: null — прочерк. */
