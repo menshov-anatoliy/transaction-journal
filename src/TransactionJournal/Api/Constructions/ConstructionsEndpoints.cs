@@ -64,6 +64,9 @@ public static class ConstructionsEndpoints
 				data.HasMarkFailure,
 				data.ConstructionCount,
 				data.OpenCount);
+			// Строки таблицы публикуют и реальный риск: расчёт остаётся в аналитике,
+			// эндпоинт переносит величину в JSON-контракт как есть.
+			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 			var rows = data.Items
 				.Select(item => new ConstructionRowResponse(
 					item.ConstructionId,
@@ -81,6 +84,7 @@ public static class ConstructionsEndpoints
 					item.TotalPnLPercent,
 					item.MarkValue,
 					item.CapitalUsagePercent,
+					item.RealRiskUsdt,
 					item.OpenedAt,
 					item.ClosedAt,
 					liveCounts.GetValueOrDefault(item.ConstructionId)))
@@ -112,6 +116,9 @@ public static class ConstructionsEndpoints
 					statusCode: StatusCodes.Status404NotFound);
 			}
 
+			// Превью публикует и реальный риск конструкции: индикатору нужна
+			// граница реального риска, величина проходит из метрик аналитики.
+			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 			return Results.Json(new ConstructionPreviewResponse(
 				data.ConstructionId,
 				data.Name,
@@ -128,6 +135,7 @@ public static class ConstructionsEndpoints
 				data.Metrics.TotalPnLPercent,
 				data.Metrics.MarkValue,
 				data.Metrics.CapitalUsagePercent,
+				data.Metrics.RealRiskUsdt,
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
 				data.MarksAsOf,
@@ -192,9 +200,13 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
 /// <param name="MarkValue">Стоимость открытых позиций по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неразобранном символе.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="LiveHintCount">Число живых подсказок конструкции для бейджа строки.</param>
+// Реальный риск входит в контракт строки списка: SPA рисует границу
+// реального риска индикатора прямо в таблице.
+// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 public sealed record ConstructionRowResponse(
 	long ConstructionId,
 	string Name,
@@ -211,6 +223,7 @@ public sealed record ConstructionRowResponse(
 	decimal? TotalPnLPercent,
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
+	decimal? RealRiskUsdt,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	int LiveHintCount);
@@ -235,11 +248,15 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
 /// <param name="MarkValue">Стоимость открытых позиций по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неразобранном символе.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое или без остатков.</param>
 /// <param name="HasMarkFailure">Признак сбоя провайдера котировок.</param>
 /// <param name="Counts">Счётчики записей конструкции для превью.</param>
+// Реальный риск входит в контракт превью: правая область строит полный
+// индикатор финрезультата с границей реального риска.
+// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 public sealed record ConstructionPreviewResponse(
 	long ConstructionId,
 	string Name,
@@ -256,6 +273,7 @@ public sealed record ConstructionPreviewResponse(
 	decimal? TotalPnLPercent,
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
+	decimal? RealRiskUsdt,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	DateTimeOffset? MarksAsOf,

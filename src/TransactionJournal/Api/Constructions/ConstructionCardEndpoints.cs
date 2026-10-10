@@ -576,6 +576,9 @@ public static class ConstructionCardEndpoints
 		data.HasOpenResidual,
 		data.HasMarkFailure,
 		data.MarksAsOf,
+		// Метрики карточки публикуют и реальный риск: индикатору карточки нужна
+		// граница реального риска, величина проходит из метрик аналитики.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 		new ConstructionCardMetricsResponse(
 			data.Metrics.RealizedPnL,
 			data.Metrics.UnrealizedPnL,
@@ -587,6 +590,7 @@ public static class ConstructionCardEndpoints
 			data.Metrics.AdjustmentsPnLPercent,
 			data.Metrics.MarkValue,
 			data.Metrics.CapitalUsagePercent,
+			data.Metrics.RealRiskUsdt,
 			data.Metrics.OpenedAt,
 			data.Metrics.ClosedAt,
 			data.Metrics.Duration is { } duration ? (long?)Math.Round(duration.TotalSeconds) : null),
@@ -757,9 +761,13 @@ public sealed record ConstructionCardResponse(
 /// <param name="AdjustmentsPnLPercent">Корректировки в процентах; null без базы.</param>
 /// <param name="MarkValue">Стоимость открытых остатков по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неразобранном символе.</param>
 /// <param name="OpenedAt">Дата открытия — время первой сделки; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой.</param>
 /// <param name="DurationSeconds">Длительность конструкции в секундах; null без сделок.</param>
+// Реальный риск входит в контракт метрик карточки: полный индикатор карточки
+// строится с границей реального риска.
+// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 public sealed record ConstructionCardMetricsResponse(
 	decimal RealizedPnL,
 	decimal? UnrealizedPnL,
@@ -771,6 +779,7 @@ public sealed record ConstructionCardMetricsResponse(
 	decimal? AdjustmentsPnLPercent,
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
+	decimal? RealRiskUsdt,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	long? DurationSeconds);

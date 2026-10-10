@@ -24,6 +24,7 @@ namespace TransactionJournal.Application;
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой конструкции.</param>
 /// <param name="MarkValue">Стоимость открытых позиций конструкции по маркам; null при закрытой конструкции или недоступной оценке марок.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала — стоимость в процентах от капитала; null без базы процентов или стоимости.</param>
+/// <param name="RealRiskUsdt">Реальный риск конструкции в USDT — наихудший результат открытых остатков на экспирации; null, когда худший случай неограничен или символ остатка не разобран.</param>
 // Капитал передаётся незаданным как есть: прочерк вместо значения — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
 // Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
@@ -34,6 +35,9 @@ namespace TransactionJournal.Application;
 // правила оценки и деградации при сбое марок остаются в аналитике.
 // Traceability: openspec:ui/screens#scenario-list-value-and-capital-usage-columns
 // Traceability: openspec:analytics/performance#requirement-mark-value-of-position-and-construction
+// Реальный риск публикуется в контракте строки списка: величина переносится
+// из метрик аналитики как есть, правила расчёта и null остаются в аналитике.
+// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 public sealed record ConstructionListItem(
 	long ConstructionId,
 	string Name,
@@ -51,7 +55,8 @@ public sealed record ConstructionListItem(
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	decimal? MarkValue = null,
-	decimal? CapitalUsagePercent = null);
+	decimal? CapitalUsagePercent = null,
+	decimal? RealRiskUsdt = null);
 
 /// <summary>
 /// Данные экрана «Конструкции»: сводка журнала — итог с разбивкой на

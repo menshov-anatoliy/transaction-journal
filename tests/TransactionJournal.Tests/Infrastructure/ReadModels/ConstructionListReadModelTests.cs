@@ -245,6 +245,33 @@ public class ConstructionListReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Строка списка несёт реальный риск из метрик аналитики с правилами null")]
+	public async Task TryIfRowCarriesRealRiskFromMetrics()
+	{
+		// Arrange: аналитика вернула реальный риск 150 для открытой конструкции
+		// и отсутствие величины для закрытой — модель списка переносит значения
+		// как есть: расчёт и правила null (неограниченный случай, неразобранный
+		// символ) остаются в аналитике.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		await SeedAsync(
+			Header("Календарь сентябрь", ConstructionStatus.Open, 3000m),
+			Header("Контртренд ETH", ConstructionStatus.Closed, 2000m));
+		SetupMetrics(null,
+			MetricsOf(1, 20m, 30m) with { RealRiskUsdt = 150m },
+			MetricsOf(2, 0m, 0m) with { RealRiskUsdt = null });
+
+		// Act: читаем данные экрана.
+		var data = await _readModel.ReadAsync();
+
+		// Assert: строка с величиной несёт реальный риск, строка без величины —
+		// null, а не ноль.
+		var withRisk = data.Items.Single(item => item.ConstructionId == 1);
+		Assert.That(withRisk.RealRiskUsdt, Is.EqualTo(150m));
+		var withoutRisk = data.Items.Single(item => item.ConstructionId == 2);
+		Assert.That(withoutRisk.RealRiskUsdt, Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Сводка переносит разбивку PnL журнала из метрик аналитики без пересчёта")]
 	public async Task TryIfSummaryCarriesPnlBreakdownFromMetrics()
 	{

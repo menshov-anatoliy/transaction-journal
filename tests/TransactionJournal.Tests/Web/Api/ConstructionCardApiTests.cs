@@ -76,6 +76,10 @@ public sealed class ConstructionCardApiTests
 		Assert.That(metrics["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(5m));
 		Assert.That(metrics["markValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(metrics["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
+		// Метрики карточки публикуют реальный риск для индикатора карточки:
+		// величина проходит из метрик аналитики без пересчёта.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		Assert.That(metrics["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
 		Assert.That(metrics["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(metrics["closedAt"], Is.Null);
 		Assert.That(metrics["durationSeconds"]!.GetValue<double>(), Is.EqualTo(53.4 * 3600).Within(0.1));
@@ -998,6 +1002,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			AdjustmentsPnLPercent = 0.17m,
 			TotalPnLPercent = 3.5m,
 			CapitalUsagePercent = 16.7m,
+			RealRiskUsdt = 150m,
 			OpenedAt = openedAt,
 			ClosedAt = null,
 			Duration = TimeSpan.FromHours(53.4),

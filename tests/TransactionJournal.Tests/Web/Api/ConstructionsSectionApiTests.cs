@@ -74,6 +74,7 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(row["totalPnLPercent"]!.GetValue<decimal>(), Is.EqualTo(3.35m));
 		Assert.That(row["markValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(row["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
+		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
 		Assert.That(row["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(row["closedAt"], Is.Null);
 	}
@@ -103,6 +104,10 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(row["totalPnL"], Is.Null);
 		Assert.That(row["markValue"], Is.Null);
 		Assert.That(row["capitalUsagePercent"], Is.Null);
+		// Реальный риск от марок не зависит: при сбое котировок он остаётся
+		// доступным, пока нереализованные величины гаснут в null.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
+		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
 		// Реализованная часть и корректировки при сбое марок остаются видимыми.
 		Assert.That(row["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(60.25m));
 		Assert.That(row["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(0m));
@@ -164,6 +169,7 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(payload["totalPnLPercent"]!.GetValue<decimal>(), Is.EqualTo(3.5m));
 		Assert.That(payload["markValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(payload["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
+		Assert.That(payload["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
 		Assert.That(payload["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(payload["closedAt"], Is.Null);
 		Assert.That(payload["marksAsOf"]!.GetValue<string>(), Is.EqualTo("2026-06-20T14:30:00+00:00"));
@@ -642,7 +648,8 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
 					MarkValue: 500m,
-					CapitalUsagePercent: 16.7m),
+					CapitalUsagePercent: 16.7m,
+					RealRiskUsdt: 150m),
 				new ConstructionListItem(
 					ConstructionId: ClosedConstructionId,
 					Name: "BTC-240531-60000C",
@@ -660,7 +667,8 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					OpenedAt: new DateTimeOffset(2026, 5, 20, 10, 0, 0, TimeSpan.Zero),
 					ClosedAt: new DateTimeOffset(2026, 5, 31, 12, 0, 0, TimeSpan.Zero),
 					MarkValue: null,
-					CapitalUsagePercent: null),
+					CapitalUsagePercent: null,
+					RealRiskUsdt: null),
 			]);
 	}
 
@@ -692,7 +700,8 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
 					MarkValue: null,
-					CapitalUsagePercent: null),
+					CapitalUsagePercent: null,
+					RealRiskUsdt: 150m),
 			]));
 
 	public Task<ConstructionListData> ReadAsync(CancellationToken cancellationToken = default) => Task.FromResult(_data);
@@ -724,6 +733,7 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			AdjustmentsPnLPercent = 0.17m,
 			TotalPnLPercent = 3.5m,
 			CapitalUsagePercent = 16.7m,
+			RealRiskUsdt = 150m,
 			OpenedAt = openedAt,
 			ClosedAt = null,
 			Duration = TimeSpan.FromHours(53.4),

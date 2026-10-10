@@ -69,6 +69,10 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 			var risk = ConstructionTargetConverter.Convert(header.RiskValue, header.RiskUnit, header.AllocatedCapitalUsdt);
 			var profit = ConstructionTargetConverter.Convert(header.ProfitValue, header.ProfitUnit, header.AllocatedCapitalUsdt);
 
+			// Реальный риск проходит из метрик аналитики без пересчёта: расчёт из
+			// структуры ног и правила null (неограниченный случай, неразобранный
+			// символ) остаются в аналитике, список переносит величину как есть.
+			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 			items.Add(new ConstructionListItem(
 				header.Id,
 				header.Name,
@@ -88,7 +92,8 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				item.OpenedAt,
 				item.ClosedAt,
 				item.MarkValue,
-				item.CapitalUsagePercent));
+				item.CapitalUsagePercent,
+				item.RealRiskUsdt));
 		}
 
 		// Счётчик сводки описывает видимые конструкции: сколько в списке и сколько
