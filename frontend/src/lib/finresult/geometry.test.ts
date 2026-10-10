@@ -113,9 +113,8 @@ describe("кейс C2 · результат в зоне риска, прибыл
 		expectMatchesLayout(geometry.markerAt ?? 0, 45);
 		expect(geometry.markerClipped).toBe(false);
 
-		// Assert: заливка основным тоном от итога до нуля, нереализованной нет.
+		// Assert: единая заливка итога — от итога до нуля.
 		expect(geometry.fillMain).toEqual({ from: 50 / 1200, to: 0.25 });
-		expect(geometry.fillUnreal).toBeNull();
 	});
 
 	it("подписи: риск есть 300 USDT · 100%, маркер «−250»", () => {
@@ -147,8 +146,7 @@ describe("кейс C3 · нереализованная 180 меньше рис�
 		expect(geometry.markerAt).toBeCloseTo(230 / 1200, 4);
 		expectMatchesLayout(geometry.markerAt ?? 0, 178.7);
 
-		// Assert: бледная заливка нереализованной части — от realized до итога.
-		expect(geometry.fillUnreal).toEqual({ from: 50 / 1200, to: 230 / 1200 });
+		// Assert: заливка итога — единый диапазон от нуля до итога −70.
 		expect(geometry.fillMain).toEqual({ from: 230 / 1200, to: 0.25 });
 	});
 
@@ -181,8 +179,7 @@ describe("кейс C4 · суммарный результат выше план
 		expectMatchesLayout(geometry.markerAt ?? 0, 339.3);
 		expect(geometry.tone).toBe("positive");
 
-		// Assert: бледная заливка от realized −250 до итога +135.
-		expect(geometry.fillUnreal).toEqual({ from: 50 / 1200, to: 435 / 1200 });
+		// Assert: заливка итога — единый зелёный диапазон от нуля до +135.
 		expect(geometry.fillMain).toEqual({ from: 0.25, to: 435 / 1200 });
 	});
 
@@ -243,6 +240,10 @@ describe("кейс C6 · сверхприбыль: итог превысил п�
 		expect(geometry.scaleMax).toBe(1400);
 		expect(geometry.riskZone?.to).toBeCloseTo(300 / 1700, 4);
 		expect(geometry.profitZone?.to).toBeCloseTo(1200 / 1700, 4);
+
+		// Assert: зелёный участок — до профита, золото за ним от профита до
+		// итога: слои не перекрываются.
+		expect(geometry.fillMain).toEqual({ from: 300 / 1700, to: 1200 / 1700 });
 		expect(geometry.superZone).toEqual({ from: 1200 / 1700, to: 1 });
 
 		// Assert: граница −150, маркер на краю шкалы, клипа нет.
@@ -262,27 +263,32 @@ describe("кейс C6 · сверхприбыль: итог превысил п�
 	});
 });
 
-describe("кейс C7 · граница в золотой зоне: реального риска нет", () => {
+describe("кейс C7 · граница реального риска правее плана: сверхприбыли нет", () => {
 	// Реализованная 950 за +900 при нулевом реальном риске, итог +850
-	// (нереализованная −100): золотая зона тянется до границы (+950) —
-	// граница стоит на правом краю шкалы, маркер внутри шкалы.
+	// (нереализованная −100): граница правее планового профита не создаёт
+	// золотую зону и не растягивает шкалу — насечка клипуется по правому
+	// краю +900, истинное значение остаётся в подписи границы.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финансового-результата-конструкции
 	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-border
 
-	it("золотая зона до границы +950 на краю, маркер +850 внутри", () => {
+	it("золотой зоны нет, шкала остаётся на +900, граница прижата к краю", () => {
 		// Act.
 		const geometry = computeFinResultGeometry(CASES.c7);
 
-		// Assert: шкала растянута до границы, золото — от профита до края.
-		expect(geometry.scaleMax).toBe(950);
-		expect(geometry.riskZone?.to).toBeCloseTo(300 / 1250, 4);
-		expect(geometry.profitZone?.to).toBeCloseTo(1200 / 1250, 4);
-		expect(geometry.superZone).toEqual({ from: 1200 / 1250, to: 1 });
+		// Assert: шкала не расширена, золотой зоны нет — граница не тянет
+		// сверхприбыль, правый край шкалы остаётся на +900.
+		expect(geometry.scaleMax).toBe(900);
+		expect(geometry.profitZone?.to).toBeCloseTo(1, 4);
+		expect(geometry.superZone).toBeNull();
 
-		// Assert: граница realized − 0 = +950 на краю золота, маркер — итог.
+		// Assert: насечка +950 за краем шкалы прижата к правому краю,
+		// маркер — итог +850 внутри шкалы.
 		expect(geometry.borderAt).toBe(1);
-		expect(geometry.markerAt).toBeCloseTo(1150 / 1250, 4);
+		expect(geometry.markerAt).toBeCloseTo(1150 / 1200, 4);
 		expect(geometry.markerClipped).toBe(false);
+
+		// Assert: зелёная заливка итога — от нуля до маркера.
+		expect(geometry.fillMain).toEqual({ from: 0.25, to: 1150 / 1200 });
 	});
 
 	it("подписи: риска нет 0 USDT · 0%, маркер «+850»", () => {
@@ -321,6 +327,27 @@ describe("сверка кейсов с компактным индикаторо
 	});
 });
 
+describe("единая заливка отрицательного итога", () => {
+	// Отрицательный итог рисуется одним красным тоном от нуля до маркера
+	// поверх фона плановой зоны риска, без разложения на реализованную и
+	// нереализованную части — у заливки итога нет отдельных оттенков.
+	// Traceability: openspec:ui/screens#scenario-finresult-negative-total-single-fill
+	it("итог −135 — единая заливка от −135 до нуля", () => {
+		// Act: реализованный −100, нереализованный −35, итог −135.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: -100, unrealized: -35 }),
+		);
+
+		// Assert: заливка — один диапазон от итога до нуля шкалы.
+		expect(geometry.tone).toBe("negative");
+		expect(geometry.fillMain).toEqual({ from: 165 / 1200, to: 0.25 });
+
+		// Assert: нереализованная часть не выделяется отдельной заливкой —
+		// конец заливки совпадает с маркером итога.
+		expect(geometry.markerAt).toBeCloseTo(165 / 1200, 4);
+	});
+});
+
 describe("граница реального риска", () => {
 	// Граница = реализованный результат − реальный риск: где конструкция
 	// окажется при худшем исходе открытых остатков с учётом закрытых сделок.
@@ -333,7 +360,6 @@ describe("граница реального риска", () => {
 		// Assert: граница на +50, маркер на итоге +200.
 		expect(geometry.borderAt).toBeCloseTo(350 / 1200, 4);
 		expect(geometry.markerAt).toBeCloseTo(500 / 1200, 4);
-		expect(geometry.fillUnreal).toBeNull();
 
 		// Assert: подпись границы — величина реального риска в USDT и процентах.
 		expect(geometry.labels.borderTitle).toBe("риск есть");
@@ -530,7 +556,6 @@ describe("состояния индикатора из §9 концепта", ()
 		// (−550) прижата к левому краю — маркер и граница не совпадают.
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.borderAt).toBe(0);
-		expect(geometry.fillUnreal).toBeNull();
 		expect(geometry.fillMain).toEqual({ from: 50 / 1200, to: 0.25 });
 		expect(geometry.labels.marker).toBe("−250");
 	});
@@ -552,7 +577,6 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.incomplete).toBe(true);
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.borderAt).toBe(0);
-		expect(geometry.fillUnreal).toBeNull();
 		// Граница со своей подписью остаётся: риск виден и без котировок.
 		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
 		// Ноль остаётся нулём, а отсутствие данных не превращается в ноль.
@@ -590,7 +614,8 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.incomplete).toBe(false);
 		expect(geometry.borderAt).toBe(1);
 		expect(geometry.markerAt).toBe(1);
-		expect(geometry.fillUnreal).toBeNull();
+		// Заливка итога — зелёный участок до профита, золото — за профитом.
+		expect(geometry.fillMain).toEqual({ from: 300 / 1245, to: 1200 / 1245 });
 		expect(geometry.superZone).toEqual({ from: 1200 / 1245, to: 1 });
 		expect(geometry.labels.borderTitle).toBe("риска нет");
 		expect(geometry.labels.borderValue).toBe("0 USDT · 0%");

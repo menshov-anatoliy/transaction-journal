@@ -4,11 +4,11 @@
 // (полный, средний и компактный индикаторы) строится поверх этих долей и
 // не считает ничего сам — одна геометрия на все представления.
 // Шкала: зона риска от −Риск до 0, зона планового профита от 0 до +Профит;
-// при выходе маркера итога или границы за +Профит справа добавляется
-// золотая зона до самого правого из вошедших. Граница — «реализованный
-// результат минус реальный риск», маркер — позиция итога (реализованный +
-// нереализованный); между границей и итогом — бледная заливка
-// нереализованной части.
+// при выходе маркера итога за +Профит справа добавляется золотая зона до
+// итога, граница реального риска в расчёте шкалы не участвует и клипуется
+// её краем. Граница — «реализованный результат минус реальный риск»,
+// маркер — позиция итога (реализованный + нереализованный); итог рисуется
+// одной заливкой без разложения на реализованную и нереализованную части.
 // Traceability: openspec:ui/screens#requirement-risk-profit-hint
 
 /** Вход калькулятора: изначальные показатели конструкции и текущий результат. */
@@ -104,10 +104,8 @@ export interface FinResultGeometry {
 	readonly markerAt: number | null;
 	/** Маркер клипован по краю шкалы: итог за её пределами. */
 	readonly markerClipped: boolean;
-	/** Заливка основным тоном — от нуля до итога. */
+	/** Единая заливка итога — от нуля до итога либо до планового профита. */
 	readonly fillMain: FinResultSpan | null;
-	/** Бледная заливка нереализованной части — от границы до итога. */
-	readonly fillUnreal: FinResultSpan | null;
 	/** Тон маркера и подписей: положительный итог — зелёный, иначе красный. */
 	readonly tone: "positive" | "negative";
 	/** Готовые подписи индикатора. */
@@ -175,7 +173,7 @@ export function computeFinResultGeometry(
 
 	// Шкала: базовые зоны из плановых показателей, при сверхприбыли —
 	// золотая надбавка справа.
-	const scale = resolveScale(input.plannedRisk, input.plannedProfit, borderValue, total);
+	const scale = resolveScale(input.plannedRisk, input.plannedProfit, total);
 	const toFraction = (value: number): number =>
 		clamp01((value - scale.min) / (scale.max - scale.min));
 
@@ -183,9 +181,14 @@ export function computeFinResultGeometry(
 	const riskZone = input.plannedRisk !== null ? { from: 0, to: zeroAt } : null;
 	const profitZone =
 		input.plannedProfit !== null ? spanOf(zeroAt, toFraction(input.plannedProfit)) : null;
+	// Золотая зона сверхприбыли возникает только когда итог превысил
+	// плановый профит, и занимает непересекающийся с зелёной заливкой
+	// участок от профита до итога; граница реального риска зону не создаёт.
+	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-marker
+	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-border
 	const superZone =
-		input.plannedProfit !== null && scale.max > input.plannedProfit
-			? spanOf(toFraction(input.plannedProfit), 1)
+		input.plannedProfit !== null && total !== null && total > input.plannedProfit
+			? spanOf(toFraction(input.plannedProfit), toFraction(total))
 			: null;
 
 	// Клип слева: насечка прижимается к краю шкалы, истинное число остаётся
@@ -195,11 +198,21 @@ export function computeFinResultGeometry(
 	const markerAt = total === null ? null : toFraction(total);
 	const markerClipped = total !== null && (total > scale.max || total < scale.min);
 
-	const fillMain = total === null ? null : spanOf(zeroAt, toFraction(total));
-	const fillUnreal =
-		unrealized === null || realized === null || total === null || unrealized === 0
+	// Единая заливка итога: неположительный итог — один красный тон от нуля
+	// до маркера, без разложения на реализованную и нереализованную части;
+	// положительный итог — зелёный участок до планового профита, а золотой
+	// участок за ним рисует superZone, слои не перекрываются.
+	// Traceability: openspec:ui/screens#scenario-finresult-negative-total-single-fill
+	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-marker
+	const fillMain =
+		total === null
 			? null
-			: spanOf(toFraction(realized), toFraction(total));
+			: spanOf(
+					zeroAt,
+					toFraction(
+						input.plannedProfit === null ? total : Math.min(total, input.plannedProfit),
+					),
+				);
 
 	const borderLabels = resolveBorderLabels(realized, input.plannedRisk, realRiskEff);
 	const markerLabel = resolveMarkerLabel(realized, unrealized, total, input.quotesDegraded);
@@ -254,7 +267,6 @@ export function computeFinResultGeometry(
 		markerAt,
 		markerClipped,
 		fillMain,
-		fillUnreal,
 		tone: total !== null && total > 0 ? "positive" : "negative",
 		labels,
 		placements,
@@ -292,7 +304,6 @@ function buildNeutralGeometry(
 		markerAt: null,
 		markerClipped: false,
 		fillMain,
-		fillUnreal: null,
 		tone: total !== null && total > 0 ? "positive" : "negative",
 		labels: {
 			risk: null,
@@ -310,16 +321,16 @@ function buildNeutralGeometry(
 }
 
 // Границы шкалы: базовая часть −Риск…+Профит (незаданная сторона
-// симметрична заданной). При выходе маркера итога или границы за +Профит
-// золотая надбавка тянется до самого правого из вошедших — без капа длины
-// и без правила «половины превышения».
+// симметрична заданной). Правая граница расширяется только до итога,
+// когда тот превышает плановый профит; граница реального риска описывает
+// худший будущий исход открытых остатков, а не полученную прибыль, и в
+// расчёте шкалы не участвует — надбавка без капа длины.
 // Traceability: openspec:ui/screens#scenario-finresult-super-zone-marker
 // Traceability: openspec:ui/screens#scenario-finresult-super-zone-border
 // Traceability: openspec:ui/screens#scenario-finresult-single-bound
 function resolveScale(
 	plannedRisk: number | null,
 	plannedProfit: number | null,
-	borderValue: number | null,
 	total: number | null,
 ): { min: number; max: number } {
 	const risk = plannedRisk ?? plannedProfit ?? 0;
@@ -327,11 +338,8 @@ function resolveScale(
 	const min = -Math.abs(risk);
 
 	let max = profit;
-	if (plannedProfit !== null) {
-		const entered = Math.max(total ?? -Infinity, borderValue ?? -Infinity);
-		if (entered > plannedProfit) {
-			max = entered;
-		}
+	if (plannedProfit !== null && total !== null && total > plannedProfit) {
+		max = total;
 	}
 
 	return { min, max };
