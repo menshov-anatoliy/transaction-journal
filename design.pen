@@ -2340,39 +2340,6 @@
                   "fontFamily": "$font",
                   "fontSize": 13.5,
                   "fontWeight": "normal"
-                },
-                {
-                  "type": "frame",
-                  "id": "DAIeA",
-                  "name": "Действия",
-                  "width": "fill_container",
-                  "justifyContent": "end",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "K7kSy",
-                      "name": "Send/Stop",
-                      "width": 36,
-                      "height": 36,
-                      "fill": "$accent",
-                      "cornerRadius": 10,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "icon",
-                          "id": "VgNyA",
-                          "name": "SendIcon",
-                          "width": 16,
-                          "height": 16,
-                          "icon": "arrow-up",
-                          "library": "lucide",
-                          "fill": "#FFFFFF"
-                        }
-                      ]
-                    }
-                  ]
                 }
               ]
             },
@@ -2531,6 +2498,29 @@
                   "name": "Spacer",
                   "width": "fill_container",
                   "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "K7kSy",
+                  "name": "Send/Stop",
+                  "width": 36,
+                  "height": 36,
+                  "fill": "$accent",
+                  "cornerRadius": 10,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "VgNyA",
+                      "name": "SendIcon",
+                      "width": 16,
+                      "height": 16,
+                      "icon": "arrow-up",
+                      "library": "lucide",
+                      "fill": "#FFFFFF"
+                    }
+                  ]
                 }
               ]
             }
