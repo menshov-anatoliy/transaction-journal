@@ -2546,7 +2546,7 @@
       "y": 2600,
       "name": "Экран/Конструкции",
       "clip": true,
-      "width": 1600,
+      "width": 1760,
       "height": 1024,
       "fill": "$bg",
       "layout": "vertical",
@@ -2611,11 +2611,105 @@
                           "fontWeight": "600"
                         },
                         {
+                          "type": "text",
+                          "id": "NwnY4",
+                          "name": "Counters",
+                          "fill": "$textSecondary",
+                          "content": "конструкций 8 · открыто 5 · архив 2",
+                          "fontFamily": "$font",
+                          "fontSize": 12.5,
+                          "fontWeight": "normal"
+                        },
+                        {
                           "type": "frame",
                           "id": "wqKVr",
                           "name": "Spacer",
                           "width": "fill_container",
                           "height": 1
+                        },
+                        {
+                          "type": "frame",
+                          "id": "b5KyT",
+                          "name": "ScopeFilter",
+                          "fill": "$surface",
+                          "cornerRadius": 9,
+                          "stroke": "$border",
+                          "gap": 4,
+                          "padding": 3,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "CwZ4H",
+                              "name": "St:Открытые",
+                              "fill": "$accentSoft",
+                              "cornerRadius": 7,
+                              "padding": [
+                                6,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Ydo4p",
+                                  "name": "T",
+                                  "fill": "$accentStrong",
+                                  "content": "Открытые",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "D1Lvx",
+                              "name": "St:Все",
+                              "cornerRadius": 7,
+                              "padding": [
+                                6,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "B4zd8C",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "Все",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Y9mB6",
+                          "name": "HintsPassBtn",
+                          "fill": "$surface",
+                          "cornerRadius": 8,
+                          "stroke": "$border",
+                          "padding": [
+                            7,
+                            8
+                          ],
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "WLef4",
+                              "name": "Icon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "lightbulb",
+                              "library": "lucide",
+                              "fill": "$textPrimary"
+                            }
+                          ]
                         },
                         {
                           "id": "R840hE",
@@ -2674,16 +2768,6 @@
                           "fontWeight": "normal"
                         }
                       ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "NwnY4",
-                      "name": "Counters",
-                      "fill": "$textSecondary",
-                      "content": "конструкций 8 · открыто 5 · архив 2",
-                      "fontFamily": "$font",
-                      "fontSize": 12.5,
-                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -2728,10 +2812,7 @@
                               "id": "N6Yl2",
                               "name": "HC:Имя",
                               "width": "fill_container",
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2749,11 +2830,8 @@
                               "type": "frame",
                               "id": "rMuEt",
                               "name": "HC:✦",
-                              "width": 44,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "width": 36,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2771,11 +2849,8 @@
                               "type": "frame",
                               "id": "qHccX",
                               "name": "HC:Статус",
-                              "width": 80,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "width": 68,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2793,11 +2868,8 @@
                               "type": "frame",
                               "id": "v0DJY",
                               "name": "HC:Капитал",
-                              "width": 76,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "width": 64,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2813,13 +2885,29 @@
                             },
                             {
                               "type": "frame",
+                              "id": "ZWmay",
+                              "name": "HC:Стоимость",
+                              "width": 72,
+                              "padding": 8,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "j7L4i",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "Стоимость",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "DFzMI",
                               "name": "HC:Реализов.",
-                              "width": 84,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "width": 76,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2837,11 +2925,8 @@
                               "type": "frame",
                               "id": "tNFZL",
                               "name": "HC:Нереализов.",
-                              "width": 88,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "width": 84,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2859,11 +2944,8 @@
                               "type": "frame",
                               "id": "I5hZsJ",
                               "name": "HC:Коррект.",
-                              "width": 66,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "width": 60,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2881,11 +2963,8 @@
                               "type": "frame",
                               "id": "A6qer",
                               "name": "HC:Итог",
-                              "width": 88,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "width": 144,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2901,20 +2980,17 @@
                             },
                             {
                               "type": "frame",
-                              "id": "yqqnB",
-                              "name": "HC:Индикатор",
-                              "width": 142,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "id": "RAlRg",
+                              "name": "HC:%Капитала",
+                              "width": 76,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "RARFU",
+                                  "id": "V8e98",
                                   "name": "T",
                                   "fill": "$textSecondary",
-                                  "content": "Индикатор",
+                                  "content": "% капитала",
                                   "fontFamily": "$font",
                                   "fontSize": 11,
                                   "fontWeight": "600"
@@ -2925,11 +3001,8 @@
                               "type": "frame",
                               "id": "CrqRs",
                               "name": "HC:Занято %",
-                              "width": 66,
-                              "padding": [
-                                8,
-                                10
-                              ],
+                              "width": 62,
+                              "padding": 8,
                               "children": [
                                 {
                                   "type": "text",
@@ -2937,6 +3010,44 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "Занято %",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "M93yJo",
+                              "name": "HC:Открыта",
+                              "width": 56,
+                              "padding": 8,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "lDJ7F",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "Открыта",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "B0oKE",
+                              "name": "HC:Закрыта",
+                              "width": 56,
+                              "padding": 8,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "phNey",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "Закрыта",
                                   "fontFamily": "$font",
                                   "fontSize": 11,
                                   "fontWeight": "600"
@@ -2962,7 +3073,7 @@
                               "width": "fill_container",
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -2984,10 +3095,10 @@
                               "type": "frame",
                               "id": "TcQbQ",
                               "name": "C:✦",
-                              "width": 44,
+                              "width": 36,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3006,10 +3117,10 @@
                               "type": "frame",
                               "id": "YZIFp",
                               "name": "C:Статус",
-                              "width": 80,
+                              "width": 68,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3034,10 +3145,10 @@
                               "type": "frame",
                               "id": "u1kPU",
                               "name": "C:Капитал",
-                              "width": 76,
+                              "width": 64,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3054,12 +3165,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "K83aT",
-                              "name": "C:Реализов",
-                              "width": 84,
+                              "id": "ZgmlP",
+                              "name": "C:Стоимость",
+                              "width": 72,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "oTQmk",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+6 145,30",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "K83aT",
+                              "name": "C:Реализов",
+                              "width": 76,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -3078,10 +3211,10 @@
                               "type": "frame",
                               "id": "a6AVy",
                               "name": "C:Нереализов",
-                              "width": 88,
+                              "width": 84,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3100,10 +3233,10 @@
                               "type": "frame",
                               "id": "qOQDg",
                               "name": "C:Коррект",
-                              "width": 66,
+                              "width": 60,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3122,11 +3255,10 @@
                               "type": "frame",
                               "id": "EIZnd",
                               "name": "C:Итог",
-                              "width": 88,
-                              "padding": [
-                                9,
-                                10
-                              ],
+                              "width": 144,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 6,
                               "children": [
                                 {
                                   "type": "text",
@@ -3137,19 +3269,7 @@
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "AFtCU",
-                              "name": "C:Индикатор",
-                              "width": 142,
-                              "padding": [
-                                6,
-                                10
-                              ],
-                              "children": [
+                                },
                                 {
                                   "id": "awPnc",
                                   "type": "ref",
@@ -3160,12 +3280,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "w6nmD",
-                              "name": "C:Занято",
-                              "width": 66,
+                              "id": "VgVka",
+                              "name": "C:%Капитала",
+                              "width": 76,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "tg5Je",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+6,4%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "w6nmD",
+                              "name": "C:Занято",
+                              "width": 62,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -3174,6 +3316,50 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "78%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "p4wOHq",
+                              "name": "C:Открыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "uSopQ",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "12 авг",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "hqtsd",
+                              "name": "C:Закрыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "LTwvX",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "—",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -3199,7 +3385,7 @@
                               "width": "fill_container",
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3218,10 +3404,10 @@
                               "type": "frame",
                               "id": "gE4Bf",
                               "name": "C:✦",
-                              "width": 44,
+                              "width": 36,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3240,10 +3426,10 @@
                               "type": "frame",
                               "id": "yZgh1",
                               "name": "C:Статус",
-                              "width": 80,
+                              "width": 68,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3268,10 +3454,10 @@
                               "type": "frame",
                               "id": "V1UD4",
                               "name": "C:Капитал",
-                              "width": 76,
+                              "width": 64,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3288,12 +3474,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "ItjDO",
-                              "name": "C:Реализов",
-                              "width": 84,
+                              "id": "JqLCO",
+                              "name": "C:Стоимость",
+                              "width": 72,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "x0l6fL",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+4 589,40",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ItjDO",
+                              "name": "C:Реализов",
+                              "width": 76,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -3312,10 +3520,10 @@
                               "type": "frame",
                               "id": "Xo1WI",
                               "name": "C:Нереализов",
-                              "width": 88,
+                              "width": 84,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3334,10 +3542,10 @@
                               "type": "frame",
                               "id": "pUvPa",
                               "name": "C:Коррект",
-                              "width": 66,
+                              "width": 60,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3356,11 +3564,10 @@
                               "type": "frame",
                               "id": "yHc6w",
                               "name": "C:Итог",
-                              "width": 88,
-                              "padding": [
-                                9,
-                                10
-                              ],
+                              "width": 144,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 6,
                               "children": [
                                 {
                                   "type": "text",
@@ -3371,19 +3578,7 @@
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "lXvUk",
-                              "name": "C:Индикатор",
-                              "width": 142,
-                              "padding": [
-                                6,
-                                10
-                              ],
-                              "children": [
+                                },
                                 {
                                   "id": "hOiNn",
                                   "type": "ref",
@@ -3416,12 +3611,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "WbAZX",
-                              "name": "C:Занято",
-                              "width": 66,
+                              "id": "c5WwHP",
+                              "name": "C:%Капитала",
+                              "width": 76,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "zphM7",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "−0,7%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "WbAZX",
+                              "name": "C:Занято",
+                              "width": 62,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -3430,6 +3647,50 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "31%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "jml6o",
+                              "name": "C:Открыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "dJkhq",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "03 сен",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "lBe7o",
+                              "name": "C:Закрыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "z14yk",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "—",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -3455,7 +3716,7 @@
                               "width": "fill_container",
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3474,10 +3735,10 @@
                               "type": "frame",
                               "id": "xtvHP",
                               "name": "C:✦",
-                              "width": 44,
+                              "width": 36,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3496,10 +3757,10 @@
                               "type": "frame",
                               "id": "i9eb3",
                               "name": "C:Статус",
-                              "width": 80,
+                              "width": 68,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3524,10 +3785,10 @@
                               "type": "frame",
                               "id": "vdxdu",
                               "name": "C:Капитал",
-                              "width": 76,
+                              "width": 64,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3544,12 +3805,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "kVHYh",
-                              "name": "C:Реализов",
-                              "width": 84,
+                              "id": "XhNGV",
+                              "name": "C:Стоимость",
+                              "width": 72,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "K6Aou",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+7 958,80",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "kVHYh",
+                              "name": "C:Реализов",
+                              "width": 76,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -3568,10 +3851,10 @@
                               "type": "frame",
                               "id": "W6xkI",
                               "name": "C:Нереализов",
-                              "width": 88,
+                              "width": 84,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3590,10 +3873,10 @@
                               "type": "frame",
                               "id": "knXI1",
                               "name": "C:Коррект",
-                              "width": 66,
+                              "width": 60,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3612,11 +3895,10 @@
                               "type": "frame",
                               "id": "A8yLGT",
                               "name": "C:Итог",
-                              "width": 88,
-                              "padding": [
-                                9,
-                                10
-                              ],
+                              "width": 144,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 6,
                               "children": [
                                 {
                                   "type": "text",
@@ -3627,19 +3909,7 @@
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "rQUPI",
-                              "name": "C:Индикатор",
-                              "width": 142,
-                              "padding": [
-                                6,
-                                10
-                              ],
-                              "children": [
+                                },
                                 {
                                   "id": "c4c5f",
                                   "type": "ref",
@@ -3667,12 +3937,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "v6ppO4",
-                              "name": "C:Занято",
-                              "width": 66,
+                              "id": "aYYVJ",
+                              "name": "C:%Капитала",
+                              "width": 76,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ghk8n",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+0,7%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "v6ppO4",
+                              "name": "C:Занято",
+                              "width": 62,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -3681,6 +3973,50 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "44%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "LX2ND",
+                              "name": "C:Открыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "TlFar",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "21 июл",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "h12maD",
+                              "name": "C:Закрыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "YUpbL",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "—",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -3706,7 +4042,7 @@
                               "width": "fill_container",
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3725,10 +4061,10 @@
                               "type": "frame",
                               "id": "V3QWdM",
                               "name": "C:✦",
-                              "width": 44,
+                              "width": 36,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3747,10 +4083,10 @@
                               "type": "frame",
                               "id": "wngkQ",
                               "name": "C:Статус",
-                              "width": 80,
+                              "width": 68,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3777,10 +4113,10 @@
                               "type": "frame",
                               "id": "qbZsn",
                               "name": "C:Капитал",
-                              "width": 76,
+                              "width": 64,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3797,12 +4133,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "Y0i7i",
-                              "name": "C:Реализов",
-                              "width": 84,
+                              "id": "yEXbl",
+                              "name": "C:Стоимость",
+                              "width": 72,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "onXdT",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+3 512,80",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Y0i7i",
+                              "name": "C:Реализов",
+                              "width": 76,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -3821,10 +4179,10 @@
                               "type": "frame",
                               "id": "hN8xV",
                               "name": "C:Нереализов",
-                              "width": 88,
+                              "width": 84,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3843,10 +4201,10 @@
                               "type": "frame",
                               "id": "W3kA1",
                               "name": "C:Коррект",
-                              "width": 66,
+                              "width": 60,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3865,11 +4223,10 @@
                               "type": "frame",
                               "id": "U0Pq4",
                               "name": "C:Итог",
-                              "width": 88,
-                              "padding": [
-                                9,
-                                10
-                              ],
+                              "width": 144,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 6,
                               "children": [
                                 {
                                   "type": "text",
@@ -3880,19 +4237,7 @@
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "flZS7",
-                              "name": "C:Индикатор",
-                              "width": 142,
-                              "padding": [
-                                6,
-                                10
-                              ],
-                              "children": [
+                                },
                                 {
                                   "id": "mYIvD",
                                   "type": "ref",
@@ -3920,12 +4265,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "UkUop",
-                              "name": "C:Занято",
-                              "width": 66,
+                              "id": "wacua",
+                              "name": "C:%Капитала",
+                              "width": 76,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "MBYrN",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+17,1%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "UkUop",
+                              "name": "C:Занято",
+                              "width": 62,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -3934,6 +4301,50 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "0%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "O1A262",
+                              "name": "C:Открыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "dYDG7",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "27 фев",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "DgkhE",
+                              "name": "C:Закрыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "LwOuc",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "27 мар",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -3959,7 +4370,7 @@
                               "width": "fill_container",
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -3978,10 +4389,10 @@
                               "type": "frame",
                               "id": "G0h6P3",
                               "name": "C:✦",
-                              "width": 44,
+                              "width": 36,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4000,10 +4411,10 @@
                               "type": "frame",
                               "id": "IIybx",
                               "name": "C:Статус",
-                              "width": 80,
+                              "width": 68,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4028,10 +4439,10 @@
                               "type": "frame",
                               "id": "gVeS7",
                               "name": "C:Капитал",
-                              "width": 76,
+                              "width": 64,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4048,12 +4459,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "JqOpd",
-                              "name": "C:Реализов",
-                              "width": 84,
+                              "id": "EAogD",
+                              "name": "C:Стоимость",
+                              "width": 72,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ABHeR",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+1 507,15",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "JqOpd",
+                              "name": "C:Реализов",
+                              "width": 76,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -4072,10 +4505,10 @@
                               "type": "frame",
                               "id": "y7Vh1v",
                               "name": "C:Нереализов",
-                              "width": 88,
+                              "width": 84,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4094,10 +4527,10 @@
                               "type": "frame",
                               "id": "g4KXnE",
                               "name": "C:Коррект",
-                              "width": 66,
+                              "width": 60,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4116,11 +4549,10 @@
                               "type": "frame",
                               "id": "qRoea",
                               "name": "C:Итог",
-                              "width": 88,
-                              "padding": [
-                                9,
-                                10
-                              ],
+                              "width": 144,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 6,
                               "children": [
                                 {
                                   "type": "text",
@@ -4131,19 +4563,7 @@
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "Awiwr",
-                              "name": "C:Индикатор",
-                              "width": 142,
-                              "padding": [
-                                6,
-                                10
-                              ],
-                              "children": [
+                                },
                                 {
                                   "id": "StqAk",
                                   "type": "ref",
@@ -4172,12 +4592,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "qIVXD",
-                              "name": "C:Занято",
-                              "width": 66,
+                              "id": "FABtH",
+                              "name": "C:%Капитала",
+                              "width": 76,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "TcXlo",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+1,7%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "qIVXD",
+                              "name": "C:Занято",
+                              "width": 62,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -4186,6 +4628,50 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "12%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "G9iiP",
+                              "name": "C:Открыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "KMYlW",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "15 сен",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "q9nnR9",
+                              "name": "C:Закрыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "E7OID",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "—",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -4208,7 +4694,7 @@
                               "width": "fill_container",
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4227,10 +4713,10 @@
                               "type": "frame",
                               "id": "ZHCrU",
                               "name": "C:✦",
-                              "width": 44,
+                              "width": 36,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4249,10 +4735,10 @@
                               "type": "frame",
                               "id": "XUFV0",
                               "name": "C:Статус",
-                              "width": 80,
+                              "width": 68,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4279,10 +4765,10 @@
                               "type": "frame",
                               "id": "SmzRo",
                               "name": "C:Капитал",
-                              "width": 76,
+                              "width": 64,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4299,12 +4785,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "f30Qmx",
-                              "name": "C:Реализов",
-                              "width": 84,
+                              "id": "hOTnr",
+                              "name": "C:Стоимость",
+                              "width": 72,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "a1mPiF",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+2 064,00",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "f30Qmx",
+                              "name": "C:Реализов",
+                              "width": 76,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -4323,10 +4831,10 @@
                               "type": "frame",
                               "id": "r1MaHd",
                               "name": "C:Нереализов",
-                              "width": 88,
+                              "width": 84,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4345,10 +4853,10 @@
                               "type": "frame",
                               "id": "w1ooo",
                               "name": "C:Коррект",
-                              "width": 66,
+                              "width": 60,
                               "padding": [
                                 9,
-                                10
+                                8
                               ],
                               "children": [
                                 {
@@ -4367,11 +4875,10 @@
                               "type": "frame",
                               "id": "ckPSA",
                               "name": "C:Итог",
-                              "width": 88,
-                              "padding": [
-                                9,
-                                10
-                              ],
+                              "width": 144,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "padding": 6,
                               "children": [
                                 {
                                   "type": "text",
@@ -4382,19 +4889,7 @@
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "RjPNl",
-                              "name": "C:Индикатор",
-                              "width": 142,
-                              "padding": [
-                                6,
-                                10
-                              ],
-                              "children": [
+                                },
                                 {
                                   "id": "EAM1q",
                                   "type": "ref",
@@ -4422,12 +4917,34 @@
                             },
                             {
                               "type": "frame",
-                              "id": "JiePv",
-                              "name": "C:Занято",
-                              "width": 66,
+                              "id": "z4anS4",
+                              "name": "C:%Капитала",
+                              "width": 76,
                               "padding": [
                                 9,
-                                10
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "X4y4MQ",
+                                  "name": "T",
+                                  "fill": "$textPrimary",
+                                  "content": "+3,2%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "JiePv",
+                              "name": "C:Занято",
+                              "width": 62,
+                              "padding": [
+                                9,
+                                8
                               ],
                               "children": [
                                 {
@@ -4441,141 +4958,61 @@
                                   "fontWeight": "normal"
                                 }
                               ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "J5VT48",
+                              "name": "C:Открыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "muQL8",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "05 июн",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "g5H0s",
+                              "name": "C:Закрыта",
+                              "width": 56,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "o9YMnI",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "02 авг",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
                             }
                           ]
                         }
                       ]
                     },
                     {
-                      "type": "frame",
-                      "id": "oLCIT",
-                      "name": "Панель подсказок журнала",
-                      "width": 352,
-                      "layout": "vertical",
-                      "gap": 12,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "KuhyZ",
-                          "name": "PanelHead",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "gCLRN",
-                              "name": "Title",
-                              "fill": "$textPrimary",
-                              "content": "Подсказки журнала",
-                              "fontFamily": "$font",
-                              "fontSize": 13.5,
-                              "fontWeight": "600"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "WksXk",
-                              "name": "Spacer",
-                              "width": "fill_container",
-                              "height": 1
-                            },
-                            {
-                              "type": "text",
-                              "id": "h7bB11",
-                              "name": "Ver",
-                              "fill": "$textMuted",
-                              "content": "v1",
-                              "fontFamily": "$font",
-                              "fontSize": 11,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "id": "p0key",
-                          "type": "ref",
-                          "ref": "gruwZ",
-                          "name": "RunBtn",
-                          "width": "fill_container",
-                          "justifyContent": "center",
-                          "padding": [
-                            8,
-                            12
-                          ],
-                          "descendants": {
-                            "OuWov": {
-                              "content": "Запустить проход подсказок",
-                              "fontSize": 12.5
-                            }
-                          }
-                        },
-                        {
-                          "id": "JMDBI",
-                          "type": "ref",
-                          "ref": "H0y2H",
-                          "name": "Hint1",
-                          "width": "fill_container",
-                          "descendants": {
-                            "dcQU6": {
-                              "content": "Лимиты риска"
-                            },
-                            "nVumb/E3YiR": {
-                              "content": "Применено"
-                            },
-                            "urdBT": {
-                              "content": "Занятость 78% капитала — выше цели 70%. Рассмотрите закрытие части позиции ETH или прикрытие путами."
-                            }
-                          }
-                        },
-                        {
-                          "id": "w7t5Th",
-                          "type": "ref",
-                          "ref": "H0y2H",
-                          "name": "Hint2",
-                          "width": "fill_container",
-                          "fill": "$surface",
-                          "descendants": {
-                            "dcQU6": {
-                              "content": "Состав конструкций"
-                            },
-                            "nVumb": {
-                              "fill": "$negSoft"
-                            },
-                            "nVumb/E3YiR": {
-                              "content": "Отклонено",
-                              "fill": "$neg"
-                            },
-                            "urdBT": {
-                              "content": "Новый инструмент XRPUSDT не входит в справочник допустимых. Определите роль инструмента или привяжите сделку вручную."
-                            }
-                          }
-                        },
-                        {
-                          "id": "xNfbx",
-                          "type": "ref",
-                          "ref": "H0y2H",
-                          "name": "Hint3",
-                          "width": "fill_container",
-                          "descendants": {
-                            "dcQU6": {
-                              "content": "Дисциплина закрытия"
-                            },
-                            "urdBT": {
-                              "content": "«Календарь BTC» достиг планового профита 15%. Правило корпуса: зафиксировать 50% объёма."
-                            }
-                          }
-                        },
-                        {
-                          "type": "text",
-                          "id": "CvzAf",
-                          "name": "History",
-                          "fill": "$textMuted",
-                          "content": "История: 24 показа · применено 18 · отклонено 6",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "id": "hbtxu",
+                      "type": "ref",
+                      "ref": "N6abN",
+                      "name": "Превью",
+                      "width": 352
                     }
                   ]
                 }
@@ -4588,7 +5025,7 @@
     {
       "type": "frame",
       "id": "QbFRE",
-      "x": 1680,
+      "x": 1840,
       "y": 2600,
       "name": "Экран/Карточка конструкции",
       "clip": true,
