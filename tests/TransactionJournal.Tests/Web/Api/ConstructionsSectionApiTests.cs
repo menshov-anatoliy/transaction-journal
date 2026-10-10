@@ -74,6 +74,16 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(row["totalPnLPercent"]!.GetValue<decimal>(), Is.EqualTo(3.35m));
 		Assert.That(row["markValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(row["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
+		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
+		// Статус соседствует с величиной: конечный риск отличим от
+		// неограниченного хвоста и неполных данных.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		Assert.That(row["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
+		// Закрытая конструкция без открытых остатков несёт нулевой конечный риск.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-zero-without-open-residuals
+		var closedRow = payload["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.ClosedConstructionId)!;
+		Assert.That(closedRow["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(0m));
+		Assert.That(closedRow["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
 		Assert.That(row["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(row["closedAt"], Is.Null);
 	}
@@ -103,6 +113,10 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(row["totalPnL"], Is.Null);
 		Assert.That(row["markValue"], Is.Null);
 		Assert.That(row["capitalUsagePercent"], Is.Null);
+		// Реальный риск от марок не зависит: при сбое котировок он остаётся
+		// доступным, пока нереализованные величины гаснут в null.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
+		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
 		// Реализованная часть и корректировки при сбое марок остаются видимыми.
 		Assert.That(row["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(60.25m));
 		Assert.That(row["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(0m));
@@ -164,6 +178,11 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(payload["totalPnLPercent"]!.GetValue<decimal>(), Is.EqualTo(3.5m));
 		Assert.That(payload["markValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(payload["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
+		Assert.That(payload["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
+		// Статус соседствует с величиной: конечный риск отличим от
+		// неограниченного хвоста и неполных данных.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		Assert.That(payload["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
 		Assert.That(payload["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(payload["closedAt"], Is.Null);
 		Assert.That(payload["marksAsOf"]!.GetValue<string>(), Is.EqualTo("2026-06-20T14:30:00+00:00"));
@@ -190,6 +209,117 @@ public sealed class ConstructionsSectionApiTests
 
 		// Assert: эндпоинт отвечает 404.
 		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+	}
+
+	[TestMethod]
+	[Description("Строки списка несут состояние реального риска: число выдаётся только конечному риску")]
+	// Инвариант контракта «число только при finite»: конечный риск идёт
+	// с числом, открытый короткий колл даёт unbounded без числа, а
+	// неполные данные открытых остатков — unavailable без числа.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task TryIfOverviewRowsPublishRealRiskStatusOnlyWithFiniteNumber()
+	{
+		// Arrange: read-модель с конечным, неограниченным и нерассчитанным риском.
+		await using var factory = new SectionApiFactory(services => services.ReplaceReadModel(StubListReadModel.WithRealRiskStatuses()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос обзора раздела.
+		var payload = await (await client.GetAsync("/api/v1/constructions")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: статус соседствует с величиной, число есть только у конечного риска.
+		var finite = payload!["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.OpenConstructionId)!;
+		Assert.That(finite["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
+		Assert.That(finite["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
+		var unbounded = payload["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.UnboundedConstructionId)!;
+		Assert.That(unbounded["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unbounded"));
+		Assert.That(unbounded["realRiskUsdt"], Is.Null);
+		var unavailable = payload["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.UnavailableConstructionId)!;
+		Assert.That(unavailable["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unavailable"));
+		Assert.That(unavailable["realRiskUsdt"], Is.Null);
+		RealRiskContractChecks.AssertNumberOnlyWhenFinite(payload["items"]!.AsArray());
+	}
+
+	[TestMethod]
+	[Description("Строка списка с конечным риском без числа не сериализуется — эндпоинт отвечает 500")]
+	// Нарушенная пара read-модели (finite + null) не просачивается в контракт:
+	// сериализатор падает, сервер отдаёт ошибку вместо ложного статуса.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task ThrowOnFiniteStatusWithoutNumberReturns500()
+	{
+		// Arrange: read-модель со сломанной парой конечного риска.
+		await using var factory = new SectionApiFactory(services => services.ReplaceReadModel(StubListReadModel.WithBrokenRealRiskPair(RealRiskStatus.Finite, null)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос обзора раздела.
+		var response = await client.GetAsync("/api/v1/constructions");
+
+		// Assert: эндпоинт отказывается публиковать нарушенную пару.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+	}
+
+	[TestMethod]
+	[Description("Строка списка с неограниченным риском и числом не сериализуется — эндпоинт отвечает 500")]
+	// Нарушенная пара read-модели (unbounded + величина) не попадает в контракт:
+	// числовой хвост за неограниченным риском искажал бы индикатор, сериализация падает.
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task ThrowOnUnboundedStatusWithNumberReturns500()
+	{
+		// Arrange: read-модель со сломанной парой неограниченного риска.
+		await using var factory = new SectionApiFactory(services => services.ReplaceReadModel(StubListReadModel.WithBrokenRealRiskPair(RealRiskStatus.Unbounded, 150m)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос обзора раздела.
+		var response = await client.GetAsync("/api/v1/constructions");
+
+		// Assert: эндпоинт отказывается публиковать нарушенную пару.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+	}
+
+	[TestMethod]
+	[Description("Превью открытого короткого колла публикует unbounded без числа")]
+	// Открытый нетто-короткий колл оставляет худший исход неограниченным:
+	// превью отдаёт статус unbounded, realRiskUsdt остаётся null.
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task TryIfPreviewPublishesUnboundedStatusForOpenShortCall()
+	{
+		// Arrange: read-модель деталей с неограниченным реальным риском.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(StubDetailReadModel.WithRealRiskStatus(RealRiskStatus.Unbounded)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос превью конструкции.
+		var payload = await (await client.GetAsync($"/api/v1/constructions/{StubListReadModel.OpenConstructionId}/preview")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: статус unbounded без числа, инвариант контракта соблюдён.
+		Assert.That(payload!["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unbounded"));
+		Assert.That(payload["realRiskUsdt"], Is.Null);
+		RealRiskContractChecks.AssertNumberOnlyWhenFinite(payload);
+	}
+
+	[TestMethod]
+	[Description("Превью при неполных данных открытых остатков публикует unavailable без числа")]
+	// Неполные исходные данные (неразобранный символ, нет средней цены):
+	// превью отдаёт статус unavailable и не выдаёт число за конечный риск.
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task TryIfPreviewPublishesUnavailableStatusForMissingData()
+	{
+		// Arrange: read-модель деталей с нерассчитанным реальным риском.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(StubDetailReadModel.WithRealRiskStatus(RealRiskStatus.Unavailable)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос превью конструкции.
+		var payload = await (await client.GetAsync($"/api/v1/constructions/{StubListReadModel.OpenConstructionId}/preview")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: статус unavailable без числа, инвариант контракта соблюдён.
+		Assert.That(payload!["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unavailable"));
+		Assert.That(payload["realRiskUsdt"], Is.Null);
+		RealRiskContractChecks.AssertNumberOnlyWhenFinite(payload);
 	}
 
 	[TestMethod]
@@ -600,6 +730,10 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 
 	public const long ClosedConstructionId = 8L;
 
+	public const long UnboundedConstructionId = 9L;
+
+	public const long UnavailableConstructionId = 10L;
+
 	private readonly ConstructionListData _data;
 
 	public StubListReadModel()
@@ -642,7 +776,9 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
 					MarkValue: 500m,
-					CapitalUsagePercent: 16.7m),
+					CapitalUsagePercent: 16.7m,
+					RealRiskUsdt: 150m,
+					RealRiskStatus: RealRiskStatus.Finite),
 				new ConstructionListItem(
 					ConstructionId: ClosedConstructionId,
 					Name: "BTC-240531-60000C",
@@ -660,8 +796,94 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					OpenedAt: new DateTimeOffset(2026, 5, 20, 10, 0, 0, TimeSpan.Zero),
 					ClosedAt: new DateTimeOffset(2026, 5, 31, 12, 0, 0, TimeSpan.Zero),
 					MarkValue: null,
-					CapitalUsagePercent: null),
+					CapitalUsagePercent: null,
+					// Закрытая конструкция без открытых остатков имеет нулевой конечный риск.
+					RealRiskUsdt: 0m,
+					RealRiskStatus: RealRiskStatus.Finite),
 			]);
+	}
+
+	/// <summary>Вариант с тремя состояниями риска: конечный, неограниченный открытый короткий колл, нерассчитанные данные.</summary>
+	public static StubListReadModel WithRealRiskStatuses() => new(new ConstructionListData(
+			TotalPnL: 60.25m,
+			RealizedPnL: 60.25m,
+			UnrealizedPnL: 0m,
+			MarksAsOf: null,
+			HasMarkFailure: false,
+			ConstructionCount: 3,
+			OpenCount: 3,
+			Items:
+			[
+				new ConstructionListItem(
+					ConstructionId: OpenConstructionId,
+					Name: "ETH-240628-3200C+P",
+					Status: ConstructionStatus.Open,
+					AllocatedCapitalUsdt: 3000m,
+					RiskPercent: 3m,
+					RiskUsdt: 90m,
+					ProfitPercent: 8m,
+					ProfitUsdt: 240m,
+					RealizedPnL: 60.25m,
+					UnrealizedPnL: 0m,
+					AdjustmentsPnL: 0m,
+					TotalPnL: 60.25m,
+					TotalPnLPercent: 2m,
+					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
+					ClosedAt: null,
+					MarkValue: 500m,
+					CapitalUsagePercent: 16.7m,
+					RealRiskUsdt: 150m,
+					RealRiskStatus: RealRiskStatus.Finite),
+				new ConstructionListItem(
+					ConstructionId: UnboundedConstructionId,
+					Name: "ETH-240628-7000C",
+					Status: ConstructionStatus.Open,
+					AllocatedCapitalUsdt: 3000m,
+					RiskPercent: 3m,
+					RiskUsdt: 90m,
+					ProfitPercent: 8m,
+					ProfitUsdt: 240m,
+					RealizedPnL: 0m,
+					UnrealizedPnL: 0m,
+					AdjustmentsPnL: 0m,
+					TotalPnL: 0m,
+					TotalPnLPercent: 0m,
+					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
+					ClosedAt: null,
+					MarkValue: 0m,
+					CapitalUsagePercent: 0m,
+					// Открытый нетто-короткий колл: число отсутствует, статус unbounded.
+					RealRiskUsdt: null,
+					RealRiskStatus: RealRiskStatus.Unbounded),
+				new ConstructionListItem(
+					ConstructionId: UnavailableConstructionId,
+					Name: "BTC-240531-UNKNOWN",
+					Status: ConstructionStatus.Open,
+					AllocatedCapitalUsdt: 3000m,
+					RiskPercent: 3m,
+					RiskUsdt: 90m,
+					ProfitPercent: 8m,
+					ProfitUsdt: 240m,
+					RealizedPnL: 0m,
+					UnrealizedPnL: 0m,
+					AdjustmentsPnL: 0m,
+					TotalPnL: 0m,
+					TotalPnLPercent: 0m,
+					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
+					ClosedAt: null,
+					MarkValue: 0m,
+					CapitalUsagePercent: 0m,
+					// Неполные данные открытых остатков: число отсутствует, статус unavailable.
+					RealRiskUsdt: null,
+					RealRiskStatus: RealRiskStatus.Unavailable),
+			]));
+
+	/// <summary>Вариант с нарушенной парой «состояние + число»: сериализация контракта обязана упасть.</summary>
+	public static StubListReadModel WithBrokenRealRiskPair(RealRiskStatus status, decimal? usdt)
+	{
+		var data = CreateDefaultData();
+		var broken = data.Items[0] with { RealRiskUsdt = usdt, RealRiskStatus = status };
+		return new StubListReadModel(data with { Items = [broken] });
 	}
 
 	/// <summary>Вариант со сбоем марок: нереализованные величины и итоги null.</summary>
@@ -692,7 +914,9 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
 					MarkValue: null,
-					CapitalUsagePercent: null),
+					CapitalUsagePercent: null,
+					RealRiskUsdt: 150m,
+					RealRiskStatus: RealRiskStatus.Finite),
 			]));
 
 	public Task<ConstructionListData> ReadAsync(CancellationToken cancellationToken = default) => Task.FromResult(_data);
@@ -701,6 +925,21 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 /// <summary>Стабильная read-модель деталей: конструкция 7 с метриками и таблицами записей.</summary>
 internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 {
+	private readonly RealRiskStatus _realRiskStatus;
+
+	public StubDetailReadModel()
+		: this(RealRiskStatus.Finite)
+	{
+	}
+
+	private StubDetailReadModel(RealRiskStatus realRiskStatus)
+	{
+		_realRiskStatus = realRiskStatus;
+	}
+
+	/// <summary>Вариант с заданным состоянием реального риска: число остаётся только у конечного риска.</summary>
+	public static StubDetailReadModel WithRealRiskStatus(RealRiskStatus realRiskStatus) => new(realRiskStatus);
+
 	public Task<ConstructionDetailData> ReadAsync(long constructionId, CancellationToken cancellationToken = default)
 	{
 		if (constructionId != StubListReadModel.OpenConstructionId)
@@ -724,6 +963,10 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			AdjustmentsPnLPercent = 0.17m,
 			TotalPnLPercent = 3.5m,
 			CapitalUsagePercent = 16.7m,
+			// Число реального риска выдаётся только конечному состоянию:
+			// unbounded и unavailable идут с null, инвариант «число только при finite».
+			RealRiskUsdt = _realRiskStatus == RealRiskStatus.Finite ? 150m : null,
+			RealRiskStatus = _realRiskStatus,
 			OpenedAt = openedAt,
 			ClosedAt = null,
 			Duration = TimeSpan.FromHours(53.4),
@@ -794,6 +1037,35 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 				new ConstructionAdjustmentRow(11, new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero), "Пополнение комиссии", PnLAdjustmentSource.Manual, 5m),
 			]);
 		return Task.FromResult(data);
+	}
+}
+
+/// <summary>Контрактные проверки связи статуса реального риска и его величины в JSON-ответах API.</summary>
+internal static class RealRiskContractChecks
+{
+	/// <summary>Инвариант «число только при finite»: realRiskUsdt есть только при статусе finite, иначе — null.</summary>
+	public static void AssertNumberOnlyWhenFinite(JsonNode? payload)
+	{
+		var status = payload!["realRiskStatus"]!.GetValue<string>();
+		var number = payload["realRiskUsdt"];
+		if (status == "finite")
+		{
+			Assert.That(number, Is.Not.Null, "У конечного риска должно быть число realRiskUsdt.");
+		}
+		else
+		{
+			Assert.That(status, Is.EqualTo("unbounded").Or.EqualTo("unavailable"), "Неизвестный статус реального риска.");
+			Assert.That(number, Is.Null, $"Статус {status} не должен сопровождаться числом realRiskUsdt.");
+		}
+	}
+
+	/// <summary>Инвариант «число только при finite» для каждой строки массива.</summary>
+	public static void AssertNumberOnlyWhenFinite(JsonArray rows)
+	{
+		foreach (var row in rows)
+		{
+			AssertNumberOnlyWhenFinite(row);
+		}
 	}
 }
 

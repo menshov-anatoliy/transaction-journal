@@ -245,6 +245,44 @@ public class ConstructionListReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Строка списка несёт реальный риск и его статус из метрик аналитики без пересчёта")]
+	public async Task TryIfRowCarriesRealRiskFromMetrics()
+	{
+		// Arrange: три конструкции — конечный нулевой риск, неограниченный и
+		// нерассчитанный — модель списка переносит величину и статус как есть:
+		// расчёт и правила null (неограниченный случай, неразобранный символ)
+		// остаются в аналитике, статус рядом с величиной не теряется.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+		// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
+		await SeedAsync(
+			Header("Календарь сентябрь", ConstructionStatus.Open, 3000m),
+			Header("Короткий колл без защиты", ConstructionStatus.Open, 2000m),
+			Header("Контртренд ETH", ConstructionStatus.Closed, 2000m));
+		SetupMetrics(null,
+			MetricsOf(1, 20m, 30m) with { RealRiskUsdt = 0m, RealRiskStatus = RealRiskStatus.Finite },
+			MetricsOf(2, 5m, 0m) with { RealRiskUsdt = null, RealRiskStatus = RealRiskStatus.Unbounded },
+			MetricsOf(3, 0m, 0m) with { RealRiskUsdt = null, RealRiskStatus = RealRiskStatus.Unavailable });
+
+		// Act: читаем данные экрана.
+		var data = await _readModel.ReadAsync();
+
+		// Assert: конечный ноль доходит до строки нулём со статусом finite —
+		// ноль не превращается в отсутствие величины; null при неограниченном
+		// и нерассчитанном риске сопровождается своим статусом, а не нулём
+		// и не угаданным конечным риском.
+		var finiteZero = data.Items.Single(item => item.ConstructionId == 1);
+		Assert.That(finiteZero.RealRiskUsdt, Is.EqualTo(0m));
+		Assert.That(finiteZero.RealRiskStatus, Is.EqualTo(RealRiskStatus.Finite));
+		var unbounded = data.Items.Single(item => item.ConstructionId == 2);
+		Assert.That(unbounded.RealRiskUsdt, Is.Null);
+		Assert.That(unbounded.RealRiskStatus, Is.EqualTo(RealRiskStatus.Unbounded));
+		var unavailable = data.Items.Single(item => item.ConstructionId == 3);
+		Assert.That(unavailable.RealRiskUsdt, Is.Null);
+		Assert.That(unavailable.RealRiskStatus, Is.EqualTo(RealRiskStatus.Unavailable));
+	}
+
+	[TestMethod]
 	[Description("Сводка переносит разбивку PnL журнала из метрик аналитики без пересчёта")]
 	public async Task TryIfSummaryCarriesPnlBreakdownFromMetrics()
 	{

@@ -354,6 +354,105 @@ public class ConstructionMetricsCalculatorTests
 	}
 
 	[TestMethod]
+	[Description("Метрики конструкции раскрывают реальный риск открытых остатков со статусом конечного риска")]
+	public void TryIfConstructionMetricsExposeRealRisk()
+	{
+		// Arrange: дебетовый спред из открытых остатков одной экспирации — длинный
+		// колл 65000 по средней 300 и короткий колл 70000 по средней 150.
+		// Требование: калькулятор метрик вычисляет реальный риск конструкции
+		// совместным минимумом платежа ног и публикует его в метриках вместе
+		// со статусом конечного риска.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-debit-spread-net-debit
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		var positions = new[]
+		{
+			OpenPosition("BTC-27DEC24-65000-C", 0, 0m, averageOpenPrice: 300m),
+			OpenPosition("BTC-27DEC24-70000-C", 0, 0m, residual: -1m, averageOpenPrice: 150m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+
+		// Assert: реальный риск равен нетто-дебету спреда и помечен конечным.
+		Assert.That(metrics.RealRiskUsdt, Is.EqualTo(150m));
+		Assert.That(metrics.RealRiskStatus, Is.EqualTo(RealRiskStatus.Finite));
+	}
+
+	[TestMethod]
+	[Description("Одинокий короткий колл переносит неограниченный статус без величины, не задевая результат")]
+	public void TryIfUnboundedShortCallCarriesStatusWithoutValue()
+	{
+		// Arrange: закрытая нога с результатом 9.97 и открытый остаток — одинокий
+		// короткий колл; суммарная позиция по коллам нетто-короткая.
+		// Требование: неограниченный хвост сопровождается null со статусом
+		// unbounded, а расчёт результата конструкции не меняется.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+		var positions = new[]
+		{
+			ClosedPosition(FirstSymbol, 0, 30, 9.97m),
+			OpenPosition("BTC-27DEC24-70000-C", 0, 0m, residual: -1m, averageOpenPrice: 150m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+
+		// Assert: величины нет, статус неограниченный, а реализованный результат
+		// и его доля от капитала остаются прежними — статус риска не трогает P&L.
+		Assert.That(metrics.RealRiskUsdt, Is.Null);
+		Assert.That(metrics.RealRiskStatus, Is.EqualTo(RealRiskStatus.Unbounded));
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(9.97m));
+		Assert.That(metrics.RealizedPnLPercent, Is.EqualTo(0.997m));
+	}
+
+	[TestMethod]
+	[Description("Неразобранный символ открытого остатка оставляет реальный риск отсутствующим со статусом нерассчитанного")]
+	public void TryIfUnparseableResidualLeavesRealRiskNull()
+	{
+		// Arrange: открытый остаток с символом, который не разбирается как символ
+		// опциона, рядом с разобранным остатком.
+		// Требование: неопределённый совместный минимум деградирует только метрику
+		// реального риска со статусом unavailable, остальные метрики не задеты.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
+		var positions = new[]
+		{
+			OpenPosition("BTCUSDT", 0, 0m, residual: 2m),
+			OpenPosition(SecondSymbol, 10, -2.5m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+
+		// Assert: реальный риск отсутствует со статусом «не рассчитан»,
+		// реализованные величины на месте.
+		Assert.That(metrics.RealRiskUsdt, Is.Null);
+		Assert.That(metrics.RealRiskStatus, Is.EqualTo(RealRiskStatus.Unavailable));
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(-2.5m));
+	}
+
+	[TestMethod]
+	[Description("Закрытая конструкция имеет нулевой конечный реальный риск")]
+	public void TryIfClosedConstructionHasZeroRealRisk()
+	{
+		// Arrange: обе позиции конструкции закрыты — открытых остатков нет.
+		// Требование: без открытых остатков реальный риск нулевой, а не отсутствует,
+		// и ноль помечен конечным статусом, а не нерассчитанным.
+		// Traceability: openspec:analytics/performance#scenario-real-risk-zero-without-open-residuals
+		var positions = new[]
+		{
+			ClosedPosition(FirstSymbol, 0, 30, 9.97m),
+			ClosedPosition(SecondSymbol, 10, 50, -2.5m),
+		};
+
+		// Act
+		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+
+		// Assert: нулевой риск при полном наборе прочих метрик, статус конечный.
+		Assert.That(metrics.RealRiskUsdt, Is.EqualTo(0m));
+		Assert.That(metrics.RealRiskStatus, Is.EqualTo(RealRiskStatus.Finite));
+		Assert.That(metrics.RealizedPnL, Is.EqualTo(7.47m));
+	}
+
+	[TestMethod]
 	[Description("Null-набор позиций отклоняется")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnNullPositions()
@@ -408,14 +507,14 @@ public class ConstructionMetricsCalculatorTests
 	};
 
 	/// <summary>Строит метрики открытой позиции: ненулевой остаток, нереализованная оценка ещё не подставлена.</summary>
-	private static PositionMetrics OpenPosition(string symbol, int openedAt, decimal realizedPnL, long? constructionId = null, decimal residual = 1m, decimal? markValue = null) => new()
+	private static PositionMetrics OpenPosition(string symbol, int openedAt, decimal realizedPnL, long? constructionId = null, decimal residual = 1m, decimal? markValue = null, decimal? averageOpenPrice = 120m) => new()
 	{
 		ConstructionId = constructionId ?? ConstructionId,
 		Symbol = symbol,
 		Residual = residual,
 		RealizedPnL = realizedPnL,
 		AccumulatedFees = 0.03m,
-		AverageOpenPrice = 120m,
+		AverageOpenPrice = averageOpenPrice,
 		AverageEntryPrice = null,
 		AverageClosePrice = null,
 		TotalPnL = null,

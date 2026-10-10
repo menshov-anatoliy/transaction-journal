@@ -13128,6 +13128,60 @@
               "height": 8,
               "stroke": "#FFFFFF",
               "strokeWidth": 1.5
+            },
+            {
+              "type": "frame",
+              "id": "KdPyN",
+              "x": 58,
+              "y": 6,
+              "name": "RiskStateBadge",
+              "enabled": false,
+              "width": 16,
+              "height": 12,
+              "fill": "$textPrimary",
+              "cornerRadius": 6,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "D0eV8J",
+                  "name": "Glyph",
+                  "fill": "#FFFFFF",
+                  "content": "∞",
+                  "fontFamily": "$font",
+                  "fontSize": 9,
+                  "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Zt4oh",
+              "x": 76,
+              "y": 6,
+              "name": "UnavailableBadge",
+              "enabled": false,
+              "width": 16,
+              "height": 12,
+              "fill": "$textPrimary",
+              "cornerRadius": 6,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "d0laNS",
+                  "name": "Glyph",
+                  "fill": "#FFFFFF",
+                  "content": "?",
+                  "fontFamily": "$font",
+                  "fontSize": 9,
+                  "fontWeight": "700"
+                }
+              ]
             }
           ]
         },
@@ -13353,6 +13407,32 @@
                   "fontFamily": "$font",
                   "fontSize": 12.5,
                   "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "bYBwW",
+                  "x": 0,
+                  "y": 0,
+                  "name": "RiskStateLabel",
+                  "enabled": false,
+                  "fill": "$neg",
+                  "content": "риск не ограничен",
+                  "fontFamily": "$font",
+                  "fontSize": 10.5,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "zOC3O",
+                  "x": 0,
+                  "y": 16,
+                  "name": "UnavailableLabel",
+                  "enabled": false,
+                  "fill": "$neg",
+                  "content": "не удалось рассчитать",
+                  "fontFamily": "$font",
+                  "fontSize": 10.5,
+                  "fontWeight": "600"
                 }
               ]
             }
@@ -13569,6 +13649,32 @@
                   "fontFamily": "$font",
                   "fontSize": 11,
                   "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "F1E8D4",
+                  "x": 0,
+                  "y": 0,
+                  "name": "RiskStateLabel",
+                  "enabled": false,
+                  "fill": "$neg",
+                  "content": "риск не ограничен",
+                  "fontFamily": "$font",
+                  "fontSize": 9.5,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "DCBuR",
+                  "x": 0,
+                  "y": 15,
+                  "name": "UnavailableLabel",
+                  "enabled": false,
+                  "fill": "$neg",
+                  "content": "не удалось рассчитать",
+                  "fontFamily": "$font",
+                  "fontSize": 9.5,
+                  "fontWeight": "600"
                 }
               ]
             }
@@ -13660,15 +13766,15 @@
     },
     "riskZone": {
       "type": "color",
-      "value": "#EFB6AE"
+      "value": "#E8836F"
     },
     "profitZone": {
       "type": "color",
-      "value": "#B9E7CC"
+      "value": "#7FD6A4"
     },
     "superZone": {
       "type": "color",
-      "value": "#F3D68C"
+      "value": "#F0C563"
     },
     "superLabel": {
       "type": "color",
@@ -13679,5 +13785,5 @@
       "value": "#EFB6AE"
     }
   },
-  "fileToken": "fe854a54-fdc0-4f83-8bc8-fd42ed96f9ca"
+  "fileToken": "0ca35bba-639e-49f2-83e0-49761c0073f6"
 }

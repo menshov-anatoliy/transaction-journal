@@ -28,6 +28,13 @@ export interface ConstructionCardMetrics {
 	readonly adjustmentsPnLPercent: number | null;
 	readonly markValue: number | null;
 	readonly capitalUsagePercent: number | null;
+	// Реальный риск открытых остатков идёт парой «величина + статус»:
+	// число только при конечном риске, статус различает неограниченный
+	// хвост и неполные данные без заглушки плановым риском.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	readonly realRiskUsdt: number | null;
+	readonly realRiskStatus: RealRiskStatus;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly durationSeconds: number | null;
@@ -120,6 +127,9 @@ export interface ConstructionCard {
 
 /** Ручной статус конструкции (реэкспорт контракта раздела). */
 export type ConstructionStatus = import("./constructions").ConstructionStatus;
+
+/** Состояние реального риска (реэкспорт контракта раздела). */
+export type RealRiskStatus = import("./constructions").RealRiskStatus;
 
 /** Цель переноса сделки: активная конструкция без текущей. */
 export interface ConstructionMoveTarget {

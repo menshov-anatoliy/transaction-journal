@@ -174,7 +174,7 @@ export function ConstructionMetricStrip({ card }: ConstructionMetricStripProps) 
 			</div>
 
 			{/* Полный индикатор финансового результата: зоны планового риска и
-			    профита, границы реализованной прибыли и итога (§9). */}
+			    профита, граница реального риска, маркер итога (§9). */}
 			<Indicator
 				input={{
 					plannedRisk: card.riskUsdt,
@@ -182,6 +182,17 @@ export function ConstructionMetricStrip({ card }: ConstructionMetricStripProps) 
 					realized: metrics.realizedPnL,
 					unrealized: metrics.unrealizedPnL,
 					quotesDegraded: card.hasMarkFailure,
+					// Открытые остатки карточки из read-модели: без них сбой
+					// марок не делает индикатор неполным.
+					// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+					hasOpenResidual: card.hasOpenResidual,
+					// Пара «число + статус» из контракта API: конечный риск
+					// даёт насечку, unbounded/unavailable — состояние
+					// без насечки.
+					// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+					// Traceability: change:show-unbounded-finresult-risk/design#d1
+					realRisk: metrics.realRiskUsdt,
+					realRiskStatus: metrics.realRiskStatus,
 				}}
 			/>
 		</section>
