@@ -4,6 +4,7 @@ import {
 	computeFinResultGeometry,
 	type FinResultGeometry,
 	type FinResultInput,
+	type FinResultLabelAlign,
 	type FinResultLabelLayout,
 	type FinResultLabelPlacement,
 	type FinResultSpan,
@@ -210,92 +211,143 @@ function LabelStack({
 	);
 }
 
-// Метки стороны: деления шкалы сверху (−Риск у левого края, 0, +Профит у
-// края зоны профита), граница и маркер снизу; у каждой — класс тона и
-// высота в строках (граница — две строки: состояние и значение).
+// Метки стороны: деления шкалы (риск, ноль, профит), граница и маркер; у
+// каждой — высота в строках и позиция по x.
+interface LabelItemCandidate {
+	readonly part: string;
+	/** Метка существует в текущей геометрии. */
+	readonly visible: boolean;
+	/** Число строк в модели разноса; у границы — две. */
+	readonly rows: number;
+	/** Нормированная позиция якоря метки. */
+	readonly x: number;
+	/** Место, назначенное калькулятором; null — метки нет. */
+	readonly placement: FinResultLabelPlacement | null;
+	readonly content: React.ReactNode;
+	readonly className?: string;
+}
+
+interface LabelItemView {
+	readonly part: string;
+	readonly rows: number;
+	readonly x: number;
+	readonly placement: FinResultLabelPlacement;
+	readonly content: React.ReactNode;
+	readonly className?: string;
+}
+
+// Метки индикатора: деления шкалы (риск, ноль, профит), граница реального
+// риска и маркер итога. Сторону каждой метке назначает калькулятор — при
+// коллизии он переносит метку на противоположную сторону полосы, поэтому
+// стек собирается по фактической стороне из разноса, а не по канонической;
+// перенесённая метка рендерится в стеке другой стороны.
+// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 function collectLabelItems(
 	geometry: FinResultGeometry,
 	preset: SizePreset,
 	side: "above" | "below",
 	placements: NonNullable<FinResultGeometry["placements"]>,
-): Array<{ part: string; rows: number; x: number; placement: FinResultLabelPlacement; content: React.ReactNode; className?: string }> {
-	const items: Array<{ part: string; rows: number; x: number; placement: FinResultLabelPlacement; content: React.ReactNode; className?: string }> = [];
+): LabelItemView[] {
+	// Подпись границы: «риск есть»/«риска нет» и значение реального риска
+	// «150 USDT · 50%»; зелёная при выходе в плюс или отсутствии риска,
+	// иначе красная.
+	const borderToneClass =
+		geometry.tone === "positive" || geometry.labels.borderTitle === "риска нет"
+			? "text-[color:var(--fin-positive-strong)]"
+			: "text-[color:var(--fin-negative)]";
 
-	if (side === "above") {
-		if (geometry.labels.risk !== null && placements.risk?.side === side) {
+	const items: LabelItemView[] = [];
+	const add = (candidate: LabelItemCandidate) => {
+		const { visible, placement } = candidate;
+		if (visible && placement !== null && placement.side === side) {
 			items.push({
-				part: "risk-scale",
-				rows: 1,
-				x: 0,
-				placement: placements.risk,
-				content: geometry.labels.risk,
-				className: cn(preset.scaleLabelClass, "text-[color:var(--fin-negative)]"),
+				part: candidate.part,
+				rows: candidate.rows,
+				x: candidate.x,
+				placement,
+				content: candidate.content,
+				className: candidate.className,
 			});
 		}
-		if (placements.zero !== null && placements.zero.side === side) {
-			items.push({
-				part: "zero-scale",
-				rows: 1,
-				x: geometry.zeroAt,
-				placement: placements.zero,
-				content: geometry.labels.zero,
-				className: cn(preset.scaleLabelClass, "text-muted-foreground"),
-			});
-		}
-		if (geometry.labels.profit !== null && placements.profit?.side === side) {
-			items.push({
-				part: "profit-scale",
-				rows: 1,
-				x: geometry.profitZone === null ? geometry.zeroAt : geometry.profitZone.to,
-				placement: placements.profit,
-				content: geometry.labels.profit,
-				className: cn(preset.scaleLabelClass, "font-medium text-[color:var(--fin-positive-strong)]"),
-			});
-		}
-	}
+	};
 
-	if (side === "below") {
-		// Подпись границы: «риск есть»/«риска нет» и значение реального
-		// риска «150 USDT · 50%»; зелёная при выходе в плюс или отсутствии
-		// риска, иначе красная.
-		if (geometry.labels.borderTitle !== null && geometry.labels.borderValue !== null && placements.border?.side === side) {
-			const borderToneClass =
-				geometry.tone === "positive" || geometry.labels.borderTitle === "риска нет"
-					? "text-[color:var(--fin-positive-strong)]"
-					: "text-[color:var(--fin-negative)]";
-			items.push({
-				part: "border-label",
-				rows: 2,
-				x: geometry.borderAt ?? 0,
-				placement: placements.border,
-				content: (
-					<>
-						<span className={cn("font-medium", borderToneClass)}>{geometry.labels.borderTitle}</span>
-						<span className={cn("font-semibold", borderToneClass)}>{geometry.labels.borderValue}</span>
-					</>
-				),
-				className: preset.markerLabelClass,
-			});
-		}
-		if (geometry.labels.marker !== null && placements.marker?.side === side) {
-			items.push({
-				part: "marker-label",
-				rows: 1,
-				x: geometry.markerAt ?? geometry.zeroAt,
-				placement: placements.marker,
-				content: geometry.labels.marker,
-				className: cn(
-					preset.markerLabelClass,
-					"font-semibold tabular-nums",
-					geometry.tone === "positive"
-						? "text-[color:var(--fin-positive-strong)]"
-						: "text-[color:var(--fin-negative)]",
-				),
-			});
-		}
-	}
+	add({
+		part: "risk-scale",
+		visible: geometry.labels.risk !== null,
+		rows: 1,
+		x: 0,
+		placement: placements.risk,
+		content: geometry.labels.risk,
+		className: cn(preset.scaleLabelClass, "text-[color:var(--fin-negative)]"),
+	});
+	add({
+		part: "zero-scale",
+		visible: true,
+		rows: 1,
+		x: geometry.zeroAt,
+		placement: placements.zero,
+		content: geometry.labels.zero,
+		className: cn(preset.scaleLabelClass, "text-muted-foreground"),
+	});
+	add({
+		part: "profit-scale",
+		visible: geometry.labels.profit !== null,
+		rows: 1,
+		x: geometry.profitZone === null ? geometry.zeroAt : geometry.profitZone.to,
+		placement: placements.profit,
+		content: geometry.labels.profit,
+		className: cn(preset.scaleLabelClass, "font-medium text-[color:var(--fin-positive-strong)]"),
+	});
+	add({
+		part: "border-label",
+		visible: geometry.labels.borderTitle !== null && geometry.labels.borderValue !== null,
+		rows: 2,
+		x: geometry.borderAt ?? 0,
+		placement: placements.border,
+		content: (
+			<>
+				<span className={cn("font-medium", borderToneClass)}>{geometry.labels.borderTitle}</span>
+				<span className={cn("font-semibold", borderToneClass)}>{geometry.labels.borderValue}</span>
+			</>
+		),
+		// Строки границы рендерятся столбцом: модель разноса считает ширину
+		// метки по самой длинной из двух строк (rows=2), а инлайн-рендер давал
+		// одну строку заметно шире модели — на узких видах маркер наплывал на
+		// подпись границы.
+		// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+		className: cn(
+			"flex flex-col",
+			placements.border === null ? "" : itemsAlignClass(placements.border.align),
+			preset.markerLabelClass,
+		),
+	});
+	add({
+		part: "marker-label",
+		visible: geometry.labels.marker !== null,
+		rows: 1,
+		x: geometry.markerAt ?? geometry.zeroAt,
+		placement: placements.marker,
+		content: geometry.labels.marker,
+		className: cn(
+			preset.markerLabelClass,
+			"font-semibold tabular-nums",
+			geometry.tone === "positive"
+				? "text-[color:var(--fin-positive-strong)]"
+				: "text-[color:var(--fin-negative)]",
+		),
+	});
 
 	return items;
+}
+
+// Внутреннее выравнивание строк многострочной метки: строки держатся вместе
+// по тому же краю, к которому метка прижата калькулятором.
+function itemsAlignClass(align: FinResultLabelAlign): string {
+	if (align === "start") {
+		return "items-start";
+	}
+
+	return align === "end" ? "items-end" : "items-center";
 }
 
 // Позиционирование метки по выравниванию из разноса: центр — по ширине

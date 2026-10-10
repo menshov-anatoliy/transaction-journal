@@ -89,6 +89,7 @@
 	/* Зоны индикатора финрезультата: контраст усилен (насыщенность выше,
 		светлота ниже); источник значений — переменные riskZone/profitZone/superZone
 		в design.pen, изменённые через MCP pen (ADR 0011). */
+	/* Traceability: change:fix-finresult-indicator-real-risk/design#d6 */
 	--risk-zone: #E8836F;
 	--profit-zone: #7FD6A4;
 	--super-zone: #F0C563;

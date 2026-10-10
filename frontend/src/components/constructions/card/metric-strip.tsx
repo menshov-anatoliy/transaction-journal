@@ -182,6 +182,10 @@ export function ConstructionMetricStrip({ card }: ConstructionMetricStripProps) 
 					realized: metrics.realizedPnL,
 					unrealized: metrics.unrealizedPnL,
 					quotesDegraded: card.hasMarkFailure,
+					// Открытые остатки карточки из read-модели: без них сбой
+					// марок не делает индикатор неполным.
+					// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+					hasOpenResidual: card.hasOpenResidual,
 					// Граница реального риска карточки: метрика бэкенда, при null —
 					// каскад заглушек внутри геометрии.
 					// Traceability: openspec:ui/screens#requirement-risk-profit-hint

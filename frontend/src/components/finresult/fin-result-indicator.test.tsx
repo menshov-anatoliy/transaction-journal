@@ -21,6 +21,7 @@ const CASE_C3 = {
 	realized: -250,
 	unrealized: 180,
 	quotesDegraded: false,
+	hasOpenResidual: true,
 } as const;
 
 // Вход кейса C6: сверхприбыль — итог +1 400 растягивает золотую зону,
@@ -31,6 +32,7 @@ const CASE_C6 = {
 	realized: 150,
 	unrealized: 1250,
 	quotesDegraded: false,
+	hasOpenResidual: true,
 } as const;
 
 describe("полный индикатор", () => {
@@ -96,6 +98,7 @@ describe("полный индикатор", () => {
 					realized: 0,
 					unrealized: 0,
 					quotesDegraded: false,
+					hasOpenResidual: true,
 					realRisk: 120,
 				}}
 			/>,
@@ -120,6 +123,7 @@ describe("полный индикатор", () => {
 					realized: 945,
 					unrealized: null,
 					quotesDegraded: false,
+					hasOpenResidual: false,
 					realRisk: 0,
 				}}
 			/>,
@@ -144,6 +148,7 @@ describe("полный индикатор", () => {
 					realized: 100,
 					unrealized: 0,
 					quotesDegraded: false,
+					hasOpenResidual: true,
 				}}
 			/>,
 		);
@@ -196,7 +201,7 @@ describe("компактный индикатор", () => {
 		// Act: плановые границы не заданы.
 		const { container } = render(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, quotesDegraded: false }}
+				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, quotesDegraded: false, hasOpenResidual: true }}
 			/>,
 		);
 
@@ -208,10 +213,13 @@ describe("компактный индикатор", () => {
 	});
 
 	it("помечает сбой котировок признаком неполноты", () => {
-		// Act: котировки недоступны при открытых остатках.
+		// Act: сбой котировок при открытых остатках — комбинация, которую
+		// отдают read-модели: нереализованная часть не оценена, но остатки
+		// открыты, поэтому скрывать есть что.
+		// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 		const { container } = render(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: 180, quotesDegraded: true }}
+				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: true }}
 			/>,
 		);
 
@@ -219,6 +227,41 @@ describe("компактный индикатор", () => {
 		const root = container.firstElementChild as HTMLElement;
 		expect(root.dataset.incomplete).toBe("true");
 		expect(container.querySelector('[data-part="fill-unreal"]')).toBeNull();
+	});
+
+	// Строки подписи границы рендерятся столбцом: модель разноса считает
+	// ширину по самой длинной строке (rows=2), инлайн-рендер давал одну
+	// строку шире модели — маркер наплывал на границу на узких видах.
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+	it("рендерит две строки подписи границы столбцом", () => {
+		// Act.
+		render(<FullFinResultIndicator input={CASE_C3} />);
+
+		// Assert: контейнер границы — flex-колонка из двух строк.
+		const borderLabel = screen.getByText("риск есть").parentElement;
+		expect(borderLabel).toHaveAttribute("data-part", "border-label");
+		expect(borderLabel).toHaveClass("flex", "flex-col");
+		expect(borderLabel?.children).toHaveLength(2);
+	});
+
+	// Перенесённая калькулятором на другую сторону метка не теряется: стек
+	// собирается по фактической стороне из разноса, а не по канонической.
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+	it("рендерит метку границы в стеке фактической стороны", () => {
+		// Act: итог +420 и граница +100 на одной позиции — нижний уровень
+		// занят маркером, граница уходит наверх.
+		const { container } = render(
+			<FullFinResultIndicator
+				input={{ plannedRisk: 300, plannedProfit: 900, realized: 520, unrealized: -100, quotesDegraded: false, hasOpenResidual: true, realRisk: 100 }}
+			/>,
+		);
+
+		// Assert: подпись границы живёт в стеке над полосой (первый ребёнок
+		// корня), а не в стеке под полосой.
+		const borderLabel = screen.getByText("риск есть").parentElement;
+		expect(borderLabel).not.toBeNull();
+		const root = container.firstElementChild as HTMLElement;
+		expect(borderLabel?.parentElement).toBe(root.firstElementChild);
 	});
 });
 

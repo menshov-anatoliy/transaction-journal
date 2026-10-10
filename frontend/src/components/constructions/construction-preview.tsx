@@ -48,6 +48,10 @@ export function ConstructionPreviewCard({ preview }: ConstructionPreviewCardProp
 					realized: preview.realizedPnL,
 					unrealized: preview.unrealizedPnL,
 					quotesDegraded: preview.hasMarkFailure,
+					// Открытые остатки есть, пока есть позиции с ненулевым
+					// остатком: без них сбой марок не делает индикатор неполным.
+					// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+					hasOpenResidual: preview.counts.openPositions > 0,
 					// Граница реального риска превью: метрика бэкенда, при null —
 					// каскад заглушек внутри геометрии.
 					// Traceability: openspec:ui/screens#requirement-risk-profit-hint

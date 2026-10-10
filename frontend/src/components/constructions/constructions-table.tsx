@@ -38,6 +38,14 @@ function quotesDegraded(row: ConstructionRow): boolean {
 	return row.unrealizedPnL === null;
 }
 
+// Открытые остатки строки выводятся из семантики read-модели: при сбое
+// марок нереализованная часть остаётся null только у позиций с ненулевым
+// остатком, а значение маркера ненулевое лишь при существующих остатках.
+// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+function hasOpenResidual(row: ConstructionRow): boolean {
+	return row.markValue !== null || row.unrealizedPnL === null;
+}
+
 /** Тон величины: положительная — зелёная, отрицательная — красная. */
 function toneClass(value: number): string {
 	if (value > 0) {
@@ -192,6 +200,9 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 								realized: row.original.realizedPnL,
 								unrealized: row.original.unrealizedPnL,
 								quotesDegraded: quotesDegraded(row.original),
+								// Открытые остатки строки из семантики read-модели.
+								// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+								hasOpenResidual: hasOpenResidual(row.original),
 								// Граница реального риска в таблице считается по
 								// метрике бэкенда; null — заглушка плановым риском.
 								// Traceability: openspec:ui/screens#requirement-risk-profit-hint

@@ -20,12 +20,17 @@ export interface FinResultInput {
 	/** Реализованный результат закрытых частей позиций в USDT; null — данных нет. */
 	readonly realized: number | null;
 	/**
-	 * Нереализованный результат открытых остатков в USDT;
-	 * null — открытых остатков нет (нереализованной части не существует).
+	 * Нереализованный результат открытых остатков в USDT; null — открытых
+	 * остатков нет либо их оценка недоступна из-за сбоя котировок
+	 * (различает пара hasOpenResidual + quotesDegraded).
 	 */
 	readonly unrealized: number | null;
 	/** Сбой котировок: нереализованная оценка недоступна, индикатор неполный. */
 	readonly quotesDegraded: boolean;
+	// Неполнота индикатора считается только при открытых остатках: сбой
+	// марок скрывает нереализованную часть, лишь когда она существует.
+	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+	readonly hasOpenResidual: boolean;
 	/**
 	 * Реальный риск открытых остатков в USDT (наихудший результат на
 	 * экспирации); null или отсутствие поля — метрика недоступна, граница
@@ -79,7 +84,7 @@ type LabelKey = "risk" | "zero" | "profit" | "border" | "marker";
 export interface FinResultGeometry {
 	/** Нейтральная полоса: плановые границы не заданы, зон нет. */
 	readonly neutral: boolean;
-	/** «Неполный» индикатор: сбой котировок скрыл нереализованную часть. */
+	/** «Неполный» индикатор: сбой котировок скрыл нереализованную часть открытых остатков. */
 	readonly incomplete: boolean;
 	/** Минимум шкалы в USDT (с учётом золотой надбавки). */
 	readonly scaleMin: number;
@@ -141,7 +146,12 @@ export function computeFinResultGeometry(
 	const unrealized = input.unrealized !== null && !input.quotesDegraded ? input.unrealized : null;
 	const realized = input.realized;
 	const total = realized === null ? null : realized + (unrealized ?? 0);
-	const incomplete = input.quotesDegraded && input.unrealized !== null;
+	// Неполный индикатор — сбой марок именно при открытых остатках: без
+	// остатков нереализованной части не существует, скрывать нечего.
+	// Комбинация приходит из read-моделей: сбой марок бэкенд отдаёт вместе
+	// с null нереализованной части только при открытых остатках.
+	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+	const incomplete = input.quotesDegraded && input.hasOpenResidual;
 
 	// Реальный риск с каскадом заглушек: нет метрики — граница считается
 	// по плановому риску, затем по плановому профиту, затем по нулю.
@@ -203,48 +213,33 @@ export function computeFinResultGeometry(
 		marker: markerLabel,
 	};
 
-	const placements =
-		layout === null || layout === undefined
+	// Дескрипторы меток для разноса в порядке обработки: маркер → граница →
+	// профит → ноль → риск — главное число выигрывает место. Метка без
+	// текста в разнос не попадает; ширинообразующий текст границы — самая
+	// длинная из двух её строк.
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+	const describeLabel = (
+		key: LabelKey,
+		x: number,
+		widthText: string | null,
+		preferred: FinResultLabelSide,
+		rows = 1,
+	): LabelItem | null => (widthText === null ? null : { key, x, widthText, preferred, rows });
+	const borderWidthText =
+		borderLabels === null
 			? null
-			: placeLabels(
-					[
-						// Порядок обработки: маркер → граница → профит → ноль →
-						// риск — главное число выигрывает место.
-						...(markerLabel !== null && markerAt !== null
-							? [{ key: "marker" as LabelKey, x: markerAt, widthText: markerLabel, preferred: "below" as const, rows: 1 }]
-							: []),
-						...(borderLabels !== null && borderAt !== null
-							? [
-									{
-										key: "border" as LabelKey,
-										x: borderAt,
-										widthText:
-											borderLabels.title.length > borderLabels.value.length
-												? borderLabels.title
-												: borderLabels.value,
-										preferred: "below" as const,
-										rows: 2,
-									},
-								]
-							: []),
-						...(labels.profit !== null
-							? [
-									{
-										key: "profit" as LabelKey,
-										x: profitZone === null ? zeroAt : profitZone.to,
-										widthText: labels.profit,
-										preferred: "above" as const,
-										rows: 1,
-									},
-								]
-							: []),
-						{ key: "zero" as LabelKey, x: zeroAt, widthText: labels.zero, preferred: "above" as const, rows: 1 },
-						...(labels.risk !== null
-							? [{ key: "risk" as LabelKey, x: 0, widthText: labels.risk, preferred: "above" as const, rows: 1 }]
-							: []),
-					],
-					layout,
-				);
+			: borderLabels.title.length > borderLabels.value.length
+				? borderLabels.title
+				: borderLabels.value;
+	const labelItems = [
+		describeLabel("marker", markerAt ?? 0, markerLabel, "below"),
+		describeLabel("border", borderAt ?? 0, borderWidthText, "below", 2),
+		describeLabel("profit", profitZone === null ? zeroAt : profitZone.to, labels.profit, "above"),
+		describeLabel("zero", zeroAt, labels.zero, "above"),
+		describeLabel("risk", 0, labels.risk, "above"),
+	].filter((item): item is LabelItem => item !== null);
+
+	const placements = layout === null || layout === undefined ? null : placeLabels(labelItems, layout);
 
 	return {
 		neutral: false,
@@ -415,9 +410,10 @@ interface OccupiedArea {
 // исчерпании метка остаётся на предпочитаемой стороне.
 const MAX_LEVEL = 3;
 
-// Разносит метки по сторонам, уровням и выравниванию. Приоритет: сначала
-// предпочитаемая сторона, при коллизии — противоположная, затем следующий
-// вертикальный уровень; крайние метки прижимаются к краям изнутри.
+// Разносит метки по сторонам, уровням и выравниванию. Порядок перебора мест:
+// вертикальный уровень внешний, стороны внутри уровня — при коллизии метка
+// сначала уходит на противоположную сторону и лишь затем на следующий
+// уровень; крайние метки прижимаются к краям изнутри.
 // Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 function placeLabels(items: readonly LabelItem[], layout: FinResultLabelLayout): FinResultLabelPlacements {
 	const placed: OccupiedArea[] = [];
@@ -432,8 +428,10 @@ function placeLabels(items: readonly LabelItem[], layout: FinResultLabelLayout):
 	return result;
 }
 
-// Подбирает место одной метке: предпочитаемая сторона → противоположная,
-// на каждой — уровни 0..MAX_LEVEL; первое свободное место выигрывает.
+// Подбирает место одной метке: уровни 0..MAX_LEVEL внешним циклом, внутри
+// уровня — предпочитаемая сторона, затем противоположная; первое свободное
+// место выигрывает.
+// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 function choosePlacement(
 	item: LabelItem,
 	layout: FinResultLabelLayout,
@@ -441,12 +439,12 @@ function choosePlacement(
 ): { area: OccupiedArea; align: FinResultLabelAlign } {
 	const oppositeSide: FinResultLabelSide = item.preferred === "above" ? "below" : "above";
 
-	for (const side of [item.preferred, oppositeSide] as const) {
-		const widthFraction = labelWidthFraction(item.widthText, side, layout);
-		const align = chooseAlign(item.x, widthFraction);
-		const [from, to] = labelRange(item.x, widthFraction, align);
+	for (let level = 0; level <= MAX_LEVEL; level++) {
+		for (const side of [item.preferred, oppositeSide] as const) {
+			const widthFraction = labelWidthFraction(item.widthText, side, layout);
+			const align = chooseAlign(item.x, widthFraction);
+			const [from, to] = labelRange(item.x, widthFraction, align);
 
-		for (let level = 0; level <= MAX_LEVEL; level++) {
 			if (!overlapsAny(placed, side, level, item.rows, from, to)) {
 				return { area: { side, level, rows: item.rows, from, to }, align };
 			}

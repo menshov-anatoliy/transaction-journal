@@ -25,7 +25,9 @@ function expectMatchesLayout(actual: number, px: number, width: number = FULL_WI
 }
 
 // Базовый вход кейсов стенда: плановый риск 300, плановый профит 900 —
-// как в подписях шкалы «−300 / 0 / +900» всех кейсов макета.
+// как в подписях шкалы «−300 / 0 / +900» всех кейсов макета. Остатки
+// закрыты (hasOpenResidual: false) — так сбой котировок не делает
+// индикатор неполным; кейсы с открытыми остатками переопределяют флаг.
 function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
 	return {
 		plannedRisk: 300,
@@ -33,6 +35,7 @@ function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
 		realized: 0,
 		unrealized: 0,
 		quotesDegraded: false,
+		hasOpenResidual: false,
 		...overrides,
 	};
 }
@@ -393,9 +396,10 @@ describe("разнос и прижатие меток", () => {
 	const LAYOUT = { scaleWidthPx: 936, aboveCharWidthPx: 7, belowCharWidthPx: 6.5 };
 
 	// Граница и маркер совпали на одной позиции: маркер выигрывает нижний
-	// уровень 0, двухстрочная граница уходит уровнем ниже — без наплыва.
+	// уровень, граница по правилу коллизии уходит на противоположную сторону,
+	// деление нуля опускается уровнем ниже — наплыва нет.
 	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
-	it("совпавшие граница и маркер разносятся по уровням без наплыва", () => {
+	it("совпавшие граница и маркер разносятся без наплыва", () => {
 		// Act: реализованная +200, нереализованная −150, реальный риск 150 —
 		// итог +50 и граница +50 совпали на одной позиции.
 		const geometry = computeFinResultGeometry(
@@ -403,9 +407,29 @@ describe("разнос и прижатие меток", () => {
 			LAYOUT,
 		);
 
-		// Assert: обе метки на одной позиции x, но на разных уровнях «below».
+		// Assert: маркер на нижнем уровне 0, граница — на противоположной
+		// стороне уровня 0, деление нуля ушло под полосу на свободное место.
 		expect(geometry.placements?.marker).toEqual({ side: "below", level: 0, align: "center" });
-		expect(geometry.placements?.border).toEqual({ side: "below", level: 1, align: "center" });
+		expect(geometry.placements?.border).toEqual({ side: "above", level: 0, align: "center" });
+		expect(geometry.placements?.zero).toEqual({ side: "below", level: 0, align: "center" });
+	});
+
+	// Порядок перебора мест — уровни внешним циклом, стороны внутри: при
+	// коллизии метка сначала уходит на противоположную сторону и лишь затем
+	// на следующий уровень предпочитаемой стороны.
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+	it("коллизия на предпочитаемой стороне уводит метку на противоположную, а не уровнем ниже", () => {
+		// Act: итог +420 на x≈0.6, граница +100 на той же позиции — нижний
+		// уровень занят маркером.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 520, unrealized: -100, realRisk: 100 }),
+			LAYOUT,
+		);
+
+		// Assert: маркер остался на нижнем уровне 0, граница ушла наверх
+		// (выше деления нуля нет коллизии), а не на нижний уровень 1.
+		expect(geometry.placements?.marker).toEqual({ side: "below", level: 0, align: "center" });
+		expect(geometry.placements?.border).toEqual({ side: "above", level: 0, align: "center" });
 	});
 
 	// Крайние метки прижимаются к краям шкалы изнутри, габариты не растут.
@@ -511,13 +535,16 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.labels.marker).toBe("−250");
 	});
 
-	// Сбой котировок скрывает нереализованную часть, но не убирает границу:
-	// «неполный» индикатор продолжает показывать реальный риск.
+	// Сбой котировок скрывает нереализованную часть открытых остатков, но не
+	// убирает границу: «неполный» индикатор продолжает показывать реальный
+	// риск. Read-модели отдают сбой марок вместе с null нереализованной
+	// части именно при открытых остатках.
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
-	it("состояние 5: сбой котировок — «неполный», нереализованная скрыта", () => {
-		// Act: котировки недоступны, хотя остатки открыты.
+	it("состояние 5: сбой котировок при открытых остатках — «неполный», нереализованная скрыта", () => {
+		// Act: котировки недоступны, остатки открыты — нереализованная
+		// часть не оценена и придёт как null.
 		const geometry = computeFinResultGeometry(
-			caseInput({ realized: -250, unrealized: 180, quotesDegraded: true }),
+			caseInput({ realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: true }),
 		);
 
 		// Assert: нереализованная часть скрыта, индикатор помечен неполным;
@@ -529,6 +556,23 @@ describe("состояния индикатора из §9 концепта", ()
 		// Граница со своей подписью остаётся: риск виден и без котировок.
 		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
 		// Ноль остаётся нулём, а отсутствие данных не превращается в ноль.
+		expect(geometry.labels.marker).toBeNull();
+	});
+
+	// Сбой котировок без открытых остатков не помечает индикатор неполным:
+	// скрывать нечего — нереализованной части не существует. Число маркера
+	// всё равно не показывается: при сбое котировок подпись — без числа.
+	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+	it("состояние 5а: сбой котировок без открытых остатков — индикатор полный", () => {
+		// Act: котировки недоступны, но все остатки закрыты.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: false }),
+		);
+
+		// Assert: неполноты нет, маркер стоит на реализованном результате,
+		// но подписи числа нет — сбой котировок запрещает выводить итог.
+		expect(geometry.incomplete).toBe(false);
+		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.labels.marker).toBeNull();
 	});
 
