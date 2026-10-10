@@ -17,8 +17,12 @@ import {
 // результата, насечка границы реального риска и маркер итога. У полного и
 // среднего видов подписи (деления шкалы над полосой, граница и маркер под
 // ней) размещает калькулятор: разнос по сторонам полосы, вертикальным
-// уровням и выравниванию считается по измеренной ширине полосы.
+// уровням и выравниванию считается по измеренной ширине полосы. Состояние
+// не конечного риска (unbounded/unavailable) выводится отдельно от шкалы:
+// текстовый статус у полного и среднего видов, бейдж ∞/? у компактного —
+// обозначения зафиксированы в мастерах design.pen.
 // Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финрезультата-конструкции
+// Traceability: change:show-unbounded-finresult-risk/design#d3
 
 /** Пропсы всех видов индикатора. */
 export interface FinResultIndicatorProps {
@@ -119,6 +123,22 @@ export function MediumFinResultIndicator({ input, className }: FinResultIndicato
 export function CompactFinResultIndicator({ input, className }: FinResultIndicatorProps) {
 	// Компактному виду подписи не положены — layout разметки не передаётся.
 	const geometry = computeFinResultGeometry(input);
+	// Короткий символ состояния: ∞ — неограниченный хвост, ? — расчёт не
+	// удался. Бейдж выводится отдельным элементом поверх полосы, а не
+	// насечкой на шкале, поэтому координатная геометрия и ширина 132px
+	// не меняются; в конечном состоянии бейджа нет.
+	// Traceability: openspec:ui/screens#scenario-finresult-compact-risk-state
+	// Traceability: change:show-unbounded-finresult-risk/design#d3
+	const riskGlyph =
+		geometry.realRiskStatus === "unbounded"
+			? "∞"
+			: geometry.realRiskStatus === "unavailable"
+				? "?"
+				: null;
+	const title =
+		[geometry.labels.riskState, geometry.incomplete ? "неполный: сбой котировок" : null]
+			.filter(Boolean)
+			.join(", ") || undefined;
 
 	return (
 		<div
@@ -128,9 +148,18 @@ export function CompactFinResultIndicator({ input, className }: FinResultIndicat
 			style={{ height: COMPACT_PRESET.barHeight + COMPACT_PRESET.markerSize / 2 }}
 			role="img"
 			aria-label={describeForScreenReader(geometry)}
-			title={geometry.incomplete ? "неполный: сбой котировок" : undefined}
+			title={title}
 		>
 			<FinResultBar geometry={geometry} preset={COMPACT_PRESET} />
+			{riskGlyph !== null && (
+				<span
+					data-part="risk-state"
+					className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-text-primary text-surface"
+					style={{ width: 16, height: 12, fontSize: 9, lineHeight: "12px", fontWeight: 700 }}
+				>
+					{riskGlyph}
+				</span>
+			)}
 		</div>
 	);
 }
@@ -165,6 +194,23 @@ function DetailedFinResultIndicator({
 			<LabelStack geometry={geometry} preset={preset} side="above" />
 			<FinResultBar geometry={geometry} preset={preset} />
 			<LabelStack geometry={geometry} preset={preset} side="below" />
+			{geometry.labels.riskState !== null && (
+				// Статус не конечного риска — отдельная строка вне координат
+				// шкалы: собственной строкой колонки он гарантированно не
+				// пересекается с метками делений, границы и маркера.
+				// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
+				// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
+				// Traceability: change:show-unbounded-finresult-risk/design#d3
+				<span
+					data-part="risk-state"
+					className={cn(
+						"whitespace-nowrap font-semibold text-[color:var(--fin-negative)]",
+						preset.markerLabelClass,
+					)}
+				>
+					{geometry.labels.riskState}
+				</span>
+			)}
 		</div>
 	);
 }
@@ -462,8 +508,16 @@ function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; prese
 	);
 }
 
-// Текстовое описание для скринридеров: состояние границы и итог.
+// Текстовое описание для скринридеров: состояние риска, плановая граница
+// в состоянии не конечного риска, состояние границы и итог. В состояниях
+// unbounded/unavailable описание называет полное состояние и отдельно
+// плановый риск, чтобы тонированную плановую зону не принимали за
+// реальный риск; в конечном состоянии описание прежнее.
+// Traceability: openspec:ui/screens#scenario-finresult-compact-risk-state
+// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
 function describeForScreenReader(geometry: FinResultGeometry): string {
+	const state = geometry.labels.riskState ?? "";
+	const planned = state !== "" ? (geometry.labels.risk ?? "") : "";
 	const border =
 		geometry.labels.borderTitle !== null && geometry.labels.borderValue !== null
 			? `${geometry.labels.borderTitle} ${geometry.labels.borderValue}`
@@ -471,7 +525,7 @@ function describeForScreenReader(geometry: FinResultGeometry): string {
 	const marker = geometry.labels.marker !== null ? `итог ${geometry.labels.marker}` : "";
 	const incomplete = geometry.incomplete ? "неполный, сбой котировок" : "";
 
-	return [border, marker, incomplete].filter(Boolean).join(", ") || "нет данных о результате";
+	return [state, planned, border, marker, incomplete].filter(Boolean).join(", ") || "нет данных о результате";
 }
 
 // Ширина контейнера через ResizeObserver; без наблюдения (тестовая среда

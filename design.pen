@@ -13128,6 +13128,33 @@
               "height": 8,
               "stroke": "#FFFFFF",
               "strokeWidth": 1.5
+            },
+            {
+              "type": "frame",
+              "id": "KdPyN",
+              "x": 58,
+              "y": 6,
+              "name": "RiskStateBadge",
+              "enabled": false,
+              "width": 16,
+              "height": 12,
+              "fill": "$textPrimary",
+              "cornerRadius": 6,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "D0eV8J",
+                  "name": "Glyph",
+                  "fill": "#FFFFFF",
+                  "content": "∞",
+                  "fontFamily": "$font",
+                  "fontSize": 9,
+                  "fontWeight": "700"
+                }
+              ]
             }
           ]
         },
@@ -13353,6 +13380,19 @@
                   "fontFamily": "$font",
                   "fontSize": 12.5,
                   "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "bYBwW",
+                  "x": 0,
+                  "y": 0,
+                  "name": "RiskStateLabel",
+                  "enabled": false,
+                  "fill": "$neg",
+                  "content": "риск не ограничен",
+                  "fontFamily": "$font",
+                  "fontSize": 10.5,
+                  "fontWeight": "600"
                 }
               ]
             }
@@ -13568,6 +13608,19 @@
                   "content": "+385",
                   "fontFamily": "$font",
                   "fontSize": 11,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "F1E8D4",
+                  "x": 0,
+                  "y": 0,
+                  "name": "RiskStateLabel",
+                  "enabled": false,
+                  "fill": "$neg",
+                  "content": "риск не ограничен",
+                  "fontFamily": "$font",
+                  "fontSize": 9.5,
                   "fontWeight": "600"
                 }
               ]

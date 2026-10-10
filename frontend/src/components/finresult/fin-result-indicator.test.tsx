@@ -35,6 +35,42 @@ const CASE_C6 = {
 	hasOpenResidual: true,
 } as const;
 
+// Вход сценария finresult-unbounded-risk: открытый нетто-короткий колл,
+// плановый риск 400, положительный итог +5 942.16 — хвост не ограничен.
+const CASE_UNBOUNDED = {
+	plannedRisk: 400,
+	plannedProfit: 900,
+	realized: 5942.16,
+	unrealized: null,
+	quotesDegraded: false,
+	hasOpenResidual: true,
+	realRiskStatus: "unbounded",
+} as const;
+
+// Вход сценария finresult-unavailable-risk: исходные данные позиции
+// неполны, расчёт реального риска не удался.
+const CASE_UNAVAILABLE = {
+	plannedRisk: 300,
+	plannedProfit: 900,
+	realized: 200,
+	unrealized: null,
+	quotesDegraded: false,
+	hasOpenResidual: true,
+	realRiskStatus: "unavailable",
+} as const;
+
+// Вход сценария finresult-risk-state-without-plan: плановых границ нет,
+// состояние риска при этом остаётся видимым.
+const CASE_UNBOUNDED_WITHOUT_PLAN = {
+	plannedRisk: null,
+	plannedProfit: null,
+	realized: 100,
+	unrealized: null,
+	quotesDegraded: false,
+	hasOpenResidual: true,
+	realRiskStatus: "unbounded",
+} as const;
+
 describe("полный индикатор", () => {
 	// Граница прижата к левому краю, но подписывается реальным риском целиком;
 	// маркер подписан итогом.
@@ -169,6 +205,151 @@ describe("средний индикатор", () => {
 		expect(screen.getByText("−300")).toBeInTheDocument();
 		expect(screen.getByText("риск есть")).toBeInTheDocument();
 		expect(screen.getByText("−70")).toBeInTheDocument();
+	});
+});
+
+describe("состояние риска в представлениях", () => {
+	// Полный вид показывает «риск не ограничен» отдельным статусом, плановое
+	// деление подписано плановым риском, при этом итог и золотая зона
+	// сохранены, а насечки и числовой подписи реального риска нет.
+	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
+	it("полный: показывает «риск не ограничен» без насечки и без числа риска", () => {
+		// Act: неограниченный хвост коротких коллов при плюсе +5 942.16.
+		const { container } = render(<FullFinResultIndicator input={CASE_UNBOUNDED} />);
+
+		// Assert: статус состояния, плановое деление, итог и золотая зона.
+		expect(screen.getByText("риск не ограничен")).toHaveAttribute("data-part", "risk-state");
+		expect(screen.getByText("плановый риск −400")).toBeInTheDocument();
+		expect(screen.getByText("+5 942.16")).toBeInTheDocument();
+		expect(container.querySelector('[data-part="super-zone"]')).not.toBeNull();
+
+		// Assert: числовой подписи реального риска, процента и насечки нет.
+		expect(screen.queryByText(/USDT/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+		expect(container.querySelector('[data-part="border"]')).toBeNull();
+		expect(container.querySelector('[data-part="border-label"]')).toBeNull();
+	});
+
+	// Недоступность расчёта — своё состояние «не удалось рассчитать», план
+	// не выдаётся за реальный риск.
+	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
+	it("полный: показывает «не удалось рассчитать» без числа реального риска", () => {
+		// Act.
+		const { container } = render(<FullFinResultIndicator input={CASE_UNAVAILABLE} />);
+
+		// Assert: статус состояния и плановое деление; насечки и числа
+		// реального риска нет.
+		expect(screen.getByText("не удалось рассчитать")).toBeInTheDocument();
+		expect(screen.getByText("плановый риск −300")).toBeInTheDocument();
+		expect(screen.queryByText(/USDT/)).not.toBeInTheDocument();
+		expect(container.querySelector('[data-part="border"]')).toBeNull();
+	});
+
+	// Средний вид показывает то же состояние, что и полный.
+	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
+	it("средний: показывает состояние неограниченного риска как полный", () => {
+		// Act.
+		const { container } = render(<MediumFinResultIndicator input={CASE_UNBOUNDED} />);
+
+		// Assert: статус есть, ложных «400 USDT · 100%» и насечки нет.
+		expect(screen.getByText("риск не ограничен")).toBeInTheDocument();
+		expect(screen.queryByText(/100%/)).not.toBeInTheDocument();
+		expect(container.querySelector('[data-part="border"]')).toBeNull();
+	});
+
+	// Метки не наплывают: статус состояния занимает собственную строку
+	// колонки, маркер остаётся в стеке под полосой.
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+	it("полный: статус состояния и метка маркера занимают разные строки", () => {
+		// Act.
+		const { container } = render(<FullFinResultIndicator input={CASE_UNBOUNDED} />);
+
+		// Assert: статус — прямой ребёнок корневой колонки, маркер живёт
+		// в стеке меток под полосой, поэтому пересечение невозможно.
+		const state = screen.getByText("риск не ограничен");
+		const root = container.firstElementChild as HTMLElement;
+		expect(state.parentElement).toBe(root);
+		const markerLabel = screen.getByText("+5 942.16");
+		expect(markerLabel.dataset.part).toBe("marker-label");
+		expect(markerLabel.parentElement).not.toBe(root);
+		expect(markerLabel.parentElement?.parentElement).toBe(root);
+	});
+
+	// Компакт различает ∞ и ? видимым бейджем поверх полосы: без насечки,
+	// без сдвига полосы 132px, состояние названо в title и aria-label
+	// отдельно от плановой границы.
+	// Traceability: openspec:ui/screens#scenario-finresult-compact-risk-state
+	it("компактный: различает ∞ и ? без насечки и называет состояние в title и aria-label", () => {
+		// Act: неограниченный хвост в строке таблицы.
+		const { container, rerender } = render(<CompactFinResultIndicator input={CASE_UNBOUNDED} />);
+
+		// Assert: бейдж ∞ поверх полосы, насечки нет, полоса и плановая
+		// зона на месте, ширина 132px сохранена.
+		expect(container.firstElementChild).toHaveClass("w-[132px]");
+		expect(container.querySelector('[data-part="risk-state"]')).toHaveTextContent("∞");
+		expect(container.querySelector('[data-part="border"]')).toBeNull();
+		expect(container.querySelector('[data-part="bar"]')).not.toBeNull();
+		expect(container.querySelector('[data-part="risk-zone"]')).not.toBeNull();
+		const unbounded = screen.getByRole("img");
+		expect(unbounded).toHaveAttribute("title", "риск не ограничен");
+		expect(unbounded.getAttribute("aria-label")).toContain("риск не ограничен");
+		expect(unbounded.getAttribute("aria-label")).toContain("плановый риск −400");
+
+		// Act: недоступный расчёт в той же строке.
+		rerender(<CompactFinResultIndicator input={CASE_UNAVAILABLE} />);
+
+		// Assert: бейдж ? и своё состояние в подсказке.
+		expect(container.querySelector('[data-part="risk-state"]')).toHaveTextContent("?");
+		expect(screen.getByRole("img")).toHaveAttribute("title", "не удалось рассчитать");
+	});
+
+	// Без плановых границ полоса нейтральная, но состояние риска видно.
+	// Traceability: openspec:ui/screens#scenario-finresult-risk-state-without-plan
+	it("нейтральная полоса показывает состояние риска в подробном и компактном видах", () => {
+		// Act: подробный вид без плановых параметров.
+		const full = render(<FullFinResultIndicator input={CASE_UNBOUNDED_WITHOUT_PLAN} />);
+
+		// Assert: зон нет, статус состояния на месте.
+		expect(full.container.querySelector('[data-part="risk-zone"]')).toBeNull();
+		expect(full.container.querySelector('[data-part="border"]')).toBeNull();
+		expect(screen.getByText("риск не ограничен")).toBeInTheDocument();
+		full.unmount();
+
+		// Act: компакт без плановых параметров.
+		const { container } = render(<CompactFinResultIndicator input={CASE_UNBOUNDED_WITHOUT_PLAN} />);
+
+		// Assert: бейдж ∞, насечки нет, единая заливка нейтральной полосы.
+		expect(container.querySelector('[data-part="risk-state"]')).toHaveTextContent("∞");
+		expect(container.querySelector('[data-part="border"]')).toBeNull();
+		expect(container.querySelector('[data-part="fill-main"]')).not.toBeNull();
+	});
+
+	// Сбой марок не скрывает предупреждение о состоянии риска.
+	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+	it("сбой марок не скрывает состояние риска", () => {
+		// Act: нереализованная часть недоступна, статус unbounded сохранён.
+		render(<FullFinResultIndicator input={{ ...CASE_UNBOUNDED, realized: -250, quotesDegraded: true }} />);
+
+		// Assert: статус виден, описание скринридеру помечает неполноту.
+		expect(screen.getByText("риск не ограничен")).toBeInTheDocument();
+		expect(screen.getByRole("img").getAttribute("aria-label")).toContain("неполный");
+	});
+
+	// Конечный риск сохраняет прежний вид всех трёх представлений.
+	// Traceability: change:show-unbounded-finresult-risk/design#d3
+	it("finite не выводит статус состояния и бейдж", () => {
+		// Arrange: конечный риск кейса C3 во всех представлениях.
+		const views = [FullFinResultIndicator, MediumFinResultIndicator, CompactFinResultIndicator];
+
+		for (const View of views) {
+			// Act.
+			const { container, unmount } = render(<View input={CASE_C3} />);
+
+			// Assert: ни статуса, ни бейджа; насечка конечного риска на месте.
+			expect(container.querySelector('[data-part="risk-state"]')).toBeNull();
+			expect(container.querySelector('[data-part="border"]')).not.toBeNull();
+			unmount();
+		}
 	});
 });
 
