@@ -255,7 +255,9 @@ describe("кейс C6 · сверхприбыль: нереализованна�
 
 		// Assert: при клипе маркера выносится итог, край золота подписан.
 		expect(geometry.labels.marker).toBe("+1\u00A0400");
-		expect(geometry.labels.superEnd).toBe("+1\u00A0150");
+		// superEnd упразднён (спец-случай «половины превышения» удалён);
+		// эталоны обновит задача 2.4 (блок 4).
+		// expect(geometry.labels.superEnd).toBe("+1\u00A0150");
 		expect(geometry.labels.profit).toBe("+900");
 		expect(geometry.tone).toBe("positive");
 	});
@@ -294,7 +296,8 @@ describe("кейс C7 · реализованная выше целевого п
 		expect(geometry.labels.borderTitle).toBe("риска нет");
 		expect(geometry.labels.borderValue).toBe("945 USDT · 315%");
 		expect(geometry.labels.marker).toBe("+1\u00A0200");
-		expect(geometry.labels.superEnd).toBe("+945");
+		// superEnd упразднён; эталоны обновит задача 2.4 (блок 4).
+		// expect(geometry.labels.superEnd).toBe("+945");
 	});
 });
 
@@ -387,7 +390,8 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.markerAt).toBe(1);
 		expect(geometry.markerClipped).toBe(true);
 		expect(geometry.labels.marker).toBe("+5\u00A0000");
-		expect(geometry.labels.superEnd).toBe("+2\u00A0100");
+		// superEnd упразднён; эталоны обновит задача 2.4 (блок 4).
+		// expect(geometry.labels.superEnd).toBe("+2\u00A0100");
 	});
 
 	it("состояние 4: нет открытых остатков — маркер совпадает с границей", () => {

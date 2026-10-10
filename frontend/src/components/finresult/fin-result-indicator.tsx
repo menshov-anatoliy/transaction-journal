@@ -4,6 +4,8 @@ import {
 	computeFinResultGeometry,
 	type FinResultGeometry,
 	type FinResultInput,
+	type FinResultLabelLayout,
+	type FinResultLabelPlacement,
 	type FinResultSpan,
 } from "@/lib/finresult/geometry";
 
@@ -11,9 +13,11 @@ import {
 // средний (сводные блоки) и компактный (строки таблиц). Все три вида рендерят
 // одну геометрию калькулятора в долях шкалы и отличаются только пресетом
 // размеров: полоса с зонами планового риска/профита/сверхприбыли, заливки
-// результата, насечка границы realized и маркер итога с подписями двумя
-// единицами у полного и среднего видов.
-// Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финансового-результата-конструкции
+// результата, насечка границы реального риска и маркер итога. У полного и
+// среднего видов подписи (деления шкалы над полосой, граница и маркер под
+// ней) размещает калькулятор: разнос по сторонам полосы, вертикальным
+// уровням и выравниванию считается по измеренной ширине полосы.
+// Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финрезультата-конструкции
 
 /** Пропсы всех видов индикатора. */
 export interface FinResultIndicatorProps {
@@ -23,7 +27,9 @@ export interface FinResultIndicatorProps {
 }
 
 // Пресет размеров представления: высоты, шрифты и радиусы из макета
-// (полный референс onchD, средний rMxFZ, компактный FMghY).
+// (полный референс onchD, средний rMxFZ, компактный FMghY), плюс метрики
+// подписей для разноса: ширина символа над/под полосой, высота строки
+// метки, отступ между секциями и номинальная ширина полосы до измерения.
 interface SizePreset {
 	/** Высота полосы, px. */
 	readonly barHeight: number;
@@ -35,6 +41,16 @@ interface SizePreset {
 	readonly borderWidth: number;
 	/** Выступ насечки за полосу вверх и вниз, px. */
 	readonly borderOverhang: number;
+	/** Высота строки подписи, px. */
+	readonly labelLineHeightPx: number;
+	/** Вертикальный отступ между секциями (метки/полоса), px. */
+	readonly sectionGapPx: number;
+	/** Ширина символа подписей над полосой (деления шкалы), px. */
+	readonly aboveCharWidthPx: number;
+	/** Ширина символа подписей под полосой (граница, маркер), px. */
+	readonly belowCharWidthPx: number;
+	/** Номинальная ширина полосы до измерения ResizeObserver, px. */
+	readonly nominalWidthPx: number;
 	/** Класс подписей делений шкалы. */
 	readonly scaleLabelClass: string;
 	/** Класс подписей границы и маркера. */
@@ -47,6 +63,11 @@ const FULL_PRESET: SizePreset = {
 	markerSize: 12,
 	borderWidth: 2,
 	borderOverhang: 4,
+	labelLineHeightPx: 14,
+	sectionGapPx: 10,
+	aboveCharWidthPx: 7,
+	belowCharWidthPx: 6.5,
+	nominalWidthPx: 480,
 	scaleLabelClass: "text-[11.5px]",
 	markerLabelClass: "text-[10.5px]",
 };
@@ -57,6 +78,11 @@ const MEDIUM_PRESET: SizePreset = {
 	markerSize: 10,
 	borderWidth: 2,
 	borderOverhang: 4,
+	labelLineHeightPx: 13,
+	sectionGapPx: 8,
+	aboveCharWidthPx: 6.5,
+	belowCharWidthPx: 6,
+	nominalWidthPx: 360,
 	scaleLabelClass: "text-[10.5px]",
 	markerLabelClass: "text-[9.5px]",
 };
@@ -67,6 +93,11 @@ const COMPACT_PRESET: SizePreset = {
 	markerSize: 8,
 	borderWidth: 2,
 	borderOverhang: 2,
+	labelLineHeightPx: 12,
+	sectionGapPx: 6,
+	aboveCharWidthPx: 6,
+	belowCharWidthPx: 6,
+	nominalWidthPx: 132,
 	scaleLabelClass: "",
 	markerLabelClass: "",
 };
@@ -85,6 +116,7 @@ export function MediumFinResultIndicator({ input, className }: FinResultIndicato
 // Ширина компактной шкалы — 132px по мастеру FMghY, независимо от ширины ячейки.
 // Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 export function CompactFinResultIndicator({ input, className }: FinResultIndicatorProps) {
+	// Компактному виду подписи не положены — layout разметки не передаётся.
 	const geometry = computeFinResultGeometry(input);
 
 	return (
@@ -102,75 +134,190 @@ export function CompactFinResultIndicator({ input, className }: FinResultIndicat
 	);
 }
 
-// Полный и средний виды: деления шкалы над полосой, полоса, подписи
-// границы и маркера под полосой.
+// Полный и средний виды: метки над полосой, полоса, метки под полосой.
+// Ширина полосы измеряется ResizeObserver для разноса меток; до измерения
+// калькулятор работает с номинальной шириной пресета.
 function DetailedFinResultIndicator({
 	input,
 	preset,
 	className,
 	dataSlot,
 }: FinResultIndicatorProps & { preset: SizePreset; dataSlot: string }) {
-	const geometry = computeFinResultGeometry(input);
+	const { ref, width } = useElementWidth();
+	const layout: FinResultLabelLayout = {
+		scaleWidthPx: width ?? preset.nominalWidthPx,
+		aboveCharWidthPx: preset.aboveCharWidthPx,
+		belowCharWidthPx: preset.belowCharWidthPx,
+	};
+	const geometry = computeFinResultGeometry(input, layout);
 
 	return (
 		<div
+			ref={ref}
 			data-slot={dataSlot}
 			data-incomplete={geometry.incomplete ? "true" : "false"}
-			className={cn("flex flex-col", preset.markerLabelClass.includes("9.5") ? "gap-2" : "gap-2.5", className)}
+			className={cn("flex flex-col", className)}
+			style={{ gap: preset.sectionGapPx }}
 			role="img"
 			aria-label={describeForScreenReader(geometry)}
 		>
-			<ScaleLabels geometry={geometry} preset={preset} />
+			<LabelStack geometry={geometry} preset={preset} side="above" />
 			<FinResultBar geometry={geometry} preset={preset} />
-			<MarkerLabels geometry={geometry} preset={preset} />
+			<LabelStack geometry={geometry} preset={preset} side="below" />
 		</div>
 	);
 }
 
-// Деления шкалы: −Риск / 0 / +Профит и край золотой зоны при сверхприбыли.
-function ScaleLabels({ geometry, preset }: { geometry: FinResultGeometry; preset: SizePreset }) {
+// Стек меток одной стороны полосы: контейнер высотой в занятые уровни,
+// каждая метка абсолютом на своём уровне; сторона, уровень и выравнивание
+// назначены калькулятором так, чтобы метки не пересекались, а крайние
+// прижимались внутрь шкалы.
+// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+function LabelStack({
+	geometry,
+	preset,
+	side,
+}: {
+	geometry: FinResultGeometry;
+	preset: SizePreset;
+	side: "above" | "below";
+}) {
+	const placements = geometry.placements;
+	if (placements === null) {
+		return null;
+	}
+
+	const items = collectLabelItems(geometry, preset, side, placements);
+	if (items.length === 0) {
+		return null;
+	}
+
+	const rows = Math.max(...items.map((item) => item.rows));
+
 	return (
-		<div className={cn("relative h-3.5", preset.scaleLabelClass)}>
-			{geometry.labels.risk !== null && (
+		<div className="relative w-full" style={{ height: rows * preset.labelLineHeightPx }}>
+			{items.map((item) => (
 				<span
-					data-part="risk-scale"
-					className="absolute left-0 -translate-x-1/2 text-[color:var(--fin-negative)]"
+					key={item.part}
+					data-part={item.part}
+					className={cn("absolute whitespace-nowrap", item.className)}
+					style={labelAnchorStyle(item, preset.labelLineHeightPx)}
 				>
-					{geometry.labels.risk}
+					{item.content}
 				</span>
-			)}
-			{!geometry.neutral && (
-				<span
-					data-part="zero-scale"
-					className="absolute -translate-x-1/2 text-muted-foreground"
-					style={{ left: percent(geometry.zeroAt) }}
-				>
-					{geometry.labels.zero}
-				</span>
-			)}
-			{geometry.labels.profit !== null && (
-				<span
-					data-part="profit-scale"
-					className="absolute -translate-x-1/2 font-medium text-[color:var(--fin-positive-strong)]"
-					style={{ left: percent(geometry.profitZone ? geometry.profitZone.to : 1) }}
-				>
-					{geometry.labels.profit}
-				</span>
-			)}
-			{geometry.labels.superEnd !== null && (
-				// Подпись сверхприбыли красится собственным токеном superLabel
-				// design.pen — тёмным текстовым цветом зоны сверхприбыли из мастера,
-				// без хардкода и заимствования чужих по смыслу токенов.
-				// Traceability: change:add-finresult-design-tokens/specs/ui/design-system/spec#scenario-finresult-colors-use-own-tokens
-				<span
-					data-part="super-scale"
-					className="absolute right-0 translate-x-1/2 text-[color:var(--fin-super-label)]"
-				>
-					{geometry.labels.superEnd}
-				</span>
-			)}
+			))}
 		</div>
 	);
+}
+
+// Метки стороны: деления шкалы сверху (−Риск у левого края, 0, +Профит у
+// края зоны профита), граница и маркер снизу; у каждой — класс тона и
+// высота в строках (граница — две строки: состояние и значение).
+function collectLabelItems(
+	geometry: FinResultGeometry,
+	preset: SizePreset,
+	side: "above" | "below",
+	placements: NonNullable<FinResultGeometry["placements"]>,
+): Array<{ part: string; rows: number; x: number; placement: FinResultLabelPlacement; content: React.ReactNode; className?: string }> {
+	const items: Array<{ part: string; rows: number; x: number; placement: FinResultLabelPlacement; content: React.ReactNode; className?: string }> = [];
+
+	if (side === "above") {
+		if (geometry.labels.risk !== null && placements.risk?.side === side) {
+			items.push({
+				part: "risk-scale",
+				rows: 1,
+				x: 0,
+				placement: placements.risk,
+				content: geometry.labels.risk,
+				className: cn(preset.scaleLabelClass, "text-[color:var(--fin-negative)]"),
+			});
+		}
+		if (placements.zero !== null && placements.zero.side === side) {
+			items.push({
+				part: "zero-scale",
+				rows: 1,
+				x: geometry.zeroAt,
+				placement: placements.zero,
+				content: geometry.labels.zero,
+				className: cn(preset.scaleLabelClass, "text-muted-foreground"),
+			});
+		}
+		if (geometry.labels.profit !== null && placements.profit?.side === side) {
+			items.push({
+				part: "profit-scale",
+				rows: 1,
+				x: geometry.profitZone === null ? geometry.zeroAt : geometry.profitZone.to,
+				placement: placements.profit,
+				content: geometry.labels.profit,
+				className: cn(preset.scaleLabelClass, "font-medium text-[color:var(--fin-positive-strong)]"),
+			});
+		}
+	}
+
+	if (side === "below") {
+		// Подпись границы: «риск есть»/«риска нет» и значение реального
+		// риска «150 USDT · 50%»; зелёная при выходе в плюс или отсутствии
+		// риска, иначе красная.
+		if (geometry.labels.borderTitle !== null && geometry.labels.borderValue !== null && placements.border?.side === side) {
+			const borderToneClass =
+				geometry.tone === "positive" || geometry.labels.borderTitle === "риска нет"
+					? "text-[color:var(--fin-positive-strong)]"
+					: "text-[color:var(--fin-negative)]";
+			items.push({
+				part: "border-label",
+				rows: 2,
+				x: geometry.borderAt ?? 0,
+				placement: placements.border,
+				content: (
+					<>
+						<span className={cn("font-medium", borderToneClass)}>{geometry.labels.borderTitle}</span>
+						<span className={cn("font-semibold", borderToneClass)}>{geometry.labels.borderValue}</span>
+					</>
+				),
+				className: preset.markerLabelClass,
+			});
+		}
+		if (geometry.labels.marker !== null && placements.marker?.side === side) {
+			items.push({
+				part: "marker-label",
+				rows: 1,
+				x: geometry.markerAt ?? geometry.zeroAt,
+				placement: placements.marker,
+				content: geometry.labels.marker,
+				className: cn(
+					preset.markerLabelClass,
+					"font-semibold tabular-nums",
+					geometry.tone === "positive"
+						? "text-[color:var(--fin-positive-strong)]"
+						: "text-[color:var(--fin-negative)]",
+				),
+			});
+		}
+	}
+
+	return items;
+}
+
+// Позиционирование метки по выравниванию из разноса: центр — по ширине
+// позиции; края — прижаты изнутри («start» — левым краем от позиции,
+// «end» — правым краем до позиции), габариты индикатора не растут.
+// Traceability: openspec:ui/screens#scenario-finresult-labels-edge-flush
+function labelAnchorStyle(
+	item: { rows: number; x: number; placement: FinResultLabelPlacement },
+	lineHeightPx: number,
+): React.CSSProperties {
+	const base: React.CSSProperties = { top: 0, lineHeight: `${lineHeightPx}px` };
+	const left = `${item.x * 100}%`;
+
+	if (item.placement.align === "start") {
+		return { ...base, left };
+	}
+
+	if (item.placement.align === "end") {
+		return { ...base, right: `${(1 - item.x) * 100}%` };
+	}
+
+	return { ...base, left, transform: "translateX(-50%)" };
 }
 
 // Полоса: тонируемые зоны в скруглённой маске, заливки результата,
@@ -275,47 +422,6 @@ function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; prese
 	);
 }
 
-// Подписи под полосой: у границы — состояние риска двумя единицами,
-// у маркера — нереализованная или вынесенный итог.
-function MarkerLabels({ geometry, preset }: { geometry: FinResultGeometry; preset: SizePreset }) {
-	const borderToneClass =
-		geometry.tone === "positive" || (geometry.labels.borderTitle === "риска нет")
-			? "text-[color:var(--fin-positive-strong)]"
-			: "text-[color:var(--fin-negative)]";
-	const markerToneClass =
-		geometry.tone === "positive"
-			? "text-[color:var(--fin-positive-strong)]"
-			: "text-[color:var(--fin-negative)]";
-
-	return (
-		<div className={cn("relative h-9", preset.markerLabelClass)}>
-			{geometry.labels.borderTitle !== null && geometry.borderAt !== null && (
-				<span
-					data-part="border-label"
-					className="absolute top-0 flex -translate-x-1/2 flex-col items-center gap-px whitespace-nowrap"
-					style={{ left: percent(geometry.borderAt) }}
-				>
-					<span className={cn("font-medium", borderToneClass)}>{geometry.labels.borderTitle}</span>
-					<span className={cn("font-semibold", borderToneClass)}>{geometry.labels.borderValue}</span>
-				</span>
-			)}
-
-			{geometry.labels.marker !== null && geometry.markerAt !== null && (
-				<span
-					data-part="marker-label"
-					className={cn(
-						"absolute top-4 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums",
-						markerToneClass,
-					)}
-					style={{ left: percent(geometry.markerAt) }}
-				>
-					{geometry.labels.marker}
-				</span>
-			)}
-		</div>
-	);
-}
-
 // Текстовое описание для скринридеров: состояние границы и итог.
 function describeForScreenReader(geometry: FinResultGeometry): string {
 	const border =
@@ -326,6 +432,32 @@ function describeForScreenReader(geometry: FinResultGeometry): string {
 	const incomplete = geometry.incomplete ? "неполный, сбой котировок" : "";
 
 	return [border, marker, incomplete].filter(Boolean).join(", ") || "нет данных о результате";
+}
+
+// Ширина контейнера через ResizeObserver; без наблюдения (тестовая среда
+// без ResizeObserver) — null, калькулятор берёт номинальную ширину пресета.
+function useElementWidth(): { ref: React.RefObject<HTMLDivElement | null>; width: number | null } {
+	const ref = React.useRef<HTMLDivElement | null>(null);
+	const [width, setWidth] = React.useState<number | null>(null);
+
+	React.useEffect(() => {
+		const element = ref.current;
+		if (element === null || typeof ResizeObserver === "undefined") {
+			return;
+		}
+
+		const observer = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				setWidth(entry.contentRect.width);
+			}
+		});
+		observer.observe(element);
+		setWidth(element.getBoundingClientRect().width);
+
+		return () => observer.disconnect();
+	}, []);
+
+	return { ref, width };
 }
 
 function percent(fraction: number): string {
