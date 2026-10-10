@@ -2,8 +2,8 @@
 
 ## 1. Метрика реального риска (бэкенд)
 
-- [ ] 1.1 Калькулятор реального риска в `Application/Analytics`: группировка открытых остатков по `(BaseCoin, ExpiryDate)`, совместный минимум платежа по узлам-страйкам, консервативная сумма групп, правила null; юнит-тесты (дебетовый спред, много-экспирационность, неограниченный случай, неразбор символа, без остатков, независимость от марок)
-- [ ] 1.2 `RealRiskUsdt` в `ConstructionMetrics` и расчёт в `ConstructionMetricsCalculator`; обновление тестов калькулятора метрик
+- [x] 1.1 Калькулятор реального риска в `Application/Analytics`: группировка открытых остатков по `(BaseCoin, ExpiryDate)`, совместный минимум платежа по узлам-страйкам, консервативная сумма групп, правила null; юнит-тесты (дебетовый спред, много-экспирационность, неограниченный случай, неразбор символа, без остатков, независимость от марок)
+- [x] 1.2 `RealRiskUsdt` в `ConstructionMetrics` и расчёт в `ConstructionMetricsCalculator`; обновление тестов калькулятора метрик
 - [ ] 1.3 `realRiskUsdt` в контрактах: `ConstructionListItem`, превью, `ConstructionDetailRows`/метрики карточки; проводка в `ConstructionListReadModel`, `ConstructionDetailReadModel`, `JournalMetricsReadModel`
 - [ ] 1.4 DTO endpoints (`ConstructionsEndpoints`, `ConstructionCardEndpoints`) — поле в списке, превью и метриках карточки; прогон тестов API
 

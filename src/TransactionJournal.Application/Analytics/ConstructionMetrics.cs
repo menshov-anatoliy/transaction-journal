@@ -51,6 +51,19 @@ public sealed record ConstructionMetrics
 	/// </summary>
 	public decimal? MarkValue { get; init; }
 
+	/// <summary>
+	/// Реальный риск конструкции в USDT — наихудший результат её открытых
+	/// остатков на экспирации: совместный минимум платежа ног в группе одной
+	/// экспирации, группы разных экспираций суммируются консервативно. Без
+	/// открытых остатков риск нулевой; null — когда худший случай неограничен
+	/// (нетто-короткая позиция по коллам группы) или символ открытого остатка
+	/// не разобран. Метрика выводится из структуры ног и средних цен открытых
+	/// остатков и от текущих марок не зависит.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: change:fix-finresult-indicator-real-risk/design#d1
+	/// </summary>
+	public decimal? RealRiskUsdt { get; init; }
+
 	/// <summary>Реализованный PnL в процентах от текущего выделенного капитала; null при нулевом капитале.</summary>
 	public required decimal? RealizedPnLPercent { get; init; }
 
