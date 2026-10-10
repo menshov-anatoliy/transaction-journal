@@ -2,6 +2,7 @@ namespace TransactionJournal.Api.Constructions;
 
 using Microsoft.AspNetCore.Builder;
 using TransactionJournal.Application;
+using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Materialization;
 using TransactionJournal.Domain;
 using TransactionJournal.Hints.Display;
@@ -64,8 +65,9 @@ public static class ConstructionsEndpoints
 				data.HasMarkFailure,
 				data.ConstructionCount,
 				data.OpenCount);
-			// Строки таблицы публикуют и реальный риск: расчёт остаётся в аналитике,
-			// эндпоинт переносит величину в JSON-контракт как есть.
+			// Строки таблицы публикуют реальный риск со статусом состояния:
+			// расчёт остаётся в аналитике, эндпоинт переносит величину
+			// и состояние в JSON-контракт как есть.
 			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 			var rows = data.Items
 				.Select(item => new ConstructionRowResponse(
@@ -85,6 +87,10 @@ public static class ConstructionsEndpoints
 					item.MarkValue,
 					item.CapitalUsagePercent,
 					item.RealRiskUsdt,
+					// Статус проходит рядом с величиной: конечный риск отличим от
+					// неограниченного хвоста и неполных данных без догадок по null.
+					// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+					SerializeRealRiskStatus(item.RealRiskStatus),
 					item.OpenedAt,
 					item.ClosedAt,
 					liveCounts.GetValueOrDefault(item.ConstructionId)))
@@ -116,8 +122,9 @@ public static class ConstructionsEndpoints
 					statusCode: StatusCodes.Status404NotFound);
 			}
 
-			// Превью публикует и реальный риск конструкции: индикатору нужна
-			// граница реального риска, величина проходит из метрик аналитики.
+			// Превью публикует реальный риск конструкции со статусом состояния:
+			// индикатору нужна граница конечного риска, величина и состояние
+			// проходят из метрик аналитики.
 			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 			return Results.Json(new ConstructionPreviewResponse(
 				data.ConstructionId,
@@ -136,6 +143,10 @@ public static class ConstructionsEndpoints
 				data.Metrics.MarkValue,
 				data.Metrics.CapitalUsagePercent,
 				data.Metrics.RealRiskUsdt,
+				// Статус проходит рядом с величиной: конечный риск отличим от
+				// неограниченного хвоста и неполных данных без догадок по null.
+				// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+				SerializeRealRiskStatus(data.Metrics.RealRiskStatus),
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
 				data.MarksAsOf,
@@ -156,6 +167,15 @@ public static class ConstructionsEndpoints
 		ConstructionStatus.Open => "open",
 		ConstructionStatus.Closed => "closed",
 		ConstructionStatus.Archived => "archived",
+		_ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
+	};
+
+	/// <summary>Стабильная строка состояния реального риска в контракте API.</summary>
+	private static string SerializeRealRiskStatus(RealRiskStatus status) => status switch
+	{
+		RealRiskStatus.Finite => "finite",
+		RealRiskStatus.Unbounded => "unbounded",
+		RealRiskStatus.Unavailable => "unavailable",
 		_ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
 	};
 }
@@ -200,13 +220,16 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
 /// <param name="MarkValue">Стоимость открытых позиций по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
-/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неразобранном символе.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
+/// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="LiveHintCount">Число живых подсказок конструкции для бейджа строки.</param>
-// Реальный риск входит в контракт строки списка: SPA рисует границу
-// реального риска индикатора прямо в таблице.
+// Реальный риск входит в контракт строки списка со статусом состояния:
+// SPA рисует насечку только конечного риска и различает неограниченный
+// хвост и неполные данные без догадок по null.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+// Traceability: change:show-unbounded-finresult-risk/design#d1
 public sealed record ConstructionRowResponse(
 	long ConstructionId,
 	string Name,
@@ -224,6 +247,7 @@ public sealed record ConstructionRowResponse(
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
+	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	int LiveHintCount);
@@ -248,15 +272,18 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
 /// <param name="MarkValue">Стоимость открытых позиций по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
-/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неразобранном символе.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
+/// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое или без остатков.</param>
 /// <param name="HasMarkFailure">Признак сбоя провайдера котировок.</param>
 /// <param name="Counts">Счётчики записей конструкции для превью.</param>
-// Реальный риск входит в контракт превью: правая область строит полный
-// индикатор финрезультата с границей реального риска.
+// Реальный риск входит в контракт превью со статусом состояния: правая
+// область строит полный индикатор финрезультата с насечкой только
+// конечного риска.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+// Traceability: change:show-unbounded-finresult-risk/design#d1
 public sealed record ConstructionPreviewResponse(
 	long ConstructionId,
 	string Name,
@@ -274,6 +301,7 @@ public sealed record ConstructionPreviewResponse(
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
+	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	DateTimeOffset? MarksAsOf,

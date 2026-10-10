@@ -12,6 +12,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Api;
 using TransactionJournal.Application;
+using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Materialization;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Domain;
@@ -80,6 +81,7 @@ public sealed class ConstructionCardApiTests
 		// величина проходит из метрик аналитики без пересчёта.
 		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 		Assert.That(metrics["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
+		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
 		Assert.That(metrics["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(metrics["closedAt"], Is.Null);
 		Assert.That(metrics["durationSeconds"]!.GetValue<double>(), Is.EqualTo(53.4 * 3600).Within(0.1));
@@ -172,6 +174,50 @@ public sealed class ConstructionCardApiTests
 		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.ServiceUnavailable));
 		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
 		Assert.That(payload!["error"]!.GetValue<string>(), Does.Contain("исполнени"));
+	}
+
+	[TestMethod]
+	[Description("Метрики карточки открытого короткого колла публикуют unbounded без числа")]
+	// Открытый нетто-короткий колл делает худший исход неограниченным:
+	// карточка отдаёт статус unbounded, realRiskUsdt остаётся null.
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task TryIfCardMetricsPublishUnboundedStatusForOpenShortCall()
+	{
+		// Arrange: read-модель деталей с неограниченным реальным риском.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(StubCardDetailReadModel.WithRealRiskStatus(RealRiskStatus.Unbounded)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: статус unbounded без числа, инвариант контракта соблюдён.
+		var metrics = payload!["metrics"]!;
+		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unbounded"));
+		Assert.That(metrics["realRiskUsdt"], Is.Null);
+		RealRiskContractChecks.AssertNumberOnlyWhenFinite(metrics);
+	}
+
+	[TestMethod]
+	[Description("Метрики карточки при неполных данных публикуют unavailable без числа")]
+	// Неполные исходные данные (неразобранный символ, нет средней цены):
+	// карточка отдаёт статус unavailable и не выдаёт число за конечный риск.
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public async Task TryIfCardMetricsPublishUnavailableStatusForMissingData()
+	{
+		// Arrange: read-модель деталей с нерассчитанным реальным риском.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(StubCardDetailReadModel.WithRealRiskStatus(RealRiskStatus.Unavailable)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: статус unavailable без числа, инвариант контракта соблюдён.
+		var metrics = payload!["metrics"]!;
+		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unavailable"));
+		Assert.That(metrics["realRiskUsdt"], Is.Null);
+		RealRiskContractChecks.AssertNumberOnlyWhenFinite(metrics);
 	}
 
 		[TestMethod]
@@ -959,19 +1005,25 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 {
 	private readonly bool _brokenJournal;
 
-	private StubCardDetailReadModel(bool brokenJournal)
+	private readonly RealRiskStatus _realRiskStatus;
+
+	private StubCardDetailReadModel(bool brokenJournal, RealRiskStatus realRiskStatus)
 	{
 		_brokenJournal = brokenJournal;
+		_realRiskStatus = realRiskStatus;
 	}
 
 	/// <summary>Вариант по умолчанию: конструкция 7 со всеми таблицами записей.</summary>
 	public StubCardDetailReadModel()
-		: this(brokenJournal: false)
+		: this(brokenJournal: false, realRiskStatus: RealRiskStatus.Finite)
 	{
 	}
 
 	/// <summary>Вариант с повреждённым сырьём: чтение падает материализацией сделок.</summary>
-	public static StubCardDetailReadModel WithBrokenJournal() => new(brokenJournal: true);
+	public static StubCardDetailReadModel WithBrokenJournal() => new(brokenJournal: true, realRiskStatus: RealRiskStatus.Finite);
+
+	/// <summary>Вариант с заданным состоянием реального риска: число остаётся только у конечного риска.</summary>
+	public static StubCardDetailReadModel WithRealRiskStatus(RealRiskStatus realRiskStatus) => new(brokenJournal: false, realRiskStatus);
 
 	public Task<ConstructionDetailData> ReadAsync(long constructionId, CancellationToken cancellationToken = default)
 	{
@@ -1002,7 +1054,10 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			AdjustmentsPnLPercent = 0.17m,
 			TotalPnLPercent = 3.5m,
 			CapitalUsagePercent = 16.7m,
-			RealRiskUsdt = 150m,
+			// Число реального риска выдаётся только конечному состоянию:
+			// unbounded и unavailable идут с null, инвариант «число только при finite».
+			RealRiskUsdt = _realRiskStatus == RealRiskStatus.Finite ? 150m : null,
+			RealRiskStatus = _realRiskStatus,
 			OpenedAt = openedAt,
 			ClosedAt = null,
 			Duration = TimeSpan.FromHours(53.4),

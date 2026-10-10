@@ -3,6 +3,7 @@ namespace TransactionJournal.Api.Constructions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using TransactionJournal.Application;
+using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Materialization;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.Data;
@@ -560,6 +561,15 @@ public static class ConstructionCardEndpoints
 			_ => null,
 	};
 
+	/// <summary>Стабильная строка состояния реального риска в контракте API.</summary>
+	private static string SerializeRealRiskStatus(RealRiskStatus status) => status switch
+	{
+		RealRiskStatus.Finite => "finite",
+		RealRiskStatus.Unbounded => "unbounded",
+		RealRiskStatus.Unavailable => "unavailable",
+		_ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
+	};
+
 	/// <summary>Перевод доменного снимка деталей в контракт карточки.</summary>
 	private static ConstructionCardResponse ToCardResponse(ConstructionDetailData data) => new(
 		data.ConstructionId,
@@ -576,8 +586,9 @@ public static class ConstructionCardEndpoints
 		data.HasOpenResidual,
 		data.HasMarkFailure,
 		data.MarksAsOf,
-		// Метрики карточки публикуют и реальный риск: индикатору карточки нужна
-		// граница реального риска, величина проходит из метрик аналитики.
+		// Метрики карточки публикуют реальный риск со статусом состояния:
+		// индикатору карточки нужна граница конечного риска, величина
+		// и состояние проходят из метрик аналитики.
 		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 		new ConstructionCardMetricsResponse(
 			data.Metrics.RealizedPnL,
@@ -591,6 +602,10 @@ public static class ConstructionCardEndpoints
 			data.Metrics.MarkValue,
 			data.Metrics.CapitalUsagePercent,
 			data.Metrics.RealRiskUsdt,
+			// Статус проходит рядом с величиной: конечный риск отличим от
+			// неограниченного хвоста и неполных данных без догадок по null.
+			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+			SerializeRealRiskStatus(data.Metrics.RealRiskStatus),
 			data.Metrics.OpenedAt,
 			data.Metrics.ClosedAt,
 			data.Metrics.Duration is { } duration ? (long?)Math.Round(duration.TotalSeconds) : null),
@@ -761,13 +776,15 @@ public sealed record ConstructionCardResponse(
 /// <param name="AdjustmentsPnLPercent">Корректировки в процентах; null без базы.</param>
 /// <param name="MarkValue">Стоимость открытых остатков по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
-/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неразобранном символе.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
+/// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия — время первой сделки; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой.</param>
 /// <param name="DurationSeconds">Длительность конструкции в секундах; null без сделок.</param>
-// Реальный риск входит в контракт метрик карточки: полный индикатор карточки
-// строится с границей реального риска.
+// Реальный риск входит в контракт метрик карточки со статусом состояния:
+// полный индикатор карточки строится с насечкой только конечного риска.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+// Traceability: change:show-unbounded-finresult-risk/design#d1
 public sealed record ConstructionCardMetricsResponse(
 	decimal RealizedPnL,
 	decimal? UnrealizedPnL,
@@ -780,6 +797,7 @@ public sealed record ConstructionCardMetricsResponse(
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
+	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	long? DurationSeconds);
