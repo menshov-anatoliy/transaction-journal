@@ -2316,26 +2316,70 @@
           "cornerRadius": 14,
           "stroke": "$border",
           "layout": "vertical",
-          "gap": 12,
+          "gap": 8,
           "padding": 14,
           "children": [
             {
-              "type": "text",
-              "id": "dkwDP",
-              "name": "Placeholder",
-              "fill": "$textMuted",
-              "textGrowth": "fixed-width",
+              "type": "frame",
+              "id": "Ur1vh",
+              "name": "Поле",
               "width": "fill_container",
-              "content": "Спросите агента о конструкции, правилах или рынке…",
-              "lineHeight": 1.5,
-              "fontFamily": "$font",
-              "fontSize": 13.5,
-              "fontWeight": "normal"
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "dkwDP",
+                  "name": "Placeholder",
+                  "fill": "$textMuted",
+                  "textGrowth": "fixed-width-height",
+                  "width": "fill_container",
+                  "height": 41,
+                  "content": "Спросите агента о конструкции, правилах или рынке…",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font",
+                  "fontSize": 13.5,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "DAIeA",
+                  "name": "Действия",
+                  "width": "fill_container",
+                  "justifyContent": "end",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "K7kSy",
+                      "name": "Send/Stop",
+                      "width": 36,
+                      "height": 36,
+                      "fill": "$accent",
+                      "cornerRadius": 10,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "VgNyA",
+                          "name": "SendIcon",
+                          "width": 16,
+                          "height": 16,
+                          "icon": "arrow-up",
+                          "library": "lucide",
+                          "fill": "#FFFFFF"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             },
             {
               "type": "frame",
               "id": "ZCrdN",
-              "name": "Params",
+              "name": "Тулбар",
               "width": "fill_container",
               "gap": 8,
               "alignItems": "center",
@@ -2380,13 +2424,6 @@
                 },
                 {
                   "type": "frame",
-                  "id": "lqR5T",
-                  "name": "Spacer",
-                  "width": "fill_container",
-                  "height": 1
-                },
-                {
-                  "type": "frame",
                   "id": "aF5vM",
                   "name": "ModelChip",
                   "fill": "$surface2",
@@ -2417,29 +2454,6 @@
                       "icon": "chevron-down",
                       "library": "lucide",
                       "fill": "$textMuted"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "K7kSy",
-                  "name": "Send",
-                  "width": 36,
-                  "height": 36,
-                  "fill": "$accent",
-                  "cornerRadius": 10,
-                  "justifyContent": "center",
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "icon",
-                      "id": "VgNyA",
-                      "name": "SendIcon",
-                      "width": 16,
-                      "height": 16,
-                      "icon": "arrow-up",
-                      "library": "lucide",
-                      "fill": "#FFFFFF"
                     }
                   ]
                 },
@@ -2510,6 +2524,13 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "type": "frame",
+                  "id": "lqR5T",
+                  "name": "Spacer",
+                  "width": "fill_container",
+                  "height": 1
                 }
               ]
             }
