@@ -26,6 +26,7 @@ const preview: ConstructionPreview = {
 	totalPnLPercent: 3.5,
 	markValue: 500,
 	capitalUsagePercent: 16.7,
+	realRiskUsdt: 45,
 	openedAt: "2026-06-18T09:05:00",
 	closedAt: null,
 	marksAsOf: "2026-06-20T14:30:00",
@@ -46,12 +47,21 @@ describe("превью конструкции", () => {
 		// Act: превью открытой конструкции.
 		renderPreview();
 
-		// Assert: имя, метрики итога и производные величины видны.
+		// Assert: имя и метрики итога и производных величин видны.
 		expect(screen.getByRole("heading", { name: "ETH-240628-3200C+P" })).toBeInTheDocument();
-		expect(screen.getByText("+105.5")).toBeInTheDocument();
+		// Итог в сводке: метрика содержит итог одним текстом.
+		const totalMetric = Array.from(document.querySelectorAll('[data-slot="metric-value"]')).find(
+			(el) => el.textContent === "+105.5",
+		);
+		expect(totalMetric).toBeDefined();
+		// Маркер индикатора подписан итогом realized + unrealized
+		// (+100.5; корректировки 5 входят только в сводку totalPnL 105.5).
+		const markerLabel = document.querySelector('[data-part="marker-label"]');
+		expect(markerLabel).not.toBeNull();
+		expect(markerLabel?.textContent).toContain("+100.5");
 		expect(screen.getByText("+60.25")).toBeInTheDocument();
-		// Нереализованная часть видна и в сводке, и в подписи маркера индикатора.
-		expect(screen.getAllByText("+40.25").length).toBeGreaterThan(0);
+		// Нереализованная часть видна в сводке.
+		expect(screen.getByText("+40.25")).toBeInTheDocument();
 		expect(screen.getByText("+5")).toBeInTheDocument();
 		expect(screen.getByText("3000")).toBeInTheDocument();
 		expect(screen.getByText("+500")).toBeInTheDocument();
@@ -111,7 +121,11 @@ describe("превью конструкции", () => {
 
 		// Значения — базовая типографика примитива: 15/600 textPrimary
 		// (инстансы превью не переопределяют размер и цвет значения).
-		const total = screen.getByText("+105.5").closest('[data-slot="metric-value"]');
+		// Из двух вхождений итога берём вхождение сводки — внутри metric-value.
+		const total = screen
+			.getAllByText("+105.5")
+			.map((element) => element.closest('[data-slot="metric-value"]'))
+			.find(Boolean);
 		expect(total?.className).toContain("text-[15px]");
 		expect(total?.className).toContain("font-semibold");
 		expect(total?.className).toContain("text-text-primary");

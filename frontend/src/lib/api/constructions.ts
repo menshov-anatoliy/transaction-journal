@@ -36,6 +36,11 @@ export interface ConstructionRow {
 	readonly totalPnLPercent: number | null;
 	readonly markValue: number | null;
 	readonly capitalUsagePercent: number | null;
+	// Реальный риск открытых остатков: бэкенд отдаёт null при неограниченном
+	// худшем случае или неразобранном символе — индикатор подставит заглушку
+	// плановым риском, граница не исчезает.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	readonly realRiskUsdt: number | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly liveHintCount: number;
@@ -72,6 +77,11 @@ export interface ConstructionPreview {
 	readonly totalPnLPercent: number | null;
 	readonly markValue: number | null;
 	readonly capitalUsagePercent: number | null;
+	// Реальный риск открытых остатков: null при неограниченном худшем случае
+	// или неразобранном символе остатка — слой индикатора применит каскад
+	// заглушек вместо скрытия границы.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	readonly realRiskUsdt: number | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly marksAsOf: string | null;

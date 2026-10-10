@@ -12,8 +12,9 @@ import {
 // и доступность выдаёт каждый из трёх видов.
 // Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финансового-результата-конструкции
 
-// Вход кейса C3 макета: граница −250, маркер −70, подписи «риск есть /
-// 250 USDT · 83%» и «+180».
+// Вход кейса C3: граница реального риска прижата к левому краю
+// (−550 = −250 − 300), маркер — итог −70, подписи «риск есть /
+// 300 USDT · 100%» и «−70».
 const CASE_C3 = {
 	plannedRisk: 300,
 	plannedProfit: 900,
@@ -22,7 +23,8 @@ const CASE_C3 = {
 	quotesDegraded: false,
 } as const;
 
-// Вход кейса C6 макета: сверхприбыль с золотой зоной и клипом маркера.
+// Вход кейса C6: сверхприбыль — итог +1 400 растягивает золотую зону,
+// маркер стоит на краю шкалы и подписан итогом.
 const CASE_C6 = {
 	plannedRisk: 300,
 	plannedProfit: 900,
@@ -32,6 +34,9 @@ const CASE_C6 = {
 } as const;
 
 describe("полный индикатор", () => {
+	// Граница прижата к левому краю, но подписывается реальным риском целиком;
+	// маркер подписан итогом.
+	// Traceability: openspec:ui/screens#scenario-finresult-border-left-clip
 	it("показывает подписи шкалы, границы и маркера кейса C3", () => {
 		// Act: полный вид для карточки и превью конструкции.
 		render(<FullFinResultIndicator input={CASE_C3} />);
@@ -41,8 +46,8 @@ describe("полный индикатор", () => {
 		expect(screen.getByText("0")).toBeInTheDocument();
 		expect(screen.getByText("+900")).toBeInTheDocument();
 		expect(screen.getByText("риск есть")).toBeInTheDocument();
-		expect(screen.getByText("250 USDT · 83%")).toBeInTheDocument();
-		expect(screen.getByText("+180")).toBeInTheDocument();
+		expect(screen.getByText("300 USDT · 100%")).toBeInTheDocument();
+		expect(screen.getByText("−70")).toBeInTheDocument();
 	});
 
 	it("позиционирует маркер по доле геометрии", () => {
@@ -64,15 +69,89 @@ describe("полный индикатор", () => {
 		expect(marker?.dataset.tone).toBe("negative");
 	});
 
-	it("показывает признак пробоя: вынос значения при клипе маркера", () => {
-		// Act: итог +1 400 за границей шкалы (кейс C6).
-		render(<FullFinResultIndicator input={CASE_C6} />);
+	// Сверхприбыль: золотая зона тянется до итога, маркер остаётся на краю
+	// шкалы без клипа и подписан итогом.
+	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-marker
+	it("рисует золотую зону до итога и подписывает маркер итогом", () => {
+		// Act: итог +1 400 на краю растянутой шкалы (кейс C6).
+		const { container } = render(<FullFinResultIndicator input={CASE_C6} />);
 
-		// Assert: значение итога вынесено числом, край золота подписан
-		// ( Thousands-разделитель — неразрывный пробел, при поиске текст
+		// Assert: золотая зона отрисована, маркер подписан итогом
+		// (тысячный разделитель — неразрывный пробел, при поиске текст
 		// нормализуется в обычный).
+		expect(container.querySelector('[data-part="super-zone"]')).not.toBeNull();
 		expect(screen.getByText("+1 400")).toBeInTheDocument();
-		expect(screen.getByText("+1 150")).toBeInTheDocument();
+	});
+
+	// Свежая позиция: ликвидация вернёт около нуля, весь реальный риск (120)
+	// впереди — граница стоит на −реальныйРиск со своей метрикой.
+	// Traceability: openspec:ui/screens#scenario-finresult-fresh-position-real-risk
+	it("показывает свежую позицию: маркер «≈ 0», граница по метрике риска", () => {
+		// Act: сделок закрытия нет, метрика реального риска доступна.
+		render(
+			<FullFinResultIndicator
+				input={{
+					plannedRisk: 300,
+					plannedProfit: 900,
+					realized: 0,
+					unrealized: 0,
+					quotesDegraded: false,
+					realRisk: 120,
+				}}
+			/>,
+		);
+
+		// Assert: маркер «≈ 0», граница подписана метрикой реального риска.
+		expect(screen.getByText("≈ 0")).toBeInTheDocument();
+		expect(screen.getByText("риск есть")).toBeInTheDocument();
+		expect(screen.getByText("120 USDT · 40%")).toBeInTheDocument();
+	});
+
+	// Закрытая конструкция: реального риска нет — граница на realized с
+	// подписью «риска нет» без процентов.
+	// Traceability: openspec:ui/screens#scenario-finresult-closed-no-risk
+	it("показывает закрытую позицию: «риска нет», граница на realized", () => {
+		// Act: остатков нет, реализованная выше целевого профита, риск 0.
+		render(
+			<FullFinResultIndicator
+				input={{
+					plannedRisk: 300,
+					plannedProfit: 900,
+					realized: 945,
+					unrealized: null,
+					quotesDegraded: false,
+					realRisk: 0,
+				}}
+			/>,
+		);
+
+		// Assert: подпись «риска нет» и итог +945 на краю шкалы.
+		expect(screen.getByText("риска нет")).toBeInTheDocument();
+		expect(screen.getByText("0 USDT · 0%")).toBeInTheDocument();
+		expect(screen.getByText("+945")).toBeInTheDocument();
+	});
+
+	// Нет метрики реального риска — граница считается по заглушке плановым
+	// риском, подпись показывает величину заглушки.
+	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
+	it("показывает заглушку границы плановым риском, когда метрики нет", () => {
+		// Act: поле realRisk не передано вызывающим компонентом.
+		render(
+			<FullFinResultIndicator
+				input={{
+					plannedRisk: 300,
+					plannedProfit: 900,
+					realized: 100,
+					unrealized: 0,
+					quotesDegraded: false,
+				}}
+			/>,
+		);
+
+		// Assert: граница по плановому риску 300, маркер — итог +100.
+		expect(screen.getByText("риск есть")).toBeInTheDocument();
+		expect(screen.getByText("300 USDT · 100%")).toBeInTheDocument();
+		expect(screen.getByText("+100")).toBeInTheDocument();
 	});
 });
 
@@ -81,10 +160,10 @@ describe("средний индикатор", () => {
 		// Act: средний вид для сводных карточек.
 		render(<MediumFinResultIndicator input={CASE_C3} />);
 
-		// Assert: те же смысловые подписи, что и в полном виде.
+		// Assert: те же смысловые подписи, что и в полном виде; маркер — итог.
 		expect(screen.getByText("−300")).toBeInTheDocument();
 		expect(screen.getByText("риск есть")).toBeInTheDocument();
-		expect(screen.getByText("+180")).toBeInTheDocument();
+		expect(screen.getByText("−70")).toBeInTheDocument();
 	});
 });
 
@@ -148,8 +227,8 @@ describe("доступность индикатора", () => {
 		// Act.
 		render(<FullFinResultIndicator input={CASE_C3} />);
 
-		// Assert: состояние озвучивается подписями границы и маркера.
-		const labelled = screen.getByRole("img", { name: /риск есть 250 USDT · 83%/ });
-		expect(labelled).toHaveAttribute("aria-label", expect.stringContaining("+180"));
+		// Assert: состояние озвучивается подписями границы и итога маркера.
+		const labelled = screen.getByRole("img", { name: /риск есть 300 USDT · 100%/ });
+		expect(labelled).toHaveAttribute("aria-label", expect.stringContaining("−70"));
 	});
 });

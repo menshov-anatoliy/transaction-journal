@@ -28,6 +28,10 @@ export interface ConstructionCardMetrics {
 	readonly adjustmentsPnLPercent: number | null;
 	readonly markValue: number | null;
 	readonly capitalUsagePercent: number | null;
+	// Реальный риск открытых остатков для границы индикатора карточки:
+	// null — заглушка плановым риском по каскаду геометрии.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	readonly realRiskUsdt: number | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly durationSeconds: number | null;

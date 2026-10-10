@@ -192,6 +192,10 @@ export function ConstructionsTable({ rows, selectedId, onSelect }: Constructions
 								realized: row.original.realizedPnL,
 								unrealized: row.original.unrealizedPnL,
 								quotesDegraded: quotesDegraded(row.original),
+								// Граница реального риска в таблице считается по
+								// метрике бэкенда; null — заглушка плановым риском.
+								// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+								realRisk: row.original.realRiskUsdt,
 							}}
 						/>
 					</div>

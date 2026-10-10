@@ -11,8 +11,8 @@
 
 - [x] 2.1 `FinResultInput.realRisk`; формула границы `realized − realRiskEff` с заглушкой и клипом слева; упразднение спец-случая #62; золотая зона до `max(total, borderValue)` без капа; упразднение `superEnd`; подпись границы «риск есть/риска нет · USDT · %»; подпись маркера — итог
 - [x] 2.2 Разнос меток: оценка ширины, назначение `{side, level, align}` в калькуляторе, прижатие крайних; рендер сторон/уровней в `fin-result-indicator.tsx` (полный и средний виды)
-- [ ] 2.3 Типы `frontend/src/lib/api/*`: `realRiskUsdt` в строке, превью, метриках карточки; проводка в `constructions-table`, `construction-preview`, `metric-strip`
-- [ ] 2.4 Обновление тестов `geometry.test.ts` и `fin-result-indicator.test.tsx` под новую семантику
+- [x] 2.3 Типы `frontend/src/lib/api/*`: `realRiskUsdt` в строке, превью, метриках карточки; проводка в `constructions-table`, `construction-preview`, `metric-strip`
+- [x] 2.4 Обновление тестов `geometry.test.ts` и `fin-result-indicator.test.tsx` под новую семантику
 
 ## 3. Визуальное и документация
 

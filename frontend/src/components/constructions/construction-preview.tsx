@@ -48,6 +48,10 @@ export function ConstructionPreviewCard({ preview }: ConstructionPreviewCardProp
 					realized: preview.realizedPnL,
 					unrealized: preview.unrealizedPnL,
 					quotesDegraded: preview.hasMarkFailure,
+					// Граница реального риска превью: метрика бэкенда, при null —
+					// каскад заглушек внутри геометрии.
+					// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+					realRisk: preview.realRiskUsdt,
 				}}
 			/>
 
