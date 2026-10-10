@@ -321,17 +321,24 @@ describe("раздел «Конструкции»", () => {
 		expect(value.className).toContain("font-semibold");
 		expect(value.className).toContain("text-accent-strong");
 
-		// Блок итога: вертикальный стек с паддингами [14,16] и зазором 3.
+		// Блок итога: одна строка по референсу design.pen — паддинги [14,16],
+		// сегменты по базовой линии, перенос на узком экране.
+		// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
 		const summary = value.closest('[data-slot="constructions-summary"]');
 		expect(summary).not.toBeNull();
+		expect(summary?.className).toContain("flex-wrap");
+		expect(summary?.className).toContain("items-baseline");
 		expect(summary?.className).toContain("px-4");
 		expect(summary?.className).toContain("py-3.5");
-		expect(summary?.className).toContain("gap-[3px]");
 
-		// Подписи: разбивка и котировки 11/normal textSecondary, счётчики 11/normal textMuted.
-		const breakdown = screen.getByText(/реализов\. \+60\.25 \/ нереализов\. \+40\.25 · котировки на/i);
+		// Подписи: разбивка 11/normal textSecondary; котировки и счётчики —
+		// 11/normal textMuted отдельными сегментами той же строки.
+		const breakdown = screen.getByText(/реализов\. \+60\.25 \/ нереализов\. \+40\.25/);
 		expect(breakdown.className).toContain("text-[11px]");
 		expect(breakdown.className).toContain("text-text-secondary");
+		const quotes = screen.getByText(/котировки на/i);
+		expect(quotes.className).toContain("text-[11px]");
+		expect(quotes.className).toContain("text-text-muted");
 		const counters = screen.getByText("3 конструкции (1 открыта)");
 		expect(counters.className).toContain("text-[11px]");
 		expect(counters.className).toContain("text-text-muted");

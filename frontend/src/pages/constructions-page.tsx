@@ -274,46 +274,48 @@ function ConstructionsHeader({
 	syncMutation: ReturnType<typeof useMutation<SyncRunSummary, Error, void>>;
 }) {
 	const summary = overview?.summary;
-	const marksNote =
+	// Подпись котировок — сегмент одной строки итога: деградация видима всегда,
+	// при норме вместо неё отметка времени марок.
+	const quotesNote =
 		summary === undefined
 			? null
 			: summary.hasMarkFailure
 				? "котировки: сбой котировок"
 				: summary.marksAsOf === null
 					? "котировки: нет открытых остатков"
-					: null;
+					: `котировки на ${formatMoment(summary.marksAsOf)}`;
 
 	return (
 		<header className="flex flex-col gap-2">
 			{/* Итог журнала — единственное место постоянного показа: с разбивкой
 			    на реализованную и нереализованную части. */}
-			{/* Шапка итога повторяет дизайн-фрейм «Итог» (oYD4G): акцентное
-			    значение 18/600 $accentStrong, подпись разбивки и счётчики
-			    11/normal $textSecondary/$textMuted, паддинги [14,16], зазор 3;
-			    отметка котировок свёрнута в подпись разбивки через «·». */}
-			{/* Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
-			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+			{/* Шапка итога — одна строка по референсу design.pen (фрейм списка):
+			    итог 18/600 $accentStrong, разбивка 11 $textSecondary, котировки и
+			    счётчики 11 $textMuted; паддинги [14,16]; сегменты выравнены по
+			    базовой линии и переносятся на узком экране. */}
+			{/* Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown */}
+			{/* Traceability: openspec:ui/design-system#requirement-screenshot-acceptance */}
 			{summary === undefined ? (
 				<p className="text-muted-foreground text-sm">чтение журнала…</p>
 			) : (
-				<div data-slot="constructions-summary" className="flex flex-col gap-[3px] px-4 py-3.5">
+				<div data-slot="constructions-summary" className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3.5">
 					<p className="text-[18px] font-semibold text-accent-strong">
 						{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
 						{summary.totalPnL === null && summary.hasMarkFailure ? " (неполный: сбой котировок)" : ""}
 					</p>
 					<p className="text-[11px] text-text-secondary">{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
 						summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
-					}${marksNote === null && summary.marksAsOf !== null ? ` · котировки на ${formatMoment(summary.marksAsOf)}` : ""}`}</p>
+					}`}</p>
 					{/* Счётчики всегда по полному набору конструкций, независимо
 					    от области видимости списка.
 					    Traceability: openspec:ui/screens#scenario-list-scope-all-shows-archived */}
+					{quotesNote !== null && <p className="text-[11px] text-text-muted">{quotesNote}</p>}
 					<p className="text-[11px] text-text-muted">
 						{formatCount(summary.constructionCount, { one: "конструкция", few: "конструкции", many: "конструкций" })} (
 						{summary.openCount} {pluralForm(summary.openCount, { one: "открыта", few: "открыты", many: "открыто" })})
 					</p>
 				</div>
 			)}
-			{marksNote !== null && <p className="text-[11px] text-text-secondary">{marksNote}</p>}
 
 			{/* Состояние и итог команды синхронизации; подробности — в разделе
 			    «Синхронизация», шапке достаточно строки статуса. */}

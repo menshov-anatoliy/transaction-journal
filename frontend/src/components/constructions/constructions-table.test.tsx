@@ -114,10 +114,12 @@ describe("таблица конструкций", () => {
 		// Act: таблица с двумя строками.
 		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
 
-		// Assert: заголовки паритета 13 колонок на месте.
+		// Assert: заголовки паритета 13 колонок на месте (подписи по мастеру
+		// design.pen: «Имя» и глиф «✦» для подсказок).
+		// Traceability: openspec:ui/screens#requirement-construction-list-screen
 		for (const header of [
-			"Конструкция",
-			"Подсказки",
+			"Имя",
+			"✦",
 			"Статус",
 			"Капитал",
 			"Стоимость",
@@ -146,9 +148,11 @@ describe("таблица конструкций", () => {
 		// Act: таблица с двумя строками.
 		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
 
-		// Assert: бейдж с числом живых подсказок у первой строки, у второй нет.
-		const badge = screen.getByRole("cell", { name: "2" }).querySelector('[data-slot="hint-badge"]');
+		// Assert: бейдж «✦ N» тоном риска у первой строки, у второй — прочерк.
+		// Traceability: openspec:ui/screens#requirement-construction-list-screen
+		const badge = screen.getByRole("cell", { name: "✦ 2" }).querySelector('[data-slot="hint-badge"]');
 		expect(badge).not.toBeNull();
+		expect(badge?.className).toContain("text-[color:var(--risk)]");
 		expect(screen.getByRole("row", { name: /BTC-240531/ }).querySelector('[data-slot="hint-badge"]')).toBeNull();
 	});
 

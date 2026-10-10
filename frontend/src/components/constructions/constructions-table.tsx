@@ -48,7 +48,7 @@ function hasOpenResidual(row: ConstructionRow): boolean {
 	return row.markValue !== null || row.unrealizedPnL === null;
 }
 
-/** Тон величины: положительная — зелёная, отрицательная — красная. */
+/** Тон итоговых величин: положительная — акцентно-зелёная, отрицательная — красная. */
 function toneClass(value: number): string {
 	if (value > 0) {
 		return "text-[color:var(--fin-positive-strong)]";
@@ -57,11 +57,19 @@ function toneClass(value: number): string {
 	return value < 0 ? "text-[color:var(--fin-negative)]" : "";
 }
 
-/** Величина ячейки с деградацией: прочерк вместо null, признак сбоя в title. */
-function DegradedValue<T>({ value, format }: { value: T | null; format: (value: T) => string }) {
+// Части PnL (реализованная, нереализованная) в списке окрашиваются только
+// в минусе: положительные и нулевые значения остаются нейтральными по
+// референсу design.pen (фрейм списка конструкций, сверка скриншотом).
+// Traceability: openspec:ui/screens#requirement-construction-list-screen
+function partToneClass(value: number): string {
+	return value < 0 ? "text-[color:var(--fin-negative)]" : "";
+}
+
+/** Величина ячейки с деградацией: прочерк вместо null, признак сбоя в title; tone — дополнительный цвет значения. */
+function DegradedValue<T>({ value, format, tone }: { value: T | null; format: (value: T) => string; tone?: string }) {
 	const degraded = degrade(value, format);
 	if (degraded.available) {
-		return <span className="tabular-nums">{degraded.text}</span>;
+		return <span className={cn("tabular-nums", tone)}>{degraded.text}</span>;
 	}
 
 	return (
@@ -79,7 +87,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 		() => [
 			{
 				id: "name",
-				header: "Конструкция",
+				header: "Имя",
 				accessorKey: "name",
 				// Имя строки по мастеру Body #1 — Inter 12.5/500 на textPrimary.
 				// Traceability: change:reconcile-frontend-with-design/design#D6
@@ -87,20 +95,26 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 			},
 			{
 				id: "hints",
-				header: "Подсказки",
+				// Подпись колонки подсказок — глиф «✦» по мастеру списка design.pen.
+				// Traceability: openspec:ui/screens#requirement-construction-list-screen
+				header: () => <span title="Живые подсказки">✦</span>,
 				accessorKey: "liveHintCount",
 				cell: ({ row }) =>
 					row.original.liveHintCount > 0 ? (
-						// Бейдж живых подсказок строки: число живых записей; без
-						// живых подсказок бейдж не рисуется.
+						// Бейдж живых подсказок строки: «✦ N» тоном риска без заливки;
+						// без живых подсказок — прочерк вторичным серым (сверка со
+						// скриншотом design.pen, фрейм списка).
+						// Traceability: openspec:ui/screens#requirement-construction-list-screen
 						<span
 							data-slot="hint-badge"
-							className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground"
+							className="font-semibold text-[color:var(--risk)]"
 							title={`живых подсказок: ${row.original.liveHintCount}`}
 						>
-							{row.original.liveHintCount}
+							✦ {row.original.liveHintCount}
 						</span>
-					) : null,
+					) : (
+						<span className="text-[color:var(--text-muted)]">{DASH}</span>
+					),
 			},
 			{
 				id: "status",
@@ -139,8 +153,10 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				id: "realized",
 				header: "Реализов.",
 				accessorKey: "realizedPnL",
+				// Положительная реализованная часть нейтральна, минус — красный.
+				// Traceability: openspec:ui/screens#requirement-construction-list-screen
 				cell: ({ row }) => (
-					<span className={cn("tabular-nums", toneClass(row.original.realizedPnL))}>
+					<span className={cn("tabular-nums", partToneClass(row.original.realizedPnL))}>
 						{formatSignedAmount(row.original.realizedPnL)}
 					</span>
 				),
@@ -160,7 +176,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 							сбой котировок
 						</span>
 					) : (
-						<span className={cn("tabular-nums", toneClass(row.original.unrealizedPnL))}>
+						<span className={cn("tabular-nums", partToneClass(row.original.unrealizedPnL))}>
 							{formatSignedAmount(row.original.unrealizedPnL)}
 						</span>
 					),
@@ -169,10 +185,11 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				id: "adjustments",
 				header: "Коррект.",
 				accessorKey: "adjustmentsPnL",
+				// Корректировки в списке всегда вторичным текстом, без тонировки
+				// по знаку (сверка со скриншотом design.pen).
+				// Traceability: openspec:ui/screens#requirement-construction-list-screen
 				cell: ({ row }) => (
-					<span className={cn("tabular-nums", toneClass(row.original.adjustmentsPnL))}>
-						{formatSignedAmount(row.original.adjustmentsPnL)}
-					</span>
+					<span className="text-text-secondary tabular-nums">{formatSignedAmount(row.original.adjustmentsPnL)}</span>
 				),
 			},
 			{
@@ -240,8 +257,10 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				sortingFn: "basic",
 				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
 				sortDescFirst: true,
+				// Занятость капитала — вторичным текстом по мастеру списка.
+				// Traceability: openspec:ui/screens#requirement-construction-list-screen
 				cell: ({ row }) => (
-					<DegradedValue value={row.original.capitalUsagePercent} format={formatSignedPercent} />
+					<DegradedValue value={row.original.capitalUsagePercent} format={formatSignedPercent} tone="text-text-secondary" />
 				),
 			},
 			{
@@ -251,7 +270,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				sortingFn: "basic",
 				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
 				sortDescFirst: true,
-				cell: ({ row }) => <DegradedValue value={row.original.openedAt} format={formatDay} />,
+				cell: ({ row }) => <DegradedValue value={row.original.openedAt} format={formatDay} tone="text-text-secondary" />,
 			},
 			{
 				id: "closedAt",
@@ -260,7 +279,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				sortingFn: "basic",
 				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
 				sortDescFirst: true,
-				cell: ({ row }) => <DegradedValue value={row.original.closedAt} format={formatDay} />,
+				cell: ({ row }) => <DegradedValue value={row.original.closedAt} format={formatDay} tone="text-text-secondary" />,
 			},
 		],
 		[],
