@@ -3,6 +3,7 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { spaRootRedirectPlugin } from "./spa-root-redirect";
 
 // SPA смонтирован в префиксе /spa, чтобы не конфликтовать за маршруты
 // с работающим Blazor-UI в корне хоста; переезд в корень — задача 7.2
@@ -10,7 +11,7 @@ import { defineConfig } from "vite";
 // Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
 // Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
 export default defineConfig({
-	plugins: [react(), tailwindcss()],
+	plugins: [react(), tailwindcss(), spaRootRedirectPlugin()],
 	base: "/spa/",
 	// Dev-сервер сохраняет относительные API-запросы SPA и передаёт их .NET-хосту.
 	// Порт фиксирован: занятый адрес должен приводить к ошибке, а не смене URL.
