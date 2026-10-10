@@ -57,12 +57,28 @@ public sealed record ConstructionMetrics
 	/// экспирации, группы разных экспираций суммируются консервативно. Без
 	/// открытых остатков риск нулевой; null — когда худший случай неограничен
 	/// (нетто-короткая позиция по коллам группы) или символ открытого остатка
-	/// не разобран. Метрика выводится из структуры ног и средних цен открытых
-	/// остатков и от текущих марок не зависит.
+	/// не разобран, — причина отсутствия числа различима статусом
+	/// <see cref="RealRiskStatus"/>. Метрика выводится из структуры ног и
+	/// средних цен открытых остатков и от текущих марок не зависит.
 	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 	// Traceability: change:fix-finresult-indicator-real-risk/design#d1
 	/// </summary>
 	public decimal? RealRiskUsdt { get; init; }
+
+	/// <summary>
+	/// Состояние реального риска: конечный риск (`finite`), неограниченный
+	/// хвост убытка (`unbounded`) или неполные исходные данные (`unavailable`).
+	/// Статус сопровождает величину без потери: число выдаётся только для
+	/// `finite`, для остальных состояний <see cref="RealRiskUsdt"/> отсутствует.
+	/// Незаданный статус консервативно читается как «не рассчитан» — по умолчанию
+	/// он не может выдавать риск конечным, иначе потребители угадывали бы
+	/// конечный риск там, где он не рассчитан.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+	// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	/// </summary>
+	public RealRiskStatus RealRiskStatus { get; init; } = RealRiskStatus.Unavailable;
 
 	/// <summary>Реализованный PnL в процентах от текущего выделенного капитала; null при нулевом капитале.</summary>
 	public required decimal? RealizedPnLPercent { get; init; }

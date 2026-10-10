@@ -72,7 +72,11 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 			// Реальный риск проходит из метрик аналитики без пересчёта: расчёт из
 			// структуры ног и правила null (неограниченный случай, неразобранный
 			// символ) остаются в аналитике, список переносит величину как есть.
+			// Статус проходит рядом с величиной: ноль конечного риска не должен
+			// потеряться, а null без причины — превратиться в догадку списка.
 			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+			// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+			// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
 			items.Add(new ConstructionListItem(
 				header.Id,
 				header.Name,
@@ -93,7 +97,8 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				item.ClosedAt,
 				item.MarkValue,
 				item.CapitalUsagePercent,
-				item.RealRiskUsdt));
+				item.RealRiskUsdt,
+				item.RealRiskStatus));
 		}
 
 		// Счётчик сводки описывает видимые конструкции: сколько в списке и сколько

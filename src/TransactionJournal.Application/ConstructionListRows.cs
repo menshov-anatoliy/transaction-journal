@@ -1,4 +1,5 @@
 using TransactionJournal.Domain;
+using TransactionJournal.Application.Analytics;
 
 namespace TransactionJournal.Application;
 
@@ -24,7 +25,8 @@ namespace TransactionJournal.Application;
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой конструкции.</param>
 /// <param name="MarkValue">Стоимость открытых позиций конструкции по маркам; null при закрытой конструкции или недоступной оценке марок.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала — стоимость в процентах от капитала; null без базы процентов или стоимости.</param>
-/// <param name="RealRiskUsdt">Реальный риск конструкции в USDT — наихудший результат открытых остатков на экспирации; null, когда худший случай неограничен или символ остатка не разобран.</param>
+/// <param name="RealRiskUsdt">Реальный риск конструкции в USDT — наихудший результат открытых остатков на экспирации; null, когда худший случай неограничен или символ остатка не разобран — причина различима статусом.</param>
+/// <param name="RealRiskStatus">Состояние реального риска: конечный (`finite`), неограниченный (`unbounded`) или нерассчитанный (`unavailable`); незаданный читается как «не рассчитан», а не как конечный.</param>
 // Капитал передаётся незаданным как есть: прочерк вместо значения — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
 // Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
@@ -38,6 +40,11 @@ namespace TransactionJournal.Application;
 // Реальный риск публикуется в контракте строки списка: величина переносится
 // из метрик аналитики как есть, правила расчёта и null остаются в аналитике.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+// Статус проходит рядом с величиной без потери: null без статуса дал бы
+// представлению двусмысленность — неограниченный хвост и неполные данные
+// надо различать, а конечный ноль не превращать в отсутствие величины.
+// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
+// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
 public sealed record ConstructionListItem(
 	long ConstructionId,
 	string Name,
@@ -56,7 +63,8 @@ public sealed record ConstructionListItem(
 	DateTimeOffset? ClosedAt,
 	decimal? MarkValue = null,
 	decimal? CapitalUsagePercent = null,
-	decimal? RealRiskUsdt = null);
+	decimal? RealRiskUsdt = null,
+	RealRiskStatus RealRiskStatus = RealRiskStatus.Unavailable);
 
 /// <summary>
 /// Данные экрана «Конструкции»: сводка журнала — итог с разбивкой на

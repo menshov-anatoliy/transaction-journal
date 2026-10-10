@@ -234,49 +234,12 @@ public class RealRiskCalculatorTests
 	}
 
 	[TestMethod]
-	[Description("Переходная числовая обёртка повторяет типизированный результат")]
-	public void TryIfLegacyNullableWrapperMirrorsTypedResult()
-	{
-		// Arrange: конечный спред, неограниченный короткий колл и неразобранный
-		// символ — три состояния типизированного результата.
-		// Требование: пока потребители не переведены на типизированный контракт,
-		// числовая обёртка отдаёт число только для конечного риска.
-		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-		var finite = new[]
-		{
-			OpenResidual("BTC-27DEC24-65000-C", 1m, 300m),
-			OpenResidual("BTC-27DEC24-70000-C", -1m, 150m),
-		};
-		var unbounded = new[] { OpenResidual("BTC-27DEC24-70000-C", -1m, 150m) };
-		var unavailable = new[] { OpenResidual("BTCUSDT", 1m, 300m) };
-
-		// Act
-		var finiteValue = _calculator.Calculate(finite);
-		var unboundedValue = _calculator.Calculate(unbounded);
-		var unavailableValue = _calculator.Calculate(unavailable);
-
-		// Assert: число сопровождает только конечный риск, остальные состояния дают null.
-		Assert.That(finiteValue, Is.EqualTo(150m));
-		Assert.That(unboundedValue, Is.Null);
-		Assert.That(unavailableValue, Is.Null);
-	}
-
-	[TestMethod]
 	[Description("Null-набор позиций отклоняется типизированным расчётом")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnNullPositionsInTypedResult()
 	{
 		// Arrange — Act — Assert
 		_calculator.CalculateResult(null!);
-	}
-
-	[TestMethod]
-	[Description("Null-набор позиций отклоняется переходной обёрткой")]
-	[ExpectedException(typeof(ArgumentNullException))]
-	public void ThrowOnNullPositionsInLegacyWrapper()
-	{
-		// Arrange — Act — Assert
-		_calculator.Calculate(null!);
 	}
 
 	#region Помощники

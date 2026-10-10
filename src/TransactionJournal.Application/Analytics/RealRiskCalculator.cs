@@ -124,23 +124,6 @@ public sealed class RealRiskCalculator
 		return RealRiskResult.Finite(Math.Max(0m, -worst));
 	}
 
-	/// <summary>
-	/// Переходная обёртка совместимости: отдаёт числовую величину конечного
-	/// риска или null, когда риск не ограничен либо не рассчитан. Существует,
-	/// пока потребители результата не переведены на типизированный контракт;
-	/// различие причин отсутствия числа при этом не теряется — оно
-	/// восстанавливается вызовом <see cref="CalculateResult"/>.
-	/// </summary>
-	/// <param name="positions">Метрики позиций конструкции.</param>
-	/// <returns>Реальный риск в USDT или null, когда величина не определена.</returns>
-	/// <exception cref="ArgumentNullException">Позиции не заданы.</exception>
-	public decimal? Calculate(IEnumerable<PositionMetrics> positions)
-	{
-		var result = CalculateResult(positions);
-
-		return result.Status == RealRiskStatus.Finite ? result.Usdt : null;
-	}
-
 	#region Вспомогательные методы
 
 	/// <summary>Внутренняя стоимость опциона в узле: колл — превышение узла над страйком, пут — страйка над узлом.</summary>

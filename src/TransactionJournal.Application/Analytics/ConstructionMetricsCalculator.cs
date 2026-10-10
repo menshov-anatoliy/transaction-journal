@@ -30,7 +30,9 @@ public sealed class ConstructionMetricsCalculator
 	/// последней позиции; длительность открытой конструкции считается от первой
 	/// сделки до переданного текущего момента. Реальный риск — наихудший результат
 	/// открытых остатков на экспирации — выводится из структуры ног и средних цен
-	/// открытых остатков и от текущих марок не зависит.
+	/// открытых остатков и от текущих марок не зависит; в метрики он переносится
+	/// вместе со статусом, различающим конечный, неограниченный и нерассчитанный
+	/// риск, без изменения расчёта результата конструкции.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, для которой вычисляются метрики.</param>
 	/// <param name="allocatedCapitalUsdt">Текущий выделенный капитал конструкции в USDT — база процентов; null, когда капитал не задан.</param>
@@ -90,10 +92,13 @@ public sealed class ConstructionMetricsCalculator
 
 		// Реальный риск — наихудший результат открытых остатков на экспирации:
 		// выводится из структуры ног и средних цен остатков, текущие марки на
-		// метрику не влияют, поэтому сбой котировок её не задевает.
+		// метрику не влияют, поэтому сбой котировок её не задевает. В метрики
+		// проходит состояние рядом с величиной: отсутствие числа перестаёт быть
+		// двусмысленным — неограниченный хвост и неполные исходные данные
+		// различимы потребителями, а P&L и прочие метрики не затронуты.
 		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
-		decimal? realRiskUsdt = _realRiskCalculator.Calculate(positionList);
+		var realRisk = _realRiskCalculator.CalculateResult(positionList);
 
 		// Проценты — чистые функции текущих данных: базой служит текущее значение
 		// выделенного капитала, поэтому правка капитала меняет только процентные
@@ -134,7 +139,8 @@ public sealed class ConstructionMetricsCalculator
 			AdjustmentsPnL = adjustmentsPnL,
 			TotalPnL = totalPnL,
 			MarkValue = markValue,
-			RealRiskUsdt = realRiskUsdt,
+			RealRiskUsdt = realRisk.Usdt,
+			RealRiskStatus = realRisk.Status,
 			RealizedPnLPercent = Percent(realizedPnL),
 			UnrealizedPnLPercent = Percent(unrealizedPnL),
 			AdjustmentsPnLPercent = Percent(adjustmentsPnL),
