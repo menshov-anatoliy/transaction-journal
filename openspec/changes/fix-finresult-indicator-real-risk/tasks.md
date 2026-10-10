@@ -1,4 +1,4 @@
-# Tasks — fix-finresult-indicator-real-risk
+﻿# Tasks — fix-finresult-indicator-real-risk
 
 ## 1. Метрика реального риска (бэкенд)
 
@@ -22,5 +22,5 @@
 
 ## 4. Приёмка
 
-- [ ] 4.1 Полный прогон тестов (бэкенд + фронтенд), сборка без предупреждений
-- [ ] 4.2 Сверка delta-спек `openspec validate`; коммиты Conventional Commits с `refs #75`
+- [x] 4.1 Полный прогон тестов (бэкенд + фронтенд), сборка без предупреждений
+- [x] 4.2 Сверка delta-спек `openspec validate`; коммиты Conventional Commits с `refs #75`
