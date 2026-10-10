@@ -11,8 +11,8 @@ namespace TransactionJournal.Tests.Analytics;
 /// нетто-дебет, группы разных экспираций суммируются консервативно,
 /// неограниченный худший случай и неполные исходные данные различаются
 /// состояниями типизированного результата, сбой марок на метрику не влияет,
-/// без открытых остатков риск конечен и нулевой, а null-набор позиций
-/// отклоняется.
+/// без открытых остатков риск конечен и нулевой, конструкция с хедж-перпом
+/// больше не деградирует в недоступность, а null-набор позиций отклоняется.
 /// </summary>
 [TestClass]
 public class RealRiskCalculatorTests
@@ -128,14 +128,15 @@ public class RealRiskCalculatorTests
 	[Description("Неизвестные данные при наличии короткого колла дают недоступность")]
 	public void TryIfUnknownDataTakePrecedenceOverShortCallTail()
 	{
-		// Arrange: один открытый остаток не разбирается как символ опциона, а в
-		// известной группе есть нетто-короткий колл.
+		// Arrange: один открытый остаток не разбирается ни как символ опциона,
+		// ни как символ линейного фьючерса, а в известной группе есть
+		// нетто-короткий колл.
 		// Требование: неполнота данных обнаруживается раньше классификации
 		// хвостов групп — статус «не рассчитан», а не «не ограничен».
 		// Traceability: openspec:analytics/performance#scenario-real-risk-unknown-group-takes-precedence
 		var positions = new[]
 		{
-			OpenResidual("BTCUSDT", 1m, 300m),
+			OpenResidual("BTCUSD", 1m, 300m),
 			OpenResidual("BTC-27DEC24-70000-C", -1m, 150m),
 		};
 
@@ -148,14 +149,40 @@ public class RealRiskCalculatorTests
 	}
 
 	[TestMethod]
+	[Description("Стреддл с открытым хедж-перпом больше не даёт недоступность")]
+	public void TryIfStraddleWithHedgePerpIsNoLongerUnavailable()
+	{
+		// Arrange: проданный стреддл одной экспирации — короткие колл и пут
+		// 4400 — с открытым хеджем длинным перпом XAUTUSDT, как в живой
+		// конструкции «XAUT стреддл 30OCT26 4400».
+		// Требование: символ перпа разбирается как линейная нога, поэтому
+		// конструкция больше не деградирует в состояние «не рассчитан».
+		// Traceability: openspec:analytics/performance#scenario-real-risk-linear-hedge-is-finite
+		var positions = new[]
+		{
+			OpenResidual("XAUT-30OCT26-4400-C", -1m, 80m),
+			OpenResidual("XAUT-30OCT26-4400-P", -1m, 60m),
+			OpenResidual("XAUTUSDT", 1m, 4100m),
+		};
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: результат типизирован и больше не «не рассчитан»; конечная
+		// величина закрепляется после полной группировки и наклонного правила.
+		Assert.That(result.Status, Is.Not.EqualTo(RealRiskStatus.Unavailable));
+	}
+
+	[TestMethod]
 	[Description("Неразобранный символ возвращает состояние недоступности")]
 	public void TryIfUnparseableSymbolYieldsUnavailable()
 	{
-		// Arrange: открытый остаток с символом линейного инструмента, который не
-		// разбирается как символ опциона.
-		// Требование: без страйка и экспирации совместный минимум не определён.
+		// Arrange: открытый остаток с символом, который не разбирается ни как
+		// символ опциона, ни как символ линейного фьючерса.
+		// Требование: без страйка, экспирации или базового актива совместный
+		// минимум не определён.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
-		var positions = new[] { OpenResidual("BTCUSDT", 1m, 300m) };
+		var positions = new[] { OpenResidual("BTCUSD", 1m, 300m) };
 
 		// Act
 		var result = _calculator.CalculateResult(positions);
