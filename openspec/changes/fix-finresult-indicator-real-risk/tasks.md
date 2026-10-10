@@ -16,7 +16,7 @@
 
 ## 3. Визуальное и документация
 
-- [ ] 3.1 Контраст зон: значения `riskZone`/`profitZone`/`superZone` в design.pen через MCP pen → `frontend/src/index.css`
+- [x] 3.1 Контраст зон: значения `riskZone`/`profitZone`/`superZone` в design.pen через MCP pen → `frontend/src/index.css`
 - [ ] 3.2 Скриншот-сверка трёх видов индикатора (карточка, сводка, таблица)
 - [ ] 3.3 Правка `.wf-research/ui-concept/concept.md` §9 под новую семантику
 

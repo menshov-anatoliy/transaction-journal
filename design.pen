@@ -13660,15 +13660,15 @@
     },
     "riskZone": {
       "type": "color",
-      "value": "#EFB6AE"
+      "value": "#E8836F"
     },
     "profitZone": {
       "type": "color",
-      "value": "#B9E7CC"
+      "value": "#7FD6A4"
     },
     "superZone": {
       "type": "color",
-      "value": "#F3D68C"
+      "value": "#F0C563"
     },
     "superLabel": {
       "type": "color",

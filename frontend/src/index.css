@@ -86,9 +86,12 @@
 	--neg-soft: #FBEAE7;
 	--info: #4A7FB5;
 	--info-soft: #E9F1F8;
-	--risk-zone: #EFB6AE;
-	--profit-zone: #B9E7CC;
-	--super-zone: #F3D68C;
+	/* Зоны индикатора финрезультата: контраст усилен (насыщенность выше,
+		светлота ниже); источник значений — переменные riskZone/profitZone/superZone
+		в design.pen, изменённые через MCP pen (ADR 0011). */
+	--risk-zone: #E8836F;
+	--profit-zone: #7FD6A4;
+	--super-zone: #F0C563;
 	--super-label: #8a6a1f;
 	--unreal-loss: #EFB6AE;
 	/* Токены accent (#1FA36B) и border (#E5E5DF) не дублируются: их значения
