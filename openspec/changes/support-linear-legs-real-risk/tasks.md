@@ -2,7 +2,7 @@
 
 ## 1. Распознавание линейного символа
 
-- [ ] 1.1 В `src/TransactionJournal.Domain/Materialization` рядом с `OptionSymbolParser` добавить чистый `LinearSymbolParser`: символ `{BASE}{QUOTE}` с `QUOTE ∈ {USDT, USDC}` распознаётся как вечный линейный фьючерс, стиль `TryParse`/`Parse` соседнего парсера, инвариантная культура. Проверить юнит-тестами `XAUTUSDT`/`ETHUSDC` (успех), опционные символы, датированные формы `{BASE}{QUOTE}-{экспирация}` и мусор (отказ), сохранение регистра и значений base/quote.
+- [x] 1.1 В `src/TransactionJournal.Domain/Materialization` рядом с `OptionSymbolParser` добавить чистый `LinearSymbolParser`: символ `{BASE}{QUOTE}` с `QUOTE ∈ {USDT, USDC}` распознаётся как вечный линейный фьючерс, стиль `TryParse`/`Parse` соседнего парсера, инвариантная культура. Проверить юнит-тестами `XAUTUSDT`/`ETHUSDC` (успех), опционные символы, датированные формы `{BASE}{QUOTE}-{экспирация}` и мусор (отказ), сохранение регистра и значений base/quote.
 
 ## 2. Линейные ноги в калькуляторе реального риска
 

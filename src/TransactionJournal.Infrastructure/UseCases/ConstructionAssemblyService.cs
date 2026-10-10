@@ -9,6 +9,9 @@ using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Domain.Sync;
 using TransactionJournal.Domain.ConstructionAssembly;
+// Алиас устраняет двусмысленность с новым LinearSymbolParser из Materialization
+// (парсер линейных ног реального риска): здесь используется парсер привязки сделок робота.
+using LinearSymbolParser = TransactionJournal.Domain.ConstructionAssembly.LinearSymbolParser;
 using TransactionJournal.Application.Materialization;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Application.Sync;
