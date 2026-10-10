@@ -1,3 +1,5 @@
+import type { RealRiskStatus } from "../api/constructions";
+
 // Калькулятор геометрии индикатора финансового результата конструкции.
 // Чистая функция без React: переводит плановые границы, реальный риск и
 // текущий результат в доли шкалы 0..1, подписи и размещения меток. Рендер
@@ -9,7 +11,14 @@
 // её краем. Граница — «реализованный результат минус реальный риск»,
 // маркер — позиция итога (реализованный + нереализованный); итог рисуется
 // одной заливкой без разложения на реализованную и нереализованную части.
+// Насечка границы ставится только при конечном реальном риске: состояния
+// unbounded/unavailable возвращают borderAt: null со статусом состояния,
+// а плановое деление подписывается плановым риском.
 // Traceability: openspec:ui/screens#requirement-risk-profit-hint
+// Traceability: change:show-unbounded-finresult-risk/design#d2
+
+/** Состояние риска без числовой границы. */
+type RiskState = Exclude<RealRiskStatus, "finite">;
 
 /** Вход калькулятора: изначальные показатели конструкции и текущий результат. */
 export interface FinResultInput {
@@ -33,11 +42,19 @@ export interface FinResultInput {
 	readonly hasOpenResidual: boolean;
 	/**
 	 * Реальный риск открытых остатков в USDT (наихудший результат на
-	 * экспирации); null или отсутствие поля — метрика недоступна, граница
-	 * считается по заглушке плановым риском. Поле опционально до проводки
-	 * метрики из API в вызывающие компоненты.
+	 * экспирации); число приходит только при статусе finite. Поле
+	 * опционально до проводки метрики из API в вызывающие компоненты.
 	 */
 	readonly realRisk?: number | null;
+	/**
+	 * Состояние реального риска из контракта API, пара к realRisk:
+	 * unbounded — неограниченный хвост, unavailable — расчёт не удался.
+	 * Отсутствие поля — вызывающий компонент ещё не проводит статус:
+	 * геометрия сохраняет прежний каскад заглушек, не выдавая его за
+	 * конечный риск.
+	 * Traceability: change:show-unbounded-finresult-risk/design#d2
+	 */
+	readonly realRiskStatus?: RealRiskStatus;
 }
 
 /** Диапазон шкалы в долях 0..1; from не больше to. */
@@ -98,8 +115,15 @@ export interface FinResultGeometry {
 	readonly profitZone: FinResultSpan | null;
 	/** Золотая зона сверхприбыли за плановым профитом; null — превышения нет. */
 	readonly superZone: FinResultSpan | null;
-	/** Позиция границы реального риска (с клипом слева); null — данных нет. */
+	/** Позиция границы реального риска (с клипом слева); null — данных нет либо риск не конечный. */
 	readonly borderAt: number | null;
+	/**
+	 * Состояние реального риска: различает конечный риск, неограниченный
+	 * хвост и нехватку данных. Отсутствие статуса во входе трактуется
+	 * конечным риском переходно, до проводки статуса в компоненты.
+	 * Traceability: change:show-unbounded-finresult-risk/design#d2
+	 */
+	readonly realRiskStatus: RealRiskStatus;
 	/** Позиция маркера итога; null — данных нет. */
 	readonly markerAt: number | null;
 	/** Маркер клипован по краю шкалы: итог за её пределами. */
@@ -115,6 +139,8 @@ export interface FinResultGeometry {
 		readonly profit: string | null;
 		readonly borderTitle: string | null;
 		readonly borderValue: string | null;
+		/** Текст состояния риска вне шкалы; null — риск конечный. */
+		readonly riskState: string | null;
 		readonly marker: string | null;
 	};
 	/**
@@ -151,25 +177,45 @@ export function computeFinResultGeometry(
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 	const incomplete = input.quotesDegraded && input.hasOpenResidual;
 
-	// Реальный риск с каскадом заглушек: нет метрики — граница считается
-	// по плановому риску, затем по плановому профиту, затем по нулю.
+	// Числовая база насечки. Каскад заглушек плановым риском остаётся
+	// только переходно — для вызывающих компонентов без статуса; заданный
+	// статус unbounded/unavailable насечку не получает вовсе.
 	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
 	const realRiskEff = input.realRisk ?? input.plannedRisk ?? input.plannedProfit ?? 0;
 
+	// Состояние риска без координаты на шкале: unbounded/unavailable
+	// отменяют числовую заглушку — насечка, её подпись и процент не
+	// считаются, плановая граница подписывается плановым риском, а
+	// состояние отдаётся компонентам сигналом вне шкалы.
+	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
+	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
+	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
+	// Traceability: change:show-unbounded-finresult-risk/design#d2
+	const riskState: RiskState | null =
+		input.realRiskStatus === "unbounded" || input.realRiskStatus === "unavailable"
+			? input.realRiskStatus
+			: null;
+	// Выходной статус: отсутствие статуса во входе трактуется конечным
+	// риском переходно, до проводки статуса в компоненты.
+	const riskStatus: RealRiskStatus = input.realRiskStatus ?? "finite";
+
 	// Нейтральная полоса: плановых границ нет — зоны и деления отсутствуют,
-	// заполнение идёт от нуля до края в сторону знака итога.
+	// заполнение идёт от нуля до края в сторону знака итога; состояние
+	// риска при этом остаётся в геометрии отдельно от полосы.
 	if (input.plannedRisk === null && input.plannedProfit === null) {
-		return buildNeutralGeometry(realized, total, incomplete, layout);
+		return buildNeutralGeometry(realized, total, incomplete, riskStatus, riskState, layout);
 	}
 
 	// Граница реального риска: «реализованный результат минус реальный
 	// риск» — где конструкция оказалась бы при худшем исходе открытых
-	// остатков с учётом уже реализованной прибыли. Насечка скрыта только
-	// без данных о позиции (realized === null); свежая позиция попадает на
-	// −реальныйРиск естественно, по формуле: спец-случай из #62 упразднён.
+	// остатков с учётом уже реализованной прибыли. Насечка скрыта без
+	// данных о позиции (realized === null) и при не конечном риске:
+	// unbounded/unavailable конечной границы не имеют. Свежая позиция
+	// попадает на −реальныйРиск естественно, по формуле: спец-случай из
+	// #62 упразднён.
 	// Traceability: openspec:ui/screens#scenario-finresult-border-real-risk
 	// Traceability: openspec:ui/screens#scenario-finresult-fresh-position-real-risk
-	const borderValue = realized === null ? null : realized - realRiskEff;
+	const borderValue = riskState === null && realized !== null ? realized - realRiskEff : null;
 
 	// Шкала: базовые зоны из плановых показателей, при сверхприбыли —
 	// золотая надбавка справа.
@@ -214,15 +260,21 @@ export function computeFinResultGeometry(
 					),
 				);
 
-	const borderLabels = resolveBorderLabels(realized, input.plannedRisk, realRiskEff);
+	// Подпись границы есть только при конечном риске: у unbounded/
+	// unavailable нет ни числового значения реального риска, ни процента.
+	const borderLabels =
+		riskState === null
+			? resolveBorderLabels(realized, input.plannedRisk, realRiskEff)
+			: null;
 	const markerLabel = resolveMarkerLabel(realized, unrealized, total, input.quotesDegraded);
 
 	const labels = {
-		risk: input.plannedRisk !== null ? formatFinAmount(-input.plannedRisk) : null,
+		risk: resolveRiskTickLabel(input.plannedRisk, riskState),
 		zero: "0",
 		profit: input.plannedProfit !== null ? formatFinAmount(input.plannedProfit) : null,
 		borderTitle: borderLabels === null ? null : borderLabels.title,
 		borderValue: borderLabels === null ? null : borderLabels.value,
+		riskState: resolveRiskStateLabel(riskState),
 		marker: markerLabel,
 	};
 
@@ -264,6 +316,7 @@ export function computeFinResultGeometry(
 		profitZone,
 		superZone,
 		borderAt,
+		realRiskStatus: riskStatus,
 		markerAt,
 		markerClipped,
 		fillMain,
@@ -275,12 +328,16 @@ export function computeFinResultGeometry(
 
 // Нейтральная полоса без плановых границ: ноль в центре, позиционных
 // отметок нет (пропорция не определена), заполнение — до края по знаку
-// итога, значение итога выносится в подпись маркера.
+// итога, значение итога выносится в подпись маркера. Состояние риска
+// остаётся в геометрии отдельно от нейтральной полосы.
 // Traceability: openspec:ui/screens#scenario-finresult-neutral-without-params
+// Traceability: openspec:ui/screens#scenario-finresult-risk-state-without-plan
 function buildNeutralGeometry(
 	realized: number | null,
 	total: number | null,
 	incomplete: boolean,
+	riskStatus: RealRiskStatus,
+	riskState: RiskState | null,
 	layout: FinResultLabelLayout | null | undefined,
 ): FinResultGeometry {
 	const zeroAt = 0.5;
@@ -301,6 +358,7 @@ function buildNeutralGeometry(
 		profitZone: null,
 		superZone: null,
 		borderAt: null,
+		realRiskStatus: riskStatus,
 		markerAt: null,
 		markerClipped: false,
 		fillMain,
@@ -311,6 +369,7 @@ function buildNeutralGeometry(
 			profit: null,
 			borderTitle: null,
 			borderValue: null,
+			riskState: resolveRiskStateLabel(riskState),
 			marker: resolveMarkerLabel(realized, null, total, false),
 		},
 		placements:
@@ -343,6 +402,36 @@ function resolveScale(
 	}
 
 	return { min, max };
+}
+
+// Подпись состояния риска вне шкалы: тексты совпадают со сценариями
+// спецификации, null — состояния нет, риск конечный.
+// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
+// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
+function resolveRiskStateLabel(riskState: RiskState | null): string | null {
+	if (riskState === "unbounded") {
+		return "риск не ограничен";
+	}
+
+	return riskState === "unavailable" ? "не удалось рассчитать" : null;
+}
+
+// Подпись планового деления риска: без состояния — число «−300»; при
+// unbounded/unavailable деление явно называется плановым риском, чтобы
+// его не принимали за границу худшего исхода.
+// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
+// Traceability: change:show-unbounded-finresult-risk/design#d2
+function resolveRiskTickLabel(
+	plannedRisk: number | null,
+	riskState: RiskState | null,
+): string | null {
+	if (plannedRisk === null) {
+		return null;
+	}
+
+	const amount = formatFinAmount(-plannedRisk);
+
+	return riskState === null ? amount : `плановый риск ${amount}`;
 }
 
 // Подпись границы: заголовок «риск есть», пока реальный риск положителен,

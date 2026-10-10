@@ -407,10 +407,10 @@ describe("граница реального риска", () => {
 		expect(geometry.labels.borderValue).toBe("120 USDT · 40%");
 	});
 
-	// Нет метрики реального риска — граница считается по заглушке плановым
-	// риском: поле realRisk опционально для вызывающих компонентов.
-	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
-	it("realRisk недоступен: заглушка плановым риском 300", () => {
+	// Переходный путь: вызывающий компонент ещё не проводит статус —
+	// прежний каскад заглушек сохранён. Заданный статус unbounded/
+	// unavailable заглушку отменяет: см. сценарии состояния риска ниже.
+	it("realRisk недоступен без статуса: переходная заглушка плановым риском 300", () => {
 		// Act: поле realRisk не передано вызывающим компонентом.
 		const geometry = computeFinResultGeometry(caseInput({ realized: 100 }));
 
@@ -437,6 +437,169 @@ describe("граница реального риска", () => {
 
 		// Assert: маркер подписан итогом «+1 250».
 		expect(geometry.labels.marker).toBe("+1\u00A0250");
+	});
+});
+
+describe("состояние риска без числовой заглушки", () => {
+	// Не конечный риск (unbounded/unavailable) не изображается конечной
+	// насечкой: насечка и её подпись отсутствуют, плановое деление
+	// подписывается плановым риском, а состояние отдаётся текстом вне
+	// шкалы. Маркер итога, единая заливка, золотая зона и нейтральный
+	// режим сохраняются.
+	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
+	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
+	// Traceability: openspec:ui/screens#scenario-finresult-risk-state-without-plan
+	// Traceability: change:show-unbounded-finresult-risk/design#d2
+
+	it("unbounded: насечки нет, плановое деление подписано плановым риском, зоны и маркер сохранены", () => {
+		// Act: итог +5 942.16 при плановом риске 400 — хвост коротких
+		// коллов не ограничен, статус из API приходит unbounded.
+		const geometry = computeFinResultGeometry(
+			caseInput({ plannedRisk: 400, realized: 5942.16, unrealized: null, realRiskStatus: "unbounded" }),
+		);
+
+		// Assert: насечка и её подписи отсутствуют вовсе, статус состояния
+		// вынесен наружу.
+		expect(geometry.realRiskStatus).toBe("unbounded");
+		expect(geometry.borderAt).toBeNull();
+		expect(geometry.labels.borderTitle).toBeNull();
+		expect(geometry.labels.borderValue).toBeNull();
+		expect(geometry.labels.riskState).toBe("риск не ограничен");
+
+		// Assert: плановое деление −400 подписано как плановый риск.
+		expect(geometry.labels.risk).toBe("плановый риск −400");
+
+		// Assert: маркер итога и единая заливка не задеты; зелёная заливка
+		// идёт до планового профита, золото рисует участок за ним.
+		expect(geometry.markerAt).toBe(1);
+		expect(geometry.labels.marker).toBe("+5\u00A0942.16");
+		expect(geometry.tone).toBe("positive");
+		expect(geometry.fillMain).toEqual({ from: 400 / (5942.16 + 400), to: 1300 / (5942.16 + 400) });
+
+		// Assert: золотая зона от профита +900 до итога, зона риска до нуля.
+		expect(geometry.superZone).toEqual({ from: 1300 / (5942.16 + 400), to: 1 });
+		expect(geometry.superZone?.to).toBe(1);
+		expect(geometry.riskZone).toEqual({ from: 0, to: 400 / (5942.16 + 400) });
+
+		// Assert: шкала растянута до итога.
+		expect(geometry.scaleMax).toBe(5942.16);
+	});
+
+	it("unbounded: разнос не строит размещение для отсутствующей границы", () => {
+		// Act: та же неограниченная позиция с метриками разметки.
+		const geometry = computeFinResultGeometry(
+			caseInput({ plannedRisk: 400, realized: 5942.16, unrealized: null, realRiskStatus: "unbounded" }),
+			{ scaleWidthPx: 936, aboveCharWidthPx: 7, belowCharWidthPx: 6.5 },
+		);
+
+		// Assert: у границы нет ни координаты, ни размещения; длинная
+		// плановая подпись «плановый риск −400» сталкивается с меткой
+		// профита наверху и разносится вниз.
+		expect(geometry.placements?.border).toBeNull();
+		expect(geometry.placements?.risk).toEqual({ side: "below", level: 0, align: "start" });
+	});
+
+	it("unavailable: насечки нет, состояние «не удалось рассчитать», плановое деление подписано", () => {
+		// Act: расчёт риска не удался при плановом риске 300.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 200, unrealized: null, realRiskStatus: "unavailable" }),
+		);
+
+		// Assert: границы нет, статус «не удалось рассчитать», плановое
+		// деление подписано плановым риском −300.
+		expect(geometry.realRiskStatus).toBe("unavailable");
+		expect(geometry.borderAt).toBeNull();
+		expect(geometry.labels.borderValue).toBeNull();
+		expect(geometry.labels.riskState).toBe("не удалось рассчитать");
+		expect(geometry.labels.risk).toBe("плановый риск −300");
+
+		// Assert: маркер итога +200 на своём месте.
+		expect(geometry.markerAt).toBeCloseTo(500 / 1200, 4);
+		expect(geometry.labels.marker).toBe("+200");
+	});
+
+	it("finite: насечка и подпись границы работают как раньше", () => {
+		// Act: конечный реальный риск 150.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 200, realRisk: 150, realRiskStatus: "finite" }),
+		);
+
+		// Assert: граница 200 − 150 = +50, подпись по реальному риску,
+		// состояние не задаётся.
+		expect(geometry.borderAt).toBeCloseTo(350 / 1200, 4);
+		expect(geometry.labels.borderTitle).toBe("риск есть");
+		expect(geometry.labels.borderValue).toBe("150 USDT · 50%");
+		expect(geometry.labels.riskState).toBeNull();
+		expect(geometry.labels.risk).toBe("−300");
+		expect(geometry.realRiskStatus).toBe("finite");
+	});
+
+	it("finite с нулевым риском: граница на нуле, состояния нет", () => {
+		// Act: реальный риск 0 при закрытых остатках.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 945, unrealized: null, realRisk: 0, realRiskStatus: "finite" }),
+		);
+
+		// Assert: граница 945 − 0 = 945 совпадает с итогом и правым краем
+		// растянутой шкалы, «риска нет», состояние отсутствует.
+		expect(geometry.borderAt).toBe(1);
+		expect(geometry.labels.borderTitle).toBe("риска нет");
+		expect(geometry.labels.riskState).toBeNull();
+	});
+
+	it("сбой марок при unbounded: неполный режим без числовой заглушки", () => {
+		// Act: сбой марок при открытых остатках и неограниченном хвосте.
+		const geometry = computeFinResultGeometry(
+			caseInput({
+				realized: -250,
+				unrealized: null,
+				quotesDegraded: true,
+				hasOpenResidual: true,
+				realRiskStatus: "unbounded",
+			}),
+		);
+
+		// Assert: неполный режим, статус unbounded сохранён, насечки нет,
+		// плановое деление подписано плановым риском, маркер без подписи.
+		expect(geometry.incomplete).toBe(true);
+		expect(geometry.realRiskStatus).toBe("unbounded");
+		expect(geometry.borderAt).toBeNull();
+		expect(geometry.labels.riskState).toBe("риск не ограничен");
+		expect(geometry.labels.risk).toBe("плановый риск −300");
+		expect(geometry.labels.marker).toBeNull();
+	});
+
+	it.each(["unbounded", "unavailable"] as const)("заданный статус %s отменяет заглушку плановым риском", (status) => {
+		// Act: реального риска нет, статус задан — прежняя подстановка
+		// планового риска в насечку отменена.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 100, realRisk: null, realRiskStatus: status }),
+		);
+
+		// Assert: насечки нет вовсе, плановые −300 остаются только
+		// границей плановой зоны.
+		expect(geometry.borderAt).toBeNull();
+		expect(geometry.labels.borderValue).toBeNull();
+		expect(geometry.labels.risk).toBe("плановый риск −300");
+		expect(geometry.riskZone).toEqual({ from: 0, to: 300 / 1200 });
+	});
+
+	it("нейтральная полоса без плановых параметров сохраняет состояние риска", () => {
+		// Act: плановых границ нет, статус unbounded.
+		const geometry = computeFinResultGeometry(
+			caseInput({ plannedRisk: null, plannedProfit: null, realized: 100, unrealized: null, realRiskStatus: "unbounded" }),
+		);
+
+		// Assert: нейтральная полоса без зон и насечки, состояние риска
+		// передано текстом вне шкалы.
+		expect(geometry.neutral).toBe(true);
+		expect(geometry.riskZone).toBeNull();
+		expect(geometry.profitZone).toBeNull();
+		expect(geometry.superZone).toBeNull();
+		expect(geometry.borderAt).toBeNull();
+		expect(geometry.realRiskStatus).toBe("unbounded");
+		expect(geometry.labels.riskState).toBe("риск не ограничен");
+		expect(geometry.labels.risk).toBeNull();
 	});
 });
 
