@@ -314,7 +314,9 @@ public static class AgentEndpoints
 	/// запрос тула реестра моделью даёт кадр начала, завершение вызова —
 	/// кадр конца; имя инструмента переносится из потока вызовов в кадр
 	/// результата, повторы фрагментов стрима одного вызова схлопываются
-	/// по id вызова, чтобы вызов давал ровно пару «начало — конец».
+	/// по id вызова, чтобы вызов давал ровно пару «начало — конец». Каждый
+	/// кадр несёт callId своего вызова: SPA сводит пары по нему и различает
+	/// одновременные вызовы одного инструмента.
 	/// </summary>
 	/// <param name="update">Очередное обновление стрима агентного цикла.</param>
 	/// <param name="toolNamesByCallId">Имена инструментов по id вызова.</param>
@@ -338,12 +340,12 @@ public static class AgentEndpoints
 					toolNamesByCallId[call.CallId] = call.Name;
 				if (startedCallIds.Add(call.CallId) &&
 					toolNamesByCallId.TryGetValue(call.CallId, out var name))
-					yield return ChatStreamEvents.Tool(name, ChatStreamEvents.ToolStartPhase);
+					yield return ChatStreamEvents.Tool(name, ChatStreamEvents.ToolStartPhase, callId: call.CallId);
 			}
 			else if (content is FunctionResultContent result &&
 				toolNamesByCallId.TryGetValue(result.CallId, out var endedName))
 			{
-				yield return ChatStreamEvents.Tool(endedName, ChatStreamEvents.ToolEndPhase);
+				yield return ChatStreamEvents.Tool(endedName, ChatStreamEvents.ToolEndPhase, callId: result.CallId);
 				// Вызов закрыт: повторный результат того же id кадр конца не дублирует.
 				toolNamesByCallId.Remove(result.CallId);
 			}

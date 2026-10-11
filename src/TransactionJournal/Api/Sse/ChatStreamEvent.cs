@@ -49,10 +49,12 @@ public static class ChatStreamEvents
 	/// <summary>Событие активности инструмента: имя инструмента и фаза вызова вокруг исполнения тула реестра.</summary>
 	// Кадры события tool доставляются между началом и единственным
 	// терминальным кадром: имя — из реестра read-only инструментов,
-	// фаза — начало или конец вызова, деталь необязательна.
+	// фаза — начало или конец вызова, деталь необязательна. Идентификатор
+	// вызова (callId) сопоставляет пары «начало — конец»: одновременные
+	// вызовы одного инструмента не гасят пилюли друг друга раньше времени.
 	// Traceability: openspec:http-api/transport#scenario-chat-tool-activity-streamed
-	public static ChatStreamEvent Tool(string name, string phase, string? detail = null) =>
-		new(ToolName, new ChatToolPayload(name, phase, detail));
+	public static ChatStreamEvent Tool(string name, string phase, string? detail = null, string? callId = null) =>
+		new(ToolName, new ChatToolPayload(name, phase, detail, callId));
 }
 
 /// <summary>Нагрузка события токена: порция текста ответа.</summary>
@@ -61,5 +63,5 @@ public sealed record ChatTokenPayload(string Text);
 /// <summary>Нагрузка события ошибки: сообщение о сбое генерации.</summary>
 public sealed record ChatErrorPayload(string Message);
 
-/// <summary>Нагрузка события активности инструмента: имя инструмента, фаза вызова и опциональная деталь.</summary>
-public sealed record ChatToolPayload(string Name, string Phase, string? Detail = null);
+/// <summary>Нагрузка события активности инструмента: имя инструмента, фаза вызова, опциональная деталь и опциональный идентификатор вызова.</summary>
+public sealed record ChatToolPayload(string Name, string Phase, string? Detail = null, string? CallId = null);

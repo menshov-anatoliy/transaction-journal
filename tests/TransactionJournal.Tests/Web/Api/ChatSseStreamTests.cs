@@ -125,6 +125,22 @@ public sealed class ChatSseStreamTests
 			"\n"));
 	}
 
+	[TestMethod]
+	[Description("Кадр tool несёт callId вызова, а при его отсутствии поле не сериализуется")]
+	// Пилюли активности на SPA сводятся по callId вызова: одновременные
+	// вызовы одного инструмента дают независимые пары кадров «начало —
+	// конец». Поле опционально: без callId транспорт его не сериализует
+	// (WhenWritingNull), кадры прежнего протокола не меняются.
+	// Traceability: openspec:http-api/transport#scenario-chat-tool-activity-streamed
+	public async Task TryIfToolFrameCarriesCallIdAndOmitsItWhenAbsent()
+	{
+		// Arrange — Act: стрим из кадра вызова с callId и кадра конца без него.
+		var (_, body) = await StreamChatAsync(CallIdToolStream);
+
+		// Assert: callId сериализован в кадре с ним и пропущен в кадре без него.
+		Assert.That(body, Is.EqualTo(CallIdToolBody));
+	}
+
 	/// <summary>Кадры эталонного стрима: начало, два токена, завершение.</summary>
 	private const string HappyPathBody =
 		"event: start\n" +
@@ -153,6 +169,21 @@ public sealed class ChatSseStreamTests
 		"\n" +
 		"event: tool\n" +
 		"data: {\"name\":\"get_market_snapshot\",\"phase\":\"end\"}\n" +
+		"\n" +
+		"event: done\n" +
+		"data: {}\n" +
+		"\n";
+
+	/// <summary>Кадры стрима с callId вызова и кадром конца без него.</summary>
+	private const string CallIdToolBody =
+		"event: start\n" +
+		"data: {}\n" +
+		"\n" +
+		"event: tool\n" +
+		"data: {\"name\":\"get_market_snapshot\",\"phase\":\"start\",\"callId\":\"call-btc\"}\n" +
+		"\n" +
+		"event: tool\n" +
+		"data: {\"name\":\"read_rule_card\",\"phase\":\"end\"}\n" +
 		"\n" +
 		"event: done\n" +
 		"data: {}\n" +
@@ -198,6 +229,15 @@ public sealed class ChatSseStreamTests
 		yield return ChatStreamEvents.Tool("get_market_snapshot", ChatStreamEvents.ToolStartPhase);
 		await Task.CompletedTask;
 		throw new InvalidOperationException("Провайдер модели недоступен");
+	}
+
+	/// <summary>Генератор чата: кадр вызова с callId и кадр конца без него.</summary>
+	private static async IAsyncEnumerable<ChatStreamEvent> CallIdToolStream()
+	{
+		yield return ChatStreamEvents.Tool("get_market_snapshot", ChatStreamEvents.ToolStartPhase, callId: "call-btc");
+		yield return ChatStreamEvents.Tool("read_rule_card", ChatStreamEvents.ToolEndPhase);
+		yield return ChatStreamEvents.Done();
+		await Task.CompletedTask;
 	}
 
 	/// <summary>

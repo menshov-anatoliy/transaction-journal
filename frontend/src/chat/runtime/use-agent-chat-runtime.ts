@@ -33,6 +33,16 @@ export interface AgentChatActiveTool {
 	readonly name: string;
 	/** Опциональная деталь вызова из кадра активности. */
 	readonly detail?: string;
+	/** Идентификатор вызова из кадра активности; различает одновременные вызовы одного инструмента. */
+	readonly callId?: string;
+}
+
+/**
+ * Ключ записи активности: кадры с callId сводятся по вызову, кадры без
+ * callId — по имени инструмента (совместимость со старым транспортом).
+ */
+export function toolActivityKey(tool: AgentChatActiveTool): string {
+	return tool.callId ?? tool.name;
 }
 
 /** Публичкий контроллер чата агента для базовых обёрток Thread/Composer. */
@@ -184,25 +194,37 @@ export function useAgentChatRuntime(chatId: string, model: string): AgentChatCon
 }
 
 /**
- * Накопление активных инструментов из кадров tool: start зажигает тул
- * (повторный start того же имени не плодит дублей — обновляет деталь),
- * end убирает тул по имени. Порядок сохраняется по моменту старта вызова,
- * чтобы статусы рендерились в порядке вызовов.
+ * Накопление активных инструментов из кадров tool: start зажигает тул —
+ * запись того же ключа заменяется (повторный start обновляет деталь,
+ * дублей не плодит), end гасит только запись своего ключа: пары
+ * «начало — конец» сводятся по callId вызова, поэтому одновременные
+ * вызовы одного инструмента живут независимо до своих парных концов.
+ * Кадры без callId сводятся по имени (совместимость). Порядок сохраняется
+ * по моменту старта вызова, чтобы статусы рендерились в порядке вызовов.
  */
 // Список активных инструментов — источник живых статусов вызовов тулов
-// реестра над потоком токенов.
+// реестра над потоком токенов; свод по callId не гасит пилюлю второго
+// вызова того же тула на первом же end.
 // Traceability: openspec:http-api/transport#scenario-chat-tool-activity-streamed
 function applyToolActivity(
 	current: readonly AgentChatActiveTool[],
 	event: Extract<ChatStreamEvent, { type: "tool" }>,
 ): readonly AgentChatActiveTool[] {
+	// Ключ активности: вызов с callId уникален, кадр без callId — по имени.
+	const key = event.callId ?? event.name;
 	// End гасит инструмент: без парного кадра в списке он не остаётся.
 	if (event.phase === "end")
-		return current.filter((tool) => tool.name !== event.name);
-	const withoutName = current.filter((tool) => tool.name !== event.name);
-	const entry: AgentChatActiveTool =
-		event.detail === undefined ? { name: event.name } : { name: event.name, detail: event.detail };
-	return [...withoutName, entry];
+		return current.filter((tool) => toolActivityKey(tool) !== key);
+	// Start заменяет запись того же ключа: без дубликатов и в порядке вызовов.
+	const withoutKey = current.filter((tool) => toolActivityKey(tool) !== key);
+	// Опциональные поля не попадают в запись ключом — так же, как транспорт
+	// не сериализует их при отсутствии.
+	let entry: AgentChatActiveTool = { name: event.name };
+	if (event.detail !== undefined)
+		entry = { ...entry, detail: event.detail };
+	if (event.callId !== undefined)
+		entry = { ...entry, callId: event.callId };
+	return [...withoutKey, entry];
 }
 
 /** Текст сообщения composer: только текстовые части, прочее не поддержано. */

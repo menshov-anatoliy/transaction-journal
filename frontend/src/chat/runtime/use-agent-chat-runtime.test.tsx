@@ -20,7 +20,9 @@ function ActiveToolsProbe(): ReactElement {
 		<Fragment>
 			<ul data-testid="active-tools">
 				{chat.activeTools.map((tool) => (
-					<li key={tool.name}>
+					// Ключ записи — ключ активности runtime: вызовы с callId
+					// уникальны, кадры без callId сводятся по имени.
+					<li key={tool.callId ?? tool.name}>
 						{tool.name}
 						{tool.detail === undefined ? "" : ` — ${tool.detail}`}
 					</li>
@@ -113,10 +115,33 @@ function openSseResponse(frames: readonly string[], signal: AbortSignal | null |
 	return new Response(stream, { status: 200 });
 }
 
-function toolFrame(name: string, phase: "start" | "end", detail?: string): string {
+/**
+ * Канал с ручной доставкой: кадры уходят в стрим по вызову теста —
+ * нужно для сценариев, где состояние проверяется между кадрами.
+ */
+function manualSseResponse(signal: AbortSignal | null | undefined): {
+	response: Response;
+	push: (frame: string) => void;
+} {
+	const encoder = new TextEncoder();
+	let push: (frame: string) => void = () => {};
+	const stream = new ReadableStream<Uint8Array>({
+		start(controller) {
+			push = (frame) => controller.enqueue(encoder.encode(frame));
+			signal?.addEventListener("abort", () => {
+				controller.error(new DOMException("Aborted", "AbortError"));
+			});
+		},
+	});
+	return { response: new Response(stream, { status: 200 }), push };
+}
+
+function toolFrame(name: string, phase: "start" | "end", detail?: string, callId?: string): string {
 	const payload: Record<string, string> = { name, phase };
 	if (detail !== undefined)
 		payload["detail"] = detail;
+	if (callId !== undefined)
+		payload["callId"] = callId;
 	return `event: tool\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
@@ -199,6 +224,63 @@ describe("активность инструментов в runtime чата аг
 			expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
 				"get_option_board — повторный вызов",
 			]);
+		});
+	});
+
+	it("гасит пилюлю только по callId своего вызова при двух вызовах одного тула", async () => {
+		// Arrange: модель сравнивает две марки — два одновременных вызова
+		// одного инструмента (call-A, call-B), стрим даёт порядок
+		// start/start/end/end; свод по имени погасил бы вторую пилюлю
+		// на первом же end.
+		// Traceability: openspec:http-api/transport#scenario-chat-tool-activity-streamed
+		let push: ((frame: string) => void) | null = null;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (url: string | URL, init?: RequestInit) => {
+				const href = typeof url === "string" ? url : url.href;
+				if (href.includes("/messages/stream")) {
+					const manual = manualSseResponse(init?.signal);
+					push = manual.push;
+					return manual.response;
+				}
+				return jsonResponse([]);
+			}),
+		);
+		const user = userEvent.setup();
+		renderRuntime();
+		await sendMessage(user);
+
+		// Act: оба вызова стартовали — start(A), start(B) с одним именем тула.
+		await waitFor(() => expect(push).not.toBeNull());
+		push!("event: start\ndata: {}\n\n");
+		push!(toolFrame("get_market_snapshot", "start", "BTC", "call-btc"));
+		push!(toolFrame("get_market_snapshot", "start", "ETH", "call-eth"));
+
+		// Assert: два вызова одного тула — две живые пилюли, подписи
+		// различаются деталями вызовов.
+		await waitFor(() => {
+			expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+				"get_market_snapshot — BTC",
+				"get_market_snapshot — ETH",
+			]);
+		});
+
+		// Act: завершается только первый вызов — end с его callId.
+		push!(toolFrame("get_market_snapshot", "end", undefined, "call-btc"));
+
+		// Assert: пилюля второго вызова осталась жива — её callId ещё не гасили.
+		await waitFor(() => {
+			expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+				"get_market_snapshot — ETH",
+			]);
+		});
+
+		// Act: парный конец второго вызова снимает последнюю пилюлю.
+		push!(toolFrame("get_market_snapshot", "end", undefined, "call-eth"));
+
+		// Assert: оба вызова закрыты — активных инструментов не осталось.
+		await waitFor(() => {
+			expect(screen.queryAllByRole("listitem")).toHaveLength(0);
 		});
 	});
 

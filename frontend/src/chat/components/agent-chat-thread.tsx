@@ -9,6 +9,7 @@ import { ArrowUp, Bot, ChevronDown, Globe, Link, Square } from "lucide-react";
 import { CHAT_DATA_SOURCES } from "@/chat/chat-params";
 import type { ChatDataSource, SourceTrace } from "@/chat/types";
 import type { AgentChatActiveTool, AgentChatController } from "@/chat/runtime/use-agent-chat-runtime";
+import { toolActivityKey } from "@/chat/runtime/use-agent-chat-runtime";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { Button } from "@/components/ui/button";
 import { SourceChip, ToolStatus } from "@/components/design";
@@ -110,8 +111,11 @@ export function AgentChatThread({ chat, context, onRuleHover, onRuleLeave, onRul
 						{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
 						{chat.activeTools.length > 0 && (
 							<div className="mb-4 flex flex-col items-start gap-2" data-slot="tool-status-run">
+								{/* Ключ пилюли — ключ записи активности: пилюли живут
+								    по callId вызова, поэтому два одновременных вызова
+								    одного тула дают две живые пилюли до своих концов. */}
 								{chat.activeTools.map((tool) => (
-									<ToolStatus key={tool.name}>{toolStatusLabel(tool)}</ToolStatus>
+									<ToolStatus key={toolActivityKey(tool)}>{toolStatusLabel(tool)}</ToolStatus>
 								))}
 							</div>
 						)}
