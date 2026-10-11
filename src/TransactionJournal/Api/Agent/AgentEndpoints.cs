@@ -1,6 +1,7 @@
 namespace TransactionJournal.Api.Agent;
 
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using TransactionJournal.Api.Sse;
 using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
@@ -114,6 +115,7 @@ public static class AgentEndpoints
 			ChatService pipeline,
 			IChatStore store,
 			AgentRulesCatalog catalog,
+			ILogger<Program> logger,
 			HttpContext http,
 			CancellationToken cancellationToken) =>
 		{
@@ -148,6 +150,9 @@ public static class AgentEndpoints
 			// транспортным событием ошибки того же соединения: история чата
 			// с зафиксированным вопросом владельца сохраняется.
 			// Traceability: openspec:http-api/transport#scenario-chat-error-delivered-as-sse-event
+			// Guard переводит сырые исключения провайдера в человекочитаемые
+			// тексты и логирует отказ с chatId и типом причины.
+			// Traceability: openspec:http-api/transport#scenario-chat-error-cause-visible-in-ui
 			async IAsyncEnumerable<ChatStreamEvent> Events()
 			{
 				await foreach (var update in pipeline.StreamAssistantAnswerAsync(id, userMessage, cancellationToken))
@@ -163,7 +168,14 @@ public static class AgentEndpoints
 				yield return new ChatStreamEvent(ChatStreamEvents.DoneName, new { message = ToMessageDto(assistant, catalog) });
 			}
 
-			await ChatSseStream.WriteStreamAsync(http.Response, Events(), cancellationToken);
+			// Поток кадров проходит через guard отказов: сырые исключения
+			// конвейера не доходят до владельца — канал завершается error-кадром
+			// с человекочитаемой причиной, а отказ с chatId уходит в лог.
+			// Traceability: openspec:http-api/transport#scenario-chat-error-cause-visible-in-ui
+			await ChatSseStream.WriteStreamAsync(
+				http.Response,
+				ChatStreamFailureGuard.GuardAsync(Events(), logger, id, cancellationToken),
+				cancellationToken);
 		});
 
 		// Ручное завершение чата владельцем: активный чат уходит в завершённые,
