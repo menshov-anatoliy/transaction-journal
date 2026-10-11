@@ -42,6 +42,8 @@ interface ApiMockOptions {
 	streamFrames?: string[];
 	/** Стрим, который завершает только отмена владельцем. */
 	neverEndingStream?: boolean;
+	/** Стрим, который доставляет кадры и остаётся открытым до отмены. */
+	openStream?: boolean;
 }
 
 function mockChatApi(options: ApiMockOptions = {}) {
@@ -58,6 +60,8 @@ function mockChatApi(options: ApiMockOptions = {}) {
 			if (href.includes("/messages/stream")) {
 				if (options.neverEndingStream === true)
 					return neverEndingSseResponse(init?.signal ?? undefined);
+				if (options.openStream === true)
+					return openSseResponse(options.streamFrames ?? [], init?.signal);
 				return sseResponse(options.streamFrames ?? []);
 			}
 			if (href.includes("/messages")) {
@@ -106,8 +110,37 @@ function neverEndingSseResponse(signal: AbortSignal | undefined): Response {
 	return new Response(stream, { status: 200 });
 }
 
+/** Канал без терминального кадра: кадры доставлены, ход идёт до отмены владельцем. */
+function openSseResponse(frames: readonly string[], signal: AbortSignal | null | undefined): Response {
+	const encoder = new TextEncoder();
+	const stream = new ReadableStream<Uint8Array>({
+		start(controller) {
+			for (const frame of frames)
+				controller.enqueue(encoder.encode(frame));
+			signal?.addEventListener("abort", () => {
+				controller.error(new DOMException("Aborted", "AbortError"));
+			});
+		},
+	});
+	return new Response(stream, { status: 200 });
+}
+
 function tokenFrame(text: string): string {
 	return `event: token\ndata: ${JSON.stringify({ text })}\n\n`;
+}
+
+function toolFrame(name: string, phase: "start" | "end", detail?: string): string {
+	const payload: Record<string, string> = { name, phase };
+	if (detail !== undefined)
+		payload["detail"] = detail;
+	return `event: tool\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+/** Подписи видимых пилюль статуса инструментов — в порядке DOM. */
+function pillLabels(): string[] {
+	return Array.from(document.querySelectorAll('[data-slot="tool-status"]')).map(
+		(pill) => pill.querySelector('[data-slot="tool-status-label"]')?.textContent ?? "",
+	);
 }
 
 function userMessage(text: string, id: string): ChatMessageDto {
@@ -196,38 +229,6 @@ describe("базовая обёртка чата агента", () => {
 		expect(composer?.className).toContain("rounded-[14px]");
 		expect(composer?.className).toContain("p-3.5");
 		expect(composer?.className).toContain("bg-surface");
-	});
-
-	it("показывает пилюлю ToolStatus на время хода и убирает её по завершении (§3.5:4)", async () => {
-		// Arrange: в чате есть история; новый ход идёт по каналу, который
-		// не завершается сам — ход «в процессе» длится до отмены.
-		mockChatApi({
-			historyByCall: [[userMessage("старый вопрос", "m1")]],
-			neverEndingStream: true,
-		});
-		const user = userEvent.setup();
-		renderChat();
-
-		// Act: владелец отправляет вопрос.
-		const input = await screen.findByRole("textbox");
-		await user.type(input, "новый вопрос");
-		await user.click(screen.getByRole("button", { name: "Отправить" }));
-
-		// Assert: пилюля «выполняется» мастера ix8ma (инстанс Tool2 Body #4)
-		// видна в потоке ленты: pill 999 на surface2 с вращающейся иконкой.
-		const statusLabel = await screen.findByText(/источники — собираю данные/);
-		const pill = statusLabel.closest('[data-slot="tool-status"]');
-		expect(pill).not.toBeNull();
-		expect(pill?.className).toContain("rounded-full");
-		expect(pill?.className).toContain("bg-surface-2");
-
-		// Act: владелец останавливает генерацию.
-		await user.click(await screen.findByRole("button", { name: "Остановить" }));
-
-		// Assert: ход завершён — пилюля уходит вместе с состоянием хода.
-		await waitFor(() => {
-			expect(screen.queryByText(/источники — собираю данные/)).toBeNull();
-		});
 	});
 
 	it("отправляет сообщение и стримит ответ токенами до завершения", async () => {
@@ -328,5 +329,180 @@ describe("базовая обёртка чата агента", () => {
 		await waitFor(() => {
 			expect(screen.getAllByText("Токен")).toHaveLength(1);
 		});
+	});
+});
+
+// Живые пилюли активности инструментов: тред рендерит ToolStatus из
+// состояния activeTools runtime — кадр tool start зажигает пилюлю «имя —
+// деталь…», парный end гасит её, терминальные кадры и отмена чистят список;
+// статичная надпись «источники — собираю данные…» и сами tool-call
+// фрагменты в ленте не появляются.
+// Traceability: openspec:ui/screens#scenario-ui-streaming-with-tool-status
+describe("живые пилюли активности инструментов в треде", () => {
+	it("рендерит пилюли инструментов из кадров tool start с именем и деталью", async () => {
+		// Arrange: ход по открытому каналу; агент вызвал два инструмента,
+		// оба start-кадра пришли до токенов ответа.
+		mockChatApi({
+			historyByCall: [[]],
+			openStream: true,
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("get_market_snapshot", "start", "BTC"),
+				toolFrame("read_rule_card", "start"),
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос — стартует ход со стримом.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "новый вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: две пилюли в порядке вызовов — формат ноды PfMRJ
+		// «источник — что делаю…»; примитив мастера ix8ma (pill на surface2).
+		await waitFor(() => {
+			expect(pillLabels()).toEqual(["get_market_snapshot — BTC…", "read_rule_card…"]);
+		});
+		const pills = Array.from(document.querySelectorAll('[data-slot="tool-status"]'));
+		expect(pills[0]?.className).toContain("rounded-full");
+		expect(pills[0]?.className).toContain("bg-surface-2");
+	});
+
+	it("гасит пилюлю инструмента по парному кадру end", async () => {
+		// Arrange: из двух вызванных инструментов первый уже завершился —
+		// его end-кадр пришёл до токенов ответа.
+		mockChatApi({
+			historyByCall: [[]],
+			openStream: true,
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("get_market_snapshot", "start"),
+				toolFrame("get_option_board", "start"),
+				toolFrame("get_market_snapshot", "end"),
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: пилюля завершённого вызова погасла, осталась только
+		// пилюля незавершённого.
+		await waitFor(() => {
+			expect(pillLabels()).toEqual(["get_option_board…"]);
+		});
+	});
+
+	it("убирает пилюли по терминальному кадру done", async () => {
+		// Arrange: ход с вызовом инструмента завершается кадром done;
+		// сервер отдаёт перечитанную историю с финальным ответом.
+		mockChatApi({
+			historyByCall: [[], [userMessage("вопрос", "m1"), assistantMessage("Ответ готов", "m2")]],
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("get_market_snapshot", "start"),
+				tokenFrame("Ответ "),
+				toolFrame("get_market_snapshot", "end"),
+				tokenFrame("готов"),
+				"event: done\ndata: {}\n\n",
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: ход доходит до завершения сам.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: ответ собран, история перечитана, пилюль не осталось.
+		expect(await screen.findByText("Ответ готов")).toBeInTheDocument();
+		await waitFor(() => {
+			expect(pillLabels()).toEqual([]);
+		});
+	});
+
+	it("убирает пилюли по кадру ошибки генерации", async () => {
+		// Arrange: вызов инструмента оборвался error-кадром того же
+		// соединения при активном вызове.
+		mockChatApi({
+			historyByCall: [[]],
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("get_market_snapshot", "start"),
+				'event: error\ndata: {"message":"генерация не удалась"}\n\n',
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: ход падает ошибкой.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: баннер деградации виден, активных пилюль не осталось.
+		expect(await screen.findByRole("alert")).toHaveTextContent(/генерация не удалась/);
+		await waitFor(() => {
+			expect(pillLabels()).toEqual([]);
+		});
+	});
+
+	it("не показывает статичную надпись источников на время хода", async () => {
+		// Arrange: ход идёт по открытому каналу без tool-кадров — агент
+		// ещё не вызывал инструменты.
+		mockChatApi({
+			historyByCall: [[]],
+			openStream: true,
+			streamFrames: ["event: start\ndata: {}\n\n"],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос — генерация идёт.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+		await screen.findByRole("button", { name: "Остановить" });
+
+		// Assert: статичная надпись «источники — собираю данные…» исчезла
+		// из треда, пилюль без вызовов инструментов тоже нет.
+		expect(screen.queryByText(/источники — собираю данные/)).toBeNull();
+		expect(pillLabels()).toEqual([]);
+	});
+
+	it("не рендерит tool-call фрагменты в ленте сообщений", async () => {
+		// Arrange: ход с активным вызовом инструмента и первым токеном.
+		mockChatApi({
+			historyByCall: [[]],
+			openStream: true,
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("read_rule_card", "start", "R-1"),
+				tokenFrame("Отвечаю "),
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: имя инструмента встречается в DOM только внутри пилюли
+		// статуса — как фрагмент вызова в ленте сообщений оно не рендерится.
+		await waitFor(() => {
+			expect(pillLabels()).toEqual(["read_rule_card — R-1…"]);
+		});
+		const mentions = screen.getAllByText(/read_rule_card/);
+		expect(mentions.length).toBeGreaterThan(0);
+		for (const mention of mentions) {
+			expect(mention.closest('[data-slot="tool-status"]')).not.toBeNull();
+		}
 	});
 });

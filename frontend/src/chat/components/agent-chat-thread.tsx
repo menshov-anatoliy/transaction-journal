@@ -7,7 +7,7 @@ import {
 } from "@assistant-ui/react";
 import { ArrowUp } from "lucide-react";
 import type { SourceTrace } from "@/chat/types";
-import type { AgentChatController } from "@/chat/runtime/use-agent-chat-runtime";
+import type { AgentChatActiveTool, AgentChatController } from "@/chat/runtime/use-agent-chat-runtime";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { Button } from "@/components/ui/button";
 import { ToolStatus } from "@/components/design";
@@ -74,20 +74,23 @@ export function AgentChatThread({ chat, onRuleHover, onRuleLeave, onRuleOpen }: 
 							}
 						</ThreadPrimitive.Messages>
 						{/*
-							Индикация выполнения tool-вызовов хода — мастер ix8ma
+							Живые пилюли активности tool-вызовов — мастер ix8ma
 							«Tool-статус» (инстанс Tool2/tMmi0 Body #4): в макете
 							пилюля стоит в потоке сообщений между вопросом владельца
-							и стримящимся ответом. Транспорт SSE (задача 2.3) событий
-							прогресса tool-вызовов не несёт — известных каналу данных
-							нет, поэтому пилюля показывается на весь ход генерации с
-							единым текстом источников; имя конкретного инструмента
-							появится здесь же с приходом live-событий tool-прогресса.
+							и стримящимся ответом. Кадр tool start зажигает пилюлю
+							конкретного инструмента, парный end гасит её; чистку по
+							терминальным кадрам и отмене выполняет runtime. Статичная
+							надпись «источники — собираю данные…» убрана: активность
+							приходит событиями стрима, а не рисуется на весь ход;
+							сами tool-call фрагменты в ленте не рендерятся.
 						*/}
+						{/* Traceability: openspec:ui/screens#scenario-ui-streaming-with-tool-status */}
 						{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
-						{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
-						{chat.isRunning && (
-							<div className="mb-4" data-slot="tool-status-run">
-								<ToolStatus>источники — собираю данные для ответа…</ToolStatus>
+						{chat.activeTools.length > 0 && (
+							<div className="mb-4 flex flex-col items-start gap-2" data-slot="tool-status-run">
+								{chat.activeTools.map((tool) => (
+									<ToolStatus key={tool.name}>{toolStatusLabel(tool)}</ToolStatus>
+								))}
 							</div>
 						)}
 					</ThreadPrimitive.Viewport>
@@ -191,4 +194,10 @@ function readSourceTrace(message: { metadata?: { custom?: Record<string, unknown
 	if (trace === null || trace === undefined)
 		return undefined;
 	return trace as SourceTrace;
+}
+
+// Подпись пилюли — формат ноды PfMRJ «источник — что делаю…»: имя
+// инструмента реестра и деталь вызова, если стрим её доставил.
+function toolStatusLabel(tool: AgentChatActiveTool): string {
+	return tool.detail === undefined ? `${tool.name}…` : `${tool.name} — ${tool.detail}…`;
 }
