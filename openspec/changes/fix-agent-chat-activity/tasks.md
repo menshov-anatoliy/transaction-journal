@@ -19,7 +19,8 @@
 
 ## 3. Чаты карточки в контекстной панели
 
-- [ ] 3.1 `ConstructionChatsPanel` → слот `useContextPanel` страницы карточки: вся высота контента, геометрия каркаса (ширина/свёрнутость), развёрнута по умолчанию; убрать `?chats=*`, выбор чата оставить в `?chat=`. Проверить: `scenario-ui-chats-panel-in-context-panel`.
+- [x] 3.1 `ConstructionChatsPanel` → слот `useContextPanel` страницы карточки: вся высота контента, геометрия каркаса (ширина/свёрнутость), развёрнута по умолчанию; убрать `?chats=*`, выбор чата оставить в `?chat=`. Проверить: `scenario-ui-chats-panel-in-context-panel`.
+  - Итог (прогон 2026-10-11, отчёт `reports/block-5-report.md` прогона): `ConstructionChatsPanel` (`construction-chats-panel.tsx`) утратил собственную геометрию и toggle — корень `div[data-slot=construction-chats]` на `h-full min-h-0`, мобильный drawer и `?chats=*` удалены, выбор чата и `?completedChats=` остаются в URL. `ConstructionCardBody` (`construction-card-page.tsx`) регистрирует панель в слоте `useContextPanel` через memo-стабильную регистрацию `{ content }`; сетка `xl:grid-cols-[1fr_auto]` развёрнута в один flex-столбец. Каркас (`AppLayout`) задаёт ширину/свёрнутость. Юнит-тесты vitest: панель 12/12 (расширена: развёрнута по умолчанию без `chats=`, восстановление выбора после перемонтирования), карточка 44/44 (новые: монтаж в слот каркаса + развёрнутость, переживание перезагрузки через `?chat=`), `npm run build` (tsc -b + vite build) — зелёные.
 
 ## 4. Активность и композер в UI
 

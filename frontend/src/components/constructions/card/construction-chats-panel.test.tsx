@@ -17,7 +17,6 @@ vi.mock("@/chat/api/chat-api", async (original) => ({
 	resumeChat: api.resumeChat, deleteChat: api.deleteChat, listChatMessages: api.listChatMessages,
 }));
 vi.mock("@/lib/api/agent-rules", () => ({ readRule: api.readRule }));
-vi.mock("@/lib/use-mobile", () => ({ useIsMobile: () => false }));
 vi.mock("@/chat/runtime/use-agent-chat-runtime", () => ({
 	useAgentChatRuntime: () => ({ runtime: {}, isRunning: false, error: null, cancel: vi.fn() }),
 }));
@@ -50,9 +49,9 @@ const rule = {
 function LocationProbe() {
 	return <span aria-label="URL">{useLocation().search}</span>;
 }
-function renderPanel(search = "?chats=open&chat=active-1&other=keep") {
+function renderPanel(search = "?chat=active-1&other=keep") {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-	render(
+	const view = render(
 		<QueryClientProvider client={client}>
 			<MemoryRouter initialEntries={[`/constructions/7${search}`]}>
 				<ConstructionChatsPanel constructionId={7} isClosed={false} />
@@ -60,7 +59,7 @@ function renderPanel(search = "?chats=open&chat=active-1&other=keep") {
 			</MemoryRouter>
 		</QueryClientProvider>,
 	);
-	return client;
+	return { client, unmount: () => view.unmount() };
 }
 
 beforeEach(() => {
@@ -88,15 +87,42 @@ describe("чаты конструкции", () => {
 		expect(screen.getByLabelText("URL")).toHaveTextContent("completedChats=true");
 		expect(screen.getByLabelText("URL")).toHaveTextContent("chat=completed-1");
 		expect(screen.getByLabelText("URL")).toHaveTextContent("other=keep");
-		await user.click(screen.getByRole("button", { name: "Чаты конструкции" }));
-		expect(screen.getByLabelText("URL")).not.toHaveTextContent("chats=open");
+		// Параметр свёрнутости панели ушёл: геометрию задаёт каркас, не панель.
+		// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
+		expect(screen.getByLabelText("URL")).not.toHaveTextContent("chats=");
+		expect(screen.queryByRole("button", { name: "Чаты конструкции" })).not.toBeInTheDocument();
+	});
+
+	// На карточке панель чатов развёрнута всегда: контекст есть, каркас панель
+	// не сворачивает, URL-параметр ?chats=* больше не нужен.
+	// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
+	it("TryIfPanelExpandedByDefaultWithoutChatsUrlParam", async () => {
+		renderPanel("");
+		// Assert: содержимое доступно сразу, без toggle-кнопки и параметров URL.
+		expect(await screen.findByRole("button", { name: "Создать чат" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Чаты конструкции" })).not.toBeInTheDocument();
+		expect(screen.getByLabelText("URL")).toHaveTextContent("");
+	});
+
+	// Выбор чата живёт в ?chat= и восстанавливается после повторного монтирования
+	// (перезагрузка страницы), так же как остальные query-параметры.
+	// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
+	it("TryIfChatSelectionSurvivesReloadViaUrl", async () => {
+		const { unmount } = renderPanel("?chat=active-1");
+		expect(await screen.findByLabelText("След источников ответа")).toBeInTheDocument();
+		unmount();
+		renderPanel("?chat=active-1");
+		// Assert: повторный заход восстанавливает тот же выбранный чат.
+		expect(await screen.findByLabelText("След источников ответа")).toBeInTheDocument();
+		expect(screen.getByLabelText("URL")).toHaveTextContent("chat=active-1");
+		expect(screen.getByLabelText("URL")).not.toHaveTextContent("chats=");
 	});
 
 	it("TryIfDeletionRequiresConfirmationAndClearsSelectionAndHistory", async () => {
 		// Arrange: удаление обновляет авторитетный список.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 		const user = userEvent.setup();
-		const client = renderPanel();
+		const { client } = renderPanel();
 		await screen.findByLabelText("След источников ответа");
 		api.deleteChat.mockImplementation(async () => { api.listChats.mockResolvedValue([]); });
 		// Act: сначала отменяем, затем подтверждаем.
@@ -133,7 +159,7 @@ describe("чаты конструкции", () => {
 		const user = userEvent.setup();
 		api.completeChat.mockRejectedValue(new Error("HTTP 409"));
 		api.resumeChat.mockRejectedValue(new Error("HTTP 409"));
-		renderPanel("?chats=open&completedChats=true");
+		renderPanel("?completedChats=true");
 		// Act: завершаем или продолжаем чат.
 		const label = action === "complete" ? "завершить чат active-1" : "продолжить чат completed-1";
 		await user.click(await screen.findByRole("button", { name: label }));

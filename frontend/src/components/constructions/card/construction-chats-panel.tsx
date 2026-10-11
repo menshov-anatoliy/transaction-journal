@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
-import { ChevronRight, MessageSquarePlus, RotateCcw, CheckCheck, Trash2 } from "lucide-react";
+import { MessageSquarePlus, RotateCcw, CheckCheck, Trash2 } from "lucide-react";
 import { listChats, createChat, deleteChat } from "@/chat/api/chat-api";
 import { chatKeys, chatMessagesOptions } from "@/chat/chat-queries";
 import { chatParamsFromForm } from "@/chat/chat-params";
@@ -12,19 +12,18 @@ import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
 import { Button } from "@/components/ui/button";
 import { formatMoment } from "@/lib/format/display-time";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/lib/use-mobile";
 import { readRule } from "@/lib/api/agent-rules";
 import { RuleFullCard, RuleBriefPopup } from "@/components/agent/rule-cards";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
-// Правая скрываемая область чатов карточки по концепции §4: полный жизненный
-// цикл чатов, привязанных к конструкции, — создание нового чата с
-// автопривязкой к ней первым сообщением, продолжение, завершение (скрытие в
-// завершённые) и удаление целиком. Для закрытой конструкции сохраняется
-// тот же текущий API; полноценный ИИ-конвейер подключается отдельно.
+// Панель чатов конструкции в правой контекстной панели каркаса по концепции
+// §4: полный жизненный цикл чатов, привязанных к конструкции, — создание
+// нового чата с автопривязкой к ней первым сообщением, продолжение,
+// завершение (скрытие в завершённые) и удаление целиком. Панель монтируется
+// страницей карточки в слот useContextPanel и развёрнута всегда (у карточки
+// контекст существует); ширина и свёрнутость — геометрия каркаса, панель
+// её не задаёт. Для закрытой конструкции сохраняется тот же текущий API.
 // Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-// На мобильном чаты открываются в drawer-панели поверх карточки.
-// Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
 // Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
 
 /** Пропсы панели чатов конструкции. */
@@ -95,11 +94,12 @@ function ChatThreadView({ chat }: { chat: ChatDto }) {
 }
 
 export function ConstructionChatsPanel({ constructionId, isClosed }: ConstructionChatsPanelProps) {
-	const isMobile = useIsMobile();
 	const [searchParams, setSearchParams] = useSearchParams();
-	// Свёрнутость, выбранный чат и показ завершённых переживают прямую ссылку и перезагрузку.
-	// Traceability: doc:.wf-research/ui-concept/concept.md#1-рамка-и-принципы
-	const open = searchParams.get("chats") === "open";
+	// Панель развёрнута всегда: собственная свёрнутость и параметр ?chats=*
+	// упразднены — ширина и свёрнутость задаёт каркас (localStorage), панель
+	// наполняет слот контекстной панели. Выбор чата (?chat=) и показ
+	// завершённых переживают перезагрузку в URL.
+	// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
 	const selectedChatId = searchParams.get("chat");
 	const showCompleted = searchParams.get("completedChats") === "true";
 	const updateQuery = (changes: Record<string, string | null>) => setSearchParams((current) => {
@@ -112,7 +112,6 @@ export function ConstructionChatsPanel({ constructionId, isClosed }: Constructio
 		}
 		return next;
 	}, { replace: true });
-	const setOpen = (value: boolean) => updateQuery({ chats: value ? "open" : null });
 	const setSelectedChatId = (chatId: string | null) => updateQuery({ chat: chatId });
 	const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null);
 	const [draft, setDraft] = React.useState("");
@@ -172,156 +171,136 @@ export function ConstructionChatsPanel({ constructionId, isClosed }: Constructio
 			: null;
 
 	return (
-		<aside data-slot="construction-chats" className="flex flex-col gap-2">
-			<Button variant="outline" size="sm" aria-expanded={open} onClick={() => setOpen(open === false)} className="self-start">
-				<ChevronRight aria-hidden className={cn("transition-transform", open && "rotate-90")} />
-				Чаты конструкции
-			</Button>
-
-			{open && (
-				<div className={cn(isMobile ? "fixed inset-0 z-40" : "flex h-[32rem] w-80 flex-col gap-2 rounded-lg border bg-card p-2 shadow-sm xl:w-96 xl:has-[[data-slot=rule-detail]]:w-[min(48rem,60vw)]")}>
-					{isMobile && (
-						<button
-							type="button"
-							aria-label="Закрыть чаты конструкции"
-							className="absolute inset-0 bg-black/40"
-							onClick={() => setOpen(false)}
-						/>
-					)}
-					<div className={cn("flex min-h-0 flex-1 flex-col gap-2 rounded-lg border bg-card p-2 shadow-sm", isMobile && "absolute right-0 top-0 h-full w-[min(30rem,100vw)] overflow-y-auto border-l")}>
-					{isMobile && <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Закрыть чаты</Button>}
-					<Button variant="outline" size="sm" aria-pressed={showCompleted} onClick={() => updateQuery({
-						completedChats: showCompleted ? null : "true",
-						...(showCompleted && completed.some((chat) => chat.id === selectedChatId) ? { chat: null } : {}),
-					})}>Показать завершённые</Button>
-					{chatsUnavailable !== null ? (
-						<div className="text-muted-foreground flex flex-col gap-2 p-2 text-sm" role="status">
-							<p role="alert">Чаты агента недоступны: {chatsUnavailable}.</p>
-							<Button variant="outline" size="sm" onClick={() => {
-								void activeQuery.refetch();
-								void completedQuery.refetch();
-							}}>Повторить загрузку</Button>
-						</div>
-					) : chatsLoading ? <p role="status">Загрузка чатов конструкции…</p> : (
-						<>
-							{/* Первое сообщение создаёт чат с привязкой и параметрами по умолчанию.
-							    Для закрытой конструкции показывается контекст пост-мортема,
-							    без подмены текущего конвейера ответа. */}
-							<div className="flex flex-col gap-1">
-								<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-									{isClosed ? "пост-мортем конструкции" : "новый чат"}
-								</span>
-								<textarea
-									rows={2}
-									className="border-input bg-background min-h-9 flex-1 resize-none rounded-md border px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground"
-									placeholder="Спросите ИИ-помощника о конструкции…"
-									value={draft}
-									onChange={(event) => setDraft(event.target.value)}
-								/>
-								<Button
-									size="sm"
-									className="self-start"
-									disabled={createMutation.isPending || draft.trim() === ""}
-									onClick={() => createMutation.mutate(draft.trim())}
-								>
-									<MessageSquarePlus aria-hidden />
-									Создать чат
-								</Button>
-								{createMutation.isError && (
-									<p className="text-destructive text-xs" role="alert">
-										Чат не создан: {createMutation.error.message}
-									</p>
-								)}
-							</div>
-
-							{lifecycleError !== null && <p role="alert" className="text-destructive text-xs">Статус чата не изменён: {lifecycleError.message}</p>}
-							<Dialog open={deleteTarget !== null} onOpenChange={(value) => {
-								if (value === false && deleteMutation.isPending === false)
-									setDeleteTarget(null);
-							}}>
-								<DialogContent showCloseButton={deleteMutation.isPending === false}>
-									<DialogTitle>Удалить чат целиком?</DialogTitle>
-									<DialogDescription>Удалить чат целиком вместе со всеми сообщениями? Это действие нельзя отменить.</DialogDescription>
-									<div className="flex gap-2">
-										<Button variant="destructive" size="sm" disabled={deleteMutation.isPending} onClick={() => {
-											if (deleteTarget !== null)
-												deleteMutation.mutate(deleteTarget);
-										}}>Подтвердить удаление</Button>
-										<Button variant="outline" size="sm" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(null)}>Отмена</Button>
-									</div>
-									{deleteMutation.isError && <p role="alert" className="text-destructive text-xs">Чат не удалён: {deleteMutation.error.message}</p>}
-								</DialogContent>
-							</Dialog>
-							<div className="flex min-h-0 flex-1 flex-col gap-2">
-								<ChatListSection
-									title="активные"
-									chats={active}
-									selectedChatId={selectedChatId}
-									onSelect={setSelectedChatId}
-									onDelete={(chatId) => { deleteMutation.reset(); setDeleteTarget(chatId); }}
-									deletePending={deleteMutation.isPending}
-									action={(chat) => (
-										<Button
-											variant="ghost"
-											size="icon"
-											className="size-6"
-											title="Завершить чат"
-											aria-label={`завершить чат ${chat.id}`}
-											disabled={completeMutation.isPending}
-											onClick={() => {
-												resumeMutation.reset();
-												completeMutation.mutate(chat.id, { onSuccess: () => {
-													if (showCompleted === false && selectedChatId === chat.id)
-														setSelectedChatId(null);
-												} });
-											}}
-										>
-											<CheckCheck aria-hidden />
-										</Button>
-									)}
-								/>
-								{showCompleted && <ChatListSection
-									title="завершённые"
-									chats={completed}
-									selectedChatId={selectedChatId}
-									onSelect={setSelectedChatId}
-									onDelete={(chatId) => { deleteMutation.reset(); setDeleteTarget(chatId); }}
-									deletePending={deleteMutation.isPending}
-									action={(chat) => (
-										<Button
-											variant="ghost"
-											size="icon"
-											className="size-6"
-											title="Продолжить чат"
-											aria-label={`продолжить чат ${chat.id}`}
-											disabled={resumeMutation.isPending}
-											onClick={() => { completeMutation.reset(); resumeMutation.mutate(chat.id); }}
-										>
-											<RotateCcw aria-hidden />
-										</Button>
-									)}
-								/>}
-							</div>
-
-							{selected !== null ? (
-								<div className="border-t pt-2" style={{ height: "60%" }}>
-									<ChatThreadView key={selected.id} chat={selected} />
-								</div>
-							) : (
-								<p className="text-muted-foreground py-4 text-center text-xs">
-									{selectedChatId !== null
-										? "Выбранный чат не найден в доступном списке"
-										: active.length + (showCompleted ? completed.length : 0) === 0
-										? "Чатов конструкции ещё нет — задайте первый вопрос"
-										: "Выберите чат из списков"}
-								</p>
-							)}
-						</>
-					)}
-					</div>
+		<div data-slot="construction-chats" className="flex h-full min-h-0 flex-col gap-2 p-2">
+			<Button variant="outline" size="sm" aria-pressed={showCompleted} onClick={() => updateQuery({
+				completedChats: showCompleted ? null : "true",
+				...(showCompleted && completed.some((chat) => chat.id === selectedChatId) ? { chat: null } : {}),
+			})}>Показать завершённые</Button>
+			{chatsUnavailable !== null ? (
+				<div className="text-muted-foreground flex flex-col gap-2 p-2 text-sm" role="status">
+					<p role="alert">Чаты агента недоступны: {chatsUnavailable}.</p>
+					<Button variant="outline" size="sm" onClick={() => {
+						void activeQuery.refetch();
+						void completedQuery.refetch();
+					}}>Повторить загрузку</Button>
 				</div>
+			) : chatsLoading ? <p role="status">Загрузка чатов конструкции…</p> : (
+				<>
+					{/* Первое сообщение создаёт чат с привязкой и параметрами по умолчанию.
+					    Для закрытой конструкции показывается контекст пост-мортема,
+					    без подмены текущего конвейера ответа. */}
+					<div className="flex flex-col gap-1">
+						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+							{isClosed ? "пост-мортем конструкции" : "новый чат"}
+						</span>
+						<textarea
+							rows={2}
+							className="border-input bg-background min-h-9 flex-1 resize-none rounded-md border px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground"
+							placeholder="Спросите ИИ-помощника о конструкции…"
+							value={draft}
+							onChange={(event) => setDraft(event.target.value)}
+						/>
+						<Button
+							size="sm"
+							className="self-start"
+							disabled={createMutation.isPending || draft.trim() === ""}
+							onClick={() => createMutation.mutate(draft.trim())}
+						>
+							<MessageSquarePlus aria-hidden />
+							Создать чат
+						</Button>
+						{createMutation.isError && (
+							<p className="text-destructive text-xs" role="alert">
+								Чат не создан: {createMutation.error.message}
+							</p>
+						)}
+					</div>
+
+					{lifecycleError !== null && <p role="alert" className="text-destructive text-xs">Статус чата не изменён: {lifecycleError.message}</p>}
+					<Dialog open={deleteTarget !== null} onOpenChange={(value) => {
+						if (value === false && deleteMutation.isPending === false)
+							setDeleteTarget(null);
+					}}>
+						<DialogContent showCloseButton={deleteMutation.isPending === false}>
+							<DialogTitle>Удалить чат целиком?</DialogTitle>
+							<DialogDescription>Удалить чат целиком вместе со всеми сообщениями? Это действие нельзя отменить.</DialogDescription>
+							<div className="flex gap-2">
+								<Button variant="destructive" size="sm" disabled={deleteMutation.isPending} onClick={() => {
+									if (deleteTarget !== null)
+										deleteMutation.mutate(deleteTarget);
+								}}>Подтвердить удаление</Button>
+								<Button variant="outline" size="sm" disabled={deleteMutation.isPending} onClick={() => setDeleteTarget(null)}>Отмена</Button>
+							</div>
+							{deleteMutation.isError && <p role="alert" className="text-destructive text-xs">Чат не удалён: {deleteMutation.error.message}</p>}
+						</DialogContent>
+					</Dialog>
+					<div className="flex min-h-0 flex-1 flex-col gap-2">
+						<ChatListSection
+							title="активные"
+							chats={active}
+							selectedChatId={selectedChatId}
+							onSelect={setSelectedChatId}
+							onDelete={(chatId) => { deleteMutation.reset(); setDeleteTarget(chatId); }}
+							deletePending={deleteMutation.isPending}
+							action={(chat) => (
+								<Button
+									variant="ghost"
+									size="icon"
+									className="size-6"
+									title="Завершить чат"
+									aria-label={`завершить чат ${chat.id}`}
+									disabled={completeMutation.isPending}
+									onClick={() => {
+										resumeMutation.reset();
+										completeMutation.mutate(chat.id, { onSuccess: () => {
+											if (showCompleted === false && selectedChatId === chat.id)
+												setSelectedChatId(null);
+										} });
+									}}
+								>
+									<CheckCheck aria-hidden />
+								</Button>
+							)}
+						/>
+						{showCompleted && <ChatListSection
+							title="завершённые"
+							chats={completed}
+							selectedChatId={selectedChatId}
+							onSelect={setSelectedChatId}
+							onDelete={(chatId) => { deleteMutation.reset(); setDeleteTarget(chatId); }}
+							deletePending={deleteMutation.isPending}
+							action={(chat) => (
+								<Button
+									variant="ghost"
+									size="icon"
+									className="size-6"
+									title="Продолжить чат"
+									aria-label={`продолжить чат ${chat.id}`}
+									disabled={resumeMutation.isPending}
+									onClick={() => { completeMutation.reset(); resumeMutation.mutate(chat.id); }}
+								>
+									<RotateCcw aria-hidden />
+								</Button>
+							)}
+						/>}
+					</div>
+
+					{selected !== null ? (
+						<div className="border-t pt-2" style={{ height: "60%" }}>
+							<ChatThreadView key={selected.id} chat={selected} />
+						</div>
+					) : (
+						<p className="text-muted-foreground py-4 text-center text-xs">
+							{selectedChatId !== null
+								? "Выбранный чат не найден в доступном списке"
+								: active.length + (showCompleted ? completed.length : 0) === 0
+								? "Чатов конструкции ещё нет — задайте первый вопрос"
+								: "Выберите чат из списков"}
+						</p>
+					)}
+				</>
 			)}
-		</aside>
+		</div>
 	);
 }
 

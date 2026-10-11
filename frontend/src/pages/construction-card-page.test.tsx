@@ -1,8 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, createMemoryRouter, RouterProvider, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AppLayout } from "@/components/layout/AppLayout";
+import type { ChatDto } from "@/chat/types";
+import type { ConstructionsOverview } from "@/lib/api/constructions";
 import type { ConstructionCard } from "@/lib/api/construction-card";
 import type { HintPanel } from "@/lib/api/hints";
 import { ConstructionCardPage } from "./construction-card-page";
@@ -10,7 +13,7 @@ import { ConstructionCardPage } from "./construction-card-page";
 // Проверяется карточка конструкции по концепции §4: шапка с именем, статусом
 // и действиями, kstrip метрик с периодом, полный индикатор финрезультата,
 // комментарий MD-рендером, четыре таблицы записей, панель подсказок
-// конструкции и правая скрываемая область чатов. Слой API подменён
+// конструкции и панель чатов в контекстной панели каркаса. Слой API подменён
 // модулем-заглушкой.
 // Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 
@@ -112,6 +115,20 @@ const constructionPanel: HintPanel = {
 	liveCount: 0,
 };
 
+const overview: ConstructionsOverview = {
+	summary: {
+		totalPnL: 105.5, realizedPnL: 60.25, unrealizedPnL: 40.25,
+		marksAsOf: null, hasMarkFailure: false, constructionCount: 1, openCount: 1,
+	},
+	items: [],
+};
+
+const activeChat: ChatDto = {
+	id: "active-1", status: "active",
+	params: { constructionId: "7", model: "GLM-5.3", sources: ["journal", "rules-corpus"] },
+	createdAt: "2026-10-08T09:00:00Z", lastMessageAt: "2026-10-08T09:00:00Z",
+};
+
 const cardApi = vi.hoisted(() => ({
 	fetchConstructionCard: vi.fn(),
 	renameConstruction: vi.fn(),
@@ -145,10 +162,35 @@ vi.mock("@/lib/api/hints", async (importOriginal) => ({
 vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/chat/api/chat-api")>()),
 	listChats: vi.fn(),
+	listChatMessages: vi.fn(),
+}));
+
+// Данные каркаса AppLayout для проверки слота контекстной панели: счётчик
+// входящих и общий обзор журнала — заглушки, к тестируемому слоту отношения
+// не имеют.
+const frameApi = vi.hoisted(() => ({
+	fetchInboxCount: vi.fn(),
+	fetchConstructionsOverview: vi.fn(),
+}));
+vi.mock("@/lib/api/inbox", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/inbox")>()),
+	fetchInboxCount: frameApi.fetchInboxCount,
+}));
+vi.mock("@/lib/api/constructions", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/constructions")>()),
+	fetchConstructionsOverview: frameApi.fetchConstructionsOverview,
+}));
+// Тред чата изолируется от assistant-ui runtime: для слота достаточно
+// факта монтирования панели и восстановления выбора из URL.
+vi.mock("@/chat/runtime/use-agent-chat-runtime", () => ({
+	useAgentChatRuntime: () => ({ runtime: {}, isRunning: false, error: null, cancel: vi.fn() }),
+}));
+vi.mock("@/chat/components/agent-chat-thread", () => ({
+	AgentChatThread: () => <div data-testid="agent-chat-thread" />,
 }));
 
 import { fetchConstructionHintsPanel } from "@/lib/api/hints";
-import { listChats } from "@/chat/api/chat-api";
+import { listChats, listChatMessages } from "@/chat/api/chat-api";
 import { ApiError } from "@/lib/api/http";
 
 function renderCardPage(
@@ -164,6 +206,32 @@ function renderCardPage(
 			</MemoryRouter>
 		</QueryClientProvider>,
 	);
+}
+
+function LocationProbe() {
+	return <span aria-label="URL">{useLocation().search}</span>;
+}
+
+// Карточка внутри каркаса: только здесь работает слот контекстной панели
+// (useOutletContext), поэтому монтаж панели чатов проверяется в этой обвязке.
+function renderCardPageInFrame(search = ""): () => void {
+	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+	const router = createMemoryRouter(
+		[{
+			element: <AppLayout />,
+			children: [{
+				path: "/constructions/:constructionId",
+				element: <><LocationProbe /><ConstructionCardPage /></>,
+			}],
+		}],
+		{ initialEntries: [`/constructions/7${search}`] },
+	);
+	const view = render(
+		<QueryClientProvider client={queryClient}>
+			<RouterProvider router={router} />
+		</QueryClientProvider>,
+	);
+	return () => view.unmount();
 }
 
 // Диалоги капитала, риска и профита открываются только через меню
@@ -183,6 +251,9 @@ beforeEach(() => {
 	vi.mocked(fetchConstructionHintsPanel).mockResolvedValue(constructionPanel);
 	// Недоступность чатов не блокирует остальные данные карточки.
 	vi.mocked(listChats).mockRejectedValue(new Error("API ответил ошибкой 404"));
+	vi.mocked(listChatMessages).mockResolvedValue([]);
+	frameApi.fetchInboxCount.mockResolvedValue(0);
+	frameApi.fetchConstructionsOverview.mockResolvedValue(overview);
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -665,5 +736,50 @@ describe("карточка конструкции: примитивы дизай
 		expect(chip.textContent).toBe(text);
 		expect(chip.className).toContain(bg);
 		expect(chip.className).toContain(fg);
+	});
+});
+
+// Панель чатов конструкции монтируется в слот useContextPanel страницы
+// карточки (design.md D4): каркас показывает контекстную панель, панель
+// развёрнута по умолчанию, геометрия задаётся каркасом; URL-параметры
+// ?chats=* упразднены, выбор чата остаётся в ?chat= и переживает
+// перезагрузку.
+// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
+describe("карточка конструкции: панель чатов в контекстной панели", () => {
+	it("TryIfChatsPanelMountedIntoContextPanelSlotExpandedByDefault", async () => {
+		// Arrange: активный чат конструкции доступен.
+		const user = userEvent.setup();
+		vi.mocked(listChats).mockImplementation(async (requested) => requested === "active" ? [activeChat] : []);
+		renderCardPageInFrame();
+		const panel = await screen.findByTestId("context-panel");
+		// Assert: панель в каркасном слоте, развёрнута, без toggle-кнопки
+		// и без параметров ?chats=*.
+		expect(await within(panel).findByRole("button", { name: "Создать чат" })).toBeInTheDocument();
+		expect(within(panel).queryByRole("button", { name: "Чаты конструкции" })).not.toBeInTheDocument();
+		const chatsRoot = document.querySelector('[data-slot="construction-chats"]');
+		expect(chatsRoot?.className).toContain("h-full");
+		expect(screen.getByLabelText("URL").textContent).toBe("");
+		// Act: выбор чата.
+		await user.click(within(panel).getByRole("button", { name: /GLM-5\.3/ }));
+		// Assert: выбор остаётся в ?chat=, chats-параметров не появляется.
+		expect(screen.getByLabelText("URL")).toHaveTextContent("chat=active-1");
+		expect(screen.getByLabelText("URL")).not.toHaveTextContent("chats=");
+	});
+
+	it("TryIfChatSelectionSurvivesPageReload", async () => {
+		// Arrange: чат выбран до перезагрузки, соседний параметр сохранён.
+		vi.mocked(listChats).mockImplementation(async (requested) => requested === "active" ? [activeChat] : []);
+		const unmount = renderCardPageInFrame("?chat=active-1&other=keep");
+		const panel = await screen.findByTestId("context-panel");
+		expect(await within(panel).findByTestId("agent-chat-thread")).toBeInTheDocument();
+		// Act: «перезагрузка» — полное размонтирование и новый заход по тому же URL.
+		unmount();
+		renderCardPageInFrame("?chat=active-1&other=keep");
+		// Assert: выбор восстановлен из URL вместе с соседними параметрами.
+		const reloaded = await screen.findByTestId("context-panel");
+		expect(await within(reloaded).findByTestId("agent-chat-thread")).toBeInTheDocument();
+		expect(within(reloaded).getByRole("button", { name: /GLM-5\.3/ })).toHaveClass("bg-accent");
+		expect(screen.getByLabelText("URL")).toHaveTextContent("chat=active-1");
+		expect(screen.getByLabelText("URL")).toHaveTextContent("other=keep");
 	});
 });

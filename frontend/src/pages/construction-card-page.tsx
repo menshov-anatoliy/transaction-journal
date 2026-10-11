@@ -12,6 +12,7 @@ import { TradesTable } from "@/components/constructions/card/trades-table";
 import { ClosingEntriesTable } from "@/components/constructions/card/closing-entries-table";
 import { AdjustmentsTable } from "@/components/constructions/card/adjustments-table";
 import { ConstructionChatsPanel } from "@/components/constructions/card/construction-chats-panel";
+import { useContextPanel } from "@/components/layout/context-panel";
 import { ParamsMenu } from "@/components/constructions/card/params-menu";
 import { HintsPanel } from "@/components/hints/hints-panel";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
@@ -27,7 +28,8 @@ import type { ConstructionCard, TargetUnit } from "@/lib/api/construction-card";
 // информация и всё управление (паритет №3–№9). Шапка с именем, статусом и
 // действиями; kstrip метрик с периодом и полным индикатором; комментарий
 // MD-рендером с модальным split-редактором; панель подсказок конструкции;
-// четыре таблицы записей; правая скрываемая область чатов с автопривязкой.
+// четыре таблицы записей; панель чатов с автопривязкой регистрируется в
+// правой контекстной панели каркаса через слот useContextPanel.
 // Все данные и команды карточки идут через единый версионированный API.
 // Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 // Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
@@ -100,6 +102,18 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 	const commands = useCardCommands(constructionId);
 	const navigate = useNavigate();
 	const [commentOpen, setCommentOpen] = React.useState(false);
+	const isClosed = card.status !== "open";
+
+	// Панель чатов конструкции монтируется в слот контекстной панели каркаса
+	// (design.md D4): у карточки контекст существует всегда, поэтому регистрация
+	// постоянна и панель развёрнута по умолчанию; ширину и свёрнутость задаёт
+	// каркас, панель свою геометрию не хранит. Выбор чата остаётся в URL (?chat=).
+	// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
+	const chatsPanelRegistration = React.useMemo(
+		() => ({ content: <ConstructionChatsPanel constructionId={constructionId} isClosed={isClosed} /> }),
+		[constructionId, isClosed],
+	);
+	useContextPanel(chatsPanelRegistration);
 
 	// Первый показ активной ошибки любой команды: причина видна у действия.
 	const actionError = firstError(
@@ -154,8 +168,7 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 				onOpenChange={setCommentOpen}
 			/>
 
-			<div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_auto]">
-				<div className="flex min-w-0 flex-col gap-6">
+			<div className="flex min-w-0 flex-col gap-6">
 					<ConstructionHintsArea constructionId={constructionId} />
 
 					{/* Заголовки и счётчики сеток живут в головках секций-карточек
@@ -193,10 +206,6 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 						onEdit={(input) => commands.editAdjustment.mutate(input)}
 						onDelete={(adjustmentId) => commands.deleteAdjustment.mutate(adjustmentId)}
 					/>
-				</div>
-
-				{/* Правая скрываемая область чатов с автопривязкой к конструкции. */}
-				<ConstructionChatsPanel constructionId={constructionId} isClosed={card.status !== "open"} />
 			</div>
 		</section>
 	);
