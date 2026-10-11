@@ -61,6 +61,12 @@ function renderPage(path = "/agent") {
 	);
 }
 
+// Контейнер подгруппы привязки ищется от заголовка со счётчиком — в нём
+// проверяется перечень пунктов именно этой подгруппы.
+function subgroupContainer(section: HTMLElement, name: RegExp): HTMLElement {
+	return within(section).getByRole("heading", { name }).closest("div") as HTMLElement;
+}
+
 beforeEach(() => {
 	vi.clearAllMocks();
 	// Обзор конструкций по умолчанию пуст: существующие сценарии работают
@@ -312,6 +318,216 @@ describe("страница агента", () => {
 
 		// Assert: длинный текст ужимается вёрсткой до одной строки (truncate).
 		expect(preview.className).toContain("truncate");
+	});
+
+	/*
+		Свежесть сверху: внутри каждой статусной группы пункты упорядочены
+		по моменту последнего сообщения по убыванию — выше расположен чат
+		с более поздним моментом последнего сообщения; серверный порядок
+		перечня (по возрастанию Id) порядок отображения не задаёт.
+	*/
+	// Traceability: openspec:ui/screens#scenario-ui-agent-sessions-recently-updated-first
+	// Traceability: change:agent-chat-list-recognition/design#D4
+	it("TryIfSessionsOrderedNewestFirstInBothStatusGroups", async () => {
+		// Arrange: активные чаты приходят в серверном порядке по возрастанию Id
+		// (утренний → свежий → дневной), завершённые — вперемешку; моменты
+		// последнего сообщения у всех различаются.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? [
+						{
+							id: "chat-morning",
+							status: "active",
+							params: { model: "модель-утренняя", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-08T08:00:00Z",
+							lastMessageAt: "2026-10-08T09:00:00Z",
+							firstMessagePreview: "",
+						},
+						{
+							id: "chat-fresh",
+							status: "active",
+							params: { model: "модель-свежая", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-08T09:00:00Z",
+							lastMessageAt: "2026-10-08T10:00:00Z",
+							firstMessagePreview: "",
+						},
+						{
+							id: "chat-noon",
+							status: "active",
+							params: { model: "модель-дневная", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-08T08:30:00Z",
+							lastMessageAt: "2026-10-08T09:30:00Z",
+							firstMessagePreview: "",
+						},
+					]
+				: [
+						{
+							id: "chat-yesterday",
+							status: "completed",
+							params: { model: "модель-вчерашняя", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-07T08:00:00Z",
+							lastMessageAt: "2026-10-07T10:00:00Z",
+							firstMessagePreview: "",
+						},
+						{
+							id: "chat-evening",
+							status: "completed",
+							params: { model: "модель-вечерняя", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-07T08:30:00Z",
+							lastMessageAt: "2026-10-07T09:00:00Z",
+							firstMessagePreview: "",
+						},
+					],
+		);
+		renderPage();
+
+		// Assert: в «Активные» сверху свежие: свежая (10:00) → дневная (09:30) →
+		// утренняя (09:00), хотя сервер прислал свежий вторым.
+		const activeSection = (await screen.findByRole("heading", { name: /активные/i })).closest("section") as HTMLElement;
+		const activeItems = within(activeSection).getAllByRole("button", { name: /модель-/ });
+		expect(activeItems).toHaveLength(3);
+		expect(activeItems[0].textContent).toContain("модель-свежая");
+		expect(activeItems[1].textContent).toContain("модель-дневная");
+		expect(activeItems[2].textContent).toContain("модель-утренняя");
+
+		// Assert: в «Завершённые» тот же порядок свежести: вчерашняя (10:00)
+		// выше вечерней (09:00).
+		const completedSection = screen.getByRole("heading", { name: /завершённые/i }).closest("section") as HTMLElement;
+		const completedItems = within(completedSection).getAllByRole("button", { name: /модель-/ });
+		expect(completedItems).toHaveLength(2);
+		expect(completedItems[0].textContent).toContain("модель-вчерашняя");
+		expect(completedItems[1].textContent).toContain("модель-вечерняя");
+	});
+
+	/*
+		Короткий перечень привязанных: привязанные чаты собираются в подгруппу
+		«Конструкции» со счётчиком, портфельные — в «Портфель»; чат конструкции
+		ищется в коротком перечне подгруппы, не просматривая портфельные.
+	*/
+	// Traceability: openspec:ui/screens#scenario-ui-agent-sessions-binding-split-shortlist
+	// Traceability: change:agent-chat-list-recognition/design#D5
+	it("TryIfBoundChatFoundInShortConstructionSubgroupWithCounters", async () => {
+		// Arrange: активные — два привязанных чата и портфельный между ними;
+		// обзор конструкций знает имя для привязки 8.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? [
+						{
+							id: "chat-bound-1",
+							status: "active",
+							params: { model: "GLM-5.3", constructionId: "8", sources: ["journal"] },
+							createdAt: "2026-10-08T09:00:00Z",
+							lastMessageAt: "2026-10-08T09:01:00Z",
+							firstMessagePreview: "Оцени риск стреддла",
+						},
+						{
+							id: "chat-portfolio",
+							status: "active",
+							params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-08T08:00:00Z",
+							lastMessageAt: "2026-10-08T08:30:00Z",
+							firstMessagePreview: "Сводка по портфелю",
+						},
+						{
+							id: "chat-bound-2",
+							status: "active",
+							params: { model: "glm-4-air", constructionId: "99", sources: ["journal"] },
+							createdAt: "2026-10-08T07:00:00Z",
+							lastMessageAt: "2026-10-08T07:30:00Z",
+							firstMessagePreview: "Разбери сделку",
+						},
+					]
+				: [],
+		);
+		constructionsApi.fetchConstructionsOverview.mockResolvedValue({
+			summary: {},
+			items: [{ constructionId: 8, name: "Стреддл BTC" }],
+		});
+		renderPage();
+
+		// Assert: подгруппы статусной группы «Активные» со счётчиками:
+		// «Конструкции · 2» и «Портфель · 1».
+		const activeSection = (await screen.findByRole("heading", { name: /активные/i })).closest("section") as HTMLElement;
+		expect(within(activeSection).getByRole("heading", { name: /Конструкции\s*·\s*2/ })).toBeInTheDocument();
+		expect(within(activeSection).getByRole("heading", { name: /Портфель\s*·\s*1/ })).toBeInTheDocument();
+
+		// Assert: чат конструкции найден в коротком перечне «Конструкции» —
+		// оба привязанных пункта там, портфельный отсутствует.
+		const boundSubgroup = subgroupContainer(activeSection, /Конструкции\s*·\s*2/);
+		expect(within(boundSubgroup).getByRole("button", { name: /GLM-5\.3/ })).toBeInTheDocument();
+		expect(within(boundSubgroup).getByRole("button", { name: /glm-4-air/ })).toBeInTheDocument();
+		expect(within(boundSubgroup).queryByRole("button", { name: /glm-5\.3-flash/ })).toBeNull();
+
+		// Assert: портфельный чат — в перечне «Портфель», там же без привязанных.
+		const portfolioSubgroup = subgroupContainer(activeSection, /Портфель\s*·\s*1/);
+		expect(within(portfolioSubgroup).getByRole("button", { name: /glm-5\.3-flash/ })).toBeInTheDocument();
+		expect(within(portfolioSubgroup).queryByRole("button", { name: /GLM-5\.3/ })).toBeNull();
+	});
+
+	/*
+		Разделение по привязке действует в обеих статусных группах: и в
+		активных, и в завершённых портфельные и привязанные чаты различаются
+		подгруппами; пустая подгруппа показывается с нулевым счётчиком.
+	*/
+	// Traceability: openspec:ui/screens#scenario-ui-agent-sessions-binding-split-both-statuses
+	// Traceability: change:agent-chat-list-recognition/design#D5
+	it("TryIfBindingSplitAppliesToBothStatusGroupsAndShowsZeroCounter", async () => {
+		// Arrange: в активных один привязанный и один портфельный чат;
+		// в завершённых только портфельный — подгруппа «Конструкции» показывается с нулём.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? [
+						{
+							id: "chat-bound",
+							status: "active",
+							params: { model: "GLM-5.3", constructionId: "8", sources: ["journal"] },
+							createdAt: "2026-10-08T09:00:00Z",
+							lastMessageAt: "2026-10-08T09:01:00Z",
+							firstMessagePreview: "Оцени риск стреддла",
+						},
+						{
+							id: "chat-portfolio",
+							status: "active",
+							params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-08T08:00:00Z",
+							lastMessageAt: "2026-10-08T08:30:00Z",
+							firstMessagePreview: "Сводка по портфелю",
+						},
+					]
+				: [
+						{
+							id: "chat-done",
+							status: "completed",
+							params: { model: "glm-4-air", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-07T08:00:00Z",
+							lastMessageAt: "2026-10-07T09:00:00Z",
+							firstMessagePreview: "Итоги недели",
+						},
+					],
+		);
+		constructionsApi.fetchConstructionsOverview.mockResolvedValue({
+			summary: {},
+			items: [{ constructionId: 8, name: "Стреддл BTC" }],
+		});
+		renderPage();
+
+		// Assert: активные — обе подгруппы со счётчиками 1/1, привязанный
+		// и портфельный чаты в разных перечнях.
+		const activeSection = (await screen.findByRole("heading", { name: /активные/i })).closest("section") as HTMLElement;
+		expect(within(activeSection).getByRole("heading", { name: /Конструкции\s*·\s*1/ })).toBeInTheDocument();
+		expect(within(activeSection).getByRole("heading", { name: /Портфель\s*·\s*1/ })).toBeInTheDocument();
+		const boundActive = subgroupContainer(activeSection, /Конструкции\s*·\s*1/);
+		expect(within(boundActive).getByRole("button", { name: /GLM-5\.3/ })).toBeInTheDocument();
+		const portfolioActive = subgroupContainer(activeSection, /Портфель\s*·\s*1/);
+		expect(within(portfolioActive).getByRole("button", { name: /glm-5\.3-flash/ })).toBeInTheDocument();
+
+		// Assert: завершённые — разделение действует и здесь; пустая подгруппа
+		// «Конструкции» показана с нулевым счётчиком, портфельный — в «Портфель».
+		const completedSection = screen.getByRole("heading", { name: /завершённые/i }).closest("section") as HTMLElement;
+		expect(within(completedSection).getByRole("heading", { name: /Конструкции\s*·\s*0/ })).toBeInTheDocument();
+		expect(within(completedSection).getByRole("heading", { name: /Портфель\s*·\s*1/ })).toBeInTheDocument();
+		const portfolioCompleted = subgroupContainer(completedSection, /Портфель\s*·\s*1/);
+		expect(within(portfolioCompleted).getByRole("button", { name: /glm-4-air/ })).toBeInTheDocument();
 	});
 
 	/*

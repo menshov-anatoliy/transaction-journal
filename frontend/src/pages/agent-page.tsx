@@ -621,6 +621,18 @@ function ChatList({
 	onToggle: (chatId: string) => void;
 	actionLabel: string;
 }) {
+	// Свежие пункты вверху группы: сортировка по моменту последнего
+	// сообщения по убыванию внутри каждой статусной группы.
+	// Traceability: openspec:ui/screens#requirement-ui-agent-sessions-newest-first
+	// Traceability: change:agent-chat-list-recognition/design#D4
+	const sortedChats = React.useMemo(() => sortChatsByFreshness(chats), [chats]);
+	// Разделение по привязке: привязанные чаты — подгруппа «Конструкции»,
+	// портфельные — «Портфель»; обе подгруппы вычисляются в каждой статусной
+	// группе по привязке чата (params.constructionId).
+	// Traceability: openspec:ui/screens#requirement-ui-agent-sessions-split-by-binding
+	// Traceability: change:agent-chat-list-recognition/design#D5
+	const constructionChats = sortedChats.filter((chat) => chat.params.constructionId != null);
+	const portfolioChats = sortedChats.filter((chat) => chat.params.constructionId == null);
 	return (
 		<section className="flex flex-col gap-1">
 			{/*
@@ -632,6 +644,77 @@ function ChatList({
 			{chats.length === 0 ? (
 				<p className="text-muted-foreground text-xs">пусто</p>
 			) : (
+				<>
+					{/*
+						Разделение группы по привязке: подгруппы «Портфель» и
+						«Конструкции» со счётчиками в каждой статусной группе;
+						пустая подгруппа показывается с нулевым счётчиком, чтобы
+						разделение было предсказуемым, а чат конструкции искался
+						в коротком перечне, не в общем списке.
+					*/}
+					{/* Traceability: openspec:ui/screens#requirement-ui-agent-sessions-split-by-binding */}
+					{/* Traceability: change:agent-chat-list-recognition/design#D5 */}
+					<ChatSubgroup
+						heading="Портфель"
+						count={portfolioChats.length}
+						chats={portfolioChats}
+						constructionNames={constructionNames}
+						selectedChatId={selectedChatId}
+						onSelect={onSelect}
+						onToggle={onToggle}
+						actionLabel={actionLabel}
+					/>
+					<ChatSubgroup
+						heading="Конструкции"
+						count={constructionChats.length}
+						chats={constructionChats}
+						constructionNames={constructionNames}
+						selectedChatId={selectedChatId}
+						onSelect={onSelect}
+						onToggle={onToggle}
+						actionLabel={actionLabel}
+					/>
+				</>
+			)}
+		</section>
+	);
+}
+
+/*
+	Подгруппа привязки внутри статусной группы: заголовок со счётчиком и
+	перечень пунктов сессий в порядке свежести; вёрстка подгруппы не
+	отличается от вёрстки статусной группы.
+*/
+// Traceability: openspec:ui/screens#requirement-ui-agent-sessions-split-by-binding
+// Traceability: change:agent-chat-list-recognition/design#D5
+function ChatSubgroup({
+	heading,
+	count,
+	chats,
+	constructionNames,
+	selectedChatId,
+	onSelect,
+	onToggle,
+	actionLabel,
+}: {
+	heading: string;
+	count: number;
+	chats: readonly ChatDto[];
+	/** Имена конструкций из кэша обзора: резолв бейджа по привязке чата. */
+	constructionNames: ReadonlyMap<string, string>;
+	selectedChatId: string | null;
+	onSelect: (chatId: string) => void;
+	onToggle: (chatId: string) => void;
+	actionLabel: string;
+}) {
+	return (
+		<div className="flex flex-col gap-1">
+			<h4 className="flex items-baseline gap-1 text-[10px] font-normal tracking-[0.5px] text-text-muted uppercase">
+				<span>{heading}</span>
+				{/* Счётчик подгруппы: нулевой счётчик виден наравне с ненулевым. */}
+				<span className="text-[10px]">· {count}</span>
+			</h4>
+			{chats.length === 0 ? null : (
 				<ul className="flex flex-col gap-1">
 					{chats.map((chat) => (
 						<li key={chat.id}>
@@ -663,8 +746,20 @@ function ChatList({
 					))}
 				</ul>
 			)}
-		</section>
+		</div>
 	);
+}
+
+/*
+	Порядок статусной группы по свежести: сортировка по моменту последнего
+	сообщения по убыванию выполняется на фронте, контракт бэкенда (OrderBy Id)
+	не меняется; при равном моменте устойчивая сортировка сохраняет серверный
+	порядок по возрастанию Id.
+*/
+// Traceability: openspec:ui/screens#requirement-ui-agent-sessions-newest-first
+// Traceability: change:agent-chat-list-recognition/design#D4
+function sortChatsByFreshness(chats: readonly ChatDto[]): ChatDto[] {
+	return [...chats].sort((left, right) => new Date(right.lastMessageAt).getTime() - new Date(left.lastMessageAt).getTime());
 }
 
 /*
