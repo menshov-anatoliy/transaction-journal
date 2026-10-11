@@ -394,6 +394,17 @@ public static class AgentEndpoints
 		// Момент последнего сообщения — as-of последнего сообщения истории;
 		// у только что созданного чата это его первое сообщение владельца.
 		var lastMessageAt = messages.Count == 0 ? chat.CreatedAt : messages[^1].AsOf;
+
+		// Превью пункта списка — текст первого сообщения владельца: берётся из
+		// той же выборки истории, что и lastMessageAt, без новых запросов к БД;
+		// история без сообщения владельца даёт пустое превью без ошибки, текст
+		// уходит целиком — ужимание в строку остаётся заботой UI.
+		// Traceability: openspec:chats/history#scenario-chat-list-preview-of-first-owner-message
+		// Traceability: openspec:chats/history#scenario-chat-list-preview-uses-first-message
+		var firstMessagePreview = messages
+			.FirstOrDefault(message => message.Role == ChatMessageRole.User)
+			?.Text ?? string.Empty;
+
 		return new AgentChatDto(
 			chat.Id.ToString(CultureInfo.InvariantCulture),
 			chat.Status == ChatStatus.Active ? "active" : "completed",
@@ -402,7 +413,8 @@ public static class AgentEndpoints
 				chat.ConstructionId?.ToString(CultureInfo.InvariantCulture),
 				[.. chat.Sources.Select(ToWireSource)]),
 			chat.CreatedAt,
-			lastMessageAt);
+			lastMessageAt,
+			firstMessagePreview);
 	}
 
 	private static AgentChatMessageDto ToMessageDto(ChatMessage message, AgentRulesCatalog catalog)
@@ -534,12 +546,19 @@ public sealed record ChangeAgentChatModelRequest(string Model);
 
 public sealed record ChatMessageStreamRequest(string Text, string? Model);
 
+/// <summary>
+/// Пункт списка чатов: параметры, статус, моменты создания и последнего
+/// сообщения, плюс превью первого сообщения владельца — опознавательный
+/// признак пункта списка; текст уходит целиком, обрезание — забота UI.
+// Traceability: openspec:chats/history#scenario-chat-list-preview-of-first-owner-message
+/// </summary>
 public sealed record AgentChatDto(
 	string Id,
 	string Status,
 	AgentChatParams Params,
 	DateTimeOffset CreatedAt,
-	DateTimeOffset LastMessageAt);
+	DateTimeOffset LastMessageAt,
+	string FirstMessagePreview);
 
 public sealed record AgentChatMessageDto(
 	string Id,

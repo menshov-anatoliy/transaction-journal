@@ -17,6 +17,9 @@ public abstract class ChatDatabaseTests
 
 	private string _databasePath = null!;
 
+	/// <summary>Путь файла базы чатов текущей проверки — для прямых обращений к SQLite.</summary>
+	protected string DatabasePath => _databasePath;
+
 	[TestInitialize]
 	public void InitializeChatDatabase()
 	{

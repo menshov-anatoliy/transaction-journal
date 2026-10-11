@@ -137,6 +137,59 @@ public sealed class AgentSectionApiTests
 	}
 
 	[TestMethod]
+	[Description("Оба списка чатов несут полный текст первого сообщения владельца без серверного обрезания")]
+	// Превью пункта списка — контракт DTO списков active/completed: длинный
+	// первый вопрос владельца уходит целиком в обоих статусах, ответ
+	// ассистента не подменяет его.
+	// Traceability: openspec:chats/history#scenario-chat-list-preview-of-first-owner-message
+	// Traceability: openspec:chats/history#scenario-chat-list-preview-uses-first-message
+	public async Task TryIfChatListsCarryFullFirstOwnerMessagePreview()
+	{
+		// Arrange: изолированное хранилище; длинный первый вопрос владельца
+		// (больше любой строки показа списка) и короткий завершённый чат.
+		var directory = Path.Combine(AppContext.BaseDirectory, $"agent-preview-{Guid.NewGuid():N}");
+		Directory.CreateDirectory(directory);
+		try
+		{
+			await using var factory = CreateChatHost(
+				new ChatStore(Path.Combine(directory, "chats.db")),
+				new RecordingContextReader(),
+				new ScriptedModelClient("Ответ ассистента на продолжение."));
+			using var client = factory.CreateClient();
+			var longQuestion = "Опиши подробнее риски выбранной конструкции портфеля и предложи, "
+				+ "какие шаги стоит предпринять в первую очередь, чтобы снизить "
+				+ "давление процентного риска без полного выхода из облигаций.";
+			var activeChatId = await CreateChatAsync(client, longQuestion, null, ["journal"]);
+			var completedChatId = await CreateChatAsync(client, "Разбери конструкцию 7.", null, ["journal"]);
+			using var streamRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/chats/{activeChatId}/messages/stream")
+			{
+				Content = JsonContent.Create(new { text = "Продолжи анализ", model = "glm-5.3" }),
+			};
+			using var streamResponse = await client.SendAsync(streamRequest, HttpCompletionOption.ResponseHeadersRead);
+			Assert.That(streamResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+			var completionResponse = await client.PostAsync($"/api/v1/chats/{completedChatId}/completion", null);
+			Assert.That(completionResponse.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+
+			// Act: оба списка чатов.
+			var activeChats = await (await client.GetAsync("/api/v1/chats?status=active")).Content.ReadFromJsonAsync<JsonArray>();
+			var completedChats = await (await client.GetAsync("/api/v1/chats?status=completed")).Content.ReadFromJsonAsync<JsonArray>();
+
+			// Assert: оба статуса несут полный текст первого сообщения
+			// владельца; ответ ассистента в превью не попадает.
+			var activeChat = activeChats!.Single(node => node!["id"]!.GetValue<string>() == activeChatId);
+			Assert.That(activeChat["firstMessagePreview"]!.GetValue<string>(), Is.EqualTo(longQuestion));
+			Assert.That(activeChat["firstMessagePreview"]!.GetValue<string>().Length, Is.GreaterThan(180));
+			Assert.That(activeChat["firstMessagePreview"]!.GetValue<string>(), Is.Not.EqualTo("Ответ ассистента на продолжение."));
+			var completedChat = completedChats!.Single(node => node!["id"]!.GetValue<string>() == completedChatId);
+			Assert.That(completedChat["firstMessagePreview"]!.GetValue<string>(), Is.EqualTo("Разбери конструкцию 7."));
+		}
+		finally
+		{
+			CleanupChatStoreDirectory(directory);
+		}
+	}
+
+	[TestMethod]
 	[Description("Чат, созданный без выбора модели, получает дефолт GLM-5.3")]
 	// Дефолт модели задаётся подсекцией Llm:Chat:Model: владелец создаёт чат,
 	// не выбирая модель, и чат работает на GLM-5.3 без правки кода.

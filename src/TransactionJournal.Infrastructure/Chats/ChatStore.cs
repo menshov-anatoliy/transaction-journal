@@ -337,7 +337,13 @@ public sealed class ChatStore : IChatStore
 			.ConfigureAwait(false)
 			?? throw new InvalidOperationException($"Чат {chatId} не найден.");
 
-	/// <summary>Чаты одного статуса в порядке создания — списки активных и завершённых.</summary>
+	/// <summary>
+	/// Чаты одного статуса в порядке создания — списки активных и завершённых.
+	/// Списковая запись дополняется превью первого сообщения владельца из
+	/// истории чата: первым по порядку, а не последним; история пуста или без
+	/// сообщения владельца — запись несёт пустое превью без ошибки.
+	// Traceability: openspec:chats/history#scenario-chat-list-preview-of-first-owner-message
+	/// </summary>
 	/// <param name="status">Отбираемый статус жизненного цикла.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	private async Task<IReadOnlyList<ChatRecord>> ListByStatusAsync(
@@ -351,7 +357,34 @@ public sealed class ChatStore : IChatStore
 			.OrderBy(candidate => candidate.Id)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
-		return entities.Select(ToRecord).ToList();
+
+		// Превью списковых записей читается одним проходом по сообщениям
+		// выбранных чатов, отдельного запроса на чат не появляется: сообщения
+		// идут по возрастанию Id, поэтому первое вхождение чата в выборке
+		// владельцев — его первое сообщение владельца; чат без истории или
+		// без сообщения владельца получает пустое превью без ошибки.
+		// Traceability: openspec:chats/history#scenario-chat-list-preview-of-first-owner-message
+		// Traceability: openspec:chats/history#scenario-chat-list-preview-uses-first-message
+		var chatIds = entities.Select(entity => entity.Id).ToList();
+		var ownerMessages = await db.Messages
+			.AsNoTracking()
+			.Where(message => chatIds.Contains(message.ChatId)
+				&& message.Role == ChatMessageRole.User.ToString())
+			.OrderBy(message => message.Id)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
+		var previews = new Dictionary<long, string>();
+		foreach (var message in ownerMessages)
+		{
+			previews.TryAdd(message.ChatId, message.Text);
+		}
+
+		return entities
+			.Select(entity => ToRecord(entity) with
+			{
+				FirstMessagePreview = previews.GetValueOrDefault(entity.Id, string.Empty),
+			})
+			.ToList();
 	}
 
 	#endregion

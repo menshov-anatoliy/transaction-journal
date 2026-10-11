@@ -176,7 +176,13 @@ public sealed record ChatStartParameters
 	public IReadOnlyList<ChatDataSource> Sources { get; init; } = ChatDataSourceCatalog.All;
 }
 
-/// <summary>Чат агента: плоская полная история обмена с параметрами и статусом.</summary>
+/// <summary>
+/// Чат агента: плоская полная история обмена с параметрами и статусом.
+/// Списковые выборки чатов дополняют запись превью первого сообщения
+/// владельца — опознавательным признаком пункта списка наравне с
+/// параметрами и статусом.
+// Traceability: openspec:chats/history#requirement-chat-list-carries-first-message-preview
+/// </summary>
 public sealed record ChatRecord
 {
 	/// <summary>Суррогатный ключ чата; 0 у несохранённого чата.</summary>
@@ -196,6 +202,15 @@ public sealed record ChatRecord
 
 	/// <summary>Момент создания чата первым сообщением владельца.</summary>
 	public required DateTimeOffset CreatedAt { get; init; }
+
+	/// <summary>
+	/// Текст первого сообщения владельца — превью опознаваемости пункта
+	/// списка чатов: берётся из истории первым по порядку, а не последним.
+	/// Заполняют списковые выборки чатов; история пуста или без сообщения
+	/// владельца — пустая строка вместо превью, без ошибки.
+	// Traceability: openspec:chats/history#requirement-chat-list-carries-first-message-preview
+	/// </summary>
+	public string FirstMessagePreview { get; init; } = string.Empty;
 }
 
 /// <summary>Роль автора сообщения чата.</summary>

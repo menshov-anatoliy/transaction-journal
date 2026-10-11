@@ -308,6 +308,97 @@ public class ChatStoreTests : ChatDatabaseTests
 	}
 
 	[TestMethod]
+	[Description("Перечисления обоих статусов дополняют списковую запись превью первого сообщения владельца")]
+	// Пункт списка опознаваем по первому сообщению владельца независимо от
+	// статуса: и активные, и завершённые чаты несут превью в списковой записи.
+	// Traceability: openspec:chats/history#scenario-chat-list-preview-of-first-owner-message
+	public async Task TryIfListingChats_CarriesFirstOwnerMessagePreviewForBothStatuses()
+	{
+		// Arrange: активный и завершённый чаты, каждый открыт своим вопросом владельца.
+		var store = CreateStore();
+		var active = await store.AppendMessageAsync(null, Start(constructionId: null), UserDraft("Что с рисками портфеля?"));
+		var completed = await store.AppendMessageAsync(null, Start(constructionId: null), UserDraft("Разбери конструкцию 7."));
+		await store.CompleteChatAsync(completed.ChatId);
+
+		// Act: перечисления активных и завершённых чатов.
+		var activeList = await store.ListActiveChatsAsync();
+		var completedList = await store.ListCompletedChatsAsync();
+
+		// Assert: обе списковые записи несут текст первого сообщения владельца.
+		Assert.That(activeList.Single(record => record.Id == active.ChatId).FirstMessagePreview,
+			Is.EqualTo("Что с рисками портфеля?"));
+		Assert.That(completedList.Single(record => record.Id == completed.ChatId).FirstMessagePreview,
+			Is.EqualTo("Разбери конструкцию 7."));
+	}
+
+	[TestMethod]
+	[Description("Превью списковой записи — первое сообщение владельца, а не последние реплики истории")]
+	// Превью стабильно опознаёт, чем чат открыт: обмен несколькими сообщениями
+	// не смещает превью на последний вопрос или последний ответ ассистента.
+	// Traceability: openspec:chats/history#scenario-chat-list-preview-uses-first-message
+	public async Task TryIfPreview_TakesFirstOwnerMessageNotLast()
+	{
+		// Arrange: чат с обменом — вопрос владельца, ответ ассистента, второй
+		// вопрос владельца и финальный ответ ассистента.
+		var store = CreateStore();
+		var first = await store.AppendMessageAsync(null, Start(constructionId: null), UserDraft("Первый вопрос владельца."));
+		await store.AppendMessageAsync(first.ChatId, null, AssistantDraft("Ответ ассистента.", 1));
+		var second = await store.AppendMessageAsync(first.ChatId, null, UserDraft("Второй вопрос владельца."));
+		await store.AppendMessageAsync(second.ChatId, null, AssistantDraft("Финальный ответ ассистента.", 2));
+
+		// Act
+		var activeList = await store.ListActiveChatsAsync();
+
+		// Assert: превью — первое по порядку сообщение владельца.
+		var record = activeList.Single(candidate => candidate.Id == first.ChatId);
+		Assert.That(record.FirstMessagePreview, Is.EqualTo("Первый вопрос владельца."));
+		Assert.That(record.FirstMessagePreview, Is.Not.EqualTo("Второй вопрос владельца."));
+		Assert.That(record.FirstMessagePreview, Is.Not.EqualTo("Финальный ответ ассистента."));
+	}
+
+	[TestMethod]
+	[Description("Пустая история и история без сообщения владельца дают пустое превью без ошибки")]
+	// Битые данные не роняют список: чат без истории и чат, чья история не
+	// содержит сообщений владельца, перечисляются с пустым превью.
+	// Traceability: openspec:chats/history#scenario-chat-list-preview-of-first-owner-message
+	public async Task TryIfBrokenHistoryWithoutOwnerMessage_YieldsEmptyPreviewWithoutError()
+	{
+		// Arrange: чат с вычищенной историей (пустая история) и чат, открытый
+		// ответом ассистента вместо вопроса владельца (битые данные).
+		var store = CreateStore();
+		var emptied = await store.AppendMessageAsync(null, Start(constructionId: null), UserDraft("Вопрос на удаление."));
+		await using (var connection = new Microsoft.Data.Sqlite.SqliteConnection(
+			new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = DatabasePath }.ToString()))
+		{
+			await connection.OpenAsync();
+			await using var command = connection.CreateCommand();
+			command.CommandText = "DELETE FROM Messages WHERE ChatId = $chatId";
+			command.Parameters.AddWithValue("$chatId", emptied.ChatId);
+			await command.ExecuteNonQueryAsync();
+		}
+
+		Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+		var assistantOnly = await store.AppendMessageAsync(null, Start(constructionId: null), AssistantDraft("Ответ без вопроса владельца.", 0));
+
+		// Act
+		var activeList = await store.ListActiveChatsAsync();
+		var completedList = await store.ListCompletedChatsAsync();
+
+		// Assert: оба чата перечислены, превью пустое — без исключения.
+		Assert.That(activeList.Single(record => record.Id == emptied.ChatId).FirstMessagePreview, Is.Empty);
+		Assert.That(activeList.Single(record => record.Id == assistantOnly.ChatId).FirstMessagePreview, Is.Empty);
+		Assert.That(completedList, Is.Empty);
+	}
+
+	/// <summary>Черновик ответа ассистента с фиксированным as-of и сдвигом в минутах.</summary>
+	private static ChatMessageDraft AssistantDraft(string text, int minutesOffset) => new()
+	{
+		Role = ChatMessageRole.Assistant,
+		Text = text,
+		AsOf = FixedNow.AddMinutes(minutesOffset),
+	};
+
+	[TestMethod]
 	[Description("Сообщение владельца в завершённый чат возвращает его в активные")]
 	// Продолжение завершённого чата — отправка сообщения: чат возвращается в
 	// список активных, история ведётся дальше в том же чате.
