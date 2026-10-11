@@ -53,8 +53,12 @@ function ChatThreadView({ chat }: { chat: ChatDto }) {
 
 	// Источник ответа раскрывается кратким попапом и полной карточкой рядом с чатом.
 	// Лента остаётся на общем Markdown-компоненте AgentChatThread.
+	// Чипы тулбара композера — параметры чата, зафиксированные при создании:
+	// модель, источники и привязка к конструкции, если чат ею связан
+	// (у привязанных чатов карточки — всегда).
 	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 	// Traceability: doc:.wf-research/ui-concept/concept.md#10-markdown-политика
+	// Traceability: openspec:ui/screens#scenario-ui-composer-input-practices
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-2 xl:flex-row">
 			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border">
@@ -64,6 +68,13 @@ function ChatThreadView({ chat }: { chat: ChatDto }) {
 						<Button variant="outline" size="sm" onClick={() => void history.refetch()}>Повторить загрузку истории</Button>
 					</div> : <AgentChatThread
 					chat={controller}
+					context={{
+						model: chat.params.model,
+						constructionLabel: chat.params.constructionId
+							? `конструкция ${chat.params.constructionId}`
+							: undefined,
+						sources: chat.params.sources,
+					}}
 					onRuleHover={setHoveredRuleId}
 					onRuleLeave={() => setHoveredRuleId(null)}
 					onRuleOpen={(ruleId) => {

@@ -5,17 +5,34 @@ import {
 	MessagePrimitive,
 	ThreadPrimitive,
 } from "@assistant-ui/react";
-import { ArrowUp } from "lucide-react";
-import type { SourceTrace } from "@/chat/types";
+import { ArrowUp, ChevronDown, Globe, Link, Square } from "lucide-react";
+import { CHAT_DATA_SOURCES } from "@/chat/chat-params";
+import type { ChatDataSource, SourceTrace } from "@/chat/types";
 import type { AgentChatActiveTool, AgentChatController } from "@/chat/runtime/use-agent-chat-runtime";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { Button } from "@/components/ui/button";
-import { ToolStatus } from "@/components/design";
+import { SourceChip, ToolStatus } from "@/components/design";
 import { SourceTraceView } from "./source-trace-view";
+
+/**
+ * Контекст чата для чипов тулбара композера: параметры, зафиксированные
+ * при создании чата, показываются рядом с отправкой без возможности
+ * изменения — сменить привязку или модель значит начать новый чат.
+ */
+export interface AgentChatThreadContext {
+	/** ИИ-модель чата — чип модели. */
+	readonly model: string;
+	/** Подпись привязки чата к конструкции; у портфельного чата чипа нет. */
+	readonly constructionLabel?: string;
+	/** Источники данных чата — чипы источников. */
+	readonly sources: readonly ChatDataSource[];
+}
 
 export interface AgentChatThreadProps {
 	/** Контроллер чата агента из useAgentChatRuntime. */
 	chat: AgentChatController;
+	/** Контекст чата для чипов тулбара композера; без него тулбар — только отправка. */
+	context?: AgentChatThreadContext;
 	/** Наведение на ссылку карточки правила из следа источников. */
 	onRuleHover?: (ruleId: string) => void;
 	/** Уход курсора со ссылки карточки правила. */
@@ -48,7 +65,7 @@ const AssistantMarkdownText: TextMessagePartComponent = ({ text }) => (
  */
 // Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
 // Traceability: change:add-agent-chat/proposal#what-changes
-export function AgentChatThread({ chat, onRuleHover, onRuleLeave, onRuleOpen }: AgentChatThreadProps) {
+export function AgentChatThread({ chat, context, onRuleHover, onRuleLeave, onRuleOpen }: AgentChatThreadProps) {
 	return (
 		<AssistantRuntimeProvider runtime={chat.runtime}>
 			<div className="flex h-full min-h-0 flex-col">
@@ -108,40 +125,97 @@ export function AgentChatThread({ chat, onRuleHover, onRuleLeave, onRuleOpen }: 
 				)}
 
 				{/* Композер Body #4 — мастер Z14sH «Композер/Агент» (инстанс AcXEb):
-				    заливка $surface, бордер $border, радиус 14, паддинг 14, зазор 12,
-				    вертикаль «поле ввода → строка действий», ширина колонки до 720.
-				    «Паддинг 10» аудита §3.5:3 принадлежит обёртке ComposerWrap (PZoUP)
-				    экрана Body #3 — в Body #4 композер идёт без обёртки, решение по
-				    мастеру; радиус 14 тоже по мастеру, а не «7–12» из текста задачи. */}
+				    заливка $surface, бордер $border, радиус 14, паддинг 14, зазор 8,
+				    вертикаль «поле ввода → тулбар», ширина колонки до 720. */}
 				{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
 				{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
-				<ComposerPrimitive.Root className="mx-1 mb-1 flex w-[min(100%,720px)] flex-col gap-3 rounded-[14px] border bg-surface p-3.5">
+				{/* Практики ввода композера: поле растёт с текстом от одной до
+				    восьми строк (TextareaAutosize примитива), Enter отправляет,
+				    Shift+Enter переносит строку; отправка недоступна при пустом
+				    поле и во время генерации — на месте отправки остаётся только
+				    Stop, отменяющий стрим и возвращающий панель в состояние ввода.
+				    Traceability: openspec:ui/screens#scenario-ui-composer-input-practices */}
+				{/* Traceability: openspec:ui/screens#scenario-ui-cancel-generation */}
+				<ComposerPrimitive.Root className="mx-1 mb-1 flex w-[min(100%,720px)] flex-col gap-2 rounded-[14px] border bg-surface p-3.5">
 					<ComposerPrimitive.Input
-						rows={2}
+						minRows={1}
+						maxRows={8}
 						placeholder="Спросите ИИ-помощника…"
-						className="max-h-40 min-h-11 w-full resize-none bg-transparent text-[13.5px] leading-[1.5] outline-none placeholder:text-text-muted"
+						className="min-h-11 w-full resize-none bg-transparent text-[13.5px] leading-[1.5] outline-none placeholder:text-text-muted"
 					/>
-					<div className="flex items-center justify-end gap-2">
-						{chat.isRunning && (
-							<ComposerPrimitive.Cancel asChild>
-								<Button variant="secondary" size="sm">
-									Остановить
-								</Button>
-							</ComposerPrimitive.Cancel>
-						)}
-						{/* Отправка — мастер-нода K7kSy «Send»: квадрат 36×36 на токене
-						    $accent (вариант Primary примитива ui/button), радиус 10
-						    (--radius-md лестницы --radius), иконка arrow-up белым. */}
-						{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
-						<ComposerPrimitive.Send asChild>
-							<Button aria-label="Отправить" size="icon" className="rounded-md">
-								<ArrowUp aria-hidden />
-							</Button>
-						</ComposerPrimitive.Send>
+					{/* Тулбар под полем — одна строка мастера ZCrdN: чипы контекста
+					    слева, spacer, отправка/остановка справа. */}
+					<div className="flex items-center gap-2">
+						{context !== undefined && <ComposerContextChips context={context} />}
+						<div className="ml-auto flex items-center gap-2">
+							{chat.isRunning ? (
+								<ComposerPrimitive.Cancel asChild>
+									<Button aria-label="Остановить" size="icon" title="Остановить генерацию" className="rounded-md">
+										<Square aria-hidden />
+									</Button>
+								</ComposerPrimitive.Cancel>
+							) : (
+								/* Отправка — мастер-нода K7kSy «Send/Stop»: квадрат 36×36
+								на токене $accent (вариант Primary примитива ui/button),
+								радиус 10 (--radius-md лестницы --radius), иконка arrow-up
+								белым; примитив Send сам блокирует кнопку при пустом поле. */
+								<ComposerPrimitive.Send asChild>
+									<Button aria-label="Отправить" size="icon" className="rounded-md">
+										<ArrowUp aria-hidden />
+									</Button>
+								</ComposerPrimitive.Send>
+							)}
+						</div>
 					</div>
 				</ComposerPrimitive.Root>
 			</div>
 		</AssistantRuntimeProvider>
+	);
+}
+
+/**
+ * Чипы контекста тулбара композера — мастер Z14sH (тулбар ZCrdN): привязка
+ * к конструкции — чип bCLlQ (пилюля 999 на $infoSoft, иконка link 12 $info),
+ * модель — чип aF5vM ($surface2, радиус 8, подпись 12/500 + шеврон
+ * $textMuted), источники — инстансы примитива «Чип/Источник» fYadZ:
+ * «журнал» и «корпус правил» с check, «рынок Bybit» с globe. Чипы
+ * информационные: параметры чата фиксируются при создании и не меняются.
+ */
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+function ComposerContextChips({ context }: { context: AgentChatThreadContext }) {
+	return (
+		<div data-slot="composer-context-chips" className="flex min-w-0 flex-wrap items-center gap-1.5">
+			{context.constructionLabel !== undefined && (
+				<span
+					data-slot="composer-bind-chip"
+					title="Чат привязан к конструкции"
+					className="inline-flex items-center gap-1.5 rounded-full bg-info-soft px-2.5 py-[5px] text-[12px] whitespace-nowrap text-text-secondary"
+				>
+					<Link aria-hidden className="size-3 shrink-0 text-info" />
+					{context.constructionLabel}
+				</span>
+			)}
+			<span
+				data-slot="composer-model-chip"
+				title="Модель чата"
+				className="inline-flex items-center gap-1.5 rounded-sm bg-secondary px-2.5 py-[5px] text-[12px] font-medium whitespace-nowrap text-foreground"
+			>
+				{context.model}
+				<ChevronDown aria-hidden className="size-3 shrink-0 text-text-muted" />
+			</span>
+			{context.sources.map((sourceId) => {
+				const source = CHAT_DATA_SOURCES.find((item) => item.id === sourceId);
+				if (source === undefined)
+					return null;
+				return (
+					<SourceChip key={sourceId} icon={sourceId === "market" ? Globe : undefined} title={source.hint}>
+						{/* Подписи инстансов мастера — со строчной первой буквы:
+						    «журнал», «корпус правил», «рынок Bybit». */}
+						{source.label[0].toLowerCase() + source.label.slice(1)}
+					</SourceChip>
+				);
+			})}
+		</div>
 	);
 }
 
