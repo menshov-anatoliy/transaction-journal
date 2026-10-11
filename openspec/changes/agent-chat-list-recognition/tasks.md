@@ -9,9 +9,9 @@
 
 ## 2. Опознаваемость пункта сессии (фронт)
 
-- [ ] 2.1 `frontend/src/chat/types.ts`: поле превью первого сообщения владельца в `ChatDto`; док-комментарий контракта списка в `chat-api.ts` обновлён. Проверка: `npm run build` (tsc -b + vite build) зелёный.
-- [ ] 2.2 `agent-page.tsx` (`ChatList`/`SessionItem`): чат с привязкой показывает имя конструкции — резолв по `params.constructionId` из кэша `fetchConstructionsOverview()`, при неразрешённом id fallback `конструкция {id}`; портфельный чат без признака конструкции. Юнит-тесты vitest: привязанный пункт с именем конструкции, портфельный — без признака. Проверить: `scenario-ui-agent-session-shows-construction-name`, `scenario-ui-agent-session-portfolio-no-binding-badge`.
-- [ ] 2.3 Пункт сессии показывает превью первого сообщения владельца одной строкой (truncate) рядом с моделью и временем. Юнит-тесты vitest: превью первого сообщения видно на пункте, длинный текст ужимается вёрсткой. Проверить: `scenario-ui-agent-session-shows-preview`.
+- [x] 2.1 `frontend/src/chat/types.ts`: поле превью первого сообщения владельца в `ChatDto`; док-комментарий контракта списка в `chat-api.ts` обновлён. Проверка: `npm run build` (tsc -b + vite build) зелёный.
+- [x] 2.2 `agent-page.tsx` (`ChatList`/`SessionItem`): чат с привязкой показывает имя конструкции — резолв по `params.constructionId` из кэша `fetchConstructionsOverview()`, при неразрешённом id fallback `конструкция {id}`; портфельный чат без признака конструкции. Юнит-тесты vitest: привязанный пункт с именем конструкции, портфельный — без признака. Проверить: `scenario-ui-agent-session-shows-construction-name`, `scenario-ui-agent-session-portfolio-no-binding-badge`.
+- [x] 2.3 Пункт сессии показывает превью первого сообщения владельца одной строкой (truncate) рядом с моделью и временем. Юнит-тесты vitest: превью первого сообщения видно на пункте, длинный текст ужимается вёрсткой. Проверить: `scenario-ui-agent-session-shows-preview`.
 
 ## 3. Порядок и разделение (фронт)
 

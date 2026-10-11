@@ -127,6 +127,7 @@ const activeChat: ChatDto = {
 	id: "active-1", status: "active",
 	params: { constructionId: "7", model: "GLM-5.3", sources: ["journal", "rules-corpus"] },
 	createdAt: "2026-10-08T09:00:00Z", lastMessageAt: "2026-10-08T09:00:00Z",
+	firstMessagePreview: "Оцени риск конструкции",
 };
 
 const cardApi = vi.hoisted(() => ({

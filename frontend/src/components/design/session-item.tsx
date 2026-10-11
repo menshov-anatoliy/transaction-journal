@@ -7,13 +7,15 @@ import { cn } from "@/lib/utils";
 	перенесён 1:1 с макета: радиус 10, вертикальный блок с зазором 3, паддинги
 	[8,10]; строка Top — заголовок Inter 12.5/600 textPrimary и время 11/normal
 	textMuted на краях (space-between, зазор 8); превью — textMuted 11.5/normal,
-	одна строка (textGrowth fixed-width → truncate). Превью опционально: ChatDto
-	чат-слоя несёт заголовок (params.model) и lastMessageAt, но не превью
-	сообщения. Корень — кнопка выбора сессии: интеграция задачи 5.2 повесит
-	на неё onSelect списка чатов. Активное состояние — по инстансам Cur (WizmS,
-	экран «Агент · Чат активный»: fill surface2 + stroke border) и S1 (V1puZa,
-	«Агент · Чаты»: fill surface2 без обводки); бордер взят с Cur как более
-	полной формы текущей сессии.
+	одна строка (textGrowth fixed-width → truncate). Превью опционально: список
+	сессий формы агентов передаёт в него текст первого сообщения владельца
+	(ChatDto.firstMessagePreview), панель чатов карточки рендерит пункты
+	без превью. Бейдж (имя привязанной конструкции) — опциональная своя строка
+	над превью: пилюля infoSoft, как чип привязки композера bCLlQ; у чата
+	без привязки бейдж не передаётся. Корень — кнопка выбора сессии:
+	активное состояние — по инстансам Cur (WizmS, экран «Агент · Чат
+	активный»: fill surface2 + stroke border) и S1 (V1puZa, «Агент · Чаты»:
+	fill surface2 без обводки); выбор сессии — кликом по пункту.
 */
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 // Traceability: change:reconcile-frontend-with-design/design#D2
@@ -38,6 +40,7 @@ function SessionItem({
 	active,
 	title,
 	time,
+	badge,
 	children,
 	...props
 }: React.ComponentProps<"button"> &
@@ -46,7 +49,9 @@ function SessionItem({
 		title: React.ReactNode;
 		/** Время последнего сообщения: textMuted 11/normal (нода SqhBW). */
 		time: React.ReactNode;
-		/** Превью последнего сообщения: textMuted 11.5, одна строка (нода r6Idf). */
+		/** Бейдж привязки (имя конструкции): своя строка над превью. */
+		badge?: React.ReactNode;
+		/** Превью первого сообщения владельца: textMuted 11.5, одна строка (нода r6Idf). */
 		children?: React.ReactNode;
 	}) {
 	return (
@@ -66,7 +71,20 @@ function SessionItem({
 					{time}
 				</span>
 			</span>
+			{badge != null && (
+				// Бейдж привязки: пилюля infoSoft, как чип привязки композера bCLlQ;
+				// имя конструкции делает пункт опознаваемым без открытия чата.
+				// Traceability: openspec:ui/screens#scenario-ui-agent-session-shows-construction-name
+				<span data-slot="session-item-badge" className="flex min-w-0">
+					<span className="inline-flex max-w-full truncate rounded-full bg-info-soft px-2 py-px text-[10.5px] whitespace-nowrap text-text-secondary">
+						{badge}
+					</span>
+				</span>
+			)}
 			{children != null && (
+				// Превью первого сообщения владельца — одна строка с truncate:
+				// сервер отдаёт текст целиком, ужимание вёрсткой происходит здесь.
+				// Traceability: openspec:ui/screens#scenario-ui-agent-session-shows-preview
 				<span
 					data-slot="session-item-preview"
 					className="truncate text-[11.5px] text-text-muted"

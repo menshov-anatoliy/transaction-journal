@@ -13,6 +13,7 @@ import { SessionItem, SourceChip } from "@/components/design";
 import { RuleFullCard, RuleBriefPopup, RULE_CHARACTER_LABELS, RULE_CLARITY_LABELS, RULE_SUBJECT_LABELS, ruleCharacterLabel } from "@/components/agent/rule-cards";
 import { Button } from "@/components/ui/button";
 import { listRules, readRule } from "@/lib/api/agent-rules";
+import { useConstructionsOverviewQuery } from "@/lib/api/constructions-overview-query";
 import { formatMoment } from "@/lib/format/display-time";
 import { useIsMobile } from "@/lib/use-mobile";
 import { cn } from "@/lib/utils";
@@ -84,6 +85,19 @@ export function AgentPage() {
 
 	const activeQuery = useQuery({ queryKey: chatKeys.list("active"), queryFn: ({ signal }) => listChats("active", signal) });
 	const completedQuery = useQuery({ queryKey: chatKeys.list("completed"), queryFn: ({ signal }) => listChats("completed", signal) });
+
+	// Имена конструкций для бейджей списка сессий: резолв по привязке чата
+	// из кэша обзора конструкций — имя принадлежит агрегату конструкций,
+	// ChatDto его не дублирует; при переименовании бейджи обновляются сами.
+	// Traceability: openspec:ui/screens#scenario-ui-agent-session-shows-construction-name
+	// Traceability: change:agent-chat-list-recognition/design#D3
+	const constructionsQuery = useConstructionsOverviewQuery();
+	const constructionNames = React.useMemo(() => {
+		const names = new Map<string, string>();
+		for (const item of constructionsQuery.data?.items ?? [])
+			names.set(String(item.constructionId), item.name);
+		return names;
+	}, [constructionsQuery.data]);
 
 	const activeChats = activeQuery.data ?? [];
 	const completedChats = completedQuery.data ?? [];
@@ -402,6 +416,7 @@ export function AgentPage() {
 									<ChatList
 										title="Активные"
 										chats={activeChats}
+										constructionNames={constructionNames}
 										selectedChatId={selectedChat?.id ?? null}
 										onSelect={setSelectedChatId}
 										onToggle={(chatId) => completeMutation.mutate(chatId)}
@@ -410,6 +425,7 @@ export function AgentPage() {
 									<ChatList
 										title="Завершённые"
 										chats={completedChats}
+										constructionNames={constructionNames}
 										selectedChatId={selectedChat?.id ?? null}
 										onSelect={setSelectedChatId}
 										onToggle={(chatId) => resumeMutation.mutate(chatId)}
@@ -446,6 +462,7 @@ export function AgentPage() {
 										<ChatList
 											title="Активные"
 											chats={activeChats}
+											constructionNames={constructionNames}
 											selectedChatId={selectedChat?.id ?? null}
 											onSelect={(chatId) => {
 												setSelectedChatId(chatId);
@@ -457,6 +474,7 @@ export function AgentPage() {
 										<ChatList
 											title="Завершённые"
 											chats={completedChats}
+											constructionNames={constructionNames}
 											selectedChatId={selectedChat?.id ?? null}
 											onSelect={(chatId) => {
 												setSelectedChatId(chatId);
@@ -588,6 +606,7 @@ function ChatThreadPane({
 function ChatList({
 	title,
 	chats,
+	constructionNames,
 	selectedChatId,
 	onSelect,
 	onToggle,
@@ -595,6 +614,8 @@ function ChatList({
 }: {
 	title: string;
 	chats: readonly ChatDto[];
+	/** Имена конструкций из кэша обзора: резолв бейджа по привязке чата. */
+	constructionNames: ReadonlyMap<string, string>;
 	selectedChatId: string | null;
 	onSelect: (chatId: string) => void;
 	onToggle: (chatId: string) => void;
@@ -618,9 +639,11 @@ function ChatList({
 								Пункт списка сессий — примитив «Сессия/пункт»
 								(мастер s9J3h, инстансы S1–S4 Body #3): заголовок —
 								модель чата, время — момент последнего сообщения;
-								превью ChatDto чат-слоя не несёт, активная сессия —
-								заливка surface2 по инстансу Cur. Выбор сессии —
-								кликом по пункту, поведение сохранено.
+								превью — текст первого сообщения владельца одной
+								строкой (ChatDto.firstMessagePreview), бейдж — имя
+								привязанной конструкции. Активная сессия — заливка
+								surface2 по инстансу Cur. Выбор сессии — кликом по
+								пункту, поведение сохранено.
 							*/}
 							{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
 							{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
@@ -628,8 +651,11 @@ function ChatList({
 								active={selectedChatId === chat.id}
 								title={chat.params.model}
 								time={formatMoment(chat.lastMessageAt)}
+								badge={constructionLabel(chat, constructionNames)}
 								onClick={() => onSelect(chat.id)}
-							/>
+							>
+								{chat.firstMessagePreview === "" ? null : chat.firstMessagePreview}
+							</SessionItem>
 							<Button variant="ghost" size="sm" className="mt-0.5 h-auto justify-start px-0 text-xs" onClick={() => onToggle(chat.id)}>
 								{actionLabel}
 							</Button>
@@ -639,6 +665,21 @@ function ChatList({
 			)}
 		</section>
 	);
+}
+
+/*
+	Бейдж привязки пункта сессии: имя конструкции резолвится из кэша обзора
+	конструкций по params.constructionId; неразрешённый id деградирует до
+	«конструкция {id}» (как в панели чатов карточки), а портфельный чат
+	бейджа не получает вовсе — признак конструкции отсутствует.
+*/
+// Traceability: openspec:ui/screens#scenario-ui-agent-session-shows-construction-name
+// Traceability: openspec:ui/screens#scenario-ui-agent-session-portfolio-no-binding-badge
+// Traceability: change:agent-chat-list-recognition/design#D3
+function constructionLabel(chat: ChatDto, names: ReadonlyMap<string, string>): string | null {
+	if (chat.params.constructionId == null)
+		return null;
+	return names.get(chat.params.constructionId) ?? `конструкция ${chat.params.constructionId}`;
 }
 
 /*

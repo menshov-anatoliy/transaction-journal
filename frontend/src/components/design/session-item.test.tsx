@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { SessionItem } from "./session-item";
 
 // Проверяется примитив «Сессия/пункт» (мастер-нода s9J3h, reusable-компонент
-// design.pen) на рендер-шве Testing Library: геометрия мастера, опциональное
-// превью (ChatDto чат-слоя превью пока не несёт) и клик выбора сессии,
-// который потребует интеграция задачи 5.2.
+// design.pen) на рендер-шве Testing Library: геометрия мастера, опциональные
+// бейдж привязки и превью (список сессий формы агентов передаёт их, панель
+// чатов карточки — нет) и клик выбора сессии.
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 // Traceability: change:reconcile-frontend-with-design/design#D2
 
@@ -45,14 +45,38 @@ describe("SessionItem: пункт списка сессий по дизайн-н
 		expect(preview.className).toContain("truncate");
 	});
 
-	it("рендерит пункт без превью: ChatDto чат-слоя превью не несёт", () => {
-		// Act: пункт только с заголовком и временем (текущие данные agent-page).
+	it("рендерит пункт без превью и бейджа, когда список их не передаёт", () => {
+		// Act: пункт только с заголовком и временем (панель чатов карточки).
 		render(<SessionItem title="Контртренд ETH: прикрытие" time="11:20" />);
 
-		// Assert: структура пункта целая, превью-слота нет.
+		// Assert: структура пункта целая, слотов превью и бейджа нет.
 		const item = screen.getByRole("button", { name: /Контртренд ETH/ });
 		expect(item.querySelector('[data-slot="session-item-preview"]')).toBeNull();
+		expect(item.querySelector('[data-slot="session-item-badge"]')).toBeNull();
 		expect(screen.getByText("11:20")).toBeInTheDocument();
+	});
+
+	// Бейдж привязки — своя строка над превью: имя конструкции делает
+	// пункт списка сессий опознаваемым без открытия чата.
+	// Traceability: openspec:ui/screens#scenario-ui-agent-session-shows-construction-name
+	it("несёт бейдж привязки отдельной строкой над превью", () => {
+		// Act: пункт сессии с бейджем конструкции и превью первого сообщения.
+		render(
+			<SessionItem title="GLM-5.3" time="13:47" badge="Стреддл BTC">
+				Оцени риск стреддла BTC на конец недели…
+			</SessionItem>,
+		);
+
+		// Assert: бейдж — слот session-item-badge с пилюлей infoSoft.
+		const badge = screen.getByText("Стреддл BTC");
+		expect(badge.getAttribute("data-slot")).toBeNull();
+		expect(badge.closest('[data-slot="session-item-badge"]')).not.toBeNull();
+		expect(badge.className).toContain("bg-info-soft");
+		expect(badge.className).toContain("rounded-full");
+		// Бейдж лежит над превью в вертикальном блоке пункта.
+		const item = screen.getByRole("button", { name: /GLM-5\.3/ });
+		const slots = Array.from(item.children).map((child) => child.getAttribute("data-slot"));
+		expect(slots.indexOf("session-item-badge")).toBeLessThan(slots.indexOf("session-item-preview"));
 	});
 
 	it("передаёт клик выбора сессии (интеграция задачи 5.2)", async () => {

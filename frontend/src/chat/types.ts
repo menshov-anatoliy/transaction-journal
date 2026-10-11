@@ -37,6 +37,11 @@ export interface ChatDto {
 	createdAt: string;
 	/** Момент последнего сообщения чата, ISO 8601. */
 	lastMessageAt: string;
+	// Превью пункта списка — текст первого сообщения владельца: опознавательный
+	// признак списка, независимый от модели и времени; сервер отдаёт текст
+	// целиком, ужимание в одну строку — забота UI.
+	// Traceability: openspec:chats/history#requirement-chat-list-carries-first-message-preview
+	firstMessagePreview: string;
 }
 
 /** Роль автора сообщения чата. */

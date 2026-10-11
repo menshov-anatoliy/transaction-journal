@@ -9,7 +9,9 @@ import { decodeChatStreamFrame, type ChatStreamEvent } from "@/chat/sse/chat-str
  * change add-agent-chat (единое SQLite-хранилище, агентный цикл над моделью):
  *
  *   GET    /api/v1/chats?status=active|completed
- *          → ChatDto[] — списки активных и завершённых чатов
+ *          → ChatDto[] — списки активных и завершённых чатов; каждый пункт
+ *            несёт превью первого сообщения владельца — опознавательный
+ *            признак списка, текст целиком (обрезание — забота UI)
  *   POST   /api/v1/chats            body { text, params }
  *          → ChatDto — чат создаётся первым сообщением владельца с параметрами
  *   GET    /api/v1/chats/{chatId}/messages
@@ -141,7 +143,12 @@ async function readChatStream(
 	throw new ChatStreamFailure("канал закрылся без события завершения", text);
 }
 
-/** Список чатов по статусу жизненного цикла: активные или завершённые. */
+/**
+ * Список чатов по статусу жизненного цикла: активные или завершённые.
+ * Каждый пункт несёт превью первого сообщения владельца — опознавательный
+ * признак списка; текст идёт целиком, обрезание в строку — забота UI.
+ */
+// Traceability: openspec:chats/history#requirement-chat-list-carries-first-message-preview
 export async function listChats(status: ChatStatus, signal?: AbortSignal): Promise<ChatDto[]> {
 	const response = await fetch(`${API_PREFIX}/chats?status=${status}`, {
 		headers: { accept: "application/json" },

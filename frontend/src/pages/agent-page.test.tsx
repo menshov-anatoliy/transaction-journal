@@ -24,6 +24,11 @@ const rulesApi = vi.hoisted(() => ({
 	readRule: vi.fn(),
 }));
 
+// Обзор конструкций: источник имён для бейджей привязки списка сессий.
+const constructionsApi = vi.hoisted(() => ({
+	fetchConstructionsOverview: vi.fn(),
+}));
+
 vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/chat/api/chat-api")>()),
 	listChats: chatsApi.listChats,
@@ -37,6 +42,10 @@ vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 vi.mock("@/lib/api/agent-rules", () => ({
 	listRules: rulesApi.listRules,
 	readRule: rulesApi.readRule,
+}));
+
+vi.mock("@/lib/api/constructions", () => ({
+	fetchConstructionsOverview: constructionsApi.fetchConstructionsOverview,
 }));
 
 function renderPage(path = "/agent") {
@@ -54,6 +63,9 @@ function renderPage(path = "/agent") {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	// Обзор конструкций по умолчанию пуст: существующие сценарии работают
+	// с портфельными чатами, бейджи привязки им не нужны.
+	constructionsApi.fetchConstructionsOverview.mockResolvedValue({ items: [] });
 	chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
 		status === "active"
 			? [
@@ -201,6 +213,105 @@ describe("страница агента", () => {
 		await waitFor(() => {
 			expect(chatsApi.completeChat).toHaveBeenCalledWith("chat-1");
 		});
+	});
+
+	/*
+		Опознаваемость пункта сессии: чат с привязкой показывает имя конструкции,
+		разрешённое из кэша обзора конструкций по params.constructionId; id без
+		записи в обзоре деградирует до «конструкция {id}», а портфельный чат
+		бейджа не получает вовсе.
+	*/
+	// Traceability: openspec:ui/screens#scenario-ui-agent-session-shows-construction-name
+	// Traceability: openspec:ui/screens#scenario-ui-agent-session-portfolio-no-binding-badge
+	// Traceability: change:agent-chat-list-recognition/design#D3
+	it("TryIfBoundSessionShowsConstructionNameAndPortfolioStaysWithoutBadge", async () => {
+		// Arrange: активные чаты — привязанный к известной конструкции 8,
+		// привязанный к неразрешённой 99 и портфельный; обзор знает имя 8.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? [
+						{
+							id: "chat-bound",
+							status: "active",
+							params: { model: "GLM-5.3", constructionId: "8", sources: ["journal"] },
+							createdAt: "2026-10-08T09:00:00Z",
+							lastMessageAt: "2026-10-08T09:01:00Z",
+							firstMessagePreview: "Оцени риск стреддла",
+						},
+						{
+							id: "chat-orphan",
+							status: "active",
+							params: { model: "glm-4-air", constructionId: "99", sources: ["journal"] },
+							createdAt: "2026-10-08T08:00:00Z",
+							lastMessageAt: "2026-10-08T08:05:00Z",
+							firstMessagePreview: "Разбери сделку",
+						},
+						{
+							id: "chat-portfolio",
+							status: "active",
+							params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-08T07:00:00Z",
+							lastMessageAt: "2026-10-08T07:30:00Z",
+							firstMessagePreview: "Сводка по портфелю за неделю",
+						},
+					]
+				: [],
+		);
+		constructionsApi.fetchConstructionsOverview.mockResolvedValue({
+			summary: {},
+			items: [{ constructionId: 8, name: "Стреддл BTC" }],
+		});
+		renderPage();
+
+		// Assert: привязанный пункт показывает имя конструкции из обзора бейджем.
+		const boundItem = await screen.findByRole("button", { name: /GLM-5\.3/ });
+		const boundBadge = within(boundItem).getByText("Стреддл BTC");
+		expect(boundBadge.closest('[data-slot="session-item-badge"]')).not.toBeNull();
+
+		// Assert: неразрешённый id даёт fallback «конструкция 99» вместо имени.
+		const orphanItem = screen.getByRole("button", { name: /glm-4-air/ });
+		expect(within(orphanItem).getByText("конструкция 99")).toBeInTheDocument();
+
+		// Assert: портфельный пункт без признака конструкции.
+		const portfolioItem = screen.getByRole("button", { name: /glm-5\.3-flash/ });
+		expect(portfolioItem.querySelector('[data-slot="session-item-badge"]')).toBeNull();
+		expect(within(portfolioItem).queryByText(/конструкция/)).toBeNull();
+	});
+
+	/*
+		Превью пункта сессии — текст первого сообщения владельца одной строкой:
+		сервер отдаёт текст целиком, ужимание до строки происходит вёрсткой
+		(truncate) на пункте списка.
+	*/
+	// Traceability: openspec:ui/screens#scenario-ui-agent-session-shows-preview
+	// Traceability: change:agent-chat-list-recognition/design#D2
+	it("TryIfSessionShowsFirstOwnerMessagePreviewTruncatedToLine", async () => {
+		// Arrange: активный чат с длинным текстом первого сообщения владельца.
+		const longPreview =
+			"Очень длинный текст первого сообщения владельца, который обязан ужиматься до одной строки вёрсткой пункта списка сессий";
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? [
+						{
+							id: "chat-1",
+							status: "active",
+							params: { model: "GLM-5.3", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-08T09:00:00Z",
+							lastMessageAt: "2026-10-08T09:01:00Z",
+							firstMessagePreview: longPreview,
+						},
+					]
+				: [],
+		);
+		renderPage();
+
+		// Assert: превью первого сообщения владельца видно на пункте сессии.
+		const item = await screen.findByRole("button", { name: /GLM-5\.3/ });
+		const preview = within(item).getByText(longPreview);
+		expect(preview.getAttribute("data-slot")).toBe("session-item-preview");
+
+		// Assert: длинный текст ужимается вёрсткой до одной строки (truncate).
+		expect(preview.className).toContain("truncate");
 	});
 
 	/*
