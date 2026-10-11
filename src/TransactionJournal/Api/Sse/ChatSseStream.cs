@@ -3,6 +3,7 @@ namespace TransactionJournal.Api.Sse;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 
@@ -10,16 +11,21 @@ using Microsoft.AspNetCore.Http.Features;
 /// Доставка потока событий чата по SSE: устанавливает соединение, открывает
 /// его событием начала, кадрирует события чата в протокол SSE и flush-ит
 /// каждый кадр, чтобы токены уходили клиенту по мере генерации. Протокол
-/// начала/токена/завершения/ошибки фиксирован транспортом — будущий эндпоинт
-/// чата (change add-agent-chat) только порождает события.
+/// начала/токена/завершения/ошибки фиксирован транспортом — эндпоинт чата
+/// только порождает события. Кадры активности инструментов проходят сквозь
+/// транспорт как обычные события и терминальность канала не меняют.
 /// </summary>
 public static class ChatSseStream
 {
 	// Нагрузка кадров отдаётся без экранирования не-ASCII — как в JSON-ответах
-	// ASP.NET Core: токены чата читаемы в потоке и компактны.
+	// ASP.NET Core: токены чата читаемы в потоке и компактны. Необязательные
+	// поля нагрузок при отсутствии не сериализуются: payload кадра tool —
+	// { name, phase, detail? } из транспорта.
+	// Traceability: openspec:http-api/transport#scenario-chat-tool-activity-streamed
 	private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web)
 	{
 		Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+		DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
 	};
 
 	/// <summary>

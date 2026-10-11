@@ -1,11 +1,16 @@
 namespace TransactionJournal.Api.Agent;
 
 using System.Globalization;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using TransactionJournal.Api.Sse;
 using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
 using TransactionJournal.Hints.Corpus;
+
+// ChatMessage в этом файле — доменная запись чата; клиент модели из
+// Microsoft.Extensions.AI резолвится по своим полным типам.
+using ChatMessage = TransactionJournal.Chats.Ports.ChatMessage;
 
 /// <summary>
 /// Эндпоинты раздела «Агент»: чаты работают поверх доменного конвейера
@@ -155,10 +160,24 @@ public static class AgentEndpoints
 			// Traceability: openspec:http-api/transport#scenario-chat-error-cause-visible-in-ui
 			async IAsyncEnumerable<ChatStreamEvent> Events()
 			{
+				// Имена вызываемых инструментов запоминаются по id вызова: кадр
+				// конца приходит вместе с результатом, в котором имени тула нет.
+				var toolNamesByCallId = new Dictionary<string, string>();
+				// Повторные фрагменты стрима одного вызова не дают второй кадр начала.
+				var startedCallIds = new HashSet<string>();
 				await foreach (var update in pipeline.StreamAssistantAnswerAsync(id, userMessage, cancellationToken))
 				{
 					if (string.IsNullOrEmpty(update.Text) == false)
 						yield return ChatStreamEvents.Token(update.Text);
+
+					// Активность инструментов реестра окружает сам вызов: агентный
+					// цикл отдаёт запрос тула до его исполнения и результат после,
+					// поэтому кадр начала уходит до работы инструмента, кадр конца —
+					// сразу после неё, до токенов результата. Кадры события tool не
+					// терминальны и инвариант «ровно один done/error» не меняют.
+					// Traceability: openspec:http-api/transport#scenario-chat-tool-activity-streamed
+					foreach (var frame in ToolActivityFrames(update, toolNamesByCallId, startedCallIds))
+						yield return frame;
 				}
 
 				// Ответ ассистента уже зафиксирован конвейером: финальное
@@ -288,6 +307,47 @@ public static class AgentEndpoints
 		});
 
 		return api;
+	}
+
+	/// <summary>
+	/// Переводит обновления агентного цикла в кадры активности инструментов:
+	/// запрос тула реестра моделью даёт кадр начала, завершение вызова —
+	/// кадр конца; имя инструмента переносится из потока вызовов в кадр
+	/// результата, повторы фрагментов стрима одного вызова схлопываются
+	/// по id вызова, чтобы вызов давал ровно пару «начало — конец».
+	/// </summary>
+	/// <param name="update">Очередное обновление стрима агентного цикла.</param>
+	/// <param name="toolNamesByCallId">Имена инструментов по id вызова.</param>
+	/// <param name="startedCallIds">Id вызовов, для которых кадр начала уже отдан.</param>
+	/// <returns>Кадры активности инструментов, порождённые обновлением.</returns>
+	// Эмиссия привязана к самим вызовам инструментов реестра: кадр начала
+	// агентный цикл отдаёт до исполнения тула, кадр конца — после.
+	// Traceability: openspec:http-api/transport#scenario-chat-tool-activity-streamed
+	private static IEnumerable<ChatStreamEvent> ToolActivityFrames(
+		ChatResponseUpdate update,
+		Dictionary<string, string> toolNamesByCallId,
+		HashSet<string> startedCallIds)
+	{
+		foreach (var content in update.Contents)
+		{
+			if (content is FunctionCallContent call)
+			{
+				// Имя может прийти только в первом фрагменте вызова: запоминаем
+				// его для кадра конца, который приходит с результатом без имени.
+				if (string.IsNullOrEmpty(call.Name) == false)
+					toolNamesByCallId[call.CallId] = call.Name;
+				if (startedCallIds.Add(call.CallId) &&
+					toolNamesByCallId.TryGetValue(call.CallId, out var name))
+					yield return ChatStreamEvents.Tool(name, ChatStreamEvents.ToolStartPhase);
+			}
+			else if (content is FunctionResultContent result &&
+				toolNamesByCallId.TryGetValue(result.CallId, out var endedName))
+			{
+				yield return ChatStreamEvents.Tool(endedName, ChatStreamEvents.ToolEndPhase);
+				// Вызов закрыт: повторный результат того же id кадр конца не дублирует.
+				toolNamesByCallId.Remove(result.CallId);
+			}
+		}
 	}
 
 	private static bool ValidateCreateRequest(CreateAgentChatRequest request, out string error)
