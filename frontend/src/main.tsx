@@ -7,7 +7,7 @@ import { createAppRouter } from "@/router";
 import "@/index.css";
 
 // Точка входа SPA журнала: react-router и TanStack Query собираются по
-// зафиксированному стеку; роутер монтируется в префикс /spa .NET-хоста.
+// зафиксированному стеку; роутер монтируется в корне .NET-хоста.
 // Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
 
 const queryClient = createAppQueryClient();

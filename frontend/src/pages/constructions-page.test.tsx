@@ -5,7 +5,6 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConstructionsOverview } from "@/lib/api/constructions";
-import { SPA_BASE_PATH } from "@/router";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ConstructionsPage } from "./constructions-page";
 
@@ -185,7 +184,7 @@ function renderPageInFrame() {
 				element: <AppLayout />,
 				children: [
 					{
-						path: SPA_BASE_PATH,
+						path: "/",
 						element: (
 							<>
 								<LocationProbe />
@@ -196,7 +195,7 @@ function renderPageInFrame() {
 				],
 			},
 		],
-		{ initialEntries: [SPA_BASE_PATH] },
+		{ initialEntries: ["/"] },
 	);
 	render(
 		<QueryClientProvider client={queryClient}>
@@ -509,8 +508,9 @@ describe("раздел «Конструкции»", () => {
 		// Act: двойной клик по строке.
 		await user.dblClick(row);
 
-		// Assert: карточка запрошена в новом окне по SPA-пути.
-		expect(openSpy).toHaveBeenCalledWith(`${SPA_BASE_PATH}/constructions/7`, "_blank");
+		// Assert: карточка запрошена в новом окне по корне-относительному пути.
+		// Traceability: adr:docs/adr/0013-spa-served-from-host-root.md#fixed-mechanics
+		expect(openSpy).toHaveBeenCalledWith("/constructions/7", "_blank");
 		openSpy.mockRestore();
 	});
 

@@ -6,7 +6,7 @@ shadcn/ui (lucide-react), react-router, TanStack Query. Стек зафикси�
 
 ## Команды
 
-- `npm run dev` — dev-сервер Vite (порт 5173, префикс `/spa/`).
+- `npm run dev` — dev-сервер Vite (порт 5173, приложение в корне).
 - `npm run build` — сборка в `dist/` (проверка типов + Vite).
 - `npm test` — юнит-тесты vitest (однократный прогон).
 - `npm run preview` — локальный просмотр собранного `dist/`.
@@ -17,10 +17,8 @@ shadcn/ui (lucide-react), react-router, TanStack Query. Стек зафикси�
 Откройте `TransactionJournal.sln`, выберите **Transaction Journal (API + React)**
 и нажмите **Run**. Конфигурация собирает .NET-решение и запускает два процесса:
 **Backend API** (профиль `spa`, HTTP `http://localhost:5019`, без отдельного окна
-браузера) и **Frontend React** (`npm run dev -- --open /spa/`).
-Vite открывает приложение в браузере по адресу `http://localhost:5173/spa/`.
-Прямой вход по `http://localhost:5173/` дев-сервер отвечает 302-редиректом
-на `/spa/`, поэтому открытие без префикса не завершается ошибкой base URL.
+браузера) и **Frontend React** (`npm run dev -- --open /`).
+Vite открывает приложение в браузере по адресу `http://localhost:5173/`.
 Оба процесса доступны в отдельных вкладках Run; останавливайте оба при завершении.
 
 Для первого запуска необходимы .NET SDK 9 и Node.js версии не ниже 22.12.
@@ -35,8 +33,11 @@ React использует тот же относительный API `/api/v1`,
 
 ## Раздача статики
 
-Собранный `dist/` раздаёт существующий .NET-хост (`src/TransactionJournal`) по
-префиксу `/spa`, пока Blazor-UI продолжает работать в корне. Сборка:
+Собранный `dist/` раздаёт .NET-хост (`src/TransactionJournal`) из корня:
+Blazor-UI удалён cutover'ом ([#53](https://github.com/menshov-anatoliy/transaction-journal/issues/53)),
+`base` фронтенда — `/`, а маршруты приложения без файла на диске
+(SPA-fallback `/{**path:nonfile}`) возвращают `index.html`. Схема зафиксирована
+в [ADR-0013](../docs/adr/0013-spa-served-from-host-root.md). Сборка:
 
 ```powershell
 npm run build          # здесь: обновляет frontend/dist

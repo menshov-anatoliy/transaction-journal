@@ -207,8 +207,10 @@ describe("чаты конструкции", () => {
 		expect(within(card).getByText("риск", { selector: "strong" })).toBeInTheDocument();
 		expect(within(card).getByText("источника", { selector: "strong" })).toBeInTheDocument();
 		expect(within(card).getByText("Статус:")).toBeInTheDocument();
+		// Ссылка корне-относительная: SPA живёт в корне хоста без префикса /spa.
+		// Traceability: adr:docs/adr/0013-spa-served-from-host-root.md#fixed-mechanics
 		expect(within(card).getByRole("link", { name: "Открыть в каталоге в новом окне" }))
-			.toHaveAttribute("href", "/spa/agent?rule=ac-01");
+			.toHaveAttribute("href", "/agent?rule=ac-01");
 		expect(api.readRule).toHaveBeenCalledWith("ac-01", expect.any(AbortSignal));
 	});
 
