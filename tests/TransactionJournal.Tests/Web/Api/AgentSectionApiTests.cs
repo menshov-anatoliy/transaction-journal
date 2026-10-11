@@ -14,6 +14,7 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TransactionJournal.Api.Agent;
+using TransactionJournal.Api.Sse;
 using TransactionJournal.Chats;
 using TransactionJournal.Chats.Ports;
 using TransactionJournal.Infrastructure.Chats;
@@ -482,9 +483,14 @@ public sealed class AgentSectionApiTests
 	/// <summary>
 	/// Хост с подменой доменных зависимостей чатов: изолированное SQLite-
 	/// хранилище, контекстный читатель-рекордер и скриптовый клиент модели
-	/// вместо keyed-клиента "chats" из регистраций хоста.
+	/// вместо keyed-клиента "chats" из регистраций хоста. Дополнительная
+	/// настройка добавляет подмены конкретных портов, например биржи.
 	/// </summary>
-	private static SectionApiFactory CreateChatHost(IChatStore store, IChatContextReader reader, IChatClient model) =>
+	private static SectionApiFactory CreateChatHost(
+		IChatStore store,
+		IChatContextReader reader,
+		IChatClient model,
+		Action<IServiceCollection>? configure = null) =>
 		new(services =>
 		{
 			services.RemoveAll<IChatStore>();
@@ -492,7 +498,75 @@ public sealed class AgentSectionApiTests
 			services.RemoveAll<IChatContextReader>();
 			services.AddSingleton(reader);
 			services.AddKeyedSingleton<IChatClient>(ChatAgent.ChatClientServiceKey, (_, _) => model);
+			configure?.Invoke(services);
 		});
+
+	[TestMethod]
+	[Description("Активность инструмента реестра стримится кадрами event: tool вокруг вызова и до токенов результата")]
+	// Стрим доставляет событие с именем инструмента реестра и фазой начала до
+	// исполнения тула, с фазой конца — после него и до токенов результата;
+	// терминальное событие остаётся ровно одно.
+	// Traceability: openspec:http-api/transport#scenario-chat-tool-activity-streamed
+	// Traceability: openspec:http-api/transport#scenario-chat-tokens-stream-over-sse
+	public async Task TryIfToolActivityStreamsAroundRegistryToolCall()
+	{
+		// Arrange: изолированное хранилище, клиент модели с тул-вызовом в первой
+		// сцене и заглушка биржи, отдающая снимок с фиксированной маркой.
+		var directory = Path.Combine(AppContext.BaseDirectory, $"agent-tool-activity-{Guid.NewGuid():N}");
+		Directory.CreateDirectory(directory);
+		try
+		{
+			var market = new StubMarketReader();
+			await using var factory = CreateChatHost(
+				new ChatStore(Path.Combine(directory, "chats.db")),
+				new RecordingContextReader(),
+				new ToolCallModelClient(),
+				services =>
+				{
+					services.RemoveAll<IChatMarketReader>();
+					services.AddSingleton<IChatMarketReader>(market);
+				});
+			using var client = factory.CreateClient();
+			var chatId = await CreateChatAsync(client, "Что с маркой BTC?", "7", ["market"]);
+
+			// Act: стриминг ответа, при котором модель вызывает снимок рынка.
+			using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/chats/{chatId}/messages/stream")
+			{
+				Content = JsonContent.Create(new { text = "Покажи марку BTC", model = "glm-5.3" }),
+			};
+			using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
+			// Assert: порядок кадров — start, tool(start), tool(end), token, done.
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+			var frames = ParseFrames(await response.Content.ReadAsStringAsync());
+			Assert.That(frames.Select(frame => frame.EventName),
+				Is.EqualTo(new[] { "start", "tool", "tool", "token", "done" }));
+			var toolStart = frames[1].Data!;
+			Assert.That(toolStart["name"]!.GetValue<string>(), Is.EqualTo(ChatTools.GetMarketSnapshotToolName));
+			Assert.That(toolStart["phase"]!.GetValue<string>(), Is.EqualTo(ChatStreamEvents.ToolStartPhase));
+			var toolEnd = frames[2].Data!;
+			Assert.That(toolEnd["name"]!.GetValue<string>(), Is.EqualTo(ChatTools.GetMarketSnapshotToolName));
+			Assert.That(toolEnd["phase"]!.GetValue<string>(), Is.EqualTo(ChatStreamEvents.ToolEndPhase));
+			var tokens = string.Concat(frames
+				.Where(frame => frame.EventName == ChatStreamEvents.TokenName)
+				.Select(frame => frame.Data!["text"]!.GetValue<string>()));
+			Assert.That(tokens, Is.EqualTo("Марка 108975.4."));
+			// Терминальное событие ровно одно — done без события ошибки.
+			Assert.That(frames.Count(frame => frame.EventName == ChatStreamEvents.DoneName), Is.EqualTo(1));
+			Assert.That(frames.Any(frame => frame.EventName == ChatStreamEvents.ErrorName), Is.False);
+
+			// Assert: тул реестра дошёл до биржи один раз, ответ ассистента в истории.
+			Assert.That(market.RequestedBaseCoins, Is.EqualTo(new[] { "BTC" }));
+			var history = await (await client.GetAsync($"/api/v1/chats/{chatId}/messages"))
+				.Content.ReadFromJsonAsync<JsonArray>();
+			Assert.That(history![^1]!["role"]!.GetValue<string>(), Is.EqualTo("assistant"));
+			Assert.That(history[^1]!["text"]!.GetValue<string>(), Is.EqualTo("Марка 108975.4."));
+		}
+		finally
+		{
+			CleanupChatStoreDirectory(directory);
+		}
+	}
 
 	/// <summary>Разбирает SSE-кадр ответа на имя события и JSON-нагрузку.</summary>
 	private static List<(string EventName, JsonNode? Data)> ParseFrames(string raw)
@@ -578,5 +652,84 @@ public sealed class AgentSectionApiTests
 		public void Dispose()
 		{
 		}
+	}
+
+	/// <summary>
+	/// Клиент модели с тул-вызовом: первая сцена требует вызов рыночного
+	/// тула реестра, вторая отвечает текстом по его результату.
+	/// </summary>
+	private sealed class ToolCallModelClient : IChatClient
+	{
+		private int _requests;
+
+		public Task<ChatResponse> GetResponseAsync(
+			IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
+			throw new NotSupportedException("Агентный цикл обязан использовать стриминг.");
+
+		public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+			IEnumerable<ChatMessage> messages,
+			ChatOptions? options = null,
+			[EnumeratorCancellation] CancellationToken cancellationToken = default)
+		{
+			await Task.Yield();
+			if (Interlocked.Increment(ref _requests) == 1)
+			{
+				// Первая сцена: модель требует вызов снимка рынка по BTC.
+				yield return new ChatResponseUpdate
+				{
+					Role = ChatRole.Assistant,
+					Contents =
+					{
+						new FunctionCallContent(
+							"call-1",
+							ChatTools.GetMarketSnapshotToolName,
+							new Dictionary<string, object?> { ["baseCoin"] = "BTC" }),
+					},
+				};
+				yield break;
+			}
+
+			// Вторая сцена: ответ модели по результату инструмента.
+			yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = { new TextContent("Марка 108975.4.") } };
+		}
+
+		public object? GetService(Type serviceType, object? serviceKey = null) => null;
+
+		public void Dispose()
+		{
+		}
+	}
+
+	/// <summary>
+	/// Заглушка биржи: снимок рынка отвечает доступными данными с фиксированной
+	/// маркой, доска опционов сценарием не вызывается и отвечает пустой доской.
+	/// </summary>
+	private sealed class StubMarketReader : IChatMarketReader
+	{
+		/// <summary>Базовые активы запросов снимка, в порядке обращений.</summary>
+		public List<string> RequestedBaseCoins { get; } = [];
+
+		public Task<ChatMarketSnapshot> ReadSnapshotAsync(string baseCoin, CancellationToken cancellationToken = default)
+		{
+			RequestedBaseCoins.Add(baseCoin);
+			return Task.FromResult(new ChatMarketSnapshot
+			{
+				BaseCoin = baseCoin,
+				AsOf = DateTimeOffset.Parse("2026-10-11T10:00:00Z", CultureInfo.InvariantCulture),
+				IsAvailable = true,
+				Symbol = "BTCUSDT",
+				MarkPrice = 108975.4m,
+			});
+		}
+
+		public Task<ChatOptionBoard> ReadOptionBoardAsync(string baseCoin, CancellationToken cancellationToken = default) =>
+			Task.FromResult(new ChatOptionBoard
+			{
+				BaseCoin = baseCoin,
+				AsOf = DateTimeOffset.Parse("2026-10-11T10:00:00Z", CultureInfo.InvariantCulture),
+				IsAvailable = true,
+				TotalTickerCount = 0,
+				Quotes = [],
+			});
 	}
 }

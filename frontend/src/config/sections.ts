@@ -7,7 +7,7 @@ import { HintsPage } from "@/pages/hints-page";
 import { InboxPage } from "@/pages/inbox-page";
 import { SyncSettingsPage } from "@/pages/sync-settings-page";
 
-/** Маршрут раздела от корня SPA (монтажный префикс /spa не входит в путь). */
+/** Маршрут раздела от корня SPA (SPA раздаётся из корня .NET-хоста). */
 export type SectionPath = "/" | "/inbox" | "/hints" | "/agent" | "/sync-settings";
 
 /** Один раздел журнала: пункт левой панели и страница роутера из одного конфига. */

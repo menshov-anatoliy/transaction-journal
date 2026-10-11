@@ -87,17 +87,19 @@ export function RuleFullCard({
 					</button>
 				)}
 				<span className="shrink-0 text-[11px] text-text-muted">{rule.id}</span>
-			</header>
-			<div className="flex flex-wrap gap-2">
-				<StatusChip tone="risk">{ruleCharacterLabel(rule.character)}</StatusChip>
-				<StatusChip tone="info">{ruleClarityLabel(rule.clarity)}</StatusChip>
-				<StatusChip tone="neutral">Субъект: {ruleSubjectWord(rule.subject)}</StatusChip>
-			</div>
-			{detail !== undefined && <RuleCardBody detail={detail} full={onOpen === undefined} />}
-			<footer className="flex items-center gap-1.5">
-				<ExternalLink aria-hidden="true" className="size-3 shrink-0 text-accent-strong" />
-				<a
-					href={`/spa/agent?rule=${encodeURIComponent(rule.id)}`}
+				</header>
+				<div className="flex flex-wrap gap-2">
+					<StatusChip tone="risk">{ruleCharacterLabel(rule.character)}</StatusChip>
+					<StatusChip tone="info">{ruleClarityLabel(rule.clarity)}</StatusChip>
+					<StatusChip tone="neutral">Субъект: {ruleSubjectWord(rule.subject)}</StatusChip>
+				</div>
+				{detail !== undefined && <RuleCardBody detail={detail} full={onOpen === undefined} />}
+				<footer className="flex items-center gap-1.5">
+					<ExternalLink aria-hidden="true" className="size-3 shrink-0 text-accent-strong" />
+					{/* Ссылка корне-относительная: SPA раздаётся из корня хоста, префикс /spa упразднён. */}
+					{/* Traceability: adr:docs/adr/0013-spa-served-from-host-root.md#fixed-mechanics */}
+					<a
+					href={`/agent?rule=${encodeURIComponent(rule.id)}`}
 					target="_blank"
 					rel="noreferrer"
 					className="text-xs text-accent-strong underline-offset-2 hover:underline"

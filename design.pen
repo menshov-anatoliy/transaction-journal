@@ -16501,6 +16501,24 @@
           ]
         }
       ]
+    },
+    {
+      "type": "rectangle",
+      "id": "c7VXxB",
+      "x": 6680,
+      "y": 0,
+      "name": "Журнал Bybit",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 1728,
+      "height": 1080
     }
   ],
   "variables": {

@@ -5,9 +5,6 @@ import { appSections } from "@/config/sections";
 import { ConstructionCardPage } from "@/pages/construction-card-page";
 import { ErrorPage } from "@/pages/error-page";
 
-/** Префикс монтажа SPA на .NET-хосте: /spa до переключения журнала (задача 7.2). */
-export const SPA_BASE_PATH = "/spa";
-
 /**
  * Дерево маршрутов каркаса: раскладка приложения в корне и по одному
  * маршруту на раздел из единого конфига. «Конструкции» — индексный маршрут;
@@ -35,7 +32,8 @@ export function buildAppRoutes(): RouteObject[] {
 	];
 }
 
-/** Браузерный роутер SPA: базовый путь учитывает монтаж под /spa. */
+/** Браузерный роутер SPA: приложение смонтировано в корне .NET-хоста, базовый путь — «/» по умолчанию. */
+// Traceability: adr:docs/adr/0013-spa-served-from-host-root.md#fixed-mechanics
 export function createAppRouter() {
-	return createBrowserRouter(buildAppRoutes(), { basename: SPA_BASE_PATH });
+	return createBrowserRouter(buildAppRoutes());
 }

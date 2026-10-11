@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentChatThread } from "./agent-chat-thread";
+import type { AgentChatThreadContext } from "./agent-chat-thread";
 import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
 import type { ChatMessageDto } from "@/chat/types";
 
@@ -19,18 +20,18 @@ import type { ChatMessageDto } from "@/chat/types";
 // Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 
-function Harness({ chatId, model }: { chatId: string; model?: string }) {
+function Harness({ chatId, model, context }: { chatId: string; model?: string; context?: AgentChatThreadContext }) {
 	const chat = useAgentChatRuntime(chatId, model ?? "GLM-5.3");
-	return <AgentChatThread chat={chat} />;
+	return <AgentChatThread chat={chat} context={context} />;
 }
 
-function renderChat(chatId = "chat-1", model?: string) {
+function renderChat(chatId = "chat-1", model?: string, context?: AgentChatThreadContext) {
 	const queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	});
 	return render(
 		<QueryClientProvider client={queryClient}>
-			<Harness chatId={chatId} model={model} />
+			<Harness chatId={chatId} model={model} context={context} />
 		</QueryClientProvider>,
 	);
 }
@@ -42,6 +43,8 @@ interface ApiMockOptions {
 	streamFrames?: string[];
 	/** Стрим, который завершает только отмена владельцем. */
 	neverEndingStream?: boolean;
+	/** Стрим, который доставляет кадры и остаётся открытым до отмены. */
+	openStream?: boolean;
 }
 
 function mockChatApi(options: ApiMockOptions = {}) {
@@ -58,6 +61,8 @@ function mockChatApi(options: ApiMockOptions = {}) {
 			if (href.includes("/messages/stream")) {
 				if (options.neverEndingStream === true)
 					return neverEndingSseResponse(init?.signal ?? undefined);
+				if (options.openStream === true)
+					return openSseResponse(options.streamFrames ?? [], init?.signal);
 				return sseResponse(options.streamFrames ?? []);
 			}
 			if (href.includes("/messages")) {
@@ -106,8 +111,86 @@ function neverEndingSseResponse(signal: AbortSignal | undefined): Response {
 	return new Response(stream, { status: 200 });
 }
 
+/** Канал без терминального кадра: кадры доставлены, ход идёт до отмены владельцем. */
+function openSseResponse(frames: readonly string[], signal: AbortSignal | null | undefined): Response {
+	const encoder = new TextEncoder();
+	const stream = new ReadableStream<Uint8Array>({
+		start(controller) {
+			for (const frame of frames)
+				controller.enqueue(encoder.encode(frame));
+			signal?.addEventListener("abort", () => {
+				controller.error(new DOMException("Aborted", "AbortError"));
+			});
+		},
+	});
+	return new Response(stream, { status: 200 });
+}
+
 function tokenFrame(text: string): string {
 	return `event: token\ndata: ${JSON.stringify({ text })}\n\n`;
+}
+
+function toolFrame(name: string, phase: "start" | "end", detail?: string): string {
+	const payload: Record<string, string> = { name, phase };
+	if (detail !== undefined)
+		payload["detail"] = detail;
+	return `event: tool\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+/** Подписи видимых пилюль статуса инструментов — в порядке DOM. */
+function pillLabels(): string[] {
+	return Array.from(document.querySelectorAll('[data-slot="tool-status"]')).map(
+		(pill) => pill.querySelector('[data-slot="tool-status-label"]')?.textContent ?? "",
+	);
+}
+
+/** Высота строки композера в px для подменённых layout-метрик jsdom. */
+const LINE_HEIGHT = 16;
+
+/**
+ * jsdom не считает layout: scrollHeight всегда 0, а lineHeight в computed
+ * style — «normal», поэтому react-textarea-autosize не может измерить строку.
+ * Для проверки автороста подменяются только эти две метрики (строка = 16px,
+ * scrollHeight = число строк текста × высота строки); расчёт высоты по
+ * minRows/maxRows библиотека выполняет по ним честно.
+ */
+function stubTextareaLayout(): () => void {
+	const overrides: Record<string, string> = {
+		boxSizing: "content-box",
+		lineHeight: `${LINE_HEIGHT}px`,
+		paddingTop: "0px",
+		paddingRight: "0px",
+		paddingBottom: "0px",
+		paddingLeft: "0px",
+		borderTopWidth: "0px",
+		borderRightWidth: "0px",
+		borderBottomWidth: "0px",
+		borderLeftWidth: "0px",
+	};
+	const realGetComputedStyle = window.getComputedStyle.bind(window);
+	const computedStyleSpy = vi.spyOn(window, "getComputedStyle").mockImplementation((node) => {
+		const real = realGetComputedStyle(node);
+		return new Proxy(real, {
+			get(target, prop) {
+				if (typeof prop === "string" && prop in overrides)
+					return overrides[prop];
+				return Reflect.get(target, prop, target);
+			},
+		});
+	});
+	const proto = HTMLTextAreaElement.prototype;
+	const original = Object.getOwnPropertyDescriptor(proto, "scrollHeight");
+	Object.defineProperty(proto, "scrollHeight", {
+		configurable: true,
+		get(this: HTMLTextAreaElement) {
+			return this.value.split("\n").length * LINE_HEIGHT;
+		},
+	});
+	return () => {
+		computedStyleSpy.mockRestore();
+		if (original !== undefined)
+			Object.defineProperty(proto, "scrollHeight", original);
+	};
 }
 
 function userMessage(text: string, id: string): ChatMessageDto {
@@ -196,38 +279,6 @@ describe("базовая обёртка чата агента", () => {
 		expect(composer?.className).toContain("rounded-[14px]");
 		expect(composer?.className).toContain("p-3.5");
 		expect(composer?.className).toContain("bg-surface");
-	});
-
-	it("показывает пилюлю ToolStatus на время хода и убирает её по завершении (§3.5:4)", async () => {
-		// Arrange: в чате есть история; новый ход идёт по каналу, который
-		// не завершается сам — ход «в процессе» длится до отмены.
-		mockChatApi({
-			historyByCall: [[userMessage("старый вопрос", "m1")]],
-			neverEndingStream: true,
-		});
-		const user = userEvent.setup();
-		renderChat();
-
-		// Act: владелец отправляет вопрос.
-		const input = await screen.findByRole("textbox");
-		await user.type(input, "новый вопрос");
-		await user.click(screen.getByRole("button", { name: "Отправить" }));
-
-		// Assert: пилюля «выполняется» мастера ix8ma (инстанс Tool2 Body #4)
-		// видна в потоке ленты: pill 999 на surface2 с вращающейся иконкой.
-		const statusLabel = await screen.findByText(/источники — собираю данные/);
-		const pill = statusLabel.closest('[data-slot="tool-status"]');
-		expect(pill).not.toBeNull();
-		expect(pill?.className).toContain("rounded-full");
-		expect(pill?.className).toContain("bg-surface-2");
-
-		// Act: владелец останавливает генерацию.
-		await user.click(await screen.findByRole("button", { name: "Остановить" }));
-
-		// Assert: ход завершён — пилюля уходит вместе с состоянием хода.
-		await waitFor(() => {
-			expect(screen.queryByText(/источники — собираю данные/)).toBeNull();
-		});
 	});
 
 	it("отправляет сообщение и стримит ответ токенами до завершения", async () => {
@@ -328,5 +379,380 @@ describe("базовая обёртка чата агента", () => {
 		await waitFor(() => {
 			expect(screen.getAllByText("Токен")).toHaveLength(1);
 		});
+	});
+});
+
+// Живые пилюли активности инструментов: тред рендерит ToolStatus из
+// состояния activeTools runtime — кадр tool start зажигает пилюлю «имя —
+// деталь…», парный end гасит её, терминальные кадры и отмена чистят список;
+// статичная надпись «источники — собираю данные…» и сами tool-call
+// фрагменты в ленте не появляются.
+// Traceability: openspec:ui/screens#scenario-ui-streaming-with-tool-status
+describe("живые пилюли активности инструментов в треде", () => {
+	it("рендерит пилюли инструментов из кадров tool start с именем и деталью", async () => {
+		// Arrange: ход по открытому каналу; агент вызвал два инструмента,
+		// оба start-кадра пришли до токенов ответа.
+		mockChatApi({
+			historyByCall: [[]],
+			openStream: true,
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("get_market_snapshot", "start", "BTC"),
+				toolFrame("read_rule_card", "start"),
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос — стартует ход со стримом.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "новый вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: две пилюли в порядке вызовов — формат ноды PfMRJ
+		// «источник — что делаю…»; примитив мастера ix8ma (pill на surface2).
+		await waitFor(() => {
+			expect(pillLabels()).toEqual(["get_market_snapshot — BTC…", "read_rule_card…"]);
+		});
+		const pills = Array.from(document.querySelectorAll('[data-slot="tool-status"]'));
+		expect(pills[0]?.className).toContain("rounded-full");
+		expect(pills[0]?.className).toContain("bg-surface-2");
+	});
+
+	it("гасит пилюлю инструмента по парному кадру end", async () => {
+		// Arrange: из двух вызванных инструментов первый уже завершился —
+		// его end-кадр пришёл до токенов ответа.
+		mockChatApi({
+			historyByCall: [[]],
+			openStream: true,
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("get_market_snapshot", "start"),
+				toolFrame("get_option_board", "start"),
+				toolFrame("get_market_snapshot", "end"),
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: пилюля завершённого вызова погасла, осталась только
+		// пилюля незавершённого.
+		await waitFor(() => {
+			expect(pillLabels()).toEqual(["get_option_board…"]);
+		});
+	});
+
+	it("убирает пилюли по терминальному кадру done", async () => {
+		// Arrange: ход с вызовом инструмента завершается кадром done;
+		// сервер отдаёт перечитанную историю с финальным ответом.
+		mockChatApi({
+			historyByCall: [[], [userMessage("вопрос", "m1"), assistantMessage("Ответ готов", "m2")]],
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("get_market_snapshot", "start"),
+				tokenFrame("Ответ "),
+				toolFrame("get_market_snapshot", "end"),
+				tokenFrame("готов"),
+				"event: done\ndata: {}\n\n",
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: ход доходит до завершения сам.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: ответ собран, история перечитана, пилюль не осталось.
+		expect(await screen.findByText("Ответ готов")).toBeInTheDocument();
+		await waitFor(() => {
+			expect(pillLabels()).toEqual([]);
+		});
+	});
+
+	it("убирает пилюли по кадру ошибки генерации", async () => {
+		// Arrange: вызов инструмента оборвался error-кадром того же
+		// соединения при активном вызове.
+		mockChatApi({
+			historyByCall: [[]],
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("get_market_snapshot", "start"),
+				'event: error\ndata: {"message":"генерация не удалась"}\n\n',
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: ход падает ошибкой.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: баннер деградации виден, активных пилюль не осталось.
+		expect(await screen.findByRole("alert")).toHaveTextContent(/генерация не удалась/);
+		await waitFor(() => {
+			expect(pillLabels()).toEqual([]);
+		});
+	});
+
+	it("не показывает статичную надпись источников на время хода", async () => {
+		// Arrange: ход идёт по открытому каналу без tool-кадров — агент
+		// ещё не вызывал инструменты.
+		mockChatApi({
+			historyByCall: [[]],
+			openStream: true,
+			streamFrames: ["event: start\ndata: {}\n\n"],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос — генерация идёт.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+		await screen.findByRole("button", { name: "Остановить" });
+
+		// Assert: статичная надпись «источники — собираю данные…» исчезла
+		// из треда, пилюль без вызовов инструментов тоже нет.
+		expect(screen.queryByText(/источники — собираю данные/)).toBeNull();
+		expect(pillLabels()).toEqual([]);
+	});
+
+	it("не рендерит tool-call фрагменты в ленте сообщений", async () => {
+		// Arrange: ход с активным вызовом инструмента и первым токеном.
+		mockChatApi({
+			historyByCall: [[]],
+			openStream: true,
+			streamFrames: [
+				"event: start\ndata: {}\n\n",
+				toolFrame("read_rule_card", "start", "R-1"),
+				tokenFrame("Отвечаю "),
+			],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+
+		// Assert: имя инструмента встречается в DOM только внутри пилюли
+		// статуса — как фрагмент вызова в ленте сообщений оно не рендерится.
+		await waitFor(() => {
+			expect(pillLabels()).toEqual(["read_rule_card — R-1…"]);
+		});
+		const mentions = screen.getAllByText(/read_rule_card/);
+		expect(mentions.length).toBeGreaterThan(0);
+		for (const mention of mentions) {
+			expect(mention.closest('[data-slot="tool-status"]')).not.toBeNull();
+		}
+	});
+});
+
+// Практики ввода композера (решение D5, мастер Z14sH): поле ввода
+// авторастёт от одной до восьми строк, Enter отправляет, Shift+Enter
+// переносит строку, отправка заблокирована на пустом поле.
+// Traceability: openspec:ui/screens#scenario-ui-composer-input-practices
+describe("практики ввода композера", () => {
+	it("авторастёт с текстом от одной строки до восьми", async () => {
+		// Arrange: композер на пустом чате; layout-метрики jsdom подменены
+		// детерминированными (строка = 16px).
+		const restoreLayout = stubTextareaLayout();
+		try {
+			mockChatApi({ historyByCall: [[]] });
+			const user = userEvent.setup();
+			renderChat();
+			const input = (await screen.findByRole("textbox")) as HTMLTextAreaElement;
+
+			// Assert: пустое поле — одна строка (minRows 1 → 16px).
+			expect(input.style.height).toBe(`${LINE_HEIGHT}px`);
+
+			// Act: владелец вводит четыре строки через Shift+Enter.
+			await user.type(input, "раз{Shift>}{Enter}{/Shift}два{Shift>}{Enter}{/Shift}три{Shift>}{Enter}{/Shift}четыре");
+
+			// Assert: поле выросло пропорционально числу строк.
+			expect(input.style.height).toBe(`${LINE_HEIGHT * 4}px`);
+
+			// Act: владелец доводит текст до девяти строк.
+			for (let line = 5; line <= 9; line += 1)
+				await user.type(input, `{Shift>}{Enter}{/Shift}строка ${line}`);
+
+			// Assert: рост остановлен на восьми строках (maxRows 8 → 128px),
+			// дальше поле не раздувается.
+			expect(input.style.height).toBe(`${LINE_HEIGHT * 8}px`);
+			expect(input.value.split("\n")).toHaveLength(9);
+		}
+		finally {
+			restoreLayout();
+		}
+	});
+
+	it("Enter отправляет многострочный текст, а Shift+Enter переносит строку", async () => {
+		// Arrange: пустой чат, после отправки сервер отдаёт обновлённую историю.
+		const calls = mockChatApi({
+			historyByCall: [[], [userMessage("первая строка\nвторая строка", "m1")]],
+			streamFrames: ["event: start\ndata: {}\n\n", tokenFrame("Отвечаю"), "event: done\ndata: {}\n\n"],
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец набирает две строки переносом Shift+Enter.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "первая строка{Shift>}{Enter}{/Shift}вторая строка");
+
+		// Assert: перенос попал в значение, отправки по Shift+Enter не было.
+		expect(input).toHaveValue("первая строка\nвторая строка");
+		expect(calls.some((call) => call.url.includes("/messages/stream"))).toBe(false);
+
+		// Act: Enter отправляет набранный многострочный вопрос.
+		await user.type(input, "{Enter}");
+
+		// Assert: стрим стартовал с многострочным текстом владельца.
+		const streamCall = await waitFor(() => {
+			const found = calls.find((call) => call.url.includes("/messages/stream"));
+			expect(found).toBeDefined();
+			return found!;
+		});
+		expect(JSON.parse(streamCall.init?.body as string).text).toBe("первая строка\nвторая строка");
+	});
+
+	it("блокирует отправку при пустом поле", async () => {
+		// Arrange: пустой чат без истории.
+		mockChatApi({ historyByCall: [[]] });
+		const user = userEvent.setup();
+		renderChat();
+		await screen.findByRole("textbox");
+
+		// Assert: на пустом поле кнопка отправки недоступна.
+		expect(screen.getByRole("button", { name: "Отправить" })).toBeDisabled();
+
+		// Act: владелец начинает печатать вопрос.
+		await user.type(screen.getByRole("textbox"), "вопрос");
+
+		// Assert: с непустым вводом отправка разблокировалась.
+		expect(screen.getByRole("button", { name: "Отправить" })).toBeEnabled();
+	});
+});
+
+// Stop во время генерации (решение D5): на время хода кнопка отправки
+// исчезает — доступна только остановка; Stop обрывает SSE-стрим по
+// AbortSignal и возвращает панель в состояние ввода.
+// Traceability: openspec:ui/screens#scenario-ui-cancel-generation
+describe("остановка генерации во время стрима", () => {
+	it("во время генерации остаётся только остановка, Stop обрывает стрим и возвращает состояние ввода", async () => {
+		// Arrange: канал не завершается сам; сервер после отмены отдаёт
+		// историю с частичным ответом.
+		const calls = mockChatApi({
+			historyByCall: [[], [userMessage("вопрос", "m1"), assistantMessage("Токен", "m2")]],
+			neverEndingStream: true,
+		});
+		const user = userEvent.setup();
+		renderChat();
+
+		// Act: владелец отправляет вопрос.
+		const input = await screen.findByRole("textbox");
+		await user.type(input, "вопрос");
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
+		expect(await screen.findByText("Токен")).toBeInTheDocument();
+
+		// Assert: на время хода отправки нет — только остановка; поле ввода
+		// остаётся доступным.
+		expect(screen.queryByRole("button", { name: "Отправить" })).toBeNull();
+		expect(screen.getByRole("button", { name: "Остановить" })).toBeEnabled();
+		expect(screen.getByRole("textbox")).toBeEnabled();
+
+		// Act: владелец останавливает генерацию.
+		await user.click(screen.getByRole("button", { name: "Остановить" }));
+
+		// Assert: SSE-стрим реально оборван по AbortSignal.
+		await waitFor(() => {
+			const streamCall = calls.find((call) => call.url.includes("/messages/stream"));
+			expect(streamCall?.init?.signal?.aborted).toBe(true);
+		});
+
+		// Assert: панель вернулась в состояние ввода — остановка исчезла,
+		// отправка вернулась, поле снова принимает текст.
+		await screen.findByRole("button", { name: "Отправить" });
+		expect(screen.queryByRole("button", { name: "Остановить" })).toBeNull();
+		const inputAfterStop = screen.getByRole("textbox");
+		expect(inputAfterStop).toBeEnabled();
+		await user.type(inputAfterStop, "дополнение");
+		expect(inputAfterStop).toHaveValue("дополнение");
+	});
+});
+
+// Чипы контекста в тулбаре композера (мастер Z14sH, тулбар ZCrdN): под
+// полем — чип привязки (если чат привязан к конструкции), чип модели и
+// чипы источников; параметры чата фиксируются при создании и не меняются.
+// Traceability: openspec:ui/screens#scenario-ui-composer-input-practices
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+describe("чипы контекста в тулбаре композера", () => {
+	it("показывает под полем чипы привязки, модели и источников", async () => {
+		// Arrange: чат привязан к конструкции и читает все три источника.
+		mockChatApi({ historyByCall: [[]] });
+		renderChat("chat-1", "GLM-5.3", {
+			model: "GLM-5.3",
+			constructionLabel: "конструкция 7",
+			sources: ["journal", "rules-corpus", "market"],
+		});
+		const input = await screen.findByRole("textbox");
+
+		// Assert: тулбар следует за полем ввода внутри композера.
+		const toolbar = document.querySelector('[data-slot="composer-context-chips"]');
+		expect(toolbar).not.toBeNull();
+		expect(toolbar?.closest("form")).toBe(input.closest("form"));
+		expect(input.compareDocumentPosition(toolbar!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+		// Assert: чип привязки — мастер bCLlQ: пилюля на $infoSoft, иконка
+		// link, подпись конструкции.
+		const bindChip = within(toolbar as HTMLElement).getByText("конструкция 7").closest('[data-slot="composer-bind-chip"]');
+		expect(bindChip?.className).toContain("rounded-full");
+		expect(bindChip?.className).toContain("bg-info-soft");
+		expect(bindChip).toHaveAttribute("title", "Чат привязан к конструкции");
+
+		// Assert: чип модели — мастер aF5vM: $surface2 с радиусом 8 и
+		// подписью модели.
+		const modelChip = within(toolbar as HTMLElement).getByText("GLM-5.3").closest('[data-slot="composer-model-chip"]');
+		expect(modelChip?.className).toContain("rounded-sm");
+		expect(modelChip?.className).toContain("bg-secondary");
+		expect(modelChip).toHaveAttribute("title", "Модель чата");
+
+		// Assert: источники — инстансы примитива fYadZ в порядке справочника:
+		// «журнал», «корпус правил» с check, «рынок Bybit» с globe.
+		const sourceChips = Array.from((toolbar as HTMLElement).querySelectorAll('[data-slot="source-chip"]'));
+		expect(sourceChips.map((chip) => chip.textContent)).toEqual(["журнал", "корпус правил", "рынок Bybit"]);
+		expect(sourceChips[2]?.querySelector("svg.lucide-globe")).not.toBeNull();
+	});
+
+	it("у портфельного чата не рисует чип привязки", async () => {
+		// Arrange: чат без привязки к конструкции — модель и один источник.
+		mockChatApi({ historyByCall: [[]] });
+		renderChat("chat-1", "GLM-5.3", { model: "GLM-5.3", sources: ["journal"] });
+
+		// Assert: чипа привязки нет, модель и источник показаны.
+		await screen.findByRole("textbox");
+		expect(document.querySelector('[data-slot="composer-bind-chip"]')).toBeNull();
+		expect(screen.getByText("GLM-5.3")).toBeInTheDocument();
+		expect(screen.getByText("журнал")).toBeInTheDocument();
+	});
+
+	it("без контекста тулбар не рисует чипы вовсе", async () => {
+		// Arrange: базовая обёртка без context (формы без параметров чата).
+		mockChatApi({ historyByCall: [[]] });
+		renderChat();
+
+		// Assert: контейнера чипов нет — композер остаётся только с полем
+		// и отправкой.
+		await screen.findByRole("textbox");
+		expect(document.querySelector('[data-slot="composer-context-chips"]')).toBeNull();
+		expect(screen.getByRole("button", { name: "Отправить" })).toBeInTheDocument();
 	});
 });

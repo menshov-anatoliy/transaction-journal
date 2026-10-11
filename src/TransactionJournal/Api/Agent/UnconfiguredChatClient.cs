@@ -10,7 +10,9 @@ using Microsoft.Extensions.AI;
 /// </summary>
 internal sealed class UnconfiguredChatClient : IChatClient
 {
-	private const string ErrorMessage =
+	// Фраза классифицируется guard'ом отказов как «ключ не настроен»:
+	// она же возвращается владельцу в error-кадре без изменений.
+	internal const string ErrorMessage =
 		"API-ключ модели не настроен: задайте Llm:ApiKey в appsettings или переменной окружения.";
 
 	/// <inheritdoc />

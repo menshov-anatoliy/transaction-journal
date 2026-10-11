@@ -3,16 +3,13 @@ import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { spaRootRedirectPlugin } from "./spa-root-redirect";
 
-// SPA смонтирован в префиксе /spa, чтобы не конфликтовать за маршруты
-// с работающим Blazor-UI в корне хоста; переезд в корень — задача 7.2
-// переключения журнала на новый интерфейс.
-// Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
-// Traceability: adr:docs/adr/0010-frontend-spa-react-stack.md
+// SPA смонтирован в корне: Blazor-UI удалён cutover'ом (issue #53), собранные
+// ассеты и страницы раздаёт .NET-хост без префикса.
+// Traceability: adr:docs/adr/0013-spa-served-from-host-root.md#fixed-mechanics
 export default defineConfig({
-	plugins: [react(), tailwindcss(), spaRootRedirectPlugin()],
-	base: "/spa/",
+	plugins: [react(), tailwindcss()],
+	base: "/",
 	// Dev-сервер сохраняет относительные API-запросы SPA и передаёт их .NET-хосту.
 	// Порт фиксирован: занятый адрес должен приводить к ошибке, а не смене URL.
 	// Traceability: doc:frontend/README.md#запуск-в-rider

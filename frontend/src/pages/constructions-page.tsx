@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatCount, pluralForm } from "@/lib/format/plural";
 import { formatSignedAmount } from "@/lib/format/quantity";
-import { SPA_BASE_PATH } from "@/router";
 import { useIsMobile } from "@/lib/use-mobile";
 import { cn } from "@/lib/utils";
 
@@ -99,10 +98,12 @@ export function ConstructionsPage() {
 		[setSearchParams],
 	);
 
-	// Двойной клик открывает карточку конструкции в новом окне браузера.
+	// Двойной клик открывает карточку конструкции в новом окне браузера;
+	// ссылка корне-относительная — SPA раздаётся из корня хоста без префикса.
 	// Traceability: openspec:ui/screens#scenario-list-double-click-opens-new-window
+	// Traceability: adr:docs/adr/0013-spa-served-from-host-root.md#fixed-mechanics
 	const openInNewWindow = React.useCallback((constructionId: number) => {
-		window.open(`${SPA_BASE_PATH}/constructions/${constructionId}`, "_blank");
+		window.open(`/constructions/${constructionId}`, "_blank");
 	}, []);
 
 	// Переключение области видимости: клиентская фильтрация строк по статусу.
