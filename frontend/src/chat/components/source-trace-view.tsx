@@ -45,11 +45,13 @@ export function SourceTraceView({ trace, onRuleHover, onRuleLeave, onRuleOpen }:
 			/*
 				Контейнер следа — мастер bUrOy «След источников» (инстанс Tr1
 				Body #4): мягкая зелёная панель $accentSofter #EFF9F4 со stroke
-				$accentSoft #E2F4EB, радиус 10, паддинги [10,12], зазор 5;
-				нейтральная плашка bg-muted/40 (аудит §3.5:5) убрана.
+				$accentSoft #E2F4EB (бордер 1px: класс border-accent-soft задаёт
+				только цвет), радиус 10, паддинги [10,12], зазор 5; отступ от
+				текста ответа — 16 (поток сообщений экрана qhGhn).
+				Нейтральная плашка bg-muted/40 (аудит §3.5:5) убрана.
 			*/
 			// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
-			className="mt-2 flex flex-col gap-[5px] rounded-[10px] border-accent-soft bg-accent-softer px-3 py-2.5"
+			className="mt-4 flex flex-col gap-[5px] rounded-[10px] border border-accent-soft bg-accent-softer px-3 py-2.5"
 		>
 			{/* Заголовок панели — нода nFpGY «TraceTitle» мастера bUrOy:
 			    капс 10/normal, letter-spacing 0.5, $textMuted. */}

@@ -778,7 +778,9 @@ describe("карточка конструкции: панель чатов в к
 		// Assert: выбор восстановлен из URL вместе с соседними параметрами.
 		const reloaded = await screen.findByTestId("context-panel");
 		expect(await within(reloaded).findByTestId("agent-chat-thread")).toBeInTheDocument();
-		expect(within(reloaded).getByRole("button", { name: /GLM-5\.3/ })).toHaveClass("bg-accent");
+			// Выбранный пункт сессии — фон surface-2 по мастерам design.pen.
+		// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+		expect(within(reloaded).getByRole("button", { name: /GLM-5\.3/ })).toHaveClass("bg-surface-2");
 		expect(screen.getByLabelText("URL")).toHaveTextContent("chat=active-1");
 		expect(screen.getByLabelText("URL")).toHaveTextContent("other=keep");
 	});

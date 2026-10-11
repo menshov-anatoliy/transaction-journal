@@ -110,8 +110,8 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 	// каркас, панель свою геометрию не хранит. Выбор чата остаётся в URL (?chat=).
 	// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
 	const chatsPanelRegistration = React.useMemo(
-		() => ({ content: <ConstructionChatsPanel constructionId={constructionId} isClosed={isClosed} /> }),
-		[constructionId, isClosed],
+		() => ({ content: <ConstructionChatsPanel constructionId={constructionId} isClosed={isClosed} constructionName={card.name} /> }),
+		[constructionId, isClosed, card.name],
 	);
 	useContextPanel(chatsPanelRegistration);
 

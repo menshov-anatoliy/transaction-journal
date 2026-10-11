@@ -32,10 +32,12 @@ export interface ConstructionChatsPanelProps {
 	readonly constructionId: number;
 	/** Ручной статус конструкции: закрытая/архивная ведёт чаты как пост-мортем. */
 	readonly isClosed: boolean;
+	/** Имя конструкции для чипа привязки композера (мастер bCLlQ, BindLabel). */
+	readonly constructionName?: string;
 }
 
 /** Чат выбранной строки с runtime assistant-ui. */
-function ChatThreadView({ chat }: { chat: ChatDto }) {
+function ChatThreadView({ chat, constructionName }: { chat: ChatDto; constructionName?: string }) {
 	const controller = useAgentChatRuntime(chat.id, chat.params.model);
 	const history = useQuery(chatMessagesOptions(chat.id));
 	const [hoveredRuleId, setHoveredRuleId] = React.useState<string | null>(null);
@@ -70,8 +72,11 @@ function ChatThreadView({ chat }: { chat: ChatDto }) {
 					chat={controller}
 					context={{
 						model: chat.params.model,
+						// Чип привязки показывает имя конструкции (мастер bCLlQ,
+						// BindLabel «Стреддл BTC»); без имени — идентификатор.
+						// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
 						constructionLabel: chat.params.constructionId
-							? `конструкция ${chat.params.constructionId}`
+							? (constructionName ?? `конструкция ${chat.params.constructionId}`)
 							: undefined,
 						sources: chat.params.sources,
 					}}
@@ -104,7 +109,7 @@ function ChatThreadView({ chat }: { chat: ChatDto }) {
 	);
 }
 
-export function ConstructionChatsPanel({ constructionId, isClosed }: ConstructionChatsPanelProps) {
+export function ConstructionChatsPanel({ constructionId, isClosed, constructionName }: ConstructionChatsPanelProps) {
 	const [searchParams, setSearchParams] = useSearchParams();
 	// Панель развёрнута всегда: собственная свёрнутость и параметр ?chats=*
 	// упразднены — ширина и свёрнутость задаёт каркас (localStorage), панель
@@ -201,7 +206,10 @@ export function ConstructionChatsPanel({ constructionId, isClosed }: Constructio
 					    Для закрытой конструкции показывается контекст пост-мортема,
 					    без подмены текущего конвейера ответа. */}
 					<div className="flex flex-col gap-1">
-						<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+					{/* Капшен секции — мастер D811M (Cap1 «АКТИВНЫЕ»): 10/normal,
+					    $textMuted, капс; полужирный caption 12 (аудит) убран. */}
+					{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+						<span className="text-text-muted text-[10px] font-normal tracking-wide uppercase">
 							{isClosed ? "пост-мортем конструкции" : "новый чат"}
 						</span>
 						<textarea
@@ -298,7 +306,7 @@ export function ConstructionChatsPanel({ constructionId, isClosed }: Constructio
 
 					{selected !== null ? (
 						<div className="border-t pt-2" style={{ height: "60%" }}>
-							<ChatThreadView key={selected.id} chat={selected} />
+							<ChatThreadView key={selected.id} chat={selected} constructionName={constructionName} />
 						</div>
 					) : (
 						<p className="text-muted-foreground py-4 text-center text-xs">
@@ -339,20 +347,29 @@ function ChatListSection({
 
 	return (
 		<div className="flex min-h-0 flex-col gap-1">
-			<span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{title}</span>
+			{/* Капшен секции — мастер D811M (Cap1/Cap2): 10/normal, $textMuted, капс. */}
+			{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+			<span className="text-text-muted text-[10px] font-normal tracking-wide uppercase">{title}</span>
 			<ul className="flex flex-col gap-1 overflow-y-auto">
 				{chats.map((chat) => (
 					<li key={chat.id} className="flex items-center gap-1">
+						{/* Пункт сессии — мастер s9J3h «Сессия/пункт»: радиус 10,
+						    паддинги [8,10], название 12.5/600, время 11 $textMuted;
+						    выбранный пункт — заливка $surface2 (D811M, S1 Cur).
+						    Превью последнего сообщения из макета нет: в DTO чата
+						    данных превью не передаётся — расширение контракта
+						    вне визуальной сверки. */}
+						{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
 						<button
 							type="button"
 							className={cn(
-								"flex-1 cursor-pointer rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent",
-								chat.id === selectedChatId && "bg-accent font-medium",
+								"flex-1 cursor-pointer rounded-md px-2.5 py-2 text-left text-[12.5px] font-semibold transition-colors hover:bg-accent",
+								chat.id === selectedChatId && "bg-surface-2",
 							)}
 							onClick={() => onSelect(chat.id)}
 						>
 							<span className="block truncate">{chat.params.model}</span>
-							<span className="text-muted-foreground block text-[11px]">
+							<span className="text-text-muted block text-[11px]">
 								{formatMoment(chat.lastMessageAt)}
 							</span>
 						</button>

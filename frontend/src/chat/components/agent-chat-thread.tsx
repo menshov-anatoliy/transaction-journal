@@ -5,7 +5,7 @@ import {
 	MessagePrimitive,
 	ThreadPrimitive,
 } from "@assistant-ui/react";
-import { ArrowUp, ChevronDown, Globe, Link, Square } from "lucide-react";
+import { ArrowUp, Bot, ChevronDown, Globe, Link, Square } from "lucide-react";
 import { CHAT_DATA_SOURCES } from "@/chat/chat-params";
 import type { ChatDataSource, SourceTrace } from "@/chat/types";
 import type { AgentChatActiveTool, AgentChatController } from "@/chat/runtime/use-agent-chat-runtime";
@@ -86,7 +86,12 @@ export function AgentChatThread({ chat, context, onRuleHover, onRuleLeave, onRul
 								message.role === "user" ? (
 									<UserRow />
 								) : (
-									<AssistantRow trace={readSourceTrace(message)} onRuleHover={onRuleHover} onRuleLeave={onRuleLeave} onRuleOpen={onRuleOpen} />
+									<AssistantRow
+										trace={readSourceTrace(message)}
+										model={context?.model}
+										createdAt={message.createdAt}
+										onRuleHover={onRuleHover} onRuleLeave={onRuleLeave} onRuleOpen={onRuleOpen}
+									/>
 								)
 							}
 						</ThreadPrimitive.Messages>
@@ -140,7 +145,7 @@ export function AgentChatThread({ chat, context, onRuleHover, onRuleLeave, onRul
 					<ComposerPrimitive.Input
 						minRows={1}
 						maxRows={8}
-						placeholder="Спросите ИИ-помощника…"
+						placeholder="Спросите агента о конструкции, правилах или рынке…"
 						className="min-h-11 w-full resize-none bg-transparent text-[13.5px] leading-[1.5] outline-none placeholder:text-text-muted"
 					/>
 					{/* Тулбар под полем — одна строка мастера ZCrdN: чипы контекста
@@ -198,7 +203,7 @@ function ComposerContextChips({ context }: { context: AgentChatThreadContext }) 
 			<span
 				data-slot="composer-model-chip"
 				title="Модель чата"
-				className="inline-flex items-center gap-1.5 rounded-sm bg-secondary px-2.5 py-[5px] text-[12px] font-medium whitespace-nowrap text-foreground"
+				className="inline-flex items-center gap-1.5 rounded-sm bg-secondary px-2.5 py-[5px] text-[12px] font-medium whitespace-nowrap text-foreground uppercase"
 			>
 				{context.model}
 				<ChevronDown aria-hidden className="size-3 shrink-0 text-text-muted" />
@@ -234,23 +239,51 @@ function UserRow() {
 	);
 }
 
+// Время хода в шапке ответа — «13:47» в часовой зоне браузера (мастер
+// sENPF, нода Time): полная дата формата formatMoment в шапке избыточна.
+function formatClock(moment: Date): string {
+	const hh = String(moment.getHours()).padStart(2, "0");
+	const mm = String(moment.getMinutes()).padStart(2, "0");
+	return `${hh}:${mm}`;
+}
+
 function AssistantRow({
 	trace,
+	model,
+	createdAt,
 	onRuleHover,
 	onRuleLeave,
 	onRuleOpen,
 }: {
 	trace: SourceTrace | undefined;
+	model?: string;
+	createdAt?: Date;
 	onRuleHover?: (ruleId: string) => void;
 	onRuleLeave?: () => void;
 	onRuleOpen?: (ruleId: string) => void;
 }) {
 	return (
-		<MessagePrimitive.Root className="mb-4 flex w-full flex-col items-start">
+		<MessagePrimitive.Root className="mb-4 flex w-full flex-col items-start gap-2">
 			{/* Ответ агента — мастер sENPF «Сообщение/Ассистент»: без карточки-плашки,
 			    плоский текст $textPrimary на фоне колонки во всю ширину; радиусы чата
 			    7–12 в дизайне живут на вложенных панелях (след источников — таск 5.2),
 			    а не на самом сообщении. Карточка с радиусом 16 (аудит §3.5:2) убрана. */}
+			{/* Шапка ответа — ноды Head мастера sENPF: аватар 22×22 r999 на
+			    $accentSoft с ботом 13 $accentStrong, имя «Агент» 12/600, модель
+			    и время хода 11 $textMuted; зазор шапки и контейнера — 8. */}
+			{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+			{createdAt !== undefined && (
+				<div className="flex items-center gap-2" data-slot="assistant-head">
+					<span className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-accent-soft">
+						<Bot aria-hidden className="size-[13px] text-accent-strong" />
+					</span>
+					<span className="text-[12px] font-semibold text-foreground">Агент</span>
+					{model !== undefined && (
+						<span className="text-[11px] text-text-muted uppercase">{model}</span>
+					)}
+					<span className="text-[11px] text-text-muted">{formatClock(createdAt)}</span>
+				</div>
+			)}
 			{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
 			<div className="w-full">
 				<MessagePrimitive.Parts components={{ Text: AssistantMarkdownText }} />
