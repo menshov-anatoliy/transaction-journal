@@ -78,7 +78,13 @@ public class SyntheticCloseDisputeStorageTests
 		var disputeService = new SyntheticCloseDisputeService(CreateOptions());
 		var constructionId = GetConstructionId();
 		await disputeService.DisputeAsync(constructionId, "hedge-perp", "hedge-call");
-		var disputedAt = (await disputeService.ListAsync(constructionId)).Single().DisputedAt;
+		SyntheticCloseDispute disputedRecord;
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			disputedRecord = db.SyntheticCloseDisputes.Single();
+		}
+
+		var disputedAt = disputedRecord.DisputedAt;
 
 		// Act: покупка 0.1 колла приходит во «Входящих» и собирается инкрементно.
 		using (var db = new JournalDbContext(CreateOptions()))
@@ -120,7 +126,13 @@ public class SyntheticCloseDisputeStorageTests
 		await disputeService.DisputeAsync(constructionId, "hedge-perp", "hedge-call");
 
 		// Assert: оспоренная связка скрыта — логический слой на спорной связке пуст.
-		Assert.That(SyntheticCloseDisputeFilter.ExcludeDisputed(RecognizedLinks(), await disputeService.ListAsync(constructionId)),
+		List<SyntheticCloseDispute> disputes;
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			disputes = db.SyntheticCloseDisputes.ToList();
+		}
+
+		Assert.That(SyntheticCloseDisputeFilter.ExcludeDisputed(RecognizedLinks(), disputes),
 			Is.Empty, "Спорная связка исключена из логического слоя");
 
 		// Act: полный пересбор с резервной копией.

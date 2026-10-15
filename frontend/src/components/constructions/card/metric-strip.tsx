@@ -122,133 +122,133 @@ export function ConstructionMetricStrip({ card }: ConstructionMetricStripProps) 
 				className="flex flex-col gap-3 rounded-lg border bg-surface px-[18px] py-3.5"
 			>
 				<div className="flex flex-wrap gap-5">
-				<Metric
-					label="общий P&L"
-					valueClassName={`tabular-nums ${VALUE_TOTAL} ${toneClass(metrics.totalPnL ?? 0)}`}
-				>
-					{metrics.totalPnL === null ? (
-						// Итог без нереализованной части неполный — признак сбоя марок.
-						<span className="text-text-muted" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя котировок">
-							неполный (сбой котировок)
-						</span>
-					) : (
-						`${formatSignedAmount(metrics.totalPnL)} USDT`
-					)}
-				</Metric>
-				<Metric
-					label={`% капитала${card.allocatedCapitalUsdt !== null ? ` (${formatAmount(card.allocatedCapitalUsdt)})` : ""}`}
-					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.totalPnLPercent ?? 0)}`}
-				>
-					{metrics.totalPnLPercent === null ? (
-						<span className="text-text-muted">{DASH}</span>
-					) : (
-						formatSignedPercent(metrics.totalPnLPercent)
-					)}
-				</Metric>
-				<Metric
-					label="стоимость"
-					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.markValue ?? 0)}`}
-				>
-					{card.hasOpenResidual === false ? (
-						<span className="text-text-muted" title="Открытых остатков нет — стоимости нет">
-							{DASH}
-						</span>
-					) : metrics.markValue === null ? (
-						<span className="text-text-muted" title="Провайдер котировок недоступен — стоимость не оценена">
-							сбой котировок
-						</span>
-					) : (
-						formatSignedAmount(metrics.markValue)
-					)}
-				</Metric>
-				<Metric
-					label="занято капитала, %"
-					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.capitalUsagePercent ?? 0)}`}
-				>
-					{metrics.capitalUsagePercent === null ? (
-						<span className="text-text-muted">{DASH}</span>
-					) : (
-						formatSignedPercent(metrics.capitalUsagePercent)
-					)}
-				</Metric>
-				<Metric
-					label="реализ. P&L"
-					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.realizedPnL)}`}
-				>
-					{formatSignedAmount(metrics.realizedPnL)}
-				</Metric>
-				<Metric
-					label="нереализ. P&L"
-					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.unrealizedPnL ?? 0)}`}
-				>
-					{card.hasMarkFailure ? (
-						<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
-							сбой котировок
-						</span>
-					) : (
-						formatSignedAmount(metrics.unrealizedPnL ?? 0)
-					)}
-				</Metric>
-				<Metric
-					label="корректировки"
-					valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.adjustmentsPnL)}`}
-				>
-					{metrics.adjustmentsPnL === 0 ? DASH : formatSignedAmount(metrics.adjustmentsPnL)}
-				</Metric>
-				<Metric label="котировки на" valueClassName={VALUE_PART}>
-					{card.hasMarkFailure ? (
-						<span className="text-text-muted" title="Провайдер котировок недоступен — время получения котировок неизвестно">
-							сбой котировок
-						</span>
-					) : card.hasOpenResidual === false ? (
-						<span className="text-text-muted" title="Открытых остатков нет — котировки оценке не нужны">
-							не нужны
-						</span>
-					) : (
-						(card.marksAsOf === null ? DASH : formatMoment(card.marksAsOf))
-					)}
-				</Metric>
-				<Metric label="период" valueClassName={VALUE_PART}>
-					{metrics.openedAt === null ? (
-						<span className="text-text-muted">{DASH}</span>
-					) : (
-						<span title="Период конструкции с длительностью">
-							{formatDay(metrics.openedAt)}
-							{metrics.closedAt !== null ? ` — ${formatDay(metrics.closedAt)}` : " — …"}{" "}
-							<span className="text-text-muted">
-								({metrics.durationSeconds === null ? "" : formatDuration(metrics.durationSeconds)})
+					<Metric
+						label="общий P&L"
+						valueClassName={`tabular-nums ${VALUE_TOTAL} ${toneClass(metrics.totalPnL ?? 0)}`}
+					>
+						{metrics.totalPnL === null ? (
+							// Итог без нереализованной части неполный — признак сбоя марок.
+							<span className="text-text-muted" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя котировок">
+								неполный (сбой котировок)
 							</span>
-						</span>
-					)}
-				</Metric>
+						) : (
+							`${formatSignedAmount(metrics.totalPnL)} USDT`
+						)}
+					</Metric>
+					<Metric
+						label={`% капитала${card.allocatedCapitalUsdt !== null ? ` (${formatAmount(card.allocatedCapitalUsdt)})` : ""}`}
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.totalPnLPercent ?? 0)}`}
+					>
+						{metrics.totalPnLPercent === null ? (
+							<span className="text-text-muted">{DASH}</span>
+						) : (
+							formatSignedPercent(metrics.totalPnLPercent)
+						)}
+					</Metric>
+					<Metric
+						label="стоимость"
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.markValue ?? 0)}`}
+					>
+						{card.hasOpenResidual === false ? (
+							<span className="text-text-muted" title="Открытых остатков нет — стоимости нет">
+								{DASH}
+							</span>
+						) : metrics.markValue === null ? (
+							<span className="text-text-muted" title="Провайдер котировок недоступен — стоимость не оценена">
+								сбой котировок
+							</span>
+						) : (
+							formatSignedAmount(metrics.markValue)
+						)}
+					</Metric>
+					<Metric
+						label="занято капитала, %"
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.capitalUsagePercent ?? 0)}`}
+					>
+						{metrics.capitalUsagePercent === null ? (
+							<span className="text-text-muted">{DASH}</span>
+						) : (
+							formatSignedPercent(metrics.capitalUsagePercent)
+						)}
+					</Metric>
+					<Metric
+						label="реализ. P&L"
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.realizedPnL)}`}
+					>
+						{formatSignedAmount(metrics.realizedPnL)}
+					</Metric>
+					<Metric
+						label="нереализ. P&L"
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.unrealizedPnL ?? 0)}`}
+					>
+						{card.hasMarkFailure ? (
+							<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
+								сбой котировок
+							</span>
+						) : (
+							formatSignedAmount(metrics.unrealizedPnL ?? 0)
+						)}
+					</Metric>
+					<Metric
+						label="корректировки"
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.adjustmentsPnL)}`}
+					>
+						{metrics.adjustmentsPnL === 0 ? DASH : formatSignedAmount(metrics.adjustmentsPnL)}
+					</Metric>
+					<Metric label="котировки на" valueClassName={VALUE_PART}>
+						{card.hasMarkFailure ? (
+							<span className="text-text-muted" title="Провайдер котировок недоступен — время получения котировок неизвестно">
+								сбой котировок
+							</span>
+						) : card.hasOpenResidual === false ? (
+							<span className="text-text-muted" title="Открытых остатков нет — котировки оценке не нужны">
+								не нужны
+							</span>
+						) : (
+							(card.marksAsOf === null ? DASH : formatMoment(card.marksAsOf))
+						)}
+					</Metric>
+					<Metric label="период" valueClassName={VALUE_PART}>
+						{metrics.openedAt === null ? (
+							<span className="text-text-muted">{DASH}</span>
+						) : (
+							<span title="Период конструкции с длительностью">
+								{formatDay(metrics.openedAt)}
+								{metrics.closedAt !== null ? ` — ${formatDay(metrics.closedAt)}` : " — …"}{" "}
+								<span className="text-text-muted">
+									({metrics.durationSeconds === null ? "" : formatDuration(metrics.durationSeconds)})
+								</span>
+							</span>
+						)}
+					</Metric>
 				</div>
 
 				{syntheticLegs.length > 0 && (
 					<>
-							{/* Разделитель строки синтетики от метрик — линия по мастеру h69OG. */}
-							<div className="h-px bg-divider" />
-							{/* Строка «зафиксировано синтетикой» (мастер Z5uVG): подпись 11
-							    textMuted с трекингом 0.3, величина лока к экспирации 14/600
-							    акцентом знака, логический размер ноги 12 textSecondary.
-							    Величина не пересчитывает «Реализованный результат» и
-							    индикатор финрезультата — те остаются инструментальными. */}
-							{/* Traceability: openspec:ui/screens#requirement-detail-synthetic-close-line */}
-							<div data-slot="synthetic-locked-line" className="flex flex-wrap items-center gap-2.5">
-								<span className="text-[11px] tracking-[0.3px] text-text-muted">
-									зафиксировано синтетикой
-								</span>
-								<span
-									data-slot="synthetic-locked-value"
-									className={cn("tabular-nums text-[14px] font-semibold", toneClass(syntheticLockedUsdt))}
-								>
-									{`${formatSignedAmount(syntheticLockedUsdt)} USDT`}
-								</span>
-								<span data-slot="synthetic-locked-legs" className="text-[12px] text-text-secondary">
-									{syntheticLegs
-										.map((leg) => `${leg.symbol} · нога ${formatAmount(leg.residual)} → ${formatAmount(leg.logicalResidual)}`)
-										.join(" · ")}
-								</span>
-							</div>
+						{/* Разделитель строки синтетики от метрик — линия по мастеру h69OG. */}
+						<div className="h-px bg-divider" />
+						{/* Строка «зафиксировано синтетикой» (мастер Z5uVG): подпись 11
+						    textMuted с трекингом 0.3, величина лока к экспирации 14/600
+						    акцентом знака, логический размер ноги 12 textSecondary.
+						    Величина не пересчитывает «Реализованный результат» и
+						    индикатор финрезультата — те остаются инструментальными. */}
+						{/* Traceability: openspec:ui/screens#requirement-detail-synthetic-close-line */}
+						<div data-slot="synthetic-locked-line" className="flex flex-wrap items-center gap-2.5">
+							<span className="text-[11px] tracking-[0.3px] text-text-muted">
+								зафиксировано синтетикой
+							</span>
+							<span
+								data-slot="synthetic-locked-value"
+								className={cn("tabular-nums text-[14px] font-semibold", toneClass(syntheticLockedUsdt))}
+							>
+								{`${formatSignedAmount(syntheticLockedUsdt)} USDT`}
+							</span>
+							<span data-slot="synthetic-locked-legs" className="text-[12px] text-text-secondary">
+								{syntheticLegs
+									.map((leg) => `${leg.symbol} · нога ${formatAmount(leg.residual)} → ${formatAmount(leg.logicalResidual)}`)
+									.join(" · ")}
+							</span>
+						</div>
 					</>
 				)}
 			</div>

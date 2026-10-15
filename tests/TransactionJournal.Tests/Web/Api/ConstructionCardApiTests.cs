@@ -3,6 +3,7 @@ namespace TransactionJournal.Tests.Web.Api;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -17,6 +18,9 @@ using TransactionJournal.Application.Materialization;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.Data;
+using TransactionJournal.Infrastructure.Data;
+using TransactionJournal.Infrastructure.ReadModels;
+using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -651,6 +655,78 @@ public sealed class ConstructionCardApiTests
 		}
 
 		[TestMethod]
+		[Description("Спор и возврат связки выполняются командами по паре execId")]
+		// Пользовательский путь спора: связка оспаривается из карточки и
+		// возвращается явным действием — команды доносят пару execId сервису
+		// спора, успех отвечает 204 без тела.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+		public async Task TryIfDisputeAndRevertRunDisputeCommands()
+		{
+			// Arrange: записывающий сервис споров.
+			var disputes = new RecordingSyntheticCloseDisputeService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceSyntheticCloseDisputeService(disputes));
+			using var client = factory.CreateClient();
+
+			// Act: спор и возврат по одной паре execId.
+			var dispute = await client.PostAsJsonAsync("/api/v1/constructions/7/synthetic-closes/dispute", new
+			{
+				linearExecId = "case-perp",
+				counterOptionExecId = "case-call",
+			});
+			var revert = await client.PostAsJsonAsync("/api/v1/constructions/7/synthetic-closes/revert", new
+			{
+				linearExecId = "case-perp",
+				counterOptionExecId = "case-call",
+			});
+
+			// Assert: команды приняты и дошли сервису с парой execId конструкции.
+			Assert.That(dispute.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(revert.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			Assert.That(disputes.Disputed, Is.EqualTo(new[] { (7L, "case-perp", "case-call") }));
+			Assert.That(disputes.Reverted, Is.EqualTo(new[] { (7L, "case-perp", "case-call") }));
+		}
+
+		[TestMethod]
+		[Description("Спор и возврат отказывают: неизвестная конструкция и повторный возврат — 404 с причиной, пустые ключи — 400")]
+		// Отказы домена до пользователя причиной: чужая конструкция — 404,
+		// возврат неоспоренной пары — 404 с текстом домена, пустые execId
+		// отсекаются до вызова сервиса — 400 без записи команды.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+		public async Task ThrowOnDisputeValidationReturns404And400()
+		{
+			// Arrange: записывающий сервис споров.
+			var disputes = new RecordingSyntheticCloseDisputeService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceSyntheticCloseDisputeService(disputes));
+			using var client = factory.CreateClient();
+
+			// Act: спор чужой конструкции, спор с пустым ключом и возврат неоспоренной пары.
+			var unknown = await client.PostAsJsonAsync("/api/v1/constructions/999/synthetic-closes/dispute", new
+			{
+				linearExecId = "case-perp",
+				counterOptionExecId = "case-call",
+			});
+			var empty = await client.PostAsJsonAsync("/api/v1/constructions/7/synthetic-closes/dispute", new
+			{
+				linearExecId = "  ",
+				counterOptionExecId = "case-call",
+			});
+			var doubleRevert = await client.PostAsJsonAsync("/api/v1/constructions/7/synthetic-closes/revert", new
+			{
+				linearExecId = "case-perp",
+				counterOptionExecId = "case-call",
+			});
+			var reason = await doubleRevert.Content.ReadAsStringAsync();
+
+			// Assert: состояния отказа и отсутствие записанных команд.
+			Assert.That(unknown.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+			Assert.That(empty.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+			Assert.That(doubleRevert.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+			Assert.That(reason, Does.Contain("не найдена"), "Пользователь видит, какой пары в спорах нет");
+			Assert.That(disputes.Disputed, Is.Empty, "Отклонённые команды до сервиса не доходят");
+			Assert.That(disputes.Reverted, Is.Empty);
+		}
+
+		[TestMethod]
 		[Description("OpenAPI-документ содержит эндпоинты карточки конструкции")]
 		// Контракт карточки публикуется в OpenAPI: документ отражает фактические
 		// эндпоинты, пригоден для ревью контрактов и генерации клиента SPA.
@@ -671,8 +747,158 @@ public sealed class ConstructionCardApiTests
 			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/close-marks"));
 			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/move-targets"));
 			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/adjustments"));
+			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/synthetic-closes/dispute"));
+			Assert.That(paths, Does.Contain("/api/v1/constructions/{constructionId}/synthetic-closes/revert"));
 			Assert.That(paths, Does.Contain("/api/v1/trades/{execId}/return-to-inbox"));
 			Assert.That(paths, Does.Contain("/api/v1/adjustments/{adjustmentId}"));
+		}
+
+		private const string XautCall = "XAUT-30OCT26-4400-C-USDT";
+
+		private const string XautPut = "XAUT-30OCT26-4400-P-USDT";
+
+		private const string XautPerp = "XAUTUSDT";
+
+		private static readonly DateTimeOffset XautFetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+		[TestMethod]
+		[Description("Спор связки из карточки скрывает её из логического слоя, возврат возвращает")]
+		// Сквозной пользовательский путь: спор по паре execId скрывает связку
+		// из логического слоя карточки (строка остаётся с признаком спора,
+		// распад остатка уходит), возврат снова включает связку.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+		// Спор скрыт из логического слоя карточки при ближайшем чтении.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
+		public async Task TryIfDisputeHidesLogicalLinkAndRevertRestoresIt()
+		{
+			// Arrange: хост с реальной read-моделью и стабильными свежими марками
+			// без сети; сырьё и доменные записи кейса XAUT сеются в базу хоста.
+			var marksAt = new DateTimeOffset(2026, 10, 15, 16, 0, 0, TimeSpan.Zero);
+			await using var factory = new SectionApiFactory(services =>
+				services.ReplaceFreshInstrumentMarkSource(new StubFreshMarkSource(4300m, marksAt)));
+			using var client = factory.CreateClient();
+			// Миграции применяются явно до сеяния: таблицы сырья и домена
+			// должны существовать независимо от момента старта хоста.
+			using (var db = new JournalDbContext(OptionsFor(factory.DatabasePath)))
+			{
+				db.Database.Migrate();
+			}
+
+			SeedXautCase(factory.DatabasePath);
+			var constructionId = await SeedXautConstructionAsync(factory.DatabasePath);
+
+			// Act: карточка до спора, спор по паре execId, чтения после спора и возврата.
+			var before = await client.GetAsync($"/api/v1/constructions/{constructionId}");
+			var beforePayload = await before.Content.ReadFromJsonAsync<JsonNode>();
+			var dispute = await client.PostAsJsonAsync($"/api/v1/constructions/{constructionId}/synthetic-closes/dispute", new
+			{
+				linearExecId = "case-perp",
+				counterOptionExecId = "case-call",
+			});
+			var hidden = await client.GetAsync($"/api/v1/constructions/{constructionId}");
+			var hiddenPayload = await hidden.Content.ReadFromJsonAsync<JsonNode>();
+			var revert = await client.PostAsJsonAsync($"/api/v1/constructions/{constructionId}/synthetic-closes/revert", new
+			{
+				linearExecId = "case-perp",
+				counterOptionExecId = "case-call",
+			});
+			var restored = await client.GetAsync($"/api/v1/constructions/{constructionId}");
+			var restoredPayload = await restored.Content.ReadFromJsonAsync<JsonNode>();
+
+			// Assert: до спора связка видна с распадом 0.3.
+			Assert.That(before.StatusCode, Is.EqualTo(HttpStatusCode.OK), await before.Content.ReadAsStringAsync());
+			var closesBefore = beforePayload!["syntheticCloses"]!.AsArray();
+			Assert.That(closesBefore, Has.Count.EqualTo(1));
+			Assert.That(closesBefore.Single()!["disputed"]!.GetValue<bool>(), Is.False);
+			var perpBefore = beforePayload["positions"]!.AsArray()
+				.Single(node => node!["symbol"]!.GetValue<string>() == XautPerp)!;
+			Assert.That(perpBefore["syntheticResidual"]!.GetValue<decimal>(), Is.EqualTo(0.3m));
+			// Непривязанный scalp-perp остаётся «прочим» остатком позиции перпа.
+			Assert.That(perpBefore["otherResidual"]!.GetValue<decimal>(), Is.EqualTo(0.04m));
+
+			// Спор принят: строка остаётся с признаком спора, логический слой
+			// карточки связку теряет — распад остатка не показывается.
+			Assert.That(dispute.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			var closesHidden = hiddenPayload!["syntheticCloses"]!.AsArray();
+			Assert.That(closesHidden, Has.Count.EqualTo(1));
+			Assert.That(closesHidden.Single()!["disputed"]!.GetValue<bool>(), Is.True);
+			var perpHidden = hiddenPayload["positions"]!.AsArray()
+				.Single(node => node!["symbol"]!.GetValue<string>() == XautPerp)!;
+			Assert.That(perpHidden["syntheticResidual"], Is.Null);
+			Assert.That(perpHidden["otherResidual"], Is.Null);
+
+			// Возврат возвращает связку в логический слой без повторного спора.
+			Assert.That(revert.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+			var closesRestored = restoredPayload!["syntheticCloses"]!.AsArray();
+			Assert.That(closesRestored, Has.Count.EqualTo(1));
+			Assert.That(closesRestored.Single()!["disputed"]!.GetValue<bool>(), Is.False);
+			var perpRestored = restoredPayload["positions"]!.AsArray()
+				.Single(node => node!["symbol"]!.GetValue<string>() == XautPerp)!;
+			Assert.That(perpRestored["syntheticResidual"]!.GetValue<decimal>(), Is.EqualTo(0.3m));
+		}
+
+		/// <summary>Миллисекунды канонического UTC-времени для сырых записей биржи.</summary>
+		private static long ExecMs(int year, int month, int day, int hour, int minute) =>
+			new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+		/// <summary>Параметры прямого доступа к базе хоста для сеяния сырья и доменных записей.</summary>
+		private static DbContextOptions<JournalDbContext> OptionsFor(string databasePath) =>
+			new DbContextOptionsBuilder<JournalDbContext>()
+				.UseSqlite($"Data Source={databasePath}")
+				.Options;
+
+		/// <summary>Спецификация опциона кейса XAUT с каноническим временем доставки 08:00 UTC.</summary>
+		private static RawInstrument XautOptionInstrument(string symbol, string optionsType) => new()
+		{
+			Symbol = symbol,
+			Category = "option",
+			PayloadJson = $$"""{"symbol":"{{symbol}}","baseCoin":"XAUT","quoteCoin":"USDT","settleCoin":"USDT","status":"Trading","optionsType":"{{optionsType}}","deliveryTime":"{{ExecMs(2026, 10, 30, 8, 0)}}","deliveryFeeRate":"0.00015"}""",
+			FetchedAt = XautFetchedAt,
+		};
+
+		/// <summary>Сырое исполнение кейса XAUT; числа биржа шлёт строками.</summary>
+		private static RawExecution XautExecution(string execId, string symbol, string category, string side, string execQty, string execPrice, string execFee, long execTimeMs) => new()
+		{
+			ExecId = execId,
+			Category = category,
+			Symbol = symbol,
+			ExecTimeMs = execTimeMs,
+			PayloadJson = $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"Trade","execTime":"{{execTimeMs}}","feeCurrency":"USDC","isMaker":false}""",
+			FetchedAt = XautFetchedAt,
+		};
+
+		/// <summary>Сеет справочник и сырые исполнения эталонного кейса XAUT в базу хоста.</summary>
+		private static void SeedXautCase(string databasePath)
+		{
+			using var db = new JournalDbContext(OptionsFor(databasePath));
+			db.RawInstruments.Add(XautOptionInstrument(XautPut, "Put"));
+			db.RawInstruments.Add(XautOptionInstrument(XautCall, "Call"));
+			db.RawInstruments.Add(new RawInstrument
+			{
+				Symbol = XautPerp,
+				Category = "linear",
+				PayloadJson = """{"symbol":"XAUTUSDT","contractType":"LinearPerpetual","status":"Trading","baseCoin":"XAUT","quoteCoin":"USDT","settleCoin":"USDT","deliveryTime":"0","optionsType":""}""",
+				FetchedAt = XautFetchedAt,
+			});
+			db.RawExecutions.Add(XautExecution("open-put", XautPut, "option", "Buy", "0.5", "139", "1.5", ExecMs(2026, 9, 30, 12, 0)));
+			db.RawExecutions.Add(XautExecution("open-call", XautCall, "option", "Buy", "0.5", "12", "0.6", ExecMs(2026, 9, 30, 12, 5)));
+			db.RawExecutions.Add(XautExecution("case-perp", XautPerp, "linear", "Buy", "0.3", "4141.91", "0.55", ExecMs(2026, 10, 15, 13, 0)));
+			db.RawExecutions.Add(XautExecution("case-call", XautCall, "option", "Sell", "0.3", "5.9", "0.35", ExecMs(2026, 10, 15, 13, 4)));
+			db.RawExecutions.Add(XautExecution("scalp-perp", XautPerp, "linear", "Buy", "0.04", "4200", "0.09", ExecMs(2026, 10, 15, 15, 0)));
+			db.SaveChanges();
+		}
+
+		/// <summary>Создаёт конструкцию стрэддла XAUT и привязывает пять сделок кейса; возвращает идентификатор.</summary>
+		private static async Task<long> SeedXautConstructionAsync(string databasePath)
+		{
+			var options = OptionsFor(databasePath);
+			var construction = await new ConstructionService(options)
+				.CreateAsync("XAUT стреддл 30OCT26 4400", 100m)
+				.ConfigureAwait(false);
+			await new TradeBindingService(options)
+				.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"])
+				.ConfigureAwait(false);
+			return construction.Id;
 		}
 }
 
@@ -1005,11 +1231,69 @@ internal sealed class RecordingCloseMarkService : IManualCloseMarkService
 		Task.FromResult<IReadOnlyList<ManualCloseMark>>([]);
 }
 
+/// <summary>Записывающий сервис споров связок: фиксирует команды и повторяет отказы домена.</summary>
+internal sealed class RecordingSyntheticCloseDisputeService : ISyntheticCloseDisputeService
+{
+	/// <summary>Вызовы спора: конструкция и пара execId (не меняется при возврате).</summary>
+	public IReadOnlyList<(long ConstructionId, string LinearExecId, string CounterOptionExecId)> Disputed => _disputeCalls;
+
+	/// <summary>Вызовы возврата: конструкция и пара execId.</summary>
+	public IReadOnlyList<(long ConstructionId, string LinearExecId, string CounterOptionExecId)> Reverted => _reverted;
+
+	private readonly List<(long ConstructionId, string LinearExecId, string CounterOptionExecId)> _disputeCalls = [];
+
+	private readonly List<(long ConstructionId, string LinearExecId, string CounterOptionExecId)> _reverted = [];
+
+	private readonly HashSet<(long ConstructionId, string LinearExecId, string CounterOptionExecId)> _activeDisputes = [];
+
+	public Task DisputeAsync(long constructionId, string linearExecId, string counterOptionExecId, CancellationToken cancellationToken = default)
+	{
+		EnsureKnownConstruction(constructionId);
+		ArgumentException.ThrowIfNullOrWhiteSpace(linearExecId);
+		ArgumentException.ThrowIfNullOrWhiteSpace(counterOptionExecId);
+		var pair = (constructionId, linearExecId, counterOptionExecId);
+		_disputeCalls.Add(pair);
+		_activeDisputes.Add(pair);
+		return Task.CompletedTask;
+	}
+
+	public Task RevertAsync(long constructionId, string linearExecId, string counterOptionExecId, CancellationToken cancellationToken = default)
+	{
+		EnsureKnownConstruction(constructionId);
+		ArgumentException.ThrowIfNullOrWhiteSpace(linearExecId);
+		ArgumentException.ThrowIfNullOrWhiteSpace(counterOptionExecId);
+		var pair = (constructionId, linearExecId, counterOptionExecId);
+		if (_activeDisputes.Remove(pair) == false)
+		{
+			// Возврат неоспоренной пары — отказ домена с причиной, как в реальном сервисе.
+			throw new SyntheticCloseDisputeNotFoundException(constructionId, linearExecId, counterOptionExecId);
+		}
+
+		_reverted.Add(pair);
+		return Task.CompletedTask;
+	}
+
+	private static void EnsureKnownConstruction(long constructionId)
+	{
+		if (constructionId != 7L)
+		{
+			throw new ConstructionNotFoundException(constructionId);
+		}
+		}
+	}
+
 /// <summary>Стабильный источник марок: одна известная марка инструмента.</summary>
 internal sealed class StubInstrumentMarkSource(decimal? mark) : IInstrumentMarkSource
 {
 	public Task<decimal?> GetLastMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
 		Task.FromResult(mark);
+}
+
+/// <summary>Заглушка свежих марок: каждая марка приходит без сети в фиксированный момент.</summary>
+internal sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt) : IFreshInstrumentMarkSource
+{
+	public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
+		Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, markPrice, receivedAt));
 }
 
 /// <summary>Помощники подмены сервисов карточки стабильными заглушками.</summary>
@@ -1055,6 +1339,18 @@ internal static class CardApiServiceExtensions
 	public static IServiceCollection ReplaceInstrumentMarkSource(this IServiceCollection services, IInstrumentMarkSource markSource)
 	{
 		return Replace(services, markSource);
+	}
+
+	/// <summary>Заменяет регистрацию источника свежих марок стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceFreshInstrumentMarkSource(this IServiceCollection services, IFreshInstrumentMarkSource freshMarkSource)
+	{
+		return Replace(services, freshMarkSource);
+	}
+
+	/// <summary>Заменяет регистрацию сервиса споров связок стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceSyntheticCloseDisputeService(this IServiceCollection services, ISyntheticCloseDisputeService disputeService)
+	{
+		return Replace(services, disputeService);
 	}
 
 	private static IServiceCollection Replace<TService>(IServiceCollection services, TService replacement)

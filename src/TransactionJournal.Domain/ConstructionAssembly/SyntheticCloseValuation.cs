@@ -11,8 +11,10 @@ namespace TransactionJournal.Domain.ConstructionAssembly;
 /// входа. Все величины в USDT: комиссии опционных сделок USDC приведены
 /// к USDT паритетом 1:1 ещё при материализации.
 /// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-locked-value
-/// Traceability: adr:docs/adr/0001-usdc-usdt-parity.md#usdc-usdt-parity-1-1
 /// </summary>
+// Комиссии опционов USDC приведены к USDT по решению ADR-0001:
+// секция последствий фиксирует применение паритета при материализации.
+// Traceability: adr:docs/adr/0001-usdc-usdt-parity.md#consequences
 public sealed record SyntheticCloseValuation
 {
 	/// <summary>Цена линейной сделки связки — база внутренней стоимости к экспирации.</summary>

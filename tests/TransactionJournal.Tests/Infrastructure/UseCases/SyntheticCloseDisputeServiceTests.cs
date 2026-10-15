@@ -79,7 +79,7 @@ public class SyntheticCloseDisputeServiceTests
 		// Act: оспариваем связку и фильтруем распознанный прогон списком споров.
 		await _disputeService.DisputeAsync(construction.Id, "case-perp", "case-call");
 		var filteredWhileDisputed = SyntheticCloseDisputeFilter.ExcludeDisputed(
-			links, await _disputeService.ListAsync(construction.Id));
+			links, ReadDisputes(construction.Id));
 
 		// Assert: спорная связка скрыта из логического слоя.
 		Assert.That(filteredWhileDisputed, Is.Empty, "Спорная связка исключена из распознавания");
@@ -87,7 +87,7 @@ public class SyntheticCloseDisputeServiceTests
 		// Act: возвращаем связку и фильтруем снова.
 		await _disputeService.RevertAsync(construction.Id, "case-perp", "case-call");
 		var filteredAfterRevert = SyntheticCloseDisputeFilter.ExcludeDisputed(
-			links, await _disputeService.ListAsync(construction.Id));
+			links, ReadDisputes(construction.Id));
 
 		// Assert: связка вернулась — споров нет, распознавание видит её опять.
 		Assert.That(filteredAfterRevert.Select(link => link.LinearExecId), Is.EqualTo(new[] { "case-perp" }));
@@ -103,8 +103,8 @@ public class SyntheticCloseDisputeServiceTests
 		// Act: оспариваем связку.
 		await _disputeService.DisputeAsync(construction.Id, "case-perp", "case-call");
 
-		// Assert: запись возвращает пару связки и время фиксированного поставщика.
-		var dispute = (await _disputeService.ListAsync(construction.Id)).Single();
+		// Assert: запись хранит пару связки и время фиксированного поставщика.
+		var dispute = ReadDisputes(construction.Id).Single();
 		Assert.That(dispute.ConstructionId, Is.EqualTo(construction.Id));
 		Assert.That(dispute.LinearExecId, Is.EqualTo("case-perp"));
 		Assert.That(dispute.CounterOptionExecId, Is.EqualTo("case-call"));
@@ -121,35 +121,17 @@ public class SyntheticCloseDisputeServiceTests
 		// Arrange: конструкция и первое оспаривание.
 		var construction = await _constructionService.CreateAsync("XAUT стреддл 30OCT26 4400", 100m);
 		await _disputeService.DisputeAsync(construction.Id, "case-perp", "case-call");
-		var first = (await _disputeService.ListAsync(construction.Id)).Single();
+		var first = ReadDisputes(construction.Id).Single();
 
 		// Act: второе оспаривание той же пары через час по фиксированным часам.
 		_timeProvider.UtcNow = _timeProvider.UtcNow.AddHours(1);
 		await _disputeService.DisputeAsync(construction.Id, "case-perp", "case-call");
 
 		// Assert: запись осталась прежней — одна, с исходным моментом.
-		var disputes = await _disputeService.ListAsync(construction.Id);
+		var disputes = ReadDisputes(construction.Id);
 		Assert.That(disputes, Has.Count.EqualTo(1), "Спор связки не задублирован");
 		Assert.That(disputes[0].Id, Is.EqualTo(first.Id));
 		Assert.That(disputes[0].DisputedAt, Is.EqualTo(first.DisputedAt), "Момент оспаривания не переписан");
-	}
-
-	[TestMethod]
-	[Description("Список споров конструкции отсортирован по моменту оспаривания")]
-	public async Task TryIfListSortedByDisputedAt()
-	{
-		// Arrange: конструкция и два спора с разным временем по фиксированным часам.
-		var construction = await _constructionService.CreateAsync("XAUT стреддл 30OCT26 4400", 100m);
-		await _disputeService.DisputeAsync(construction.Id, "later-perp", "later-call");
-		_timeProvider.UtcNow = _timeProvider.UtcNow.AddHours(1);
-		await _disputeService.DisputeAsync(construction.Id, "earlier-perp", "earlier-call");
-
-		// Act: читаем список споров.
-		var disputes = await _disputeService.ListAsync(construction.Id);
-
-		// Assert: порядок следует моменту оспаривания, а не порядку вставки.
-		Assert.That(disputes.Select(dispute => dispute.LinearExecId),
-			Is.EqualTo(new[] { "later-perp", "earlier-perp" }));
 	}
 
 	[TestMethod]
@@ -207,15 +189,6 @@ public class SyntheticCloseDisputeServiceTests
 	}
 
 	[TestMethod]
-	[Description("Чтение споров неизвестной конструкции отказывает")]
-	[ExpectedException(typeof(ConstructionNotFoundException))]
-	public async Task ThrowOnListUnknownConstruction()
-	{
-		// Arrange — Act: список споров несуществующей конструкции.
-		await _disputeService.ListAsync(999);
-	}
-
-	[TestMethod]
 	[Description("Null-опции контекста отклоняются конструктором")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnNullOptions()
@@ -230,6 +203,20 @@ public class SyntheticCloseDisputeServiceTests
 		new DbContextOptionsBuilder<JournalDbContext>()
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
+
+	/// <summary>
+	/// Читает записи споров конструкции напрямую из хранилища: сервис спорами
+	/// только командует, наблюдение результата делается по данным базы.
+	/// </summary>
+	private List<SyntheticCloseDispute> ReadDisputes(long constructionId)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		return db.SyntheticCloseDisputes
+			.AsNoTracking()
+			.Where(dispute => dispute.ConstructionId == constructionId)
+			.OrderBy(dispute => dispute.Id)
+			.ToList();
+	}
 
 	/// <summary>Связка кейса 15.10.2026: покупка 0.3 XAUTUSDT и продажа 0.3 колла 4400.</summary>
 	private static SyntheticCloseLink RecognizedXautLink() => new()

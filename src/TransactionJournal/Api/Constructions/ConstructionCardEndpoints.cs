@@ -309,6 +309,49 @@ public static class ConstructionCardEndpoints
 				errorPrefix: "Удаление корректировки не выполнено");
 		});
 
+		// Оспаривание распознанной связки: спор по паре execId скрывает связку
+		// из логического слоя до явного возврата — карточка показывает её
+		// строкой с признаком спора.
+		// Команды спора идут через единый версионированный API.
+		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		// Спор — пользовательский путь требования оспаривания: связка
+		// оспаривается из карточки и возвращается явным действием.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+		group.MapPost("/{constructionId:long}/synthetic-closes/dispute", async (
+			long constructionId,
+			DisputeSyntheticCloseRequest request,
+			ISyntheticCloseDisputeService disputes,
+			CancellationToken cancellationToken) =>
+		{
+			if (string.IsNullOrWhiteSpace(request.LinearExecId) || string.IsNullOrWhiteSpace(request.CounterOptionExecId))
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+			}
+
+			return await RunDisputeCommand(
+				() => disputes.DisputeAsync(constructionId, request.LinearExecId.Trim(), request.CounterOptionExecId.Trim(), cancellationToken),
+				errorPrefix: "Оспаривание не выполнено");
+		});
+
+		// Возврат оспоренной связки: запись спора удаляется, и связка снова
+		// входит в логический слой ближайшим чтением карточки.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+		group.MapPost("/{constructionId:long}/synthetic-closes/revert", async (
+			long constructionId,
+			DisputeSyntheticCloseRequest request,
+			ISyntheticCloseDisputeService disputes,
+			CancellationToken cancellationToken) =>
+		{
+			if (string.IsNullOrWhiteSpace(request.LinearExecId) || string.IsNullOrWhiteSpace(request.CounterOptionExecId))
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+			}
+
+			return await RunDisputeCommand(
+				() => disputes.RevertAsync(constructionId, request.LinearExecId.Trim(), request.CounterOptionExecId.Trim(), cancellationToken),
+				errorPrefix: "Возврат связки не выполнен");
+		});
+
 		// Цели переноса сделки: активные конструкции без текущей — лёгкий
 		// список для формы «Перенести…» без метрик.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
@@ -687,6 +730,39 @@ public static class ConstructionCardEndpoints
 		return Results.NoContent();
 	}
 
+	/// <summary>
+	/// Выполняет команду спора связки с единой обработкой отказов: неизвестная
+	/// конструкция — 404, возврат неоспоренной пары — 404 с причиной домена,
+	/// ошибка ввода — 400, прочие сбои — 500 с текстом причины.
+	/// </summary>
+	private static async Task<IResult> RunDisputeCommand(Func<Task> action, string errorPrefix)
+	{
+		try
+		{
+			await action();
+		}
+		catch (ConstructionNotFoundException)
+		{
+			return Results.Json(new ConstructionCardErrorResponse("Конструкция не найдена — возможно, удалена."), statusCode: StatusCodes.Status404NotFound);
+		}
+		catch (SyntheticCloseDisputeNotFoundException exception)
+		{
+			// Повторный возврат неоспоренной связки — ошибка состояния:
+			// пользователь видит, какой пары в спорах нет.
+			return Results.Json(new ConstructionCardErrorResponse(exception.Message), statusCode: StatusCodes.Status404NotFound);
+		}
+		catch (ArgumentException)
+		{
+			return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+		}
+		catch (Exception exception)
+		{
+			return Results.Json(new ConstructionCardErrorResponse($"{errorPrefix}: {exception.Message}"), statusCode: StatusCodes.Status500InternalServerError);
+		}
+
+		return Results.NoContent();
+	}
+
 	/// <summary>Стабильная строка статуса конструкции в контракте API.</summary>
 	private static string SerializeStatus(ConstructionStatus status) => status switch
 	{
@@ -1004,3 +1080,8 @@ public sealed record SaveAdjustmentRequest(
 	string Source,
 	decimal AmountUsdt,
 	string? Description);
+
+/// <summary>Запрос оспаривания или возврата синтетической связки.</summary>
+/// <param name="LinearExecId">Биржевой идентификатор линейного исполнения связки.</param>
+/// <param name="CounterOptionExecId">Биржевой идентификатор встречного опционного исполнения связки.</param>
+public sealed record DisputeSyntheticCloseRequest(string LinearExecId, string CounterOptionExecId);

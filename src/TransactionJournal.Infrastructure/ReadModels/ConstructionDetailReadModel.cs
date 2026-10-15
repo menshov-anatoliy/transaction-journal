@@ -305,14 +305,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	{
 		// Спор — команда пользователя, read-модель только читает перечень споров
 		// напрямую: сервис спора владеет командным сценарием и здесь не используется.
-		var disputedKeys = (await db.SyntheticCloseDisputes
-				.AsNoTracking()
-				.Where(dispute => dispute.ConstructionId == constructionId)
-				.Select(dispute => new { dispute.LinearExecId, dispute.CounterOptionExecId })
-				.ToListAsync(cancellationToken)
-				.ConfigureAwait(false))
-			.Select(dispute => (dispute.LinearExecId, dispute.CounterOptionExecId))
-			.ToHashSet();
+		var disputes = await db.SyntheticCloseDisputes
+			.AsNoTracking()
+			.Where(dispute => dispute.ConstructionId == constructionId)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
 
 		// Поток привязанных сделок повторяет вход сборки: материализованная сделка
 		// переносится в запись исполнения теми же полями, время — из DateTimeOffset.
@@ -326,23 +323,32 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				SignedQuantity = trade.Quantity,
 			})
 			.ToArray();
+		var links = SyntheticCloseRecognizer.Recognize(assemblies);
+		// Правило «спор скрывает связку» едино в чистом фильтре домена:
+		// его неоспоренный прогон определяет, какие связки двигают логический слой.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
+		var logicalKeys = SyntheticCloseDisputeFilter.ExcludeDisputed(links, disputes)
+			.Select(link => (link.LinearExecId, link.CounterOptionExecId))
+			.ToHashSet();
+		var disputedKeys = disputes
+			.Select(dispute => (dispute.LinearExecId, dispute.CounterOptionExecId))
+			.ToHashSet();
 		var rows = new List<SyntheticCloseRow>();
 		var quantityByLinearSymbol = new Dictionary<string, decimal>(StringComparer.Ordinal);
-		foreach (var link in SyntheticCloseRecognizer.Recognize(assemblies))
+		foreach (var link in links)
 		{
-			var linearExecId = link.LinearExecId;
-			var counterExecId = link.CounterOptionExecId;
-			var disputed = disputedKeys.Contains((linearExecId, counterExecId));
+			var key = (link.LinearExecId, link.CounterOptionExecId);
 			var valuation = SyntheticCloseValuationOf(link, boundTrades);
 			var lockedValue = SyntheticCloseValuationCalculator.CalculateToExpiry(link, valuation);
 			// Лок спорной связки не выходит из строки: величина показывается
 			// с признаком спора, логический слой ноги спорной связкой не трогается.
 			// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-locked-value-marks-failure-independent
-			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, disputed));
-			if (disputed == false)
+			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, disputedKeys.Contains(key)));
+			if (logicalKeys.Contains(key))
 			{
-				quantityByLinearSymbol[linearTradeOf(link, boundTrades).Symbol] =
-					quantityByLinearSymbol.GetValueOrDefault(linearTradeOf(link, boundTrades).Symbol) + link.Quantity;
+				var linearTrade = LinearTradeOf(link, boundTrades);
+				quantityByLinearSymbol[linearTrade.Symbol] =
+					quantityByLinearSymbol.GetValueOrDefault(linearTrade.Symbol) + link.Quantity;
 			}
 		}
 
@@ -353,7 +359,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// Линейная сделка связки по идентификатору исполнения; сделка приходит из
 	/// того же потока, по которому работал распознаватель, и потому присутствует.
 	/// </summary>
-	private static MaterializedTrade linearTradeOf(SyntheticCloseLink link, List<MaterializedTrade> boundTrades) =>
+	private static MaterializedTrade LinearTradeOf(SyntheticCloseLink link, List<MaterializedTrade> boundTrades) =>
 		boundTrades.Single(trade => trade.ExecId == link.LinearExecId);
 
 	/// <summary>
@@ -363,7 +369,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// </summary>
 	private static SyntheticCloseValuation SyntheticCloseValuationOf(SyntheticCloseLink link, List<MaterializedTrade> boundTrades)
 	{
-		var linearTrade = linearTradeOf(link, boundTrades);
+		var linearTrade = LinearTradeOf(link, boundTrades);
 		var counterTrade = boundTrades.Single(trade => trade.ExecId == link.CounterOptionExecId);
 		var legEntries = boundTrades
 			.Where(trade => trade.Symbol == link.ClosedLegSymbol)

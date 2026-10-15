@@ -127,6 +127,26 @@ public class SyntheticCloseRecognizerTests
 	}
 
 	[TestMethod]
+	[Description("Покупка встречного опциона той же доски в окне и количестве связкой не считается")]
+	// Встречный опцион в связке ac-43 только продаётся: покупка колла той же
+	// доски, окна и количества — самостоятельная сделка, нога остаётся
+	// с полным остатком.
+	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-synthetic-put-close-recognized
+	public void TryIfBoughtCounterOptionStaysUnlinked()
+	{
+		// Arrange: стреддл, покупка 0.3 фьючерса и покупка 0.3 колла рядом.
+		var executions = XautStraddleHalfLegs();
+		executions.Add(Linear("hedge-perp", XautPerp, Ms(2026, 10, 15, 14, 0), 0.3m));
+		executions.Add(Option("bought-call", XautCall4400, Ms(2026, 10, 15, 14, 4), 0.3m));
+
+		// Act: распознаём связки.
+		var links = SyntheticCloseRecognizer.Recognize(executions);
+
+		// Assert: связки нет — покупка встречного опциона не закрывает пут.
+		Assert.That(links, Is.Empty);
+	}
+
+	[TestMethod]
 	[DataRow(60, 1)]
 	[DataRow(61, 0)]
 	[Description("Связка распознаётся при зазоре ровно 60 минут и не распознаётся при большем зазоре")]

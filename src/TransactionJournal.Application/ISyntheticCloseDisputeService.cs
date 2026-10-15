@@ -26,9 +26,4 @@ public interface ISyntheticCloseDisputeService
 		string linearExecId,
 		string counterOptionExecId,
 		CancellationToken cancellationToken = default);
-
-	/// <summary>Возвращает записи оспаривания конструкции по паре execId связок.</summary>
-	Task<IReadOnlyList<SyntheticCloseDispute>> ListAsync(
-		long constructionId,
-		CancellationToken cancellationToken = default);
 }

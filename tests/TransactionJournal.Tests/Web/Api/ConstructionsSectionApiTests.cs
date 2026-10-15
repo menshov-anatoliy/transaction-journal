@@ -666,9 +666,16 @@ internal static class SectionApiServiceExtensions
 /// </summary>
 internal sealed class SectionApiFactory : WebApplicationFactory<Program>
 {
+	/// <summary>Имя переменной окружения секции Journal: попадает в конфигурацию
+	/// WebApplicationBuilder до исполнения Program, в отличие от in-memory
+	/// источников ConfigureWebHost, которые применяются уже к собранному хосту.</summary>
+	private const string DatabaseEnvironmentVariable = "ConnectionStrings__Journal";
+
 	private readonly string _databasePath = Path.Combine(
 		Path.GetDirectoryName(typeof(ConstructionsSectionApiTests).Assembly.Location)!,
 		$"journal-section-api-tests-{Guid.NewGuid():N}.db");
+
+	private readonly string? _previousDatabaseEnvironmentValue;
 
 	private readonly Action<IServiceCollection>? _configureServices;
 
@@ -680,7 +687,17 @@ internal sealed class SectionApiFactory : WebApplicationFactory<Program>
 	{
 		_configureServices = configureServices;
 		_configureConfiguration = configureConfiguration;
+		// Program читает строку подключения из builder.Configuration ещё до того,
+		// как фабрика применит свои in-memory значения к собранному хосту; без
+		// переменной окружения все доменные сервисы хоста ушли бы в базу по
+		// умолчанию из App_Data. Тесты собираются последовательно (DoNotParallelize),
+		// поэтому предыдущее значение достаточно восстановить при удалении фабрики.
+		_previousDatabaseEnvironmentValue = Environment.GetEnvironmentVariable(DatabaseEnvironmentVariable);
+		Environment.SetEnvironmentVariable(DatabaseEnvironmentVariable, $"Data Source={_databasePath}");
 	}
+
+	/// <summary>Путь временной базы SQLite хоста: тест сеет сырьё и доменные записи напрямую.</summary>
+	public string DatabasePath => _databasePath;
 
 	protected override void ConfigureWebHost(IWebHostBuilder builder)
 	{
@@ -708,6 +725,10 @@ internal sealed class SectionApiFactory : WebApplicationFactory<Program>
 		{
 			return;
 		}
+
+		// Переменная окружения базы возвращается к прежнему значению, чтобы
+		// следующие фабрики того же процесса не унаследовали эту базу.
+		Environment.SetEnvironmentVariable(DatabaseEnvironmentVariable, _previousDatabaseEnvironmentValue);
 
 		// Временная база и соседние WAL-файлы удаляются после прогона.
 		foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })

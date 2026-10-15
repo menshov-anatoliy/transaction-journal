@@ -8,8 +8,9 @@ namespace TransactionJournal.Domain.ConstructionAssembly;
 /// опционным исполнением, когда совпадает базовый актив, зазор не превышает
 /// 60 минут (та же константа окна, что в сборке), страйк и экспирация
 /// встречного опциона совпадают с открытой опционной ногой той же доски,
-/// количества равны и не превышают открытую часть ноги, а направления
-/// соответствуют правилу: закрытие длинного PUT — покупка фьючерса и продажа
+/// количества равны и не превышают открытую часть ноги, встречный опцион
+/// продаётся (его покупка связкой не считается), а направления соответствуют
+/// правилу: закрытие длинного PUT — покупка фьючерса и продажа
 /// CALL, длинного CALL — продажа фьючерса и продажа PUT. Каждое исполнение
 /// входит не более чем в одну связку; при нескольких кандидатах берётся
 /// раннее по времени, затем по execId. Прогон детерминирован: записи
@@ -157,9 +158,14 @@ public static class SyntheticCloseRecognizer
 			}
 
 			var parts = candidate.Parts;
+			// Встречный опцион в связке ac-43 только продаётся: покупка колла
+			// той же доски — самостоятельная ставка, а не закрытие длинного
+			// пута (пут закрывается покупкой фьючерса против продажи колла).
+			// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-synthetic-put-close-recognized
 			if (parts.Type != counterType
 				|| string.Equals(parts.BaseCoin, baseCoin, StringComparison.Ordinal) == false
 				|| Math.Abs(candidate.Execution.ExecTimeMs - linear.ExecTimeMs) > LinkGapMs
+				|| candidate.Execution.SignedQuantity >= 0m
 				|| decimal.Abs(candidate.Execution.SignedQuantity) != quantity)
 			{
 				continue;

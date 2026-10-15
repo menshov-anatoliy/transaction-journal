@@ -116,35 +116,6 @@ public sealed class SyntheticCloseDisputeService : ISyntheticCloseDisputeService
 
 	#endregion
 
-	#region Чтение
-
-	/// <summary>Возвращает записи оспаривания конструкции, отсортированные по моменту оспаривания.</summary>
-	/// <param name="constructionId">Идентификатор конструкции.</param>
-	/// <param name="cancellationToken">Токен отмены.</param>
-	/// <exception cref="ConstructionNotFoundException">Конструкция не найдена.</exception>
-	public async Task<IReadOnlyList<SyntheticCloseDispute>> ListAsync(
-		long constructionId,
-		CancellationToken cancellationToken = default)
-	{
-		using var db = CreateContext();
-		await EnsureConstructionExistsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
-
-		// SQLite не переводит DateTimeOffset в ORDER BY — сортировка по времени
-		// выполняется на клиенте после чтения строк.
-		var disputes = await db.SyntheticCloseDisputes
-			.AsNoTracking()
-			.Where(dispute => dispute.ConstructionId == constructionId)
-			.OrderBy(dispute => dispute.Id)
-			.ToListAsync(cancellationToken)
-			.ConfigureAwait(false);
-		return disputes
-			.OrderBy(dispute => dispute.DisputedAt)
-			.ThenBy(dispute => dispute.Id)
-			.ToList();
-	}
-
-	#endregion
-
 	#region Помощники
 
 	private JournalDbContext CreateContext() => new(_options);
