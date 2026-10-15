@@ -42,6 +42,9 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 	/// <summary>Ручные пометки закрытия позиций — пользовательские закрывающие записи.</summary>
 	public DbSet<ManualCloseMark> ManualCloseMarks => Set<ManualCloseMark>();
 
+	/// <summary>Записи оспаривания синтетических связок — ручные данные логического слоя.</summary>
+	public DbSet<SyntheticCloseDispute> SyntheticCloseDisputes => Set<SyntheticCloseDispute>();
+
 	/// <summary>Кэш последних известных марок инструментов — провайдер марок аналитики.</summary>
 	public DbSet<InstrumentMark> InstrumentMarks => Set<InstrumentMark>();
 
@@ -164,6 +167,27 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 			.HasOne(mark => mark.Construction)
 			.WithMany()
 			.HasForeignKey(mark => mark.ConstructionId)
+			.OnDelete(DeleteBehavior.Cascade);
+
+		// Спор принадлежит связке внутри конструкции и, как прочие ручные данные
+		// конструкций, удаляется каскадом вместе с ней: полный пересбор вычищает
+		// таблицу целиком, инкрементная сборка её не трогает. Уникальный индекс
+		// по «конструкция + пара execId» не допускает двух споров на одну связку.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+		// Traceability: change:synthetic-close-logical-layer/design#d3
+		modelBuilder.Entity<SyntheticCloseDispute>()
+			.HasIndex(dispute => new
+			{
+				dispute.ConstructionId,
+				dispute.LinearExecId,
+				dispute.CounterOptionExecId,
+			})
+			.IsUnique();
+
+		modelBuilder.Entity<SyntheticCloseDispute>()
+			.HasOne(dispute => dispute.Construction)
+			.WithMany()
+			.HasForeignKey(dispute => dispute.ConstructionId)
 			.OnDelete(DeleteBehavior.Cascade);
 
 		#endregion

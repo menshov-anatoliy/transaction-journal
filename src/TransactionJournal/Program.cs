@@ -228,6 +228,13 @@ builder.Services.AddSingleton<IManualCloseMarkService>(sp => sp.GetRequiredServi
 builder.Services.AddSingleton(sp => new PnLAdjustmentService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton<IPnLAdjustmentService>(sp => sp.GetRequiredService<PnLAdjustmentService>());
+// Оспаривание связки из деталей конструкции и явный возврат выполняются
+// use-case сервисом споров: логический слой зависит от интерфейса, а не от
+// конкретного хранилища ручных данных.
+// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+builder.Services.AddSingleton(sp => new SyntheticCloseDisputeService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton<ISyntheticCloseDisputeService>(sp => sp.GetRequiredService<SyntheticCloseDisputeService>());
 
 // Read-модель каркаса «Терминала»: счётчик непривязанных сделок для бейджа
 // «Входящих» и заголовок открытой конструкции для транзитной вкладки — тонкая

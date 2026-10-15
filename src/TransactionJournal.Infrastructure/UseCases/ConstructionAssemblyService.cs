@@ -512,11 +512,15 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 
 		// Дочерние записи вычищаются перед конструкциями: внешние ключи привязок и
 		// корректировок запрещают тихое каскадное удаление, пересборка снимает их
-		// явным вычищением целиком.
+		// явным вычищением целиком. Споры синтетических связок — ручные данные
+		// конструкций: пересбор стирает их вместе с прочим содержимым, после чего
+		// автоматическое распознавание возвращает связки.
+		// Traceability: change:synthetic-close-logical-layer/specs/domain/construction-assembly/spec#requirement-full-rebuild-semantics
 		await db.TradeUserdata.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.PnLAdjustments.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.PositionComments.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.ManualCloseMarks.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+		await db.SyntheticCloseDisputes.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.Constructions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
 		// Конструкции вставляются в порядке плана: порядковый номер плана задаёт

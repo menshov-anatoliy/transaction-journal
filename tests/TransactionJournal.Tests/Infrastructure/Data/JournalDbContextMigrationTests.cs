@@ -134,6 +134,122 @@ public class JournalDbContextMigrationTests
 		db.SaveChanges();
 	}
 
+	[TestMethod]
+	[Description("Миграция разворачивает таблицу оспариваний синтетических связок с уникальным индексом")]
+	// Таблица ручных данных логического слоя разворачивается штатным Migrate()
+	// на пустой базе вместе с остальной схемой журнала.
+	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+	public void TryIfMigrationCreatesSyntheticCloseDisputesTable()
+	{
+		// Act: применяем миграции к пустому файлу базы.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate();
+		}
+
+		// Assert: таблица и уникальный индекс по «конструкция + пара execId» на месте.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var tables = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table' ORDER BY name")
+				.ToList();
+			Assert.That(tables, Does.Contain("SyntheticCloseDisputes"));
+
+			var indexes = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'index' AND tbl_name = 'SyntheticCloseDisputes' ORDER BY name")
+				.ToList();
+			Assert.That(indexes, Does.Contain("IX_SyntheticCloseDisputes_ConstructionId_LinearExecId_CounterOptionExecId"));
+		}
+	}
+
+	[TestMethod]
+	[Description("Уникальный индекс по «конструкция + пара execId» отклоняет второй спор одной связки")]
+	// Спор связки один: повторное оспаривание той же пары исполнений в той же
+	// конструкции отклоняется на уровне БД, а не только сервисом.
+	// Traceability: change:synthetic-close-logical-layer/design#d3
+	[ExpectedException(typeof(DbUpdateException))]
+	public void ThrowOnDuplicateDisputePairInsert()
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.Database.Migrate();
+		db.Constructions.Add(new Construction { Name = "XAUT стреддл 30OCT26 4400" });
+		db.SaveChanges();
+
+		// Act: вставляем второй спор с той же парой execId той же конструкции.
+		db.SyntheticCloseDisputes.Add(new SyntheticCloseDispute
+		{
+			ConstructionId = db.Constructions.Single().Id,
+			LinearExecId = "case-perp",
+			CounterOptionExecId = "case-call",
+			DisputedAt = DateTimeOffset.UtcNow,
+		});
+		db.SaveChanges();
+
+		db.SyntheticCloseDisputes.Add(new SyntheticCloseDispute
+		{
+			ConstructionId = db.Constructions.Single().Id,
+			LinearExecId = "case-perp",
+			CounterOptionExecId = "case-call",
+			DisputedAt = DateTimeOffset.UtcNow,
+		});
+		db.SaveChanges();
+	}
+
+	[TestMethod]
+	[Description("Откат миграции удаляет таблицу оспариваний, повторное применение возвращает её")]
+	// Миграция симметрична: Down удаляет таблицу с записями споров, Up
+	// разворачивает её снова — откат и накат проходят штатным Migrate().
+	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-dispute
+	public void TryIfMigrationRollbackDropsAndRollforwardRestoresSyntheticCloseDisputesTable()
+	{
+		// Act: применяем все миграции и пишем один спор.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate();
+			db.Constructions.Add(new Construction { Name = "XAUT стреддл 30OCT26 4400" });
+			db.SaveChanges();
+			db.SyntheticCloseDisputes.Add(new SyntheticCloseDispute
+			{
+				ConstructionId = db.Constructions.Single().Id,
+				LinearExecId = "case-perp",
+				CounterOptionExecId = "case-call",
+				DisputedAt = DateTimeOffset.UtcNow,
+			});
+			db.SaveChanges();
+		}
+
+		// Act: откатываем миграцию к предыдущей (AddHints).
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate("20261004093503_AddHints");
+		}
+
+		// Assert: таблицы больше нет вместе с записью спора.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var tables = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table' ORDER BY name")
+				.ToList();
+			Assert.That(tables, Does.Not.Contain("SyntheticCloseDisputes"));
+		}
+
+		// Act: повторный накат всех миграций.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate();
+		}
+
+		// Assert: таблица развёрнута снова и доступна для записей.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var tables = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table' ORDER BY name")
+				.ToList();
+			Assert.That(tables, Does.Contain("SyntheticCloseDisputes"));
+			Assert.That(db.SyntheticCloseDisputes, Is.Empty, "Запись спора не пережила откат");
+		}
+	}
+
 	#region Помощники
 
 	private DbContextOptions<JournalDbContext> CreateOptions() =>

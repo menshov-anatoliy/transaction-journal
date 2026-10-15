@@ -342,6 +342,34 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.ToTable("SyncStates");
                 });
 
+            modelBuilder.Entity("TransactionJournal.Domain.Data.SyntheticCloseDispute", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ConstructionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CounterOptionExecId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("DisputedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LinearExecId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConstructionId", "LinearExecId", "CounterOptionExecId")
+                        .IsUnique();
+
+                    b.ToTable("SyntheticCloseDisputes");
+                });
+
             modelBuilder.Entity("TransactionJournal.Domain.Data.TradeUserdata", b =>
                 {
                     b.Property<long>("Id")
@@ -450,6 +478,17 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("TransactionJournal.Domain.Data.PositionComment", b =>
+                {
+                    b.HasOne("TransactionJournal.Domain.Data.Construction", "Construction")
+                        .WithMany()
+                        .HasForeignKey("ConstructionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Construction");
+                });
+
+            modelBuilder.Entity("TransactionJournal.Domain.Data.SyntheticCloseDispute", b =>
                 {
                     b.HasOne("TransactionJournal.Domain.Data.Construction", "Construction")
                         .WithMany()

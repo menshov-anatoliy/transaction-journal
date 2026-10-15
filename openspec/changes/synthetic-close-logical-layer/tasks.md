@@ -12,8 +12,8 @@
 
 ## 3. Оспаривание связок (хранение)
 
-- [ ] 3.1 Добавить EF-модель и миграцию таблицы `SyntheticCloseDisputes` (ConstructionId + пара execId); проверить применение и откат миграции на копии живой базы
-- [ ] 3.2 Реализовать сервис оспаривания/возврата связки; unit-тесты: спор исключает связку из распознавания до возврата (`scenario-dispute-hides-logical-link`), инкрементная сборка спор сохраняет (`scenario-dispute-survives-incremental-assembly`), пересбор стирает и связка возвращается автоматически (`scenario-rebuild-wipes-dispute`)
+- [x] 3.1 Добавить EF-модель и миграцию таблицы `SyntheticCloseDisputes` (ConstructionId + пара execId); проверить применение и откат миграции на копии живой базы
+- [x] 3.2 Реализовать сервис оспаривания/возврата связки; unit-тесты: спор исключает связку из распознавания до возврата (`scenario-dispute-hides-logical-link`), инкрементная сборка спор сохраняет (`scenario-dispute-survives-incremental-assembly`), пересбор стирает и связка возвращается автоматически (`scenario-rebuild-wipes-dispute`)
 
 ## 4. Read-model и контракт API
 
