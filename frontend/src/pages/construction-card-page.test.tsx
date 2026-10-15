@@ -68,6 +68,8 @@ const card: ConstructionCard = {
 			comment: "ножка **входа**",
 			markValue: 300,
 			priceChangePercent: 5,
+			syntheticResidual: null,
+			otherResidual: null,
 		},
 	],
 	trades: [
@@ -106,6 +108,7 @@ const card: ConstructionCard = {
 			amountUsdt: 5,
 		},
 	],
+	syntheticCloses: [],
 };
 
 const constructionPanel: HintPanel = {
@@ -687,14 +690,18 @@ describe("карточка конструкции: примитивы дизай
 		expect(metrics).toHaveLength(9);
 
 		// Контейнер сводки — surface-карточка радиуса 12 с каймой, паддинги
-		// [14,18], зазор между показателями 20 (нода h69OG).
+		// [14,18]: колонка с зазором 12 (нода h69OG после 5.1 change
+		// synthetic-close-logical-layer), внутри — строка метрик с зазором 20.
 		const card = document.querySelector('[data-slot="construction-metrics-card"]');
 		expect(card?.className).toContain("rounded-lg");
 		expect(card?.className).toContain("border");
 		expect(card?.className).toContain("bg-surface");
 		expect(card?.className).toContain("px-[18px]");
 		expect(card?.className).toContain("py-3.5");
-		expect(card?.className).toContain("gap-5");
+		expect(card?.className).toContain("flex-col");
+		expect(card?.className).toContain("gap-3");
+		const row = card?.querySelector("div");
+		expect(row?.className).toContain("gap-5");
 
 		// Итог (M1) — значение 16/600: единственный акцентный кегль строки.
 		const first = metrics[0]?.querySelector('[data-slot="metric-value"]');

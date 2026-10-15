@@ -202,7 +202,27 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 							// Разделитель строк — токен divider #EBEBE5 по мастеру Body #2.
 							<TableRow key={position.symbol} className="border-divider">
 								<TableCell className="font-medium text-foreground">{position.symbol}</TableCell>
-								<TableCell className="tabular-nums">{formatAmount(position.residual)}</TableCell>
+								<TableCell className="tabular-nums">
+									{position.syntheticResidual === null ? (
+										formatAmount(position.residual)
+									) : (
+										// Распад остатка линейной ноги (мастер aU7Nx/LFEkd):
+										// синтетический хедж связки и прочий (скальперский)
+										// остаток раздельно, инструментальный остаток в
+										// главной строке не меняется.
+										// Traceability: openspec:ui/screens#scenario-detail-linear-leg-splits-synthetic-and-scalps
+										<div
+											data-slot="linear-leg-residual-split"
+											className="flex flex-col gap-[2px]"
+											title="Остаток распадается на синтетический хедж связки и прочий (скальперский) остаток"
+										>
+											<span>{formatAmount(position.residual)}</span>
+											<span className="text-[9.5px] text-text-muted">
+												{`синтетика ${formatAmount(position.syntheticResidual)} · прочее ${formatAmount(position.otherResidual ?? 0)}`}
+											</span>
+										</div>
+									)}
+								</TableCell>
 								<TableCell className="tabular-nums">{position.averageEntryPrice === null ? DASH : formatAmount(position.averageEntryPrice)}</TableCell>
 								<TableCell className="tabular-nums">{position.averageClosePrice === null ? DASH : formatAmount(position.averageClosePrice)}</TableCell>
 								<TableCell>

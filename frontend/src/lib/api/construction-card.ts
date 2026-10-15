@@ -59,6 +59,24 @@ export interface ConstructionCardPosition {
 	readonly comment: string | null;
 	readonly markValue: number | null;
 	readonly priceChangePercent: number | null;
+	// Распад остатка линейной ноги: пара не-null отличает синтетическое
+	// содержимое ноги от нулевого инструментального остатка; null — у ноги
+	// нет неоспоренного синтетического содержимого.
+	// Traceability: openspec:ui/screens#scenario-detail-linear-leg-splits-synthetic-and-scalps
+	readonly syntheticResidual: number | null;
+	readonly otherResidual: number | null;
+}
+
+/** Строка распознанного синтетического закрытия карточки. */
+export interface ConstructionCardSyntheticClose {
+	/** Символ закрываемой опционной ноги связки. */
+	readonly closedLegSymbol: string;
+	/** Знаковое количество линейной части связки. */
+	readonly quantity: number;
+	/** Величина паритетного лока к экспирации, USDT; от марок не зависит. */
+	readonly lockedValueUsdt: number;
+	/** Признак ручного оспаривания: спорная связка в логический слой не входит. */
+	readonly disputed: boolean;
 }
 
 /** Строка таблицы сделок карточки. */
@@ -123,6 +141,10 @@ export interface ConstructionCard {
 	readonly closingEntries: readonly ConstructionCardClosingEntry[];
 	readonly closingWarnings: readonly ConstructionCardClosingWarning[];
 	readonly adjustments: readonly ConstructionCardAdjustment[];
+	// Связки синтетического закрытия; пустой список — обычное состояние
+	// конструкции без связок, строка «зафиксировано синтетикой» не выводится.
+	// Traceability: openspec:ui/screens#requirement-detail-synthetic-close-line
+	readonly syntheticCloses: readonly ConstructionCardSyntheticClose[];
 }
 
 /** Ручной статус конструкции (реэкспорт контракта раздела). */

@@ -5360,164 +5360,223 @@
                   "fill": "$surface",
                   "cornerRadius": 12,
                   "stroke": "$border",
-                  "gap": 20,
+                  "layout": "vertical",
+                  "gap": 12,
                   "padding": [
                     14,
                     18
                   ],
                   "children": [
                     {
-                      "id": "ZzdbC",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M1",
-                      "width": "fit_content",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "Общий P&L"
-                        },
-                        "Q4NLmR": {
-                          "content": "+385,30",
-                          "fill": "$accentStrong",
-                          "fontSize": 16
-                        }
-                      }
-                    },
-                    {
-                      "id": "dpMJg",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M2",
-                      "width": "fit_content",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "% капитала"
-                        },
-                        "Q4NLmR": {
-                          "content": "64%",
-                          "fill": "$textPrimary",
-                          "fontSize": 14
-                        }
-                      }
-                    },
-                    {
-                      "id": "CqQnP",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M3",
-                      "width": "fit_content",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "Стоимость"
-                        },
-                        "Q4NLmR": {
-                          "content": "1 240",
-                          "fill": "$textPrimary",
-                          "fontSize": 14
-                        }
-                      }
-                    },
-                    {
-                      "id": "vw4zf",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M4",
-                      "width": "fit_content",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "Занятость"
-                        },
-                        "Q4NLmR": {
-                          "content": "78%",
-                          "fill": "$textPrimary",
-                          "fontSize": 14
-                        }
-                      }
-                    },
-                    {
-                      "id": "lN9aE",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M5",
-                      "width": "fit_content",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "Реализов."
-                        },
-                        "Q4NLmR": {
-                          "content": "+240,20",
-                          "fill": "$textPrimary",
-                          "fontSize": 14
-                        }
-                      }
-                    },
-                    {
-                      "id": "RT5pk",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M6",
-                      "width": "fit_content",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "Нереализов."
-                        },
-                        "Q4NLmR": {
-                          "content": "+145,10",
-                          "fill": "$textPrimary",
-                          "fontSize": 14
-                        }
-                      }
-                    },
-                    {
-                      "id": "bIjcE",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M7",
-                      "width": "fit_content",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "Корректировки"
-                        },
-                        "Q4NLmR": {
-                          "content": "3",
-                          "fill": "$textPrimary",
-                          "fontSize": 14
-                        }
-                      }
-                    },
-                    {
-                      "id": "Sn0Ud",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M8",
-                      "width": "fit_content",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "Котировки на"
-                        },
-                        "Q4NLmR": {
-                          "content": "07.10 13:51",
-                          "fill": "$textPrimary",
-                          "fontSize": 14
-                        }
-                      }
-                    },
-                    {
-                      "id": "e5auzF",
-                      "type": "ref",
-                      "ref": "jtDmV",
-                      "name": "M9",
+                      "type": "frame",
+                      "id": "NEN9T",
+                      "name": "Метрики",
                       "width": "fill_container",
-                      "descendants": {
-                        "bGGN9": {
-                          "content": "Период"
+                      "gap": 20,
+                      "children": [
+                        {
+                          "id": "ZzdbC",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M1",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Общий P&L"
+                            },
+                            "Q4NLmR": {
+                              "content": "+385,30",
+                              "fill": "$accentStrong",
+                              "fontSize": 16
+                            }
+                          }
                         },
-                        "Q4NLmR": {
-                          "content": "12 авг — 07 окт · 56 дн.",
-                          "fill": "$textPrimary",
-                          "fontSize": 14
+                        {
+                          "id": "dpMJg",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M2",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "% капитала"
+                            },
+                            "Q4NLmR": {
+                              "content": "64%",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "CqQnP",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M3",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Стоимость"
+                            },
+                            "Q4NLmR": {
+                              "content": "1 240",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "vw4zf",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M4",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Занятость"
+                            },
+                            "Q4NLmR": {
+                              "content": "78%",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "lN9aE",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M5",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Реализов."
+                            },
+                            "Q4NLmR": {
+                              "content": "+240,20",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "RT5pk",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M6",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Нереализов."
+                            },
+                            "Q4NLmR": {
+                              "content": "+145,10",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "bIjcE",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M7",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Корректировки"
+                            },
+                            "Q4NLmR": {
+                              "content": "3",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "Sn0Ud",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M8",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Котировки на"
+                            },
+                            "Q4NLmR": {
+                              "content": "07.10 13:51",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "e5auzF",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "M9",
+                          "width": "fill_container",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Период"
+                            },
+                            "Q4NLmR": {
+                              "content": "12 авг — 07 окт · 56 дн.",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
                         }
-                      }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "V9nPG",
+                      "name": "Divider",
+                      "width": "fill_container",
+                      "height": 1,
+                      "fill": "$divider"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Z5uVG",
+                      "name": "Зафиксировано синтетикой",
+                      "width": "fill_container",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "AqBUE",
+                          "name": "Label",
+                          "fill": "$textMuted",
+                          "content": "зафиксировано синтетикой",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.3
+                        },
+                        {
+                          "type": "text",
+                          "id": "tz9z8",
+                          "name": "Value",
+                          "fill": "$accentStrong",
+                          "content": "+35,70 USDT",
+                          "fontFamily": "$font",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "zxepU",
+                          "name": "LegInfo",
+                          "fill": "$textSecondary",
+                          "content": "ETH-28MAR-1600-P · нога 0,5 → 0,2",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -6401,7 +6460,7 @@
                               "id": "gyQO1",
                               "name": "T",
                               "fill": "$textSecondary",
-                              "content": "−2",
+                              "content": "0,5",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -6759,7 +6818,8 @@
                           "type": "frame",
                           "id": "aU7Nx",
                           "name": "C1",
-                          "width": 50,
+                          "layout": "vertical",
+                          "gap": 2,
                           "padding": [
                             7,
                             6
@@ -6770,9 +6830,19 @@
                               "id": "DelLK",
                               "name": "T",
                               "fill": "$textSecondary",
-                              "content": "0",
+                              "content": "0,34",
                               "fontFamily": "$font",
                               "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "LFEkd",
+                              "name": "Split",
+                              "fill": "$textMuted",
+                              "content": "синтетика 0,30 · прочее 0,04",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
                               "fontWeight": "normal"
                             }
                           ]
@@ -6814,7 +6884,7 @@
                               "id": "UYnep",
                               "name": "T",
                               "fill": "$textSecondary",
-                              "content": "3 118",
+                              "content": "—",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -6835,8 +6905,8 @@
                               "type": "text",
                               "id": "Kb4WP",
                               "name": "T",
-                              "fill": "$textSecondary",
-                              "content": "—",
+                              "fill": "$accentStrong",
+                              "content": "+1 055",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -6857,8 +6927,8 @@
                               "type": "text",
                               "id": "ZjjWX",
                               "name": "T",
-                              "fill": "$textSecondary",
-                              "content": "—",
+                              "fill": "$neg",
+                              "content": "−0,1%",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -6901,8 +6971,8 @@
                               "type": "text",
                               "id": "jWpjm",
                               "name": "T",
-                              "fill": "$textSecondary",
-                              "content": "—",
+                              "fill": "$neg",
+                              "content": "−0,68",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -6924,7 +6994,7 @@
                               "id": "A1f1p",
                               "name": "T",
                               "fill": "$neg",
-                              "content": "−96,50",
+                              "content": "−97,18",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -6990,7 +7060,7 @@
                               "id": "skNaZ",
                               "name": "T",
                               "fill": "$textSecondary",
-                              "content": "03.09 12:00",
+                              "content": "—",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -7012,7 +7082,7 @@
                               "id": "H1pAK",
                               "name": "T",
                               "fill": "$textSecondary",
-                              "content": "закрыта",
+                              "content": "открыта",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -7064,14 +7134,28 @@
                           ],
                           "children": [
                             {
-                              "type": "text",
-                              "id": "dB2JT",
-                              "name": "T",
-                              "fill": "$textSecondary",
-                              "content": "—",
-                              "fontFamily": "$font",
-                              "fontSize": 11,
-                              "fontWeight": "normal"
+                              "type": "frame",
+                              "id": "yffp8",
+                              "name": "Btn:Пометка",
+                              "cornerRadius": 6,
+                              "stroke": "$border",
+                              "strokeWidth": 1,
+                              "padding": [
+                                3,
+                                7
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Vie2v",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "пометкой…",
+                                  "fontFamily": "$font",
+                                  "fontSize": 9.5,
+                                  "fontWeight": "500"
+                                }
+                              ]
                             }
                           ]
                         }
