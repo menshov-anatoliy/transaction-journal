@@ -28,6 +28,8 @@ namespace TransactionJournal.Application;
 /// <param name="Comment">Комментарий позиции по ключу «конструкция × инструмент»; null — комментария нет.</param>
 /// <param name="MarkValue">Стоимость открытого остатка по текущей марке — нетто-величина «марка × знаковый остаток» со знаком; null у закрытой позиции и при сбое марок.</param>
 /// <param name="PriceChangePercent">Процент изменения цены открытого остатка — движение марки от средней цены остатка, приведённое к направлению позиции: плюс — движение «в прибыль»; null у закрытой позиции и при сбое марок.</param>
+/// <param name="SyntheticResidual">Часть остатка линейной ноги, уведённая неоспоренными синтетическими связками — знаковая сумма их линейных сделок; null, когда неоспоренного синтетического содержимого у ноги нет.</param>
+/// <param name="OtherResidual">Прочий остаток линейной ноги — остаток минус синтетическая часть; null вместе с синтетической частью.</param>
 // Строка показывает картину позиции её записями: вход, выход,
 // раздельные части реализованного и нереализованного результата
 // с процентом от капитала, общий P&L с процентом, комиссии и времена.
@@ -39,6 +41,10 @@ namespace TransactionJournal.Application;
 // позиции и деградируют вместе с марками: закрытая позиция — null, сбой
 // марок — null при живых реализованных величинах.
 // Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
+// Остаток линейной ноги распадается на «синтетику / прочий остаток» по
+// неоспоренным связкам: 0.30 синтетического хеджа и 0.04 скальпов видны
+// раздельно при остатке 0.34.
+// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
 public sealed record ConstructionPositionRow(
 	string Symbol,
 	decimal Residual,
@@ -56,7 +62,9 @@ public sealed record ConstructionPositionRow(
 	bool IsOpen,
 	string? Comment,
 	decimal? MarkValue = null,
-	decimal? PriceChangePercent = null);
+	decimal? PriceChangePercent = null,
+	decimal? SyntheticResidual = null,
+	decimal? OtherResidual = null);
 
 /// <summary>
 /// Строка таблицы сделок деталей конструкции: сделка с атрибутами биржевой
@@ -119,6 +127,26 @@ public sealed record ConstructionAdjustmentRow(
 	decimal AmountUsdt);
 
 /// <summary>
+/// Строка списка синтетических закрытий деталей конструкции: распознанная
+/// связка с ногой, количеством, величиной лока и признаком спора. Строка
+/// вычисляется при чтении деталей и не хранится в сборке; спорная связка
+/// остаётся в списке с признаком спора — её лок в логический слой не входит.
+/// </summary>
+/// <param name="ClosedLegSymbol">Символ закрываемой опционной ноги — инструмент, который в связке не продаётся.</param>
+/// <param name="Quantity">Количество связки — закрываемая часть ноги.</param>
+/// <param name="LockedValueUsdt">Величина «зафиксировано синтетикой» — паритетный лок связки к экспирации в USDT.</param>
+/// <param name="Disputed">Связка оспорена пользователем: лок не входит в логический слой ноги.</param>
+// Список связок и признак спора вычисляются read-моделью деталей при чтении
+// и приходят в контракт аддитивно: транспортные требования не меняются.
+// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
+// Traceability: change:synthetic-close-logical-layer/design#d5
+public sealed record SyntheticCloseRow(
+	string ClosedLegSymbol,
+	decimal Quantity,
+	decimal LockedValueUsdt,
+	bool Disputed);
+
+/// <summary>
 /// Данные экрана деталей конструкции: заголовок с комментарием, сводка метрик
 /// с периодом и отметкой марок и четыре таблицы записей — позиции, сделки,
 /// закрывающие записи и внешние корректировки PnL. Пустая таблица передаётся
@@ -144,12 +172,17 @@ public sealed record ConstructionAdjustmentRow(
 /// <param name="ClosingEntries">Строки таблицы закрывающих записей в хронологическом порядке.</param>
 /// <param name="ClosingWarnings">Предупреждения об избыточных закрывающих записях конструкции.</param>
 /// <param name="Adjustments">Строки таблицы корректировок, упорядоченные по дате.</param>
+/// <param name="SyntheticCloses">Строки распознанных синтетических закрытий конструкции; null оставлен совместимости прежних построений — читающий слой всегда передаёт список.</param>
 // Капитал передаётся незаданным как есть: скрытие процентов — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
 // Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
 // Величины риска и профита сводки выводятся обеими единицами чистым
 // конвертером: введённая единица первоисточник, вторая вычисляется от капитала.
 // Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
+// Список синтетических закрытий — аддитивное поле данных экрана: строки
+// связок вычисляются при чтении и приходят в контракт без ломки потребителей.
+// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
+// Traceability: change:synthetic-close-logical-layer/design#d5
 public sealed record ConstructionDetailData(
 	long ConstructionId,
 	string Name,
@@ -169,5 +202,6 @@ public sealed record ConstructionDetailData(
 	IReadOnlyList<ConstructionClosingEntryRow> ClosingEntries,
 	IReadOnlyList<RedundantClosingEntryWarning> ClosingWarnings,
 	IReadOnlyList<ConstructionAdjustmentRow> Adjustments,
+	IReadOnlyList<SyntheticCloseRow>? SyntheticCloses = null,
 	TargetUnit? RiskUnit = null,
 	TargetUnit? ProfitUnit = null);

@@ -139,6 +139,79 @@ public sealed class ConstructionCardApiTests
 	}
 
 	[TestMethod]
+	[Description("Синтетические закрытия и распад линейной ноги входят в контракт карточки аддитивно")]
+	// Аддитивность контракта: прежние поля снимка не меняются, новые поля
+	// syntheticCloses и syntheticResidual/otherResidual появляются рядом —
+	// существующие потребители остаются совместимыми.
+	// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
+	// Traceability: change:synthetic-close-logical-layer/design#d5
+	public async Task TryIfSyntheticClosesFieldsAreAdditiveToCardContract()
+	{
+		// Arrange: стабильная read-модель деталей конструкции 7 со связкой XAUT.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var response = await client.GetAsync("/api/v1/constructions/7");
+
+		// Assert: прежние поля шапки и позиций не изменились.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+		Assert.That(payload!["constructionId"]!.GetValue<long>(), Is.EqualTo(7L));
+		Assert.That(payload["name"]!.GetValue<string>(), Is.EqualTo("ETH-240628-3200C+P"));
+		Assert.That(payload["status"]!.GetValue<string>(), Is.EqualTo("open"));
+		var optionPosition = payload["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "ETH-28JUN24-3200-C")!;
+		Assert.That(optionPosition["residual"]!.GetValue<decimal>(), Is.EqualTo(2m));
+		Assert.That(optionPosition["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(40m));
+		Assert.That(optionPosition["syntheticResidual"], Is.Null);
+		Assert.That(optionPosition["otherResidual"], Is.Null);
+
+		// Линейная нога XAUT несёт распад остатка: 0.34 = 0.30 синтетики + 0.04
+		// прочего остатка; прежние колонки позиции сохранились.
+		var perpPosition = payload["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "XAUTUSDT")!;
+		Assert.That(perpPosition["residual"]!.GetValue<decimal>(), Is.EqualTo(0.34m));
+		Assert.That(perpPosition["markValue"]!.GetValue<decimal>(), Is.EqualTo(350m));
+		Assert.That(perpPosition["syntheticResidual"]!.GetValue<decimal>(), Is.EqualTo(0.3m));
+		Assert.That(perpPosition["otherResidual"]!.GetValue<decimal>(), Is.EqualTo(0.04m));
+
+		// Список связок приходит с ногой, количеством, величиной лока и признаком
+		// спора; без связок поле отдаётся пустым списком, а не отсутствует.
+		var closes = payload["syntheticCloses"]!.AsArray();
+		Assert.That(closes, Has.Count.EqualTo(1));
+		var close = closes.Single()!;
+		Assert.That(close["closedLegSymbol"]!.GetValue<string>(), Is.EqualTo("XAUT-30OCT26-4400-P-USDT"));
+		Assert.That(close["quantity"]!.GetValue<decimal>(), Is.EqualTo(0.3m));
+		Assert.That(close["lockedValueUsdt"]!.GetValue<decimal>(), Is.EqualTo(35.697m));
+		Assert.That(close["disputed"]!.GetValue<bool>(), Is.True);
+	}
+
+	[TestMethod]
+	[Description("OpenAPI-описание остаётся опубликованным и не ломается от аддитивных полей")]
+	// Обновление описания контракта: документ пересобирается из записей ответа
+	// автоматически, транспортные требования не меняются — маршрут карточки и
+	// схемы команд потребителей остаются на месте.
+	// Traceability: change:synthetic-close-logical-layer/design#d5
+	// Traceability: openspec:http-api/transport#scenario-openapi-schema-published
+	public async Task TryIfOpenApiServesUnchangedContractWithAdditiveFields()
+	{
+		// Arrange: хост раздела со стабильной read-моделью деталей.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос OpenAPI-документа.
+		var document = await (await client.GetAsync("/openapi/v1.json")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: маршрут карточки опубликован с GET-операцией, схемы команд
+		// существующих потребителей не потеряны — документ не сломан.
+		var paths = document!["paths"]!.AsObject();
+		Assert.That(paths.Select(path => path.Key), Does.Contain("/api/v1/constructions/{constructionId}"));
+		Assert.That(paths["/api/v1/constructions/{constructionId}"]!["get"], Is.Not.Null);
+		var schemas = document["components"]!["schemas"]!.AsObject().Select(schema => schema.Key).ToArray();
+		Assert.That(schemas, Does.Contain("RenameConstructionRequest"));
+		Assert.That(schemas, Does.Contain("SetCommentRequest"));
+	}
+
+	[TestMethod]
 	[Description("Снимок неизвестной конструкции отвечает 404")]
 	// Чужой или удалённый идентификатор — явный 404: карточка показывает
 	// состояние «не найдена» вместо пустых таблиц.
@@ -998,8 +1071,9 @@ internal static class CardApiServiceExtensions
 
 /// <summary>
 /// Стабильная read-модель деталей для карточки: конструкция 7 с открытым
-/// остатком, двумя позициями, тремя сделками, ручной закрывающей записью,
-/// предупреждением об избыточной записи и одной корректировкой.
+/// остатком, тремя позициями (включая линейную ногу с распадом «синтетика /
+/// прочий остаток»), тремя сделками, ручной закрывающей записью, предупреждением
+/// об избыточной записи, одной корректировкой и одной синтетической связкой.
 /// </summary>
 internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 {
@@ -1114,6 +1188,26 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					Comment: null,
 					MarkValue: null,
 					PriceChangePercent: null),
+				new ConstructionPositionRow(
+					Symbol: "XAUTUSDT",
+					Residual: 0.34m,
+					AverageEntryPrice: 4150m,
+					AverageClosePrice: null,
+					RealizedPnL: 0m,
+					RealizedPnLPercent: null,
+					UnrealizedPnL: 15m,
+					UnrealizedPnLPercent: 0.5m,
+					TotalPnL: 15m,
+					TotalPnLPercent: 0.5m,
+					AccumulatedFees: 0.64m,
+					OpenedAt: openedAt,
+					ClosedAt: null,
+					IsOpen: true,
+					Comment: null,
+					MarkValue: 350m,
+					PriceChangePercent: 1.2m,
+					SyntheticResidual: 0.3m,
+					OtherResidual: 0.04m),
 			],
 			Trades:
 			[
@@ -1139,6 +1233,12 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			Adjustments:
 			[
 				new ConstructionAdjustmentRow(11, new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero), "PnL робота grid-ETH", PnLAdjustmentSource.Robot, 5m),
+			],
+			// Строка связки с оспоренным локом: признак спора и величина проходят
+			// в контракт карточки вместе с распадом линейной ноги.
+			SyntheticCloses:
+			[
+				new SyntheticCloseRow("XAUT-30OCT26-4400-P-USDT", 0.3m, 35.697m, true),
 			],
 			RiskUnit: TargetUnit.Percent,
 			ProfitUnit: TargetUnit.Usdt);

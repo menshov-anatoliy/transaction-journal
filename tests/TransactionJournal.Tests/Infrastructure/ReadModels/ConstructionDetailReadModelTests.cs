@@ -63,6 +63,12 @@ public class ConstructionDetailReadModelTests
 	private const string EthPutDec27 = "ETH-25DEC27-2100-P-USDT";
 	private const string EthPerpSymbol = "ETHUSDT";
 
+	// Инструменты кейса синтетического закрытия XAUT 15.10.2026: стрэддл доски
+	// 30OCT26 08:00 UTC, связка с линейным перпом и скальп 0.04 XAUTUSDT.
+	private const string XautCall = "XAUT-30OCT26-4400-C-USDT";
+	private const string XautPut = "XAUT-30OCT26-4400-P-USDT";
+	private const string XautPerp = "XAUTUSDT";
+
 	/// <summary>Момент «сейчас» пересбора: сделки истории позади, доска 25DEC27 ещё жива.</summary>
 	private static readonly DateTimeOffset AssemblyNow = new(2026, 12, 10, 12, 0, 0, TimeSpan.Zero);
 
@@ -309,10 +315,12 @@ public class ConstructionDetailReadModelTests
 		// Assert: контракт строки зафиксирован составом публичных свойств — поля
 		// служебных величин оценки открытого остатка (средняя остатка, марка как
 		// цена) из строки убраны вместе с их колонками; стоимость и процент
-		// изменения цены открытого остатка добавлены выводимыми столбцами.
+		// изменения цены открытого остатка добавлены выводимыми столбцами; распад
+		// остатка линейной ноги на синтетическую и прочую части — двумя колонками.
 		// Требование: строка позиции показывает вход, выход и итог,
 		// колонки «Средняя», «Марка» и «Нереализов.» отсутствуют.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
+		// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
 		var columns = typeof(ConstructionPositionRow).GetProperties().Select(property => property.Name).ToArray();
 		Assert.That(columns, Is.EqualTo(new[]
 		{
@@ -333,6 +341,8 @@ public class ConstructionDetailReadModelTests
 			nameof(ConstructionPositionRow.Comment),
 			nameof(ConstructionPositionRow.MarkValue),
 			nameof(ConstructionPositionRow.PriceChangePercent),
+			nameof(ConstructionPositionRow.SyntheticResidual),
+			nameof(ConstructionPositionRow.OtherResidual),
 		}));
 	}
 
@@ -369,6 +379,103 @@ public class ConstructionDetailReadModelTests
 		Assert.That(closed.MarkValue, Is.Null);
 		Assert.That(closed.PriceChangePercent, Is.Null);
 		Assert.That(closed.RealizedPnL, Is.EqualTo(-10m));
+	}
+
+	[TestMethod]
+	[Description("Строки синтетических закрытий и распад линейной ноги обслуживают кейс XAUT: 0.30 синтетики и 0.04 скальпов")]
+	// Кейс эталонный: стрэддл 0.5, связка «перп 0.3 + продажа 0.3 колла» и
+	// скальп 0.04 дают остаток XAUTUSDT 0.34 с распадом 0.30 синтетики и
+	// 0.04 прочего остатка; величина лока связки — 35.697 USDT.
+	// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
+	// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
+	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-locked-value
+	public async Task TryIfSyntheticCloseRowsAndLinearSplitServeXautCase()
+	{
+		// Arrange: справочник кейса, конструкция с пятью сделками эталонного
+		// состава и живая марка для метрик позиций.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-кейс", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: распознана ровно одна связка с ногой пут, количеством 0.3 и
+		// локом 35.697 USDT; остаток перпа 0.34 распадается на 0.30 синтетики
+		// и 0.04 прочего остатка; ноги опционов распада не несут.
+		Assert.That(data.SyntheticCloses, Has.Count.EqualTo(1));
+		var link = data.SyntheticCloses!.Single();
+		Assert.That(link.ClosedLegSymbol, Is.EqualTo(XautPut));
+		Assert.That(link.Quantity, Is.EqualTo(0.3m));
+		Assert.That(link.LockedValueUsdt, Is.EqualTo(35.697m));
+		Assert.That(link.Disputed, Is.False);
+		var perp = data.Positions.Single(row => row.Symbol == XautPerp);
+		Assert.That(perp.Residual, Is.EqualTo(0.34m));
+		Assert.That(perp.SyntheticResidual, Is.EqualTo(0.3m));
+		Assert.That(perp.OtherResidual, Is.EqualTo(0.04m));
+		var put = data.Positions.Single(row => row.Symbol == XautPut);
+		Assert.That(put.SyntheticResidual, Is.Null);
+		Assert.That(put.OtherResidual, Is.Null);
+		var call = data.Positions.Single(row => row.Symbol == XautCall);
+		Assert.That(call.SyntheticResidual, Is.Null);
+		Assert.That(call.OtherResidual, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Оспоренная связка остаётся строкой с признаком спора, а распад линейной ноги отсутствует")]
+	// Спор исключает связку из логического слоя: лок строки не пересчитывается,
+	// признак спора виден, синтетическая часть остатка ноги обнуляется.
+	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
+	// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-synthetic-locked-line-shown
+	public async Task TryIfDisputedLinkKeepsRowWithFlagAndSplitAbsent()
+	{
+		// Arrange: кейс XAUT с оспоренной связкой «case-perp × case-call».
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-спор", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		var disputeService = new SyntheticCloseDisputeService(CreateOptions());
+		await disputeService.DisputeAsync(construction.Id, "case-perp", "case-call");
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные экрана деталей после оспаривания.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: строка связки осталась с признаком спора и прежней величиной
+		// лока; распад остатка перпа отсутствует — колонки null при остатке 0.34.
+		Assert.That(data.SyntheticCloses, Has.Count.EqualTo(1));
+		var link = data.SyntheticCloses!.Single();
+		Assert.That(link.Disputed, Is.True);
+		Assert.That(link.LockedValueUsdt, Is.EqualTo(35.697m));
+		var perp = data.Positions.Single(row => row.Symbol == XautPerp);
+		Assert.That(perp.Residual, Is.EqualTo(0.34m));
+		Assert.That(perp.SyntheticResidual, Is.Null);
+		Assert.That(perp.OtherResidual, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Деталь без синтетических связок передаёт пустой список и не несёт распада остатков")]
+	// Пустота — обычное состояние деталей: список связок передаётся пустым,
+	// колонки распада остаются null у всех позиций.
+	// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-synthetic-line-absent
+	public async Task TryIfDetailWithoutSyntheticClosesServesEmptyListAndNoSplit()
+	{
+		// Arrange: конструкция с одной линейной сделкой без опционных ног.
+		var construction = await _constructionService.CreateAsync("Без связок", 1000m);
+		await AddLinearTradeAsync("exec-lone", "Buy", "1", "43000", "0", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(construction.Id, "exec-lone");
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: список связок пуст, распад у позиции отсутствует.
+		Assert.That(data.SyntheticCloses, Is.Empty);
+		var position = data.Positions.Single(row => row.Symbol == LinearSymbol);
+		Assert.That(position.SyntheticResidual, Is.Null);
+		Assert.That(position.OtherResidual, Is.Null);
 	}
 
 	[TestMethod]
@@ -961,6 +1068,52 @@ public class ConstructionDetailReadModelTests
 			FetchedAt = FetchedAt,
 		});
 		await db.SaveChangesAsync();
+	}
+
+	/// <summary>Добавляет сырую запись исполнения кейса XAUT с указанной комиссией; числа биржа шлёт строками.</summary>
+	private async Task AddXautExecutionAsync(string execId, string symbol, string category, string side, string execQty, string execPrice, string execFee, long execTimeMs, string feeCurrency)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawExecutions.Add(new RawExecution
+		{
+			ExecId = execId,
+			Category = category,
+			Symbol = symbol,
+			ExecTimeMs = execTimeMs,
+			PayloadJson = $$"""{"symbol":"{{symbol}}","orderId":"order-{{execId}}","orderLinkId":"","side":"{{side}}","execFee":"{{execFee}}","execId":"{{execId}}","execPrice":"{{execPrice}}","execQty":"{{execQty}}","execType":"Trade","execTime":"{{execTimeMs}}","feeCurrency":"{{feeCurrency}}","isMaker":false}""",
+			FetchedAt = FetchedAt,
+		});
+		await db.SaveChangesAsync();
+	}
+
+	/// <summary>Справочник кейса XAUT: пут и колл доски 30OCT26 08:00 UTC и линейный перп XAUTUSDT.</summary>
+	private void SeedXautInstruments()
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawInstruments.Add(OptionInstrument(XautPut, "Put", ExecMs(2026, 10, 30, 8, 0)));
+		db.RawInstruments.Add(OptionInstrument(XautCall, "Call", ExecMs(2026, 10, 30, 8, 0)));
+		db.RawInstruments.Add(new RawInstrument
+		{
+			Symbol = XautPerp,
+			Category = "linear",
+			PayloadJson = """{"symbol":"XAUTUSDT","contractType":"LinearPerpetual","status":"Trading","baseCoin":"XAUT","quoteCoin":"USDT","settleCoin":"USDT","deliveryTime":"0","optionsType":""}""",
+			FetchedAt = FetchedAt,
+		});
+		db.SaveChanges();
+	}
+
+	/// <summary>
+	/// Наполняет сырьё эталонного кейса XAUT 15.10.2026: стрэддл 0.5 (пут @ 139
+	/// fee 1.5, колл @ 12 fee 0.6), связка 15.10 (перп 0.3 @ 4141.91 fee 0.55,
+	/// продажа 0.3 колла @ 5.9 fee 0.35) и скальп 0.04 @ 4200 fee 0.09.
+	/// </summary>
+	private async Task SeedXautCaseAsync()
+	{
+		await AddXautExecutionAsync("open-put", XautPut, "option", "Buy", "0.5", "139", "1.5", ExecMs(2026, 9, 30, 12, 0), "USDC");
+		await AddXautExecutionAsync("open-call", XautCall, "option", "Buy", "0.5", "12", "0.6", ExecMs(2026, 9, 30, 12, 5), "USDC");
+		await AddXautExecutionAsync("case-perp", XautPerp, "linear", "Buy", "0.3", "4141.91", "0.55", ExecMs(2026, 10, 15, 13, 0), "USDC");
+		await AddXautExecutionAsync("case-call", XautCall, "option", "Sell", "0.3", "5.9", "0.35", ExecMs(2026, 10, 15, 13, 4), "USDC");
+		await AddXautExecutionAsync("scalp-perp", XautPerp, "linear", "Buy", "0.04", "4200", "0.09", ExecMs(2026, 10, 15, 15, 0), "USDC");
 	}
 
 	/// <summary>Спецификация опциона ETH в справочнике с каноническим временем доставки 08:00 UTC.</summary>

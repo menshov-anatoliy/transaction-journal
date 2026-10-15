@@ -4,6 +4,8 @@ using TransactionJournal.Application.Analytics;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Domain.Analytics;
+using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Application.Materialization;
 using TransactionJournal.Application;
@@ -14,8 +16,9 @@ namespace TransactionJournal.Infrastructure.ReadModels;
 /// Реализация read-модели деталей конструкции: метрики и позиции читаются у
 /// read-модели метрик журнала, закрывающие записи — у read-модели позиций,
 /// заголовок, сделки с комментариями и корректировки — короткоживущим контекстом
-/// из хранилища. Чтение ничего не пишет в базу и безопасно в длительных сессиях
-/// Blazor Server.
+/// из хранилища; синтетические закрытия вычисляются при чтении чистым
+/// распознавателем над привязанными сделками конструкции. Чтение ничего не
+/// пишет в базу и безопасно в длительных сессиях Blazor Server.
 /// </summary>
 public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 {
@@ -66,8 +69,9 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 
 		// Проценты позиций строятся от текущего капитала конструкции: незаданный
 		// капитал передаётся как есть, без базы процентов величины остаются null.
-		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, cancellationToken).ConfigureAwait(false);
 		var trades = await ReadTradesAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
+		var synthetic = await ReadSyntheticClosesAsync(db, constructionId, trades.BoundTrades, cancellationToken).ConfigureAwait(false);
+		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, synthetic.QuantityByLinearSymbol, cancellationToken).ConfigureAwait(false);
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 
@@ -98,10 +102,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			hasOpenResidual && constructionMetrics.UnrealizedPnL is null,
 			metrics.MarksAsOf,
 			positions,
-			trades,
+			trades.Rows,
 			closing.Rows,
 			closing.Warnings,
 			adjustments,
+			synthetic.Rows,
 			// Единица ввода проходит в DTO: форма правки предзаполняет поле
 			// первоисточника, не подменяя введённую единицу вычисленной.
 			RiskUnit: construction.RiskUnit,
@@ -117,13 +122,16 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// конструкции не владеют, а процент P&L от стоимости — потому что
 	/// стоимость позиции уже выведена здесь же. Незаданный или нулевой капитал
 	/// базы процентов от капитала не образует, неположительная стоимость — базы
-	/// процентов от стоимости.
+	/// процентов от стоимости. Остаток линейной ноги распадается на синтетическую
+	/// и прочую части по количествам неоспоренных связок.
+	/// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
 	/// </summary>
 	private static async Task<List<ConstructionPositionRow>> ReadPositionsAsync(
 		JournalDbContext db,
 		long constructionId,
 		decimal? allocatedCapitalUsdt,
 		JournalMetrics metrics,
+		IReadOnlyDictionary<string, decimal> syntheticQuantityByLinearSymbol,
 		CancellationToken cancellationToken)
 	{
 		var commentsBySymbol = (await db.PositionComments
@@ -153,28 +161,46 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			.ThenByDescending(position => InstrumentStrike(position.Symbol))
 			.ThenBy(position => InstrumentTypeRank(position.Symbol))
 			.ThenBy(position => position.Symbol, StringComparer.Ordinal)
-			.Select(position => new ConstructionPositionRow(
-				position.Symbol,
-				position.Residual,
-				position.AverageEntryPrice,
-				position.AverageClosePrice,
-				position.RealizedPnL,
-				PercentOfCapital(position.RealizedPnL),
-				position.UnrealizedPnL,
-				PercentOfCapital(position.UnrealizedPnL),
-				position.TotalPnL,
-				PercentOfCapital(position.TotalPnL),
-				position.AccumulatedFees,
-				position.OpenedAt,
-				position.ClosedAt,
-				position.Residual != 0m,
-				commentsBySymbol.GetValueOrDefault(position.Symbol),
-				// Стоимость и процент изменения цены открытого остатка проходят
-				// из метрик позиции как есть: их деградация при закрытом остатке
-				// и сбое марок уже решена слоем марок.
-				// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
-				MarkValue: position.MarkValue,
-				PriceChangePercent: position.PriceChangePercent))
+			.Select(position =>
+			{
+				// Распад остатка линейной ноги «синтетика / прочий остаток» строится
+				// только при неоспоренном синтетическом содержимом: без связок и при
+				// оспоренных связках колонки остаются null — экран показывает
+				// отсутствие распада одинаково.
+				// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-synthetic-line-absent
+				decimal? syntheticResidual = null;
+				decimal? otherResidual = null;
+				if (syntheticQuantityByLinearSymbol.TryGetValue(position.Symbol, out var syntheticQuantity))
+				{
+					syntheticResidual = syntheticQuantity;
+					otherResidual = position.Residual - syntheticQuantity;
+				}
+
+				return new ConstructionPositionRow(
+					position.Symbol,
+					position.Residual,
+					position.AverageEntryPrice,
+					position.AverageClosePrice,
+					position.RealizedPnL,
+					PercentOfCapital(position.RealizedPnL),
+					position.UnrealizedPnL,
+					PercentOfCapital(position.UnrealizedPnL),
+					position.TotalPnL,
+					PercentOfCapital(position.TotalPnL),
+					position.AccumulatedFees,
+					position.OpenedAt,
+					position.ClosedAt,
+					position.Residual != 0m,
+					commentsBySymbol.GetValueOrDefault(position.Symbol),
+					// Стоимость и процент изменения цены открытого остатка проходят
+					// из метрик позиции как есть: их деградация при закрытом остатке
+					// и сбое марок уже решена слоем марок.
+					// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
+					MarkValue: position.MarkValue,
+					PriceChangePercent: position.PriceChangePercent,
+					SyntheticResidual: syntheticResidual,
+					OtherResidual: otherResidual);
+			})
 			.ToList();
 	}
 
@@ -208,9 +234,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// Строки таблицы сделок: сделки материализуются проекцией синхронизации
 	/// из того же сырья, что питает «Входящие» и метрики, затем фильтруются
 	/// по действующей привязке к конструкции; комментарии читаются из
-	/// пользовательских данных сделок.
+	/// пользовательских данных сделок. Материализованные сделки возвращаются
+	/// вместе со строками: распознаватель синтетических закрытий читает тот же
+	/// поток привязанных сделок конструкции.
 	/// </summary>
-	private static async Task<List<ConstructionTradeRow>> ReadTradesAsync(
+	private static async Task<(List<ConstructionTradeRow> Rows, List<MaterializedTrade> BoundTrades)> ReadTradesAsync(
 		JournalDbContext db,
 		long constructionId,
 		CancellationToken cancellationToken)
@@ -235,14 +263,16 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			.ConfigureAwait(false);
 
 		var materializer = new TradeMaterializer(new InstrumentResolver(new InstrumentCatalog(rawInstruments)));
+		var boundTrades = materializer.Materialize(rawExecutions).Trades
+			.Where(trade => boundExecIds.Contains(trade.ExecId))
+			.OrderByDescending(trade => trade.ExecutedAt)
+			.ThenByDescending(trade => trade.ExecId, StringComparer.Ordinal)
+			.ToList();
 		// Порядок строк сделок — по времени исполнения от новых к старым; при равном
 		// времени строки детерминированы тай-брейком execId по убыванию и не меняются
 		// между перечитываниями.
 		// Traceability: openspec:ui/screens#scenario-detail-trades-newest-first
-		return materializer.Materialize(rawExecutions).Trades
-			.Where(trade => boundExecIds.Contains(trade.ExecId))
-			.OrderByDescending(trade => trade.ExecutedAt)
-			.ThenByDescending(trade => trade.ExecId, StringComparer.Ordinal)
+		return (boundTrades
 			.Select(trade => new ConstructionTradeRow(
 				trade.ExecId,
 				trade.Symbol,
@@ -253,7 +283,110 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				Math.Abs(trade.Quantity) * trade.Price,
 				trade.Fee,
 				commentsByExecId.GetValueOrDefault(trade.ExecId)))
-			.ToList();
+			.ToList(), boundTrades);
+	}
+
+	/// <summary>
+	/// Строки синтетических закрытий конструкции: распознаватель связок
+	/// вычисляется над потоком привязанных сделок конструкции и не хранится
+	/// в сборке; величина лока каждой связки считается чистым калькулятором
+	/// по записям FIFO закрываемой ноги. Оспоренные связки остаются в списке
+	/// с признаком спора — их лок не входит в логический слой: и величина лока
+	/// строки, и распад остатка ноги строятся только по неоспоренным связкам.
+	/// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-locked-value
+	/// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
+	/// Traceability: change:synthetic-close-logical-layer/design#d1
+	/// </summary>
+	private static async Task<(List<SyntheticCloseRow> Rows, IReadOnlyDictionary<string, decimal> QuantityByLinearSymbol)> ReadSyntheticClosesAsync(
+		JournalDbContext db,
+		long constructionId,
+		List<MaterializedTrade> boundTrades,
+		CancellationToken cancellationToken)
+	{
+		// Спор — команда пользователя, read-модель только читает перечень споров
+		// напрямую: сервис спора владеет командным сценарием и здесь не используется.
+		var disputedKeys = (await db.SyntheticCloseDisputes
+				.AsNoTracking()
+				.Where(dispute => dispute.ConstructionId == constructionId)
+				.Select(dispute => new { dispute.LinearExecId, dispute.CounterOptionExecId })
+				.ToListAsync(cancellationToken)
+				.ConfigureAwait(false))
+			.Select(dispute => (dispute.LinearExecId, dispute.CounterOptionExecId))
+			.ToHashSet();
+
+		// Поток привязанных сделок повторяет вход сборки: материализованная сделка
+		// переносится в запись исполнения теми же полями, время — из DateTimeOffset.
+		var assemblies = boundTrades
+			.Select(trade => new AssemblyExecution
+			{
+				ExecId = trade.ExecId,
+				Category = trade.Category,
+				Symbol = trade.Symbol,
+				ExecTimeMs = trade.ExecutedAt.ToUnixTimeMilliseconds(),
+				SignedQuantity = trade.Quantity,
+			})
+			.ToArray();
+		var rows = new List<SyntheticCloseRow>();
+		var quantityByLinearSymbol = new Dictionary<string, decimal>(StringComparer.Ordinal);
+		foreach (var link in SyntheticCloseRecognizer.Recognize(assemblies))
+		{
+			var linearExecId = link.LinearExecId;
+			var counterExecId = link.CounterOptionExecId;
+			var disputed = disputedKeys.Contains((linearExecId, counterExecId));
+			var valuation = SyntheticCloseValuationOf(link, boundTrades);
+			var lockedValue = SyntheticCloseValuationCalculator.CalculateToExpiry(link, valuation);
+			// Лок спорной связки не выходит из строки: величина показывается
+			// с признаком спора, логический слой ноги спорной связкой не трогается.
+			// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-locked-value-marks-failure-independent
+			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, disputed));
+			if (disputed == false)
+			{
+				quantityByLinearSymbol[linearTradeOf(link, boundTrades).Symbol] =
+					quantityByLinearSymbol.GetValueOrDefault(linearTradeOf(link, boundTrades).Symbol) + link.Quantity;
+			}
+		}
+
+		return (rows, quantityByLinearSymbol);
+	}
+
+	/// <summary>
+	/// Линейная сделка связки по идентификатору исполнения; сделка приходит из
+	/// того же потока, по которому работал распознаватель, и потому присутствует.
+	/// </summary>
+	private static MaterializedTrade linearTradeOf(SyntheticCloseLink link, List<MaterializedTrade> boundTrades) =>
+		boundTrades.Single(trade => trade.ExecId == link.LinearExecId);
+
+	/// <summary>
+	/// Записи FIFO закрываемой ноги связки: сделки ноги из того же потока
+	/// привязанных сделок упорядочены по времени исполнения и идентификатору —
+	/// тот же порядок, что у распознавателя связок.
+	/// </summary>
+	private static SyntheticCloseValuation SyntheticCloseValuationOf(SyntheticCloseLink link, List<MaterializedTrade> boundTrades)
+	{
+		var linearTrade = linearTradeOf(link, boundTrades);
+		var counterTrade = boundTrades.Single(trade => trade.ExecId == link.CounterOptionExecId);
+		var legEntries = boundTrades
+			.Where(trade => trade.Symbol == link.ClosedLegSymbol)
+			.OrderBy(trade => trade.ExecutedAt)
+			.ThenBy(trade => trade.ExecId, StringComparer.Ordinal)
+			.Select(trade => new PositionFifoEntry
+			{
+				At = trade.ExecutedAt,
+				Kind = PositionFifoEntryKind.Trade,
+				SourceKey = trade.ExecId,
+				Quantity = trade.Quantity,
+				Price = trade.Price,
+				Fee = trade.Fee,
+			})
+			.ToArray();
+		return new SyntheticCloseValuation
+		{
+			LinearPrice = linearTrade.Price,
+			LinearFee = linearTrade.Fee,
+			CounterOptionPrice = counterTrade.Price,
+			CounterOptionFee = counterTrade.Fee,
+			ClosedLegEntries = legEntries,
+		};
 	}
 
 	/// <summary>

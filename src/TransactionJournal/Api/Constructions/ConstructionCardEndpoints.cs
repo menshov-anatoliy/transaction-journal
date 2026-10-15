@@ -617,7 +617,9 @@ public static class ConstructionCardEndpoints
 			position.IsOpen,
 			position.Comment,
 			position.MarkValue,
-			position.PriceChangePercent)).ToArray(),
+			position.PriceChangePercent,
+			position.SyntheticResidual,
+			position.OtherResidual)).ToArray(),
 		data.Trades.Select(trade => new ConstructionCardTradeResponse(
 			trade.ExecId,
 			trade.Symbol,
@@ -645,7 +647,15 @@ public static class ConstructionCardEndpoints
 			adjustment.Date,
 			adjustment.Description,
 			SerializeAdjustmentSource(adjustment.Source),
-			adjustment.AmountUsdt)).ToArray());
+			adjustment.AmountUsdt)).ToArray(),
+		// Пустой список вместо null в JSON: отсутствие связок — обычное состояние,
+		// контракт отдаёт явную пустоту, а не отсутствие поля.
+		// Traceability: change:synthetic-close-logical-layer/design#d5
+		(data.SyntheticCloses ?? []).Select(close => new ConstructionCardSyntheticCloseResponse(
+			close.ClosedLegSymbol,
+			close.Quantity,
+			close.LockedValueUsdt,
+			close.Disputed)).ToArray());
 
 	/// <summary>Разбирает строку источника корректировки; null — неизвестное значение.</summary>
 	private static PnLAdjustmentSource? DeserializeAdjustmentSource(string? source) => source switch
@@ -734,6 +744,11 @@ public static class ConstructionCardEndpoints
 /// <param name="ClosingEntries">Строки таблицы закрывающих записей.</param>
 /// <param name="ClosingWarnings">Предупреждения об избыточных закрывающих записях.</param>
 /// <param name="Adjustments">Строки таблицы корректировок PnL.</param>
+/// <param name="SyntheticCloses">Строки распознанных синтетических закрытий конструкции; пустой список без связок.</param>
+// Синтетические закрытия входят в контракт карточки аддитивно: новые поля
+// добавлены в конец записей, существующие потребители не ломаются.
+// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
+// Traceability: change:synthetic-close-logical-layer/design#d5
 public sealed record ConstructionCardResponse(
 	long ConstructionId,
 	string Name,
@@ -754,7 +769,8 @@ public sealed record ConstructionCardResponse(
 	IReadOnlyList<ConstructionCardTradeResponse> Trades,
 	IReadOnlyList<ConstructionCardClosingEntryResponse> ClosingEntries,
 	IReadOnlyList<ConstructionCardClosingWarningResponse> ClosingWarnings,
-	IReadOnlyList<ConstructionCardAdjustmentResponse> Adjustments);
+	IReadOnlyList<ConstructionCardAdjustmentResponse> Adjustments,
+	IReadOnlyList<ConstructionCardSyntheticCloseResponse> SyntheticCloses);
 
 /// <summary>Метрики карточки: сводка kstrip с периодом и длительностью.</summary>
 /// <param name="RealizedPnL">Реализованный PnL конструкции.</param>
@@ -811,6 +827,12 @@ public sealed record ConstructionCardMetricsResponse(
 /// <param name="Comment">Комментарий позиции в Markdown; null — комментария нет.</param>
 /// <param name="MarkValue">Стоимость остатка по марке; null у закрытой и при сбое марок.</param>
 /// <param name="PriceChangePercent">Изменение цены остатка в процентах; null у закрытой и при сбое.</param>
+/// <param name="SyntheticResidual">Часть остатка, уведённая неоспоренными синтетическими связками; null без неоспоренного синтетического содержимого.</param>
+/// <param name="OtherResidual">Прочий остаток линейной ноги — остаток минус синтетическая часть; null вместе с синтетической частью.</param>
+// Распад остатка линейной ноги входит в контракт позиции аддитивно: null
+// при отсутствии неоспоренной синтетики отличим от нуля остатка.
+// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
+// Traceability: change:synthetic-close-logical-layer/design#d5
 public sealed record ConstructionCardPositionResponse(
 	string Symbol,
 	decimal Residual,
@@ -828,7 +850,23 @@ public sealed record ConstructionCardPositionResponse(
 	bool IsOpen,
 	string? Comment,
 	decimal? MarkValue,
-	decimal? PriceChangePercent);
+	decimal? PriceChangePercent,
+	decimal? SyntheticResidual,
+	decimal? OtherResidual);
+
+/// <summary>Строка списка синтетических закрытий карточки.</summary>
+/// <param name="ClosedLegSymbol">Символ закрываемой опционной ноги связки.</param>
+/// <param name="Quantity">Количество связки — закрываемая часть ноги.</param>
+/// <param name="LockedValueUsdt">Величина «зафиксировано синтетикой» — паритетный лок связки к экспирации в USDT.</param>
+/// <param name="Disputed">Связка оспорена пользователем: её лок не входит в логический слой ноги.</param>
+// Признак спора проходит рядом со связкой: строка остаётся видимой после
+// оспаривания, логический слой спорной связкой не трогается.
+// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
+public sealed record ConstructionCardSyntheticCloseResponse(
+	string ClosedLegSymbol,
+	decimal Quantity,
+	decimal LockedValueUsdt,
+	bool Disputed);
 
 /// <summary>Строка таблицы сделок карточки.</summary>
 /// <param name="ExecId">Биржевой идентификатор исполнения — ключ сделки.</param>
