@@ -133,8 +133,9 @@ export interface FinResultGeometry {
 	readonly borderAt: number | null;
 	/**
 	 * Тон подписи границы — по знаку худшего исхода, а не итога:
-	 * отрицательный исход красный даже при плюсовом итоге; null — границы
-	 * нет. Traceability: openspec:ui/screens#requirement-risk-profit-hint
+	 * отрицательный исход красный даже при плюсовом итоге; null — границы нет.
+	 *
+	 * Traceability: openspec:ui/screens#requirement-risk-profit-hint
 	 */
 	readonly borderTone: "positive" | "negative" | null;
 	/**
