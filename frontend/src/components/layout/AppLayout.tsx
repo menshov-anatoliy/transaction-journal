@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { NavLink, Outlet, matchPath, useLocation } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
+	LineChart,
 	Menu,
 	PanelLeftClose,
 	PanelLeftOpen,
@@ -238,7 +239,7 @@ export function AppLayout() {
 								<Button
 									variant="ghost"
 									size="icon"
-									className="size-[30px]"
+									className="size-7"
 									aria-label="Развернуть панель навигации"
 									title="Развернуть панель навигации"
 									onClick={() => left.setCollapsed(false)}
@@ -248,24 +249,27 @@ export function AppLayout() {
 							) : (
 								<>
 									{/*
-										Лого-глиф по ноде srW2i мастера: квадрат на паре
+										Лого-глиф по ноде srW2i мастера: квадрат 26×26
+										(size-6.5) с радиусом 8 на паре
 										accentSoft/accentStrong — эта пара в «Каркасе»
-										принадлежит логотипу топбара.
+										принадлежит логотипу топбара; по центру иконка
+										line-chart 14×14 цветом $accentStrong.
 									*/}
 									{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
 									<span
 										data-slot="topbar-logo"
 										data-testid="topbar-logo"
 										aria-hidden="true"
-										className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-accent-soft text-[13px] font-semibold text-accent-strong"
+										className="flex size-6.5 shrink-0 items-center justify-center rounded-lg bg-accent-soft"
 									>
-										Ж
+										<LineChart className="size-3.5 text-accent-strong" />
 									</span>
 									<span className="whitespace-nowrap text-sm font-semibold">Журнал Bybit</span>
+									{/* Кнопки панелей — 28×28 по мастеру J8C2x/z6tizc, иконка 15 сохраняется. */}
 									<Button
 										variant="ghost"
 										size="icon"
-										className="ml-auto size-[30px]"
+										className="ml-auto size-7"
 										aria-label="Свернуть панель навигации"
 										title="Свернуть панель навигации"
 										onClick={() => left.setCollapsed(true)}
@@ -302,7 +306,7 @@ export function AppLayout() {
 									<Button
 										variant="ghost"
 										size="icon"
-										className="size-[30px]"
+										className="size-7"
 										aria-label="Развернуть контекстную панель"
 										title="Развернуть контекстную панель"
 										onClick={() => right.setCollapsed(false)}
@@ -314,7 +318,7 @@ export function AppLayout() {
 										<Button
 											variant="ghost"
 											size="icon"
-											className="size-[30px]"
+											className="size-7"
 											aria-label="Свернуть контекстную панель"
 											title="Свернуть контекстную панель"
 											onClick={() => right.setCollapsed(true)}
@@ -479,13 +483,15 @@ function PageHeaderSegment({
 			data-testid="topbar-segment-page"
 			className="flex min-w-0 flex-1 items-center gap-2.5 px-5"
 		>
+			{/* Крошка «Журнал / <раздел>» — одна строка 12px $textMuted без
+				выделения хвоста раздела (мастер jGvOM). */}
 			<nav
 				aria-label="Крошка раздела"
-				className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[13px] text-text-muted"
+				className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text-muted"
 			>
 				<span>Журнал</span>
 				<span aria-hidden="true">/</span>
-				{section != null && <span className="font-medium text-text-secondary">{section.label}</span>}
+				{section != null && <span>{section.label}</span>}
 				{badgeVisible && (
 					<span
 						data-slot="topbar-badge"
@@ -496,8 +502,9 @@ function PageHeaderSegment({
 					</span>
 				)}
 			</nav>
+			{/* Заголовок страницы — 15/600 по мастеру jGvOM. */}
 			{title != null && (
-				<span data-testid="topbar-page-title" className="truncate text-sm font-semibold text-text-primary">
+				<span data-testid="topbar-page-title" className="truncate text-[15px] font-semibold text-text-primary">
 					{title}
 				</span>
 			)}
@@ -535,11 +542,12 @@ function SyncStatus() {
 		return null;
 	}
 
+	// 11.5px $textMuted по мастеру jGvOM (нода SyncStatus).
 	return (
 		<div
 			data-slot="sync-status"
 			data-testid="sync-status"
-			className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-text-muted"
+			className="flex items-center gap-1.5 whitespace-nowrap text-[11.5px] text-text-muted"
 			title="Последний успешный запуск синхронизации"
 		>
 			<RefreshCw aria-hidden="true" className="size-3.5" />

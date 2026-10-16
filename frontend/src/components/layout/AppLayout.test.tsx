@@ -191,6 +191,22 @@ describe("раскладка каркаса приложения", () => {
 		expect(within(segment).getByTestId("topbar-logo")).toBeInTheDocument();
 	});
 
+	it("рисует лого-глиф токенами мастера srW2i", () => {
+		renderLayout();
+
+		// Assert: квадрат 26×26 (size-6.5) с радиусом 8 на паре
+		// accentSoft/accentStrong; по центру — иконка line-chart 14×14
+		// цветом $accentStrong вместо текстового глифа.
+		// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
+		const logo = screen.getByTestId("topbar-logo");
+		expect(logo.className).toContain("size-6.5");
+		expect(logo.className).toContain("rounded-lg");
+		expect(logo.className).toContain("bg-accent-soft");
+		const glyph = logo.querySelector("svg");
+		expect(glyph).toHaveClass("size-3.5");
+		expect(glyph).toHaveClass("text-accent-strong");
+	});
+
 	it("несёт геометрию мастера g0z20: высота 64, сегментные паддинги, фон surface", () => {
 		renderLayout();
 
@@ -337,12 +353,15 @@ describe("сегменты топбара", () => {
 		const navSegment = screen.getByTestId("topbar-segment-nav");
 		const collapseLeft = within(navSegment).getByRole("button", { name: "Свернуть панель навигации" });
 		expect(collapseLeft).toHaveAttribute("title", "Свернуть панель навигации");
+		// Кнопки панелей — 28×28 по мастеру J8C2x/z6tizc (иконка 15 сохраняется).
+		expect(collapseLeft.className).toContain("size-7");
 		// Внутренний (правый) край сегмента навигации: кнопка — последний элемент.
 		expect(navSegment.lastElementChild).toBe(collapseLeft);
 
 		const contextSegment = screen.getByTestId("topbar-segment-context");
 		const collapseRight = within(contextSegment).getByRole("button", { name: "Свернуть контекстную панель" });
 		expect(collapseRight).toHaveAttribute("title", "Свернуть контекстную панель");
+		expect(collapseRight.className).toContain("size-7");
 		// Внутренний (левый) край сегмента контекста: кнопка — первый элемент.
 		expect(contextSegment.firstElementChild).toBe(collapseRight);
 
@@ -369,9 +388,14 @@ describe("сегменты топбара", () => {
 		const contextSegment = screen.getByTestId("topbar-segment-context");
 		expect(contextSegment).toHaveStyle({ width: "2.75rem" });
 		expect(within(contextSegment).queryByTestId("context-chip")).not.toBeInTheDocument();
-		expect(
-			within(contextSegment).getByRole("button", { name: "Развернуть контекстную панель" }),
-		).toBeInTheDocument();
+		const expandRight = within(contextSegment).getByRole("button", { name: "Развернуть контекстную панель" });
+		const expandLeft = within(screen.getByTestId("topbar-segment-nav")).getByRole(
+			"button",
+			{ name: "Развернуть панель навигации" },
+		);
+		// Кнопки разворачивания — те же 28×28 по мастеру J8C2x/z6tizc.
+		expect(expandLeft.className).toContain("size-7");
+		expect(expandRight.className).toContain("size-7");
 		expect(screen.getByTestId("context-panel")).toHaveStyle({ width: "2.75rem" });
 	});
 });
@@ -394,6 +418,24 @@ describe("сегмент страницы", () => {
 		expect(crumb).toHaveTextContent("/");
 		expect(crumb).toHaveTextContent("Конструкции");
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Конструкции");
+	});
+
+	it("рисует крошку и заголовок типографикой мастера jGvOM", () => {
+		renderLayout();
+
+		// Assert: крошка — одна строка 12px $textMuted (text-xs) без
+		// выделения хвоста раздела; заголовок страницы — 15/600
+		// (text-[15px]).
+		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.className).toContain("text-xs");
+		expect(crumb.className).toContain("text-text-muted");
+		const tail = within(crumb).getByText("Конструкции");
+		expect(tail.className).not.toContain("font-medium");
+		expect(tail.className).not.toContain("text-text-secondary");
+		const title = within(segment).getByTestId("topbar-page-title");
+		expect(title.className).toContain("text-[15px]");
 	});
 
 	it("регистрация шапки выводит заголовок и чипы страницы у крошки", () => {
@@ -448,6 +490,8 @@ describe("статус синхронизации", () => {
 		// HH:MM в зоне браузера.
 		const status = await screen.findByTestId("sync-status");
 		expect(status).toHaveTextContent("Обновлено 11:05");
+		// 11.5px $textMuted по мастеру (нода SyncStatus).
+		expect(status.className).toContain("text-[11.5px]");
 	});
 
 	it("скрыт, когда успешных запусков нет", async () => {
