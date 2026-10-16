@@ -488,6 +488,7 @@
                   "strokeWidth": {
                     "right": 1
                   },
+                  "layout": "vertical",
                   "children": [
                     {
                       "type": "frame",
@@ -498,8 +499,6 @@
                       "layout": "vertical",
                       "gap": 4,
                       "padding": [
-                        16,
-                        8,
                         16,
                         12
                       ],
@@ -600,136 +599,24 @@
                     },
                     {
                       "type": "frame",
-                      "id": "M1A5f1",
-                      "name": "Иконочная колонка",
-                      "width": 44,
-                      "height": "fill_container",
+                      "id": "ZHpWn",
+                      "name": "Футер",
+                      "width": "fill_container",
+                      "height": 44,
                       "stroke": "$divider",
                       "strokeWidth": {
-                        "left": 1
+                        "top": 1
                       },
-                      "layout": "vertical",
-                      "gap": 6,
                       "padding": [
-                        14,
-                        4
+                        0,
+                        12
                       ],
+                      "justifyContent": "end",
                       "alignItems": "center",
                       "children": [
                         {
                           "type": "frame",
-                          "id": "wTCUF",
-                          "name": "Раздел:layers",
-                          "width": 30,
-                          "height": 30,
-                          "fill": "$accentSofter",
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "TDQS0",
-                              "name": "Icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "layers",
-                              "library": "lucide",
-                              "fill": "$accent"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "kx4ZS",
-                          "name": "Раздел:inbox",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "v96F8q",
-                              "name": "Icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "inbox",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "E4HA3u",
-                          "name": "Раздел:lightbulb",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "w910e",
-                              "name": "Icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "lightbulb",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "ecwIR",
-                          "name": "Раздел:bot",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "Bq7R0",
-                              "name": "Icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "bot",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "l9J5A",
-                          "name": "Раздел:refresh-cw",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "r9inZ",
-                              "name": "Icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "refresh-cw",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "eMdVl",
+                          "id": "n11v3D",
                           "name": "Collapse",
                           "width": 30,
                           "height": 30,
@@ -739,7 +626,7 @@
                           "children": [
                             {
                               "type": "icon",
-                              "id": "vBj0O",
+                              "id": "k6o1UT",
                               "name": "CollapseIcon",
                               "width": 15,
                               "height": 15,
@@ -807,111 +694,8 @@
                   "strokeWidth": {
                     "left": 1
                   },
+                  "layout": "vertical",
                   "children": [
-                    {
-                      "type": "frame",
-                      "id": "GosgE",
-                      "name": "Иконочная колонка",
-                      "width": 44,
-                      "height": "fill_container",
-                      "layout": "vertical",
-                      "gap": 6,
-                      "padding": [
-                        14,
-                        4
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "l97wI6",
-                          "name": "Контекст:clipboard-list",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "WJ4EJ",
-                              "name": "Icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "clipboard-list",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "m2UAQ",
-                          "name": "Контекст:message-square",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "v6bF4",
-                              "name": "Icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "message-square",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "MjrQv",
-                          "name": "Контекст:book-open",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "E5Q3N5",
-                              "name": "Icon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "book-open",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "D4pzu",
-                          "name": "Collapse",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "UAxqJ",
-                              "name": "CollapseIcon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "panel-right-close",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        }
-                      ]
-                    },
                     {
                       "type": "frame",
                       "id": "C2PUHj",
@@ -1163,6 +947,46 @@
                           "fontFamily": "$font",
                           "fontSize": 10.5,
                           "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Hbj76",
+                      "name": "Футер",
+                      "width": "fill_container",
+                      "height": 44,
+                      "stroke": "$divider",
+                      "strokeWidth": {
+                        "top": 1
+                      },
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "RGtut",
+                          "name": "Collapse",
+                          "width": 30,
+                          "height": 30,
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "trPdb",
+                              "name": "CollapseIcon",
+                              "width": 15,
+                              "height": 15,
+                              "icon": "panel-right-close",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
                         }
                       ]
                     }
