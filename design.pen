@@ -16587,22 +16587,261 @@
       ]
     },
     {
-      "type": "rectangle",
-      "id": "c7VXxB",
-      "x": 6680,
-      "y": 0,
-      "name": "Журнал Bybit",
-      "fill": [
-        "#ffffff",
+      "type": "frame",
+      "id": "oxkk8",
+      "x": 3520,
+      "y": 2600,
+      "name": "Мастер/Синтетика · список связок",
+      "width": 560,
+      "layout": "vertical",
+      "gap": 8,
+      "children": [
         {
-          "type": "image",
-          "enabled": true,
-          "url": "screenshot-localhost.png",
-          "mode": "cover"
+          "type": "frame",
+          "id": "SZwJL",
+          "name": "Сводка · синтетика раскрыта",
+          "width": "fill_container",
+          "fill": "$surface",
+          "cornerRadius": 12,
+          "stroke": "$border",
+          "layout": "vertical",
+          "gap": 10,
+          "padding": [
+            14,
+            18
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "ON77c",
+              "name": "Строка-переключатель",
+              "width": "fill_container",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "BzTdt",
+                  "name": "Label",
+                  "fill": "$textMuted",
+                  "content": "зафиксировано синтетикой",
+                  "fontFamily": "$font",
+                  "fontSize": 11,
+                  "fontWeight": "normal",
+                  "letterSpacing": 0.3
+                },
+                {
+                  "type": "text",
+                  "id": "m2Ulh",
+                  "name": "Value",
+                  "fill": "$accentStrong",
+                  "content": "+35,70 USDT",
+                  "fontFamily": "$font",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "LXPXt",
+                  "name": "LegInfo",
+                  "fill": "$textSecondary",
+                  "content": "ETH-28MAR-1600-P · нога 0,5 → 0,2",
+                  "fontFamily": "$font",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon",
+                  "id": "rukzK",
+                  "name": "Chevron",
+                  "width": 14,
+                  "height": 14,
+                  "icon": "chevron-up",
+                  "library": "lucide",
+                  "fill": "$textMuted"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "iaqTq",
+              "name": "Список связок",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                0,
+                0,
+                0,
+                10
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "b1VrH",
+                  "name": "Связка",
+                  "width": "fill_container",
+                  "cornerRadius": 2,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "jdzIF",
+                      "name": "Содержимое",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "gsNxi",
+                          "name": "Нога",
+                          "fill": "$textSecondary",
+                          "content": "ETH-28MAR-1600-P",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "l0PMa",
+                          "name": "Количество",
+                          "fill": "$textPrimary",
+                          "content": "· 0,3",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "L5Gtz",
+                          "name": "Лок",
+                          "fill": "$textPrimary",
+                          "content": "· лок +20,40 USDT",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "GpMQY",
+                      "type": "ref",
+                      "ref": "Kn5dY",
+                      "name": "Действие",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "descendants": {
+                        "MIT6Q": {
+                          "content": "Оспорить",
+                          "fontSize": 11
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "YDyTw",
+                  "name": "Связка · оспорена",
+                  "width": "fill_container",
+                  "cornerRadius": 2,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "justifyContent": "space_between",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "J0Q96h",
+                      "name": "Содержимое",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "iL9OZ",
+                          "name": "Нога",
+                          "fill": "$textMuted",
+                          "content": "ETH-28MAR-1600-P",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "M7YeFW",
+                          "name": "Количество",
+                          "fill": "$textMuted",
+                          "content": "· 0,2",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "pwtFQ",
+                          "name": "Лок",
+                          "fill": "$textMuted",
+                          "content": "· лок +15,30 USDT",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QyRUE",
+                          "name": "Признак",
+                          "fill": "$textMuted",
+                          "content": "оспорена",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal",
+                          "letterSpacing": 0.3
+                        }
+                      ]
+                    },
+                    {
+                      "id": "BIdlX",
+                      "type": "ref",
+                      "ref": "Kn5dY",
+                      "name": "Действие",
+                      "padding": [
+                        4,
+                        8
+                      ],
+                      "descendants": {
+                        "MIT6Q": {
+                          "content": "Вернуть",
+                          "fontSize": 11
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "NAwbZ",
+          "name": "Caption",
+          "fill": "$textMuted",
+          "content": "Строка-переключатель с раскрытым списком связок — оспоренная приглушена, действие в конце строки",
+          "fontFamily": "$font",
+          "fontSize": 10.5,
+          "fontWeight": "normal"
         }
-      ],
-      "width": 1728,
-      "height": 1080
+      ]
     }
   ],
   "variables": {
