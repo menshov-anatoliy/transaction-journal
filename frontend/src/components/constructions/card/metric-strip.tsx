@@ -300,7 +300,7 @@ export function ConstructionMetricStrip({ card, onDispute, onRevert }: Construct
 										data-slot="synthetic-close-row"
 										data-disputed={close.disputed}
 										className={cn(
-											"flex flex-wrap items-center gap-2 rounded-sm px-2 py-1 text-[12px]",
+											"flex flex-wrap items-center gap-2 rounded-[2px] px-2 py-1 text-[12px]",
 											close.disputed && "text-text-muted",
 										)}
 									>
