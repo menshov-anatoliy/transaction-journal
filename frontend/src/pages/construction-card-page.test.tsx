@@ -802,3 +802,50 @@ describe("карточка конструкции: панель чатов в к
 		expect(screen.getByLabelText("URL")).toHaveTextContent("other=keep");
 	});
 });
+
+// Шапка сегмента «страница» топбара на карточке (решение раунд-сверки 3.0,
+// макет QbFRE): трёхуровневая крошка «Журнал / Конструкции / Карточка»,
+// после загрузки заголовок «<имя конструкции> · Карточка», до загрузки —
+// fallback «Карточка конструкции»; чипов сегмента страницы на экране нет.
+// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+// Traceability: change:rework-contextual-topbar/tasks#3.0
+describe("карточка конструкции: шапка сегмента страницы топбара", () => {
+	it("TryIfPageHeaderRegistersCardNameBreadcrumbTailAndChatsChipAfterLoad", async () => {
+		// Act: карточка внутри каркаса — регистрация шапки работает только в слоте Outlet.
+		renderCardPageInFrame();
+
+		// Assert: заголовок сегмента — «<имя конструкции> · Карточка»; ждём
+		// именно текст: сначала срабатывает fallback-регистрация, затем
+		// перерегистрация по загруженной карточке.
+		const title = await screen.findByText("ETH-240628-3200C+P · Карточка");
+		expect(title).toHaveAttribute("data-testid", "topbar-page-title");
+
+		// Assert: крошка трёхуровневая — хвост «Карточка» после раздела «Конструкции».
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Конструкции/Карточка");
+
+		// Assert: чип сегмента контекста — «Чаты конструкции»; чипов сегмента страницы нет.
+		// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+		expect(screen.getByTestId("context-chip")).toHaveTextContent("Чаты конструкции");
+		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
+	});
+
+	it("TryIfPageHeaderFallsBackToCardTitleWhileCardLoading", async () => {
+		// Arrange: чтение карточки не завершается — имени для заголовка нет.
+		cardApi.fetchConstructionCard.mockReturnValue(new Promise(() => {}));
+
+		// Act: карточка внутри каркаса.
+		renderCardPageInFrame();
+
+		// Assert: до загрузки сегмент показывает fallback «Карточка
+		// конструкции» при уже зарегистрированном хвосте крошки; контекстная
+		// панель с чипом чатов ещё не выведена.
+		const title = await screen.findByTestId("topbar-page-title");
+		expect(title).toHaveTextContent("Карточка конструкции");
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Конструкции/Карточка");
+		expect(screen.queryByTestId("context-chip")).not.toBeInTheDocument();
+	});
+});

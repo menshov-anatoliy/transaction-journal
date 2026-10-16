@@ -124,12 +124,13 @@ function OverflowContextScreen() {
 }
 
 /**
- * Экран-проверка: регистрирует шапку страницы (заголовок и чип) в сегменте
- * «страница» топбара.
+ * Экран-проверка: регистрирует шапку страницы (заголовок, хвост крошки и
+ * чип) в сегменте «страница» топбара.
  */
 function HeaderRegisteringScreen() {
 	usePageHeader({
 		title: "Карточка конструкции",
+		breadcrumbTail: "Карточка",
 		chips: <span data-testid="page-chip">чип страницы</span>,
 	});
 	return <div>главная</div>;
@@ -446,6 +447,19 @@ describe("сегмент страницы", () => {
 		const segment = screen.getByTestId("topbar-segment-page");
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Карточка конструкции");
 		expect(within(segment).getByTestId("page-chip")).toBeInTheDocument();
+	});
+
+	it("хвост регистрации продолжает крошку третьим уровнем", () => {
+		renderLayout(false, false, true);
+
+		// Assert: зарегистрированный хвост «Карточка» продолжает крошку
+		// «Журнал / Конструкции» трёхуровневой — порядок «Журнал /
+		// Конструкции / Карточка» в одной строке.
+		// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+		// Traceability: change:rework-contextual-topbar/tasks#3.0
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Конструкции/Карточка");
 	});
 
 	it("бейдж входящих дублируется у крошки на экране «Входящие»", async () => {

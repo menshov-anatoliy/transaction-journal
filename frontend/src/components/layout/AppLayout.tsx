@@ -446,11 +446,12 @@ function resolveSection(pathname: string): AppSection | null {
 
 /**
  * Сегмент «страница» топбара (design.md D3): слева крошка «Журнал /
- * <раздел>» из конфигурации разделов с бейджем «Входящих» у крошки, далее
- * заголовок и чипы из регистрации шапки страницы (без регистрации —
- * заголовок раздела); справа — инварианты каркаса: статус синхронизации
- * и итог журнала с разбивкой, видимые на любом экране. Паддинги [0,20]
- * по мастеру jGvOM.
+ * <раздел>» из конфигурации разделов с хвостом из регистрации шапки
+ * страницы («Журнал / <раздел> / <хвост>») и бейджем «Входящих» у крошки,
+ * далее заголовок и чипы из регистрации (без регистрации — заголовок
+ * раздела); справа — инварианты каркаса: статус синхронизации и итог
+ * журнала с разбивкой, видимые на любом экране. Паддинги [0,20] по
+ * мастеру jGvOM.
  *
  * Traceability: openspec:ui/screens#scenario-frame-page-header-registration
  * Traceability: openspec:ui/screens#scenario-inbox-badge-counts-unassigned
@@ -492,6 +493,20 @@ function PageHeaderSegment({
 				<span>Журнал</span>
 				<span aria-hidden="true">/</span>
 				{section != null && <span>{section.label}</span>}
+				{/*
+					Хвост крошки страницы из регистрации шапки: вложенный
+					маршрут (карточка конструкции) дополняет крошку третьим
+					уровнем — «Журнал / Конструкции / Карточка» (решение
+					раунд-сверки 3.0); без регистрации крошка двухуровневая.
+				*/}
+				{/* Traceability: openspec:ui/screens#scenario-frame-page-header-registration */}
+				{/* Traceability: change:rework-contextual-topbar/tasks#3.0 */}
+				{registration?.breadcrumbTail != null && (
+					<>
+						<span aria-hidden="true">/</span>
+						<span>{registration.breadcrumbTail}</span>
+					</>
+				)}
 				{badgeVisible && (
 					<span
 						data-slot="topbar-badge"

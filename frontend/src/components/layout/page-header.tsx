@@ -7,10 +7,11 @@ import type { AppOutletContext } from "./outlet-context";
  * чипы/действия задаёт текущий экран через Outlet-контекст — по образцу
  * слота контекстной панели. Крошка «Журнал / <раздел>», бейдж «Входящих»,
  * итог журнала и статус синхронизации страницами не регистрируются: это
- * инварианты каркаса.
+ * инварианты каркаса. Страница может дополнить крошку хвостом третьего
+ * уровня («Журнал / <раздел> / <хвост>») для вложенных маршрутов.
  *
- * Контракт для страниц: хук `usePageHeader({ title, chips })` регистрирует
- * шапку на время жизни вызывающего компонента.
+ * Контракт для страниц: хук `usePageHeader({ title, breadcrumbTail, chips })`
+ * регистрирует шапку на время жизни вызывающего компонента.
  *
  * Traceability: openspec:ui/screens#requirement-app-frame-navigation
  * Traceability: openspec:ui/screens#scenario-frame-page-header-registration
@@ -20,6 +21,15 @@ import type { AppOutletContext } from "./outlet-context";
 export interface PageHeaderRegistration {
 	/** Заголовок страницы рядом с крошкой; без поля показывается раздел из конфигурации. */
 	title?: ReactNode;
+	/**
+	 * Хвост трёхуровневой крошки страницы: «Журнал / <раздел> / <хвост>».
+	 * Вложенный маршрут (карточка конструкции) регистрирует «Карточка»,
+	 * обычные разделы поле не задают и остаются двухуровневыми.
+	 *
+	 * Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+	 * Traceability: change:rework-contextual-topbar/tasks#3.0
+	 */
+	breadcrumbTail?: ReactNode;
 	/** Ключевые чипы/действия страницы рядом с заголовком. */
 	chips?: ReactNode;
 }
