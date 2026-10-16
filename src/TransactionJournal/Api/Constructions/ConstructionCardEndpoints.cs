@@ -698,7 +698,9 @@ public static class ConstructionCardEndpoints
 			close.ClosedLegSymbol,
 			close.Quantity,
 			close.LockedValueUsdt,
-			close.Disputed)).ToArray());
+			close.Disputed,
+			close.LinearExecId,
+			close.CounterOptionExecId)).ToArray());
 
 	/// <summary>Разбирает строку источника корректировки; null — неизвестное значение.</summary>
 	private static PnLAdjustmentSource? DeserializeAdjustmentSource(string? source) => source switch
@@ -935,14 +937,22 @@ public sealed record ConstructionCardPositionResponse(
 /// <param name="Quantity">Количество связки — закрываемая часть ноги.</param>
 /// <param name="LockedValueUsdt">Величина «зафиксировано синтетикой» — паритетный лок связки к экспирации в USDT.</param>
 /// <param name="Disputed">Связка оспорена пользователем: её лок не входит в логический слой ноги.</param>
+/// <param name="LinearExecId">Биржевой идентификатор линейного исполнения связки — первый ключ команд оспаривания и возврата.</param>
+/// <param name="CounterOptionExecId">Биржевой идентификатор встречного опционного исполнения связки — второй ключ команд оспаривания и возврата.</param>
 // Признак спора проходит рядом со связкой: строка остаётся видимой после
 // оспаривания, логический слой спорной связкой не трогается.
+// Пара execId добавлена в конец записи аддитивно: UI адресует связку
+// в готовых эндпоинтах synthetic-closes/dispute|revert, прежние потребители
+// ответа не ломаются.
 // Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
+// Traceability: change:add-synthetic-close-dispute-ui/design#d1
 public sealed record ConstructionCardSyntheticCloseResponse(
 	string ClosedLegSymbol,
 	decimal Quantity,
 	decimal LockedValueUsdt,
-	bool Disputed);
+	bool Disputed,
+	string LinearExecId,
+	string CounterOptionExecId);
 
 /// <summary>Строка таблицы сделок карточки.</summary>
 /// <param name="ExecId">Биржевой идентификатор исполнения — ключ сделки.</param>

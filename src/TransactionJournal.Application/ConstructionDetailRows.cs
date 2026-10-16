@@ -136,15 +136,22 @@ public sealed record ConstructionAdjustmentRow(
 /// <param name="Quantity">Количество связки — закрываемая часть ноги.</param>
 /// <param name="LockedValueUsdt">Величина «зафиксировано синтетикой» — паритетный лок связки к экспирации в USDT.</param>
 /// <param name="Disputed">Связка оспорена пользователем: лок не входит в логический слой ноги.</param>
+/// <param name="LinearExecId">Биржевой идентификатор линейного исполнения связки — первый ключ команд оспаривания и возврата.</param>
+/// <param name="CounterOptionExecId">Биржевой идентификатор встречного опционного исполнения связки — второй ключ команд оспаривания и возврата.</param>
 // Список связок и признак спора вычисляются read-моделью деталей при чтении
 // и приходят в контракт аддитивно: транспортные требования не меняются.
+// Пара execId пробрасывается из распознанной связки в конец строки: без неё
+// UI не может адресовать связку в командах оспаривания и возврата.
 // Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
 // Traceability: change:synthetic-close-logical-layer/design#d5
+// Traceability: change:add-synthetic-close-dispute-ui/design#d1
 public sealed record SyntheticCloseRow(
 	string ClosedLegSymbol,
 	decimal Quantity,
 	decimal LockedValueUsdt,
-	bool Disputed);
+	bool Disputed,
+	string LinearExecId,
+	string CounterOptionExecId);
 
 /// <summary>
 /// Данные экрана деталей конструкции: заголовок с комментарием, сводка метрик

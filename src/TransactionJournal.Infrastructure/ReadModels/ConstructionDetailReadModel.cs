@@ -343,7 +343,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			// Лок спорной связки не выходит из строки: величина показывается
 			// с признаком спора, логический слой ноги спорной связкой не трогается.
 			// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-locked-value-marks-failure-independent
-			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, disputedKeys.Contains(key)));
+			// Пара execId распознанной связки пробрасывается в конец строки
+			// аддитивно: по ней UI адресует связку в командах оспаривания
+			// и возврата.
+			// Traceability: change:add-synthetic-close-dispute-ui/design#d1
+			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, disputedKeys.Contains(key), link.LinearExecId, link.CounterOptionExecId));
 			if (logicalKeys.Contains(key))
 			{
 				var linearTrade = LinearTradeOf(link, boundTrades);

@@ -2,8 +2,8 @@
 
 ## 1. Контракт карточки: пара execId в строке связки
 
-- [ ] 1.1 Дополнить `ConstructionCardSyntheticCloseResponse` полями `LinearExecId`/`CounterOptionExecId` (в конец записи) и пробросить их в `ConstructionDetailReadModel` из `SyntheticCloseLink` строки `SyntheticCloseRow`; проверить тестом read-модели, что ответ связки содержит пару execId распознанной связки
-- [ ] 1.2 Обновить OpenAPI-описание карточки (аддитивные поля строки `syntheticCloses`) и проверить контрактным тестом, что существующие потребители ответа не затронуты
+- [x] 1.1 Дополнить `ConstructionCardSyntheticCloseResponse` полями `LinearExecId`/`CounterOptionExecId` (в конец записи) и пробросить их в `ConstructionDetailReadModel` из `SyntheticCloseLink` строки `SyntheticCloseRow`; проверить тестом read-модели, что ответ связки содержит пару execId распознанной связки
+- [x] 1.2 Обновить OpenAPI-описание карточки (аддитивные поля строки `syntheticCloses`) и проверить контрактным тестом, что существующие потребители ответа не затронуты
 
 ## 2. API-клиент frontend
 

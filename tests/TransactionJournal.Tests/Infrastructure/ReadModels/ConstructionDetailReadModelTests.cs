@@ -411,6 +411,11 @@ public class ConstructionDetailReadModelTests
 		Assert.That(link.Quantity, Is.EqualTo(0.3m));
 		Assert.That(link.LockedValueUsdt, Is.EqualTo(35.697m));
 		Assert.That(link.Disputed, Is.False);
+		// Пара execId распознанной связки доходит в строку read-модели: по ней
+		// UI адресует связку в командах оспаривания и возврата.
+		// Traceability: change:add-synthetic-close-dispute-ui/design#d1
+		Assert.That(link.LinearExecId, Is.EqualTo("case-perp"));
+		Assert.That(link.CounterOptionExecId, Is.EqualTo("case-call"));
 		var perp = data.Positions.Single(row => row.Symbol == XautPerp);
 		Assert.That(perp.Residual, Is.EqualTo(0.34m));
 		Assert.That(perp.SyntheticResidual, Is.EqualTo(0.3m));

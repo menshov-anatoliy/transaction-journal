@@ -190,6 +190,48 @@ public sealed class ConstructionCardApiTests
 	}
 
 	[TestMethod]
+	[Description("Пара execId в строке syntheticCloses входит в контракт карточки аддитивно")]
+	// Пара linearExecId/counterOptionExecId нужна UI для вызова готовых
+	// эндпоинтов спора и возврата; прежние поля строки не меняются, новые
+	// добавлены в конец записи — существующие потребители ответа совместимы.
+	// Traceability: change:add-synthetic-close-dispute-ui/design#d1
+	public async Task TryIfSyntheticCloseExecIdPairIsAdditiveToCardContract()
+	{
+		// Arrange: стабильная read-модель деталей конструкции 7 со связкой XAUT.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var response = await client.GetAsync("/api/v1/constructions/7");
+
+		// Assert: прежние поля строки связки не изменились, пара execId добавлена
+		// в конец записи.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+		var close = payload!["syntheticCloses"]!.AsArray().Single()!;
+		Assert.That(close["closedLegSymbol"]!.GetValue<string>(), Is.EqualTo("XAUT-30OCT26-4400-P-USDT"));
+		Assert.That(close["quantity"]!.GetValue<decimal>(), Is.EqualTo(0.3m));
+		Assert.That(close["lockedValueUsdt"]!.GetValue<decimal>(), Is.EqualTo(35.697m));
+		Assert.That(close["disputed"]!.GetValue<bool>(), Is.True);
+		Assert.That(close["linearExecId"]!.GetValue<string>(), Is.EqualTo("case-perp"));
+		Assert.That(close["counterOptionExecId"]!.GetValue<string>(), Is.EqualTo("case-call"));
+
+		// OpenAPI-описание карточки дополнено аддитивно: схема строки связки
+		// несёт пару execId рядом с прежними обязательными полями, а схемы
+		// команд существующих потребителей остались на месте.
+		// OpenAPI-описание карточки дополнено аддитивно: документ публикуется
+		// с маршрутом карточки, а схемы команд существующих потребителей
+		// не потеряны — их контракты ответа не затронуты.
+		var document = await (await client.GetAsync("/openapi/v1.json")).Content.ReadFromJsonAsync<JsonNode>();
+		var paths = document!["paths"]!.AsObject();
+		Assert.That(paths.Select(path => path.Key), Does.Contain("/api/v1/constructions/{constructionId}"));
+		var schemas = document["components"]!["schemas"]!.AsObject().Select(schema => schema.Key).ToArray();
+		Assert.That(schemas, Does.Contain("RenameConstructionRequest"));
+		Assert.That(schemas, Does.Contain("SetCommentRequest"));
+		Assert.That(schemas, Does.Contain("DisputeSyntheticCloseRequest"));
+	}
+
+	[TestMethod]
 	[Description("OpenAPI-описание остаётся опубликованным и не ломается от аддитивных полей")]
 	// Обновление описания контракта: документ пересобирается из записей ответа
 	// автоматически, транспортные требования не меняются — маршрут карточки и
@@ -1531,10 +1573,11 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 				new ConstructionAdjustmentRow(11, new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero), "PnL робота grid-ETH", PnLAdjustmentSource.Robot, 5m),
 			],
 			// Строка связки с оспоренным локом: признак спора и величина проходят
-			// в контракт карточки вместе с распадом линейной ноги.
+			// в контракт карточки вместе с распадом линейной ноги; пара execId
+			// несёт ключи эндпоинтов спора и возврата.
 			SyntheticCloses:
 			[
-				new SyntheticCloseRow("XAUT-30OCT26-4400-P-USDT", 0.3m, 35.697m, true),
+				new SyntheticCloseRow("XAUT-30OCT26-4400-P-USDT", 0.3m, 35.697m, true, "case-perp", "case-call"),
 			],
 			RiskUnit: TargetUnit.Percent,
 			ProfitUnit: TargetUnit.Usdt);
