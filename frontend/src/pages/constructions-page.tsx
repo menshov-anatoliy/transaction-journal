@@ -174,15 +174,15 @@ export function ConstructionsPage() {
 				    Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
 				<h1 className="page-title">Конструкции</h1>
 				{/* Счётчики конструкций рядом с титулом — формат макета «Counters»
-				    «конструкций N · открыто N · архив N» (12px $textMuted), архив —
-				    все минус открытые. Считаются по полному набору журнала,
-				    независимо от области видимости списка. Кнопку «Разобрать
-				    входящие» из тулбара убрали решением раунд-сверки: вход — через
-				    раздел «Входящие» панели навигации.
+				    «конструкций N · открыто N · архив N» (12.5 $textSecondary,
+				    мастер NwnY4), архив — все минус открытые. Считаются по полному
+				    набору журнала, независимо от области видимости списка. Кнопку
+				    «Разобрать входящие» из тулбара убрали решением раунд-сверки:
+				    вход — через раздел «Входящие» панели навигации.
 				    Traceability: change:rework-contextual-topbar/tasks#2.0
 				    Traceability: openspec:ui/screens#requirement-construction-list-screen */}
 				{summary !== undefined && (
-					<p data-slot="constructions-counters" className="text-[12px] text-text-muted">
+					<p data-slot="constructions-counters" className="text-[12.5px] text-text-secondary">
 						{`конструкций ${summary.constructionCount} · открыто ${summary.openCount} · архив ${
 							summary.constructionCount - summary.openCount
 						}`}
@@ -312,27 +312,28 @@ function ConstructionsHeader({
 			    марок; компактный итог на любом экране живёт в топбаре каркаса
 			    и читает тот же кэш обзора. Счётчики конструкций — рядом с
 			    титулом тулбара, в строке итога их нет. */}
-			{/* Шапка итога — одна строка по референсу design.pen (фрейм списка):
-			    итог 18/600 $accentStrong, разбивка 11 $textSecondary, котировки
-			    11 $textMuted; паддинги [14,16]; сегменты выравнены по
-			    базовой линии и переносятся на узком экране. */}
+			{/* Шапка итога — одна строка по мастеру ud07u design.pen (после
+			    синхронизации К1): итог 20/600 $accentStrong (J3jIaE), разбивка
+			    12.5 $textSecondary (g2EeYx), котировки 11.5 $textMuted (otg5U);
+			    паддинги [14,16]; сегменты выравнены по базовой линии и
+			    переносятся на узком экране. */}
 			{/* Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown */}
 			{/* Traceability: openspec:ui/design-system#requirement-screenshot-acceptance */}
 			{summary === undefined ? (
 				<p className="text-muted-foreground text-sm">чтение журнала…</p>
 			) : (
 				<div data-slot="constructions-summary" className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3.5">
-					<p className="text-[18px] font-semibold text-accent-strong">
+					<p className="text-[20px] font-semibold text-accent-strong">
 						{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
 						{summary.totalPnL === null && summary.hasMarkFailure ? " (неполный: сбой котировок)" : ""}
 					</p>
-					<p className="text-[11px] text-text-secondary">{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
+					<p className="text-[12.5px] text-text-secondary">{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
 						summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
 					}`}</p>
 					{/* Котировки всегда по полному набору конструкций, независимо
 					    от области видимости списка.
 					    Traceability: openspec:ui/screens#scenario-list-scope-all-shows-archived */}
-					{quotesNote !== null && <p className="text-[11px] text-text-muted">{quotesNote}</p>}
+					{quotesNote !== null && <p className="text-[11.5px] text-text-muted">{quotesNote}</p>}
 				</div>
 			)}
 

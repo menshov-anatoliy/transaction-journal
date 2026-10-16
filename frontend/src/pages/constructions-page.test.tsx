@@ -312,19 +312,19 @@ describe("раздел «Конструкции»", () => {
 		expect(heading.className).not.toContain("text-2xl");
 	});
 
-	it("шапка итога повторяет фрейм «Итог» oYD4G: 18/600 accentStrong, подписи 11, паддинги [14,16]", async () => {
-		// Шапка итога журнала сверена с дизайн-фреймом «Итог» (oYD4G):
-		// акцентное значение 18/600 $accentStrong, подписи разбивки и
-		// счётчиков 11/normal $textSecondary/$textMuted, паддинги [14,16],
-		// межстрочный зазор 3.
+	it("шапка итога повторяет мастер ud07u: 20/600 accentStrong, подписи 12.5/11.5, паддинги [14,16]", async () => {
+		// Шапка итога журнала сверена с мастером ud07u design.pen (после
+		// синхронизации К1): акцентное значение 20/600 $accentStrong (J3jIaE),
+		// разбивка 12.5 $textSecondary (g2EeYx), котировки 11.5 $textMuted
+		// (otg5U), паддинги [14,16], межстрочный зазор 3.
 		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 		// Traceability: change:reconcile-frontend-with-design/design#D2
 		// Act: открытие раздела.
 		renderPage();
 
-		// Assert: значение итога — 18/600 на акцентном токене.
+		// Assert: значение итога — 20/600 на акцентном токене.
 		const value = await screen.findByText("+100.5 USDT");
-		expect(value.className).toContain("text-[18px]");
+		expect(value.className).toContain("text-[20px]");
 		expect(value.className).toContain("font-semibold");
 		expect(value.className).toContain("text-accent-strong");
 
@@ -338,13 +338,13 @@ describe("раздел «Конструкции»", () => {
 		expect(summary?.className).toContain("px-4");
 		expect(summary?.className).toContain("py-3.5");
 
-		// Подписи: разбивка 11/normal textSecondary; котировки —
-		// 11/normal textMuted отдельным сегментом той же строки.
+		// Подписи: разбивка 12.5 $textSecondary (g2EeYx); котировки —
+		// 11.5 $textMuted (otg5U) отдельным сегментом той же строки.
 		const breakdown = screen.getByText(/реализов\. \+60\.25 \/ нереализов\. \+40\.25/);
-		expect(breakdown.className).toContain("text-[11px]");
+		expect(breakdown.className).toContain("text-[12.5px]");
 		expect(breakdown.className).toContain("text-text-secondary");
 		const quotes = screen.getByText(/котировки на/i);
-		expect(quotes.className).toContain("text-[11px]");
+		expect(quotes.className).toContain("text-[11.5px]");
 		expect(quotes.className).toContain("text-text-muted");
 	});
 
@@ -364,8 +364,9 @@ describe("раздел «Конструкции»", () => {
 	it("показывает счётчики конструкций рядом с титулом в формате макета", async () => {
 		// Счётчики по решению раунд-сверки перенесены из строки итога сводки
 		// к H1 тулбара в формате макета: «конструкций N · открыто N · архив N»,
-		// архив — все минус открытые; 12px $textMuted. Считаются по полному
-		// набору журнала, независимо от области видимости списка.
+		// архив — все минус открытые; 12.5 $textSecondary (мастер NwnY4).
+		// Считаются по полному набору журнала, независимо от области
+		// видимости списка.
 		// Traceability: change:rework-contextual-topbar/tasks#2.0
 		// Traceability: openspec:ui/screens#requirement-construction-list-screen
 		// Act: открытие раздела.
@@ -374,8 +375,8 @@ describe("раздел «Конструкции»", () => {
 		// Assert: счётчики следуют сразу за титулом H1 и несут токены макета.
 		const counters = await screen.findByText("конструкций 3 · открыто 1 · архив 2");
 		expect(counters).toHaveAttribute("data-slot", "constructions-counters");
-		expect(counters.className).toContain("text-[12px]");
-		expect(counters.className).toContain("text-text-muted");
+		expect(counters.className).toContain("text-[12.5px]");
+		expect(counters.className).toContain("text-text-secondary");
 		const heading = screen.getByRole("heading", { name: "Конструкции", level: 1 });
 		expect(heading.nextElementSibling).toBe(counters);
 	});
