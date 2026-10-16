@@ -200,7 +200,7 @@ describe("раскладка каркаса приложения", () => {
 		// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 		const logo = screen.getByTestId("topbar-logo");
 		expect(logo.className).toContain("size-6.5");
-		expect(logo.className).toContain("rounded-lg");
+		expect(logo.className).toContain("rounded-sm");
 		expect(logo.className).toContain("bg-accent-soft");
 		const glyph = logo.querySelector("svg");
 		expect(glyph).toHaveClass("size-3.5");

@@ -260,7 +260,7 @@ export function AppLayout() {
 										data-slot="topbar-logo"
 										data-testid="topbar-logo"
 										aria-hidden="true"
-										className="flex size-6.5 shrink-0 items-center justify-center rounded-lg bg-accent-soft"
+										className="flex size-6.5 shrink-0 items-center justify-center rounded-sm bg-accent-soft"
 									>
 										<LineChart className="size-3.5 text-accent-strong" />
 									</span>
