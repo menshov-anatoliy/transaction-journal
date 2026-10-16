@@ -19,7 +19,8 @@ import { useOutletContext } from "react-router";
 export interface ContextPanelRegistration {
 	/** Основное содержимое панели (например, краткая карточка конструкции). */
 	content: ReactNode;
-	/** Иконочные действия в колонке панели над кнопкой сворачивания. */
+	/** Иконочные действия в рейке свёрнутой панели над футером с кнопкой разворачивания. */
+	/** Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail */
 	iconActions?: ReactNode;
 }
 

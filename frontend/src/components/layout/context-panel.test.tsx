@@ -23,7 +23,7 @@ const inboxApi = vi.mocked(await import("@/lib/api/inbox"));
 // между рендерами, иначе эффект перезапускается на каждом рендере.
 const briefCardRegistration: ContextPanelRegistration = {
 	content: <div>краткая карточка конструкции</div>,
-	iconActions: <button type="button">Действие контекста</button>,
+	iconActions: <button type="button" title="Действие контекста">Действие контекста</button>,
 };
 
 /**
@@ -97,14 +97,16 @@ describe("слот контекстной панели", () => {
 		expect(screen.getByRole("main")).toBeInTheDocument();
 	});
 
-	it("регистрация контекста показывает панель с содержимым и иконками действий", async () => {
+	it("регистрация контекста показывает содержимое и футер без действий рейки", async () => {
 		// Act: экран регистрирует краткую карточку и действие.
 		renderLayout();
 
-		// Assert: панель появилась, содержимое и иконочные действия на месте.
+		// Развёрнутая панель показывает контент; действия доступны только в рейке.
+		// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
 		expect(await screen.findByTestId("context-panel")).toBeInTheDocument();
 		expect(screen.getByText("краткая карточка конструкции")).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "Действие контекста" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Действие контекста" })).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Свернуть контекстную панель" })).toBeInTheDocument();
 	});
 
 	it("регистрация разворачивает панель на сохранённую ширину", async () => {
@@ -133,19 +135,31 @@ describe("слот контекстной панели", () => {
 		expect(screen.getByText("центр экрана")).toBeInTheDocument();
 	});
 
-	it("сохранённая свёрнутость показывает панель только иконочной колонкой", async () => {
+	it("сохранённая свёрнутость показывает рейку действий над футером с кнопкой", async () => {
 		// Arrange: пользователь свернул правую панель, геометрия сохранена.
 		localStorage.setItem("tj.layout.right", JSON.stringify({ width: 24, collapsed: true }));
 
 		// Act: экран регистрирует контекст.
 		renderLayout();
 
-		// Assert: панель схлопнута до иконочной колонки — содержимого и
-		// сплиттера нет, доступна кнопка разворачивания.
+		// Содержимое и сплиттер скрыты; действие остаётся в рейке над футером.
+		// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
 		const panel = await screen.findByTestId("context-panel");
-		expect(panel.style.width).toBe("");
+		expect(panel.style.width).toBe("2.75rem");
 		expect(screen.queryByText("краткая карточка конструкции")).not.toBeInTheDocument();
 		expect(screen.queryByRole("separator", { name: "Изменить ширину контекстной панели" })).not.toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "Развернуть контекстную панель" })).toBeInTheDocument();
+		const rail = panel.querySelector('[data-slot="panel-miniature-rail"]');
+		expect(rail).not.toBeNull();
+		expect(rail?.className).toContain("w-11");
+		const action = screen.getByRole("button", { name: "Действие контекста" });
+		expect(action).toHaveAttribute("title", "Действие контекста");
+		const expand = screen.getByRole("button", { name: "Развернуть контекстную панель" });
+		expect(expand).toHaveAttribute("title", "Развернуть контекстную панель");
+		const footer = panel.querySelector('[data-slot="panel-footer"]');
+		expect(rail?.nextElementSibling).toBe(footer);
+		expect(footer?.className).toContain("border-t");
+		expect(footer?.contains(expand)).toBe(true);
+		expect(rail?.contains(expand)).toBe(false);
+		expect(rail?.contains(action)).toBe(true);
 	});
 });

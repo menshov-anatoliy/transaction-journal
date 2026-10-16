@@ -10,9 +10,10 @@ import { fetchInboxCount } from "@/lib/api/inbox";
 import { useConstructionsOverviewQuery } from "@/lib/api/constructions-overview-query";
 import { formatSignedAmount } from "@/lib/format/quantity";
 import { useIsMobile } from "@/lib/use-mobile";
-import { PanelIconColumn } from "./PanelIconColumn";
+import { PanelFooter } from "./PanelFooter";
+import { PanelMiniatureRail } from "./PanelMiniatureRail";
 import { PanelResizer } from "./PanelResizer";
-import { usePanelGeometry } from "./layout-geometry";
+import { COLLAPSED_LEFT_WIDTH_REM, usePanelGeometry } from "./layout-geometry";
 import type { ContextPanelApi, ContextPanelRegistration } from "./context-panel";
 
 /**
@@ -21,9 +22,9 @@ import type { ContextPanelApi, ContextPanelRegistration } from "./context-panel"
  * контекстная панель. Ширины панелей тянутся сплиттерами (левая
  * 4.25–20 rem, правая 20–40 rem) и вместе со свёрнутостью хранятся в
  * localStorage («tj.layout.*»), восстанавливаясь на монтировании; URL
- * панельную геометрию не несёт. Каждая панель несёт вертикальную
- * иконочную колонку у внутреннего края; сворачивание — последняя иконка
- * колонки, топбар панелями больше не управляет (на мобильном остаётся
+ * панельную геометрию не несёт. Обе панели несут футер с кнопкой управления
+ * в обоих состояниях; свёрнутые показывают над ним рейку миниатюр.
+ * Топбар панелями больше не управляет (на мобильном остаётся
  * только кнопка drawer-шторки, механика панелей на мобильный не
  * расширяется — Non-Goals design.md). Топбар, кроме бренда, несёт
  * компактный итог журнала с разбивкой на реализованный и нереализованный
@@ -36,17 +37,15 @@ import type { ContextPanelApi, ContextPanelRegistration } from "./context-panel"
  * Traceability: openspec:ui/screens#scenario-journal-total-always-visible
  * Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
  * Traceability: openspec:ui/screens#scenario-frame-panel-geometry-persists
- * Traceability: openspec:ui/screens#scenario-frame-collapse-icon-in-panel-column
+ * Traceability: openspec:ui/screens#scenario-frame-collapse-button-in-panel-footer
+ * Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
  * Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
  * Traceability: change:rework-spa-shell-and-screens/design#D1
- * Traceability: change:rework-spa-shell-and-screens/design#D2
+ * Traceability: change:rework-panel-collapse-footer/design#D1
+ * Traceability: change:rework-panel-collapse-footer/design#D2
  * Traceability: change:rework-spa-shell-and-screens/design#D3
  * Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
  */
-
-// Свёрнутая левая панель: рейка иконок разделов (4.25 rem) плюс
-// иконочная колонка (2.25 rem) у внутреннего края.
-const COLLAPSED_LEFT_WIDTH_REM = 6.5;
 
 export function AppLayout() {
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -67,7 +66,7 @@ export function AppLayout() {
 	// Слот контекстной панели: страницы регистрируют содержимое через
 	// useContextPanel (Outlet-контекст). Без регистрации правая панель
 	// не выводится вовсе — центр занимает всю ширину; контекст плюс
-	// свёрнутость пользователя = панель схлопнута до иконочной колонки.
+	// свёрнутость пользователя = панель схлопнута до рейки миниатюр.
 	const [registration, setRegistration] = useState<ContextPanelRegistration | null>(null);
 	const setRegistrationStable = useCallback((next: ContextPanelRegistration | null) => {
 		setRegistration((previous) => (previous === next ? previous : next));
@@ -84,9 +83,12 @@ export function AppLayout() {
 		<nav
 			aria-label="Разделы журнала"
 			className={cn(
-				"flex flex-col gap-1 bg-background px-3 py-4",
-				isMobile ? "h-full w-72 border-r border-divider" : "min-w-0 flex-1 overflow-hidden",
-				collapsedDesktop && "px-2",
+				"flex flex-col gap-1 bg-background",
+				isMobile
+					? "h-full w-72 border-r border-divider px-3 py-4"
+					: collapsedDesktop
+						? "w-full px-1"
+						: "min-w-0 flex-1 overflow-y-auto px-3 py-4",
 			)}
 		>
 			{appSections.map((section) => {
@@ -126,6 +128,7 @@ export function AppLayout() {
 							to={section.path}
 							end={section.path === "/"}
 							aria-label={section.label}
+							title={collapsedDesktop ? section.label : undefined}
 							onClick={() => setMobileMenuOpen(false)}
 						>
 							{collapsedDesktop == false && section.label}
@@ -140,15 +143,15 @@ export function AppLayout() {
 		Топбар по мастер-ноде jGvOM экрана «Каркас» g0z20: высота 54, паддинги
 		[0,24], заливка $surface, нижний разделитель $divider, зазор 10.
 		Свернуть/развернуть левую панель топбар больше не может: управление
-		свёрнутостью переехало в иконочную колонку самой панели (последняя
-		иконка). Кнопка в топбаре остаётся только на мобильном — это управление
+		свёрнутостью переехало в футер самой панели. Кнопка в топбаре
+		остаётся только на мобильном — это управление
 		drawer-шторкой, а не панелью каркаса. Справа — компактный итог журнала:
 		по требованию каркаса он виден на любом экране, поэтому дополняет
 		бренд мастер-ноды, а детальная сводка остаётся в шапке списка.
 	*/
 	// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 	// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
-	// Traceability: openspec:ui/screens#scenario-frame-collapse-icon-in-panel-column
+	// Traceability: openspec:ui/screens#scenario-frame-collapse-button-in-panel-footer
 	// Traceability: change:reconcile-frontend-with-design/design#D2
 	return (
 		<div className="flex h-svh flex-col">
@@ -175,19 +178,21 @@ export function AppLayout() {
 						className="flex h-full min-h-0 shrink-0 border-r border-divider bg-background"
 						style={{ width: `${left.collapsed ? COLLAPSED_LEFT_WIDTH_REM : left.width}rem` }}
 					>
-						{navigation}
-						{/*
-							Иконочная колонка у внутреннего края панели (справа):
-							иконка сворачивания — последняя в колонке.
-						*/}
-						{/* Traceability: openspec:ui/screens#scenario-frame-collapse-icon-in-panel-column */}
-						<PanelIconColumn
-							side="left"
-							collapsed={left.collapsed}
-							onToggleCollapse={() => left.setCollapsed(left.collapsed == false)}
-							collapseLabel="Свернуть панель навигации"
-							expandLabel="Развернуть панель навигации"
-						/>
+						<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+							{left.collapsed ? (
+								<PanelMiniatureRail side="left">
+									{navigation}
+								</PanelMiniatureRail>
+							) : (
+								navigation
+							)}
+							<PanelFooter
+								side="left"
+								collapsed={left.collapsed}
+								onToggle={() => left.setCollapsed(left.collapsed == false)}
+								label={left.collapsed ? "Развернуть панель навигации" : "Свернуть панель навигации"}
+							/>
+						</div>
 						{left.collapsed == false && (
 							<PanelResizer
 								side="left"
@@ -221,7 +226,7 @@ export function AppLayout() {
 						data-slot="layout-panel-right"
 						data-testid="context-panel"
 						className="flex h-full min-h-0 shrink-0 border-l border-divider bg-background"
-						style={right.collapsed ? undefined : { width: `${right.width}rem` }}
+						style={{ width: `${right.collapsed ? COLLAPSED_LEFT_WIDTH_REM : right.width}rem` }}
 					>
 						{right.collapsed == false && (
 							<PanelResizer
@@ -230,22 +235,27 @@ export function AppLayout() {
 								onResize={(deltaRem) => right.setWidth(right.width + deltaRem)}
 							/>
 						)}
-						{/*
-							Иконочная колонка у внутреннего края панели (слева):
-							действия контекста, затем последней — сворачивание.
-						*/}
-						{/* Traceability: openspec:ui/screens#scenario-frame-collapse-icon-in-panel-column */}
-						<PanelIconColumn
-							side="right"
-							collapsed={right.collapsed}
-							onToggleCollapse={() => right.setCollapsed(right.collapsed == false)}
-							collapseLabel="Свернуть контекстную панель"
-							expandLabel="Развернуть контекстную панель"
-							actions={registration?.iconActions}
-						/>
-						{right.collapsed == false && (
-							<div className="min-w-0 flex-1 overflow-y-auto">{registration?.content}</div>
-						)}
+						<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+							{right.collapsed ? (
+								<PanelMiniatureRail side="right">
+									{registration?.iconActions != null && (
+										<div title="Действия контекста" className="flex flex-col items-center gap-1">
+											{registration.iconActions}
+										</div>
+									)}
+								</PanelMiniatureRail>
+							) : (
+								<div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pt-3.5 pb-3">
+									{registration?.content}
+								</div>
+							)}
+							<PanelFooter
+								side="right"
+								collapsed={right.collapsed}
+								onToggle={() => right.setCollapsed(right.collapsed == false)}
+								label={right.collapsed ? "Развернуть контекстную панель" : "Свернуть контекстную панель"}
+							/>
+						</div>
 					</aside>
 				)}
 			</div>

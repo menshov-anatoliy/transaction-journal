@@ -33,7 +33,7 @@ beforeEach(() => {
 
 // Проверяется каркас приложения по концепции §2: тонкий топбар с брендом
 // «Журнал Bybit» и компактным итогом журнала (разбивка P&L видна на любом
-// экране), левая панель с пятью разделами и сворачивание панели до иконок.
+// экране), левая панель с пятью разделами и сворачивание до рейки миниатюр.
 // Traceability: doc:.wf-research/ui-concept/concept.md#2-каркас-приложения
 // Traceability: openspec:ui/screens#scenario-journal-total-always-visible
 // Слой сверки с design.pen (задача 3.1): топбар, бренд и нав-пункты «Каркаса»
@@ -69,7 +69,21 @@ function ContextRegisteringScreen() {
 	return <div>главная</div>;
 }
 
-function renderLayout(withContext = false) {
+const overflowingRegistration = {
+	content: <div>контекст экрана</div>,
+	iconActions: Array.from({ length: 20 }, (_, index) => (
+		<button key={index} type="button" title={`Действие ${index + 1}`}>
+			{`Действие ${index + 1}`}
+		</button>
+	)),
+};
+
+function OverflowContextScreen() {
+	useContextPanel(overflowingRegistration);
+	return <div>главная</div>;
+}
+
+function renderLayout(withContext = false, overflowContext = false) {
 	const queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	});
@@ -77,7 +91,7 @@ function renderLayout(withContext = false) {
 		[{
 			element: <AppLayout />,
 			children: [
-				{ index: true, element: withContext ? <ContextRegisteringScreen /> : <div>главная</div> },
+				{ index: true, element: overflowContext ? <OverflowContextScreen /> : withContext ? <ContextRegisteringScreen /> : <div>главная</div> },
 				{ path: "hints", element: <h1>Подсказки</h1> },
 			],
 		}],
@@ -285,31 +299,93 @@ describe("итог журнала в топбаре", () => {
 	});
 });
 
-// Геометрия и управление панелями каркаса: сворачивание живёт иконочной
-// колонкой у внутреннего края панели, ширины ограничены диапазонами и
-// восстанавливаются из localStorage между сессиями.
-// Traceability: openspec:ui/screens#scenario-frame-collapse-icon-in-panel-column
+// Панели: футер с кнопкой остаётся в обоих состояниях под рейкой миниатюр;
+// сохранённая геометрия восстанавливается между сессиями.
+// Traceability: openspec:ui/screens#scenario-frame-collapse-button-in-panel-footer
+// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
 // Traceability: openspec:ui/screens#scenario-frame-panel-geometry-persists
-// Traceability: change:rework-spa-shell-and-screens/design#D1
+// Traceability: change:rework-panel-collapse-footer/design#D1
 describe("панели каркаса", () => {
-	it("кнопка сворачивания левой панели — последняя иконка её колонки", () => {
-		renderLayout();
+	it("футер обеих развёрнутых панелей содержит кнопку у внутреннего края", async () => {
+		// Развёрнутые панели не содержат рейку, а кнопки находятся в футерах 44 px.
+		// Traceability: openspec:ui/screens#scenario-frame-collapse-button-in-panel-footer
+		renderLayout(true);
+		expect(await screen.findByTestId("context-panel")).toBeInTheDocument();
+		for (const [side, label, alignment] of [
+			["left", "Свернуть панель навигации", "justify-end"],
+			["right", "Свернуть контекстную панель", "justify-start"],
+		]) {
+			const footer = document.querySelector(`[data-slot="panel-footer"][data-side="${side}"]`);
+			expect(footer).not.toBeNull();
+			expect(footer?.className).toContain("h-11");
+			expect(footer?.className).toContain("border-t");
+			expect(footer?.className).toContain("shrink-0");
+			expect(footer?.className).toContain("px-3");
+			expect(footer?.className).toContain(alignment);
+			expect(within(footer as HTMLElement).getAllByRole("button")).toHaveLength(1);
+			expect(within(footer as HTMLElement).getByRole("button", { name: label })).toHaveAttribute("title", label);
+		}
+		expect(document.querySelector("[data-slot=panel-miniature-rail]")).toBeNull();
+	});
 
-		// Assert: в иконочной колонке левой панели кнопка сворачивания стоит
-		// последней; в топбаре панельных кнопок больше нет.
-		const column = document.querySelector('[data-slot="panel-icon-column"][data-side="left"]');
-		expect(column).not.toBeNull();
-		const buttons = Array.from(column!.querySelectorAll("button"));
-		const toggle = screen.getByRole("button", { name: "Свернуть панель навигации" });
-		expect(buttons).not.toHaveLength(0);
-		expect(buttons[buttons.length - 1]).toBe(toggle);
+	it("обе свёрнутые панели сохраняют футер с единственной кнопкой вне рейки", async () => {
+		// Кнопка разворачивания принадлежит футеру с разделителем, а не рейке.
+		// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
+		const user = userEvent.setup();
+		renderLayout(true);
+		await screen.findByTestId("context-panel");
+		await user.click(screen.getByRole("button", { name: "Свернуть панель навигации" }));
+		await user.click(screen.getByRole("button", { name: "Свернуть контекстную панель" }));
+
+		for (const [side, label, alignment] of [
+			["left", "Развернуть панель навигации", "justify-end"],
+			["right", "Развернуть контекстную панель", "justify-start"],
+		]) {
+			const panel = document.querySelector(`[data-slot="layout-panel-${side}"]`);
+			const footer = panel?.querySelector('[data-slot="panel-footer"]') as HTMLElement;
+			const rail = panel?.querySelector('[data-slot="panel-miniature-rail"]') as HTMLElement;
+			expect(panel).not.toBeNull();
+			expect(footer).not.toBeNull();
+			expect(rail).not.toBeNull();
+			expect(footer.className).toContain("h-11");
+			expect(footer.className).toContain("border-t");
+			expect(footer.className).toContain("shrink-0");
+			expect(footer.className).toContain("px-1");
+			expect(footer.className).toContain(alignment);
+			expect(rail.nextElementSibling).toBe(footer);
+			expect(rail.className).toContain("overflow-y-auto");
+			expect(within(footer).getAllByRole("button")).toHaveLength(1);
+			const button = within(footer).getByRole("button", { name: label });
+			expect(button.className).toContain("size-[30px]");
+			expect(button).toHaveAttribute("title", label);
+			expect(rail.contains(button)).toBe(false);
+		}
+	});
+
+	it("при переполнении миниатюр прокручивается рейка, а футер остаётся вне неё", async () => {
+		// Ограниченная высота не вытесняет футер: только рейка занимает
+		// остаток высоты и прокручивается вместе с множеством действий.
+		// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
+		localStorage.setItem("tj.layout.right", JSON.stringify({ width: 24, collapsed: true }));
+		renderLayout(false, true);
+		const panel = await screen.findByTestId("context-panel");
+		panel.style.height = "90px";
+		const rail = panel.querySelector('[data-slot="panel-miniature-rail"]') as HTMLElement;
+		const footer = panel.querySelector('[data-slot="panel-footer"]') as HTMLElement;
+		expect(within(rail).getAllByRole("button")).toHaveLength(20);
+		expect(rail.className).toContain("min-h-0");
+		expect(rail.className).toContain("flex-1");
+		expect(rail.className).toContain("overflow-y-auto");
+		expect(footer.className).toContain("shrink-0");
+		expect(rail.nextElementSibling).toBe(footer);
+		expect(within(footer).getByRole("button", { name: "Развернуть контекстную панель" })).toBeInTheDocument();
 	});
 
 	it("топбар не содержит кнопок сворачивания панелей", () => {
 		renderLayout();
 
 		// Assert: у топбара не осталось ни одной панельной кнопки — сворачивание
-		// переехало в иконочные колонки панелей.
+		// переехало в футеры панелей.
 		const bannerButtons = Array.from(screen.getByRole("banner").querySelectorAll("button"));
 		for (const button of bannerButtons) {
 			expect(button.textContent).not.toMatch(/панел[ьи]/i);
@@ -327,12 +403,42 @@ describe("панели каркаса", () => {
 		// Assert: панель снова свёрнута (подписи скрыты), после разворачивания
 		// восстанавливается и сохранённая ширина 10 rem.
 		const panel = screen.getByTestId("layout-panel-left");
-		expect(panel.style.width).toBe("6.5rem");
+		expect(panel.style.width).toBe("2.75rem");
 		for (const section of appSections) {
 			expect(screen.queryByText(section.label)).not.toBeInTheDocument();
+			expect(screen.getByRole("link", { name: section.label })).toHaveAttribute("title", section.label);
 		}
+		const rail = document.querySelector('[data-slot="panel-miniature-rail"][data-side="left"]');
+		expect(rail).not.toBeNull();
+		expect(rail?.className).toContain("w-11");
+		expect(rail?.nextElementSibling).toBe(screen.getByRole("button", { name: "Развернуть панель навигации" }).parentElement);
+		expect(screen.queryByRole("button", { name: "Свернуть панель навигации" })).not.toBeInTheDocument();
 		await user.click(screen.getByRole("button", { name: "Развернуть панель навигации" }));
 		expect(panel.style.width).toBe("10rem");
+	});
+
+	it("рейка сохраняет навигацию и не показывает бейдж «Входящих»", async () => {
+		// Миниатюры остаются ссылками, но текст и бейдж при сворачивании скрыты.
+		// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
+		const user = userEvent.setup();
+		inboxApi.fetchInboxCount.mockResolvedValue(7);
+		renderLayout();
+		expect(await screen.findByText("7")).toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "Свернуть панель навигации" }));
+		expect(screen.queryByText("7")).not.toBeInTheDocument();
+		await user.click(screen.getByRole("link", { name: "Подсказки" }));
+		expect(await screen.findByRole("heading", { name: "Подсказки" })).toBeInTheDocument();
+		expect(screen.getByRole("link", { name: "Подсказки" })).toHaveAttribute("aria-current", "page");
+	});
+
+	it("контент панелей сохраняет боковые отступы 12 px", async () => {
+		// Контент обеих панелей отступает на 12 px; вертикали следуют макету.
+		// Traceability: openspec:ui/screens#scenario-frame-panel-content-uniform-padding
+		renderLayout(true);
+		const right = await screen.findByTestId("context-panel");
+		expect(screen.getByRole("navigation", { name: "Разделы журнала" }).className).toContain("px-3 py-4");
+		const content = right.querySelector(".overflow-y-auto");
+		expect(content?.className).toContain("px-3 pt-3.5 pb-3");
 	});
 
 	it("сплиттер левой панели меняет ширину стрелками и сохраняет её", async () => {

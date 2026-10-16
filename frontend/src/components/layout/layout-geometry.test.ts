@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+	COLLAPSED_LEFT_WIDTH_REM,
 	PANEL_WIDTH_RANGE_REM,
 	clampPanelWidth,
 	readPanelGeometry,
@@ -16,6 +17,13 @@ import {
 
 beforeEach(() => {
 	localStorage.clear();
+});
+
+// Ширина свёрнутой навигации равна рейке 44 px и не меняет сохраняемый диапазон.
+// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
+it("свёрнутая панель занимает только ширину рейки миниатюр", () => {
+	expect(COLLAPSED_LEFT_WIDTH_REM).toBe(2.75);
+	expect(PANEL_WIDTH_RANGE_REM.left.min).toBe(4.25);
 });
 
 describe("clampPanelWidth", () => {

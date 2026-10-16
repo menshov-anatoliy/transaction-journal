@@ -13,6 +13,10 @@ import { useCallback, useMemo, useState } from "react";
 /** Панели каркаса с сохраняемой геометрией. */
 export type LayoutPanel = "left" | "right";
 
+// Свёрнутая навигация занимает только рейку миниатюр шириной 44 px.
+// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
+export const COLLAPSED_LEFT_WIDTH_REM = 2.75;
+
 /** Допустимый диапазон ширины панели в rem: левая 4.25–20, правая 20–40. */
 export const PANEL_WIDTH_RANGE_REM: Readonly<Record<LayoutPanel, { min: number; max: number }>> = {
 	left: { min: 4.25, max: 20 },
@@ -38,7 +42,7 @@ const STORAGE_KEYS: Readonly<Record<LayoutPanel, string>> = {
 export interface PanelGeometry {
 	/** Ширина панели в rem (внутри диапазона PANEL_WIDTH_RANGE_REM). */
 	width: number;
-	/** Панель схлопнута до иконочной колонки. */
+	/** Панель схлопнута до рейки миниатюр. */
 	collapsed: boolean;
 }
 
