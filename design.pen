@@ -394,78 +394,304 @@
               "name": "Топбар",
               "reusable": true,
               "width": "fill_container",
-              "height": 54,
+              "height": 64,
               "fill": "$surface",
               "stroke": "$divider",
               "strokeWidth": {
                 "bottom": 1
               },
-              "gap": 10,
-              "padding": [
-                0,
-                24
-              ],
               "alignItems": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "srW2i",
-                  "name": "Logo",
-                  "width": 26,
-                  "height": 26,
-                  "fill": "$accentSoft",
-                  "cornerRadius": 8,
-                  "justifyContent": "center",
+                  "id": "SrTjW",
+                  "name": "Сегмент · навигация",
+                  "width": 240,
+                  "height": "fill_container",
+                  "fill": "$bg",
+                  "gap": 10,
+                  "padding": [
+                    0,
+                    16
+                  ],
                   "alignItems": "center",
                   "children": [
                     {
-                      "type": "icon",
-                      "id": "W6QRKp",
-                      "name": "LogoIcon",
-                      "width": 14,
-                      "height": 14,
-                      "icon": "line-chart",
-                      "library": "lucide",
-                      "fill": "$accentStrong"
+                      "type": "frame",
+                      "id": "srW2i",
+                      "name": "Logo",
+                      "width": 26,
+                      "height": 26,
+                      "fill": "$accentSoft",
+                      "cornerRadius": 8,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "W6QRKp",
+                          "name": "LogoIcon",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "line-chart",
+                          "library": "lucide",
+                          "fill": "$accentStrong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "WBYbU",
+                      "name": "Brand",
+                      "fill": "$textPrimary",
+                      "content": "Журнал Bybit",
+                      "fontFamily": "$font",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "b3OTr",
+                      "name": "Spacer",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "J8C2x",
+                      "name": "Кнопка сворачивания · навигация",
+                      "width": 28,
+                      "height": 28,
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "L1CDb",
+                          "name": "Иконка",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "panel-left-close",
+                          "library": "lucide",
+                          "fill": "$textMuted"
+                        }
+                      ]
                     }
                   ]
                 },
                 {
-                  "type": "text",
-                  "id": "WBYbU",
-                  "name": "Brand",
-                  "fill": "$textPrimary",
-                  "content": "Журнал Bybit",
-                  "fontFamily": "$font",
-                  "fontSize": 14,
-                  "fontWeight": "600"
+                  "type": "frame",
+                  "id": "TQ8xW",
+                  "name": "Сегмент · страница",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$surface",
+                  "gap": 10,
+                  "padding": [
+                    0,
+                    20
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "cbGOV",
+                      "name": "Крошка раздела",
+                      "fill": "$textMuted",
+                      "content": "Журнал / Конструкции",
+                      "fontFamily": "$font",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "xw51b",
+                      "name": "Бейдж входящих",
+                      "fill": "$accent",
+                      "cornerRadius": 999,
+                      "padding": [
+                        2,
+                        8
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "z4kqW",
+                          "name": "Бейдж · текст",
+                          "fill": "#FFFFFF",
+                          "content": "12",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "meh33",
+                      "name": "Заголовок страницы",
+                      "fill": "$textPrimary",
+                      "content": "Конструкции",
+                      "fontFamily": "$font",
+                      "fontSize": 15,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "MyZsE",
+                      "name": "Чип · область",
+                      "fill": "$surface2",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zzcIY",
+                          "name": "Чип · область · Текст",
+                          "fill": "$textSecondary",
+                          "content": "Открытые ▾",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "I1JbT",
+                      "name": "Чип · подсказки",
+                      "fill": "$surface2",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "f3Zvlu",
+                          "name": "Чип · подсказки · Текст",
+                          "fill": "$textSecondary",
+                          "content": "Подсказки",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "do3rs",
+                      "name": "Spacer",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "wqCYd",
+                      "name": "Итог журнала",
+                      "fill": "$accentStrong",
+                      "content": "+1 284 USDT",
+                      "fontFamily": "$font",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "LoPAn",
+                      "name": "Итог · части",
+                      "fill": "$textMuted",
+                      "content": "реализов. +940 / нереализов. +344",
+                      "fontFamily": "$font",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 },
                 {
                   "type": "frame",
-                  "id": "u91SL",
-                  "name": "Spacer",
-                  "width": "fill_container",
-                  "height": 1
-                },
-                {
-                  "type": "icon",
-                  "id": "Z9SndU",
-                  "name": "SyncIcon",
-                  "width": 12,
-                  "height": 12,
-                  "icon": "refresh-cw",
-                  "library": "lucide",
-                  "fill": "$textMuted"
-                },
-                {
-                  "type": "text",
-                  "id": "zMCol",
-                  "name": "SyncStatus",
-                  "fill": "$textMuted",
-                  "content": "Синхронизировано · 13:42",
-                  "fontFamily": "$font",
-                  "fontSize": 11.5,
-                  "fontWeight": "normal"
+                  "id": "ot9ii",
+                  "name": "Сегмент · контекст",
+                  "width": 360,
+                  "height": "fill_container",
+                  "fill": "$bg",
+                  "gap": 10,
+                  "padding": [
+                    0,
+                    16
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "z6tizc",
+                      "name": "Кнопка сворачивания · контекст",
+                      "width": 28,
+                      "height": 28,
+                      "cornerRadius": 7,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "TZKIJ",
+                          "name": "Иконка",
+                          "width": 15,
+                          "height": 15,
+                          "icon": "panel-right-close",
+                          "library": "lucide",
+                          "fill": "$textMuted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bOfzl",
+                      "name": "Чип · панели",
+                      "fill": "$infoSoft",
+                      "cornerRadius": 999,
+                      "padding": [
+                        6,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "s5fwGV",
+                          "name": "Чип · панели · Текст",
+                          "fill": "$info",
+                          "content": "Карточка · BTC-280324",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "Z9SndU",
+                      "name": "SyncIcon",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "refresh-cw",
+                      "library": "lucide",
+                      "fill": "$textMuted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zMCol",
+                      "name": "SyncStatus",
+                      "fill": "$textMuted",
+                      "content": "Обновлено 12:04",
+                      "fontFamily": "$font",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 }
               ]
             },
@@ -594,47 +820,6 @@
                               "content": "Синхронизация"
                             }
                           }
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "ZHpWn",
-                      "name": "Футер",
-                      "width": "fill_container",
-                      "height": 44,
-                      "stroke": "$divider",
-                      "strokeWidth": {
-                        "top": 1
-                      },
-                      "padding": [
-                        0,
-                        12
-                      ],
-                      "justifyContent": "end",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "n11v3D",
-                          "name": "Collapse",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "k6o1UT",
-                              "name": "CollapseIcon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "panel-left-close",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
                         }
                       ]
                     }
@@ -949,46 +1134,6 @@
                           "fontWeight": "normal"
                         }
                       ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Hbj76",
-                      "name": "Футер",
-                      "width": "fill_container",
-                      "height": 44,
-                      "stroke": "$divider",
-                      "strokeWidth": {
-                        "top": 1
-                      },
-                      "padding": [
-                        0,
-                        12
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "RGtut",
-                          "name": "Collapse",
-                          "width": 30,
-                          "height": 30,
-                          "cornerRadius": 8,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "trPdb",
-                              "name": "CollapseIcon",
-                              "width": 15,
-                              "height": 15,
-                              "icon": "panel-right-close",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        }
-                      ]
                     }
                   ]
                 }
@@ -1032,6 +1177,28 @@
                           "children": [
                             {
                               "type": "frame",
+                              "id": "Q3gu5C",
+                              "name": "Заголовок сегмента",
+                              "width": "fill_container",
+                              "height": 36,
+                              "fill": "$surface",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "C686Yh",
+                                  "name": "Иконка",
+                                  "width": 12,
+                                  "height": 12,
+                                  "icon": "panel-left-close",
+                                  "library": "lucide",
+                                  "fill": "$textMuted"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "FX8FR",
                               "name": "Разделы",
                               "width": "fill_container",
@@ -1071,47 +1238,6 @@
                                   "cornerRadius": 1.5
                                 }
                               ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "LqHYu",
-                              "name": "Футер · 44 px",
-                              "width": "fill_container",
-                              "height": 44,
-                              "stroke": "$divider",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "padding": [
-                                0,
-                                12
-                              ],
-                              "justifyContent": "end",
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "KUhI9",
-                                  "name": "Collapse",
-                                  "width": 30,
-                                  "height": 30,
-                                  "cornerRadius": 8,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "I9Xfrr",
-                                      "name": "CollapseIcon",
-                                      "width": 15,
-                                      "height": 15,
-                                      "icon": "panel-left-close",
-                                      "library": "lucide",
-                                      "fill": "$textMuted"
-                                    }
-                                  ]
-                                }
-                              ]
                             }
                           ]
                         },
@@ -1136,6 +1262,28 @@
                           "stroke": "$border",
                           "layout": "vertical",
                           "children": [
+                            {
+                              "type": "frame",
+                              "id": "C8xpAZ",
+                              "name": "Заголовок сегмента",
+                              "width": "fill_container",
+                              "height": 36,
+                              "fill": "$surface",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "he5P2",
+                                  "name": "Иконка",
+                                  "width": 12,
+                                  "height": 12,
+                                  "icon": "panel-left-open",
+                                  "library": "lucide",
+                                  "fill": "$textMuted"
+                                }
+                              ]
+                            },
                             {
                               "type": "frame",
                               "id": "fdzzR",
@@ -1214,47 +1362,6 @@
                                   "fill": "$textMuted"
                                 }
                               ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "fNvzB",
-                              "name": "Футер · 44 px",
-                              "width": "fill_container",
-                              "height": 44,
-                              "stroke": "$divider",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "padding": [
-                                0,
-                                4
-                              ],
-                              "justifyContent": "end",
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "pdLAQ",
-                                  "name": "Развернуть",
-                                  "width": 30,
-                                  "height": 30,
-                                  "cornerRadius": 8,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "G0dOIu",
-                                      "name": "CollapseIcon",
-                                      "width": 15,
-                                      "height": 15,
-                                      "icon": "panel-left-open",
-                                      "library": "lucide",
-                                      "fill": "$textMuted"
-                                    }
-                                  ]
-                                }
-                              ]
                             }
                           ]
                         }
@@ -1265,7 +1372,9 @@
                       "id": "PLgXc",
                       "name": "Caption",
                       "fill": "$textMuted",
-                      "content": "Развёрнута ↔ свёрнута до рейки миниатюр",
+                      "textGrowth": "fixed-width",
+                      "width": 620,
+                      "content": "Развёрнута: кнопка сворачивания в заголовке сегмента. Свёрнута: рейка миниатюр на всю высоту панели, кнопка разворачивания — в заголовке сегмента.",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "normal"
@@ -1300,6 +1409,28 @@
                           "children": [
                             {
                               "type": "frame",
+                              "id": "KFrIa",
+                              "name": "Заголовок сегмента",
+                              "width": "fill_container",
+                              "height": 36,
+                              "fill": "$surface",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "gqDKq",
+                                  "name": "Иконка",
+                                  "width": 12,
+                                  "height": 12,
+                                  "icon": "panel-right-close",
+                                  "library": "lucide",
+                                  "fill": "$textMuted"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "WSPkl",
                               "name": "Контекст",
                               "width": "fill_container",
@@ -1330,46 +1461,6 @@
                                   "cornerRadius": 1.5
                                 }
                               ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "aXNZo",
-                              "name": "Футер · 44 px",
-                              "width": "fill_container",
-                              "height": 44,
-                              "stroke": "$divider",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "padding": [
-                                0,
-                                12
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "tAOHM",
-                                  "name": "Collapse",
-                                  "width": 30,
-                                  "height": 30,
-                                  "cornerRadius": 8,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "RFkNg",
-                                      "name": "CollapseIcon",
-                                      "width": 15,
-                                      "height": 15,
-                                      "icon": "panel-right-close",
-                                      "library": "lucide",
-                                      "fill": "$textMuted"
-                                    }
-                                  ]
-                                }
-                              ]
                             }
                           ]
                         },
@@ -1394,6 +1485,28 @@
                           "stroke": "$border",
                           "layout": "vertical",
                           "children": [
+                            {
+                              "type": "frame",
+                              "id": "A6a6u",
+                              "name": "Заголовок сегмента",
+                              "width": "fill_container",
+                              "height": 36,
+                              "fill": "$surface",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "s1ETV",
+                                  "name": "Иконка",
+                                  "width": 12,
+                                  "height": 12,
+                                  "icon": "panel-right-open",
+                                  "library": "lucide",
+                                  "fill": "$textMuted"
+                                }
+                              ]
+                            },
                             {
                               "type": "frame",
                               "id": "WvCVm",
@@ -1439,46 +1552,6 @@
                                   "fill": "$textMuted"
                                 }
                               ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "rNt1R",
-                              "name": "Футер · 44 px",
-                              "width": "fill_container",
-                              "height": 44,
-                              "stroke": "$divider",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "padding": [
-                                0,
-                                4
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "iwU41",
-                                  "name": "Развернуть",
-                                  "width": 30,
-                                  "height": 30,
-                                  "cornerRadius": 8,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "J6PVym",
-                                      "name": "CollapseIcon",
-                                      "width": 15,
-                                      "height": 15,
-                                      "icon": "panel-right-open",
-                                      "library": "lucide",
-                                      "fill": "$textMuted"
-                                    }
-                                  ]
-                                }
-                              ]
                             }
                           ]
                         }
@@ -1489,7 +1562,9 @@
                       "id": "wKDiZ",
                       "name": "Caption",
                       "fill": "$textMuted",
-                      "content": "Развёрнута с контекстом — 352–368 px · без контекста скрыта",
+                      "textGrowth": "fixed-width",
+                      "width": 620,
+                      "content": "Развёрнута: кнопка сворачивания в заголовке сегмента. Свёрнута: рейка миниатюр на всю высоту панели, кнопка разворачивания — в заголовке сегмента.",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "normal"
@@ -2706,7 +2781,15 @@
           "id": "U0RGD",
           "type": "ref",
           "ref": "jGvOM",
-          "name": "Топбар"
+          "name": "Топбар",
+          "descendants": {
+            "cbGOV": {
+              "content": "Журнал / Конструкции"
+            },
+            "meh33": {
+              "content": "Конструкции"
+            }
+          }
         },
         {
           "type": "frame",
@@ -5181,7 +5264,7 @@
       "name": "Экран/Карточка конструкции",
       "clip": true,
       "width": 1600,
-      "height": 1512,
+      "height": 1522,
       "fill": "$bg",
       "layout": "vertical",
       "children": [
@@ -5189,7 +5272,24 @@
           "id": "Kzmsl",
           "type": "ref",
           "ref": "jGvOM",
-          "name": "Топбар"
+          "name": "Топбар",
+          "descendants": {
+            "cbGOV": {
+              "content": "Журнал / Конструкции / Карточка"
+            },
+            "meh33": {
+              "content": "BTC-280324 · Карточка"
+            },
+            "MyZsE": {
+              "enabled": false
+            },
+            "I1JbT": {
+              "enabled": false
+            },
+            "s5fwGV": {
+              "content": "Чаты конструкции"
+            }
+          }
         },
         {
           "type": "frame",
@@ -9325,7 +9425,24 @@
           "id": "fixDe",
           "type": "ref",
           "ref": "jGvOM",
-          "name": "Топбар"
+          "name": "Топбар",
+          "descendants": {
+            "cbGOV": {
+              "content": "Журнал / Агент"
+            },
+            "meh33": {
+              "content": "Агент · Чаты"
+            },
+            "MyZsE": {
+              "enabled": false
+            },
+            "I1JbT": {
+              "enabled": false
+            },
+            "bOfzl": {
+              "enabled": false
+            }
+          }
         },
         {
           "type": "frame",
@@ -9844,7 +9961,24 @@
           "id": "GKNzf",
           "type": "ref",
           "ref": "jGvOM",
-          "name": "Топбар"
+          "name": "Топбар",
+          "descendants": {
+            "cbGOV": {
+              "content": "Журнал / Агент"
+            },
+            "meh33": {
+              "content": "Агент · Чат"
+            },
+            "MyZsE": {
+              "enabled": false
+            },
+            "I1JbT": {
+              "enabled": false
+            },
+            "bOfzl": {
+              "enabled": false
+            }
+          }
         },
         {
           "type": "frame",
@@ -10260,7 +10394,24 @@
           "id": "wihqq",
           "type": "ref",
           "ref": "jGvOM",
-          "name": "Топбар"
+          "name": "Топбар",
+          "descendants": {
+            "cbGOV": {
+              "content": "Журнал / Входящие"
+            },
+            "meh33": {
+              "content": "Входящие"
+            },
+            "MyZsE": {
+              "enabled": false
+            },
+            "I1JbT": {
+              "enabled": false
+            },
+            "bOfzl": {
+              "enabled": false
+            }
+          }
         },
         {
           "type": "frame",
@@ -12022,7 +12173,24 @@
           "id": "ecjpy",
           "type": "ref",
           "ref": "jGvOM",
-          "name": "Топбар"
+          "name": "Топбар",
+          "descendants": {
+            "cbGOV": {
+              "content": "Журнал / Подсказки"
+            },
+            "meh33": {
+              "content": "Подсказки"
+            },
+            "MyZsE": {
+              "enabled": false
+            },
+            "I1JbT": {
+              "enabled": false
+            },
+            "bOfzl": {
+              "enabled": false
+            }
+          }
         },
         {
           "type": "frame",
@@ -12466,7 +12634,24 @@
           "id": "lJXdH",
           "type": "ref",
           "ref": "jGvOM",
-          "name": "Топбар"
+          "name": "Топбар",
+          "descendants": {
+            "cbGOV": {
+              "content": "Журнал / Агент / Правила"
+            },
+            "meh33": {
+              "content": "Правила"
+            },
+            "MyZsE": {
+              "enabled": false
+            },
+            "I1JbT": {
+              "enabled": false
+            },
+            "bOfzl": {
+              "enabled": false
+            }
+          }
         },
         {
           "type": "frame",
@@ -13116,7 +13301,24 @@
           "id": "oK3UO",
           "type": "ref",
           "ref": "jGvOM",
-          "name": "Топбар"
+          "name": "Топбар",
+          "descendants": {
+            "cbGOV": {
+              "content": "Журнал / Синхронизация"
+            },
+            "meh33": {
+              "content": "Синхронизация"
+            },
+            "MyZsE": {
+              "enabled": false
+            },
+            "I1JbT": {
+              "enabled": false
+            },
+            "bOfzl": {
+              "enabled": false
+            }
+          }
         },
         {
           "type": "frame",
@@ -17977,7 +18179,7 @@
                   "id": "K4OyFL",
                   "name": "К1 · Метка",
                   "fill": "$textPrimary",
-                  "content": "К1 · Контекстный топбар: сегменты над тремя фреймами",
+                  "content": "К1 · Контекстный топбар — принят, перенесён в мастер",
                   "fontFamily": "$font",
                   "fontSize": 16,
                   "fontWeight": "600"
@@ -18046,6 +18248,35 @@
                               "fontFamily": "$font",
                               "fontSize": 14,
                               "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "yQfMx",
+                              "name": "Spacer",
+                              "width": "fill_container",
+                              "height": 1
+                            },
+                            {
+                              "type": "frame",
+                              "id": "abdjg",
+                              "name": "Кнопка сворачивания · навигация",
+                              "width": 28,
+                              "height": 28,
+                              "cornerRadius": 7,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "N0txZ",
+                                  "name": "Кнопка сворачивания · навигация · Иконка",
+                                  "width": 15,
+                                  "height": 15,
+                                  "icon": "panel-left-close",
+                                  "library": "lucide",
+                                  "fill": "$textMuted"
+                                }
+                              ]
                             }
                           ]
                         },
@@ -18197,6 +18428,28 @@
                           "children": [
                             {
                               "type": "frame",
+                              "id": "ydv1F",
+                              "name": "Кнопка сворачивания · контекст",
+                              "width": 28,
+                              "height": 28,
+                              "cornerRadius": 7,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "AV6QM",
+                                  "name": "Кнопка сворачивания · контекст · Иконка",
+                                  "width": 15,
+                                  "height": 15,
+                                  "icon": "panel-right-close",
+                                  "library": "lucide",
+                                  "fill": "$textMuted"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "EpGOd",
                               "name": "Чип · панель",
                               "fill": "$infoSoft",
@@ -18211,7 +18464,7 @@
                                   "id": "vSj0f",
                                   "name": "Чип · панель · Текст",
                                   "fill": "$info",
-                                  "content": "Панель: Карточка · BTC-280324",
+                                  "content": "Карточка · BTC-280324",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -18559,46 +18812,6 @@
                                   "fontWeight": "normal"
                                 }
                               ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "Q9VrWU",
-                              "name": "Футер",
-                              "width": "fill_container",
-                              "height": 44,
-                              "stroke": "$divider",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "padding": [
-                                0,
-                                12
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "E2LKo",
-                                  "name": "Collapse",
-                                  "width": 30,
-                                  "height": 30,
-                                  "cornerRadius": 8,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "D3miSk",
-                                      "name": "CollapseIcon",
-                                      "width": 15,
-                                      "height": 15,
-                                      "icon": "panel-right-close",
-                                      "library": "lucide",
-                                      "fill": "$textMuted"
-                                    }
-                                  ]
-                                }
-                              ]
                             }
                           ]
                         }
@@ -18608,12 +18821,12 @@
                 },
                 {
                   "type": "text",
-                  "id": "Ezazq",
+                  "id": "H8qJmc",
                   "name": "К1 · Примечание",
                   "fill": "$textSecondary",
                   "textGrowth": "fixed-width",
                   "width": 1440,
-                  "content": "Топбар делится на три сегмента, выровненные по колонкам каркаса: над навигацией — бренд, над центром — крошка, заголовок и действия страницы, над контекстом — что открыто в панели. Сквозные: итог журнала и время синхронизации. Плюс: эволюция без ломки геометрии. Минус: полоса на всю ширину, центр страницы получает меньше вертикали.",
+                  "content": "Топбар делится на три сегмента, выровненные по колонкам каркаса: над навигацией — бренд и кнопка сворачивания панели, над центром — крошка, заголовок и действия страницы плюс итог журнала, над контекстом — кнопка панели, чип открытого содержимого и время синхронизации. Футеры панелей убраны: управление свёрнутостью живёт в заголовках сегментов и остаётся доступным в свёрнутом состоянии (сегмент сжимается до рейки 44 px). Отклонение от сценария frame-collapse-button-in-panel-footer — при переносе в мастера спека обновляется. Плюс: эволюция без ломки геометрии, панели без нижней полосы получают больше полезной высоты.",
                   "lineHeight": 1.5,
                   "fontFamily": "$font",
                   "fontSize": 12,
