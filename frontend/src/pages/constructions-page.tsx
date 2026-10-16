@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { Lightbulb, Loader2, RefreshCw } from "lucide-react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import type { ConstructionsOverview } from "@/lib/api/constructions";
 import { fetchConstructionPreview } from "@/lib/api/constructions";
 import { constructionsOverviewQueryKey, useConstructionsOverviewQuery } from "@/lib/api/constructions-overview-query";
@@ -12,14 +12,15 @@ import { ConstructionsTable } from "@/components/constructions/constructions-tab
 import { useContextPanel } from "@/components/layout/context-panel";
 import { Button } from "@/components/ui/button";
 import { formatMoment } from "@/lib/format/display-time";
-import { formatCount, pluralForm } from "@/lib/format/plural";
 import { formatSignedAmount } from "@/lib/format/quantity";
 import { useIsMobile } from "@/lib/use-mobile";
 import { cn } from "@/lib/utils";
 
-// Раздел «Конструкции» — главный экран SPA: шапка с итогом журнала,
-// счётчиками, сегментом области видимости и тулбаром (разбор входящих,
-// ручной проход подсказок, синхронизация); таблица с выделением строк.
+// Раздел «Конструкции» — главный экран SPA: тулбар с титулом раздела и
+// счётчиками конструкций, сегментом области видимости и действиями (ручной
+// проход подсказок, синхронизация); строка итога сводки; таблица с выделением
+// строк. Вход в разбор входящих — через раздел «Входящие» панели навигации,
+// кнопки в тулбаре раздела нет (решение раунд-сверки формы).
 // Выделение и область видимости живут в URL и переживают перезагрузку;
 // краткая карточка выделенной конструкции регистрируется в правой
 // контекстной панели каркаса через useContextPanel (design.md D3–D6).
@@ -58,6 +59,9 @@ export function ConstructionsPage() {
 	// сводка списка не плодит дублирующих обращений к API.
 	// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
 	const overviewQuery = useConstructionsOverviewQuery();
+	// Счётчики у титула тулбара: полный набор конструкций, открыто и архив;
+	// читаются из сводки обзора тем же запросом.
+	const summary = overviewQuery.data?.summary;
 
 	// Синхронизация из шапки: после закрытого запуска раздел перечитывает
 	// обзор — новые сделки меняют итог и строки.
@@ -162,13 +166,28 @@ export function ConstructionsPage() {
 
 	return (
 		<section className="flex flex-col gap-4 p-6">
-			{/* Тулбар раздела: титул, сегмент области видимости и действия —
-			    разбор входящих, ручной проход подсказок и синхронизация в одном
-			    ряду (design.md D5, D6; TitleRow мастера «Экран/Конструкции»). */}
+			{/* Тулбар раздела: титул со счётчиками конструкций, сегмент области
+			    видимости и действия — ручной проход подсказок и синхронизация в
+			    одном ряду (design.md D5, D6; TitleRow мастера «Экран/Конструкции»). */}
 			<div className="flex flex-wrap items-center gap-3">
 				{/* Титул раздела — Inter 21/600 дизайн-системы (H1 Body-экранов).
 				    Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
 				<h1 className="page-title">Конструкции</h1>
+				{/* Счётчики конструкций рядом с титулом — формат макета «Counters»
+				    «конструкций N · открыто N · архив N» (12px $textMuted), архив —
+				    все минус открытые. Считаются по полному набору журнала,
+				    независимо от области видимости списка. Кнопку «Разобрать
+				    входящие» из тулбара убрали решением раунд-сверки: вход — через
+				    раздел «Входящие» панели навигации.
+				    Traceability: change:rework-contextual-topbar/tasks#2.0
+				    Traceability: openspec:ui/screens#requirement-construction-list-screen */}
+				{summary !== undefined && (
+					<p data-slot="constructions-counters" className="text-[12px] text-text-muted">
+						{`конструкций ${summary.constructionCount} · открыто ${summary.openCount} · архив ${
+							summary.constructionCount - summary.openCount
+						}`}
+					</p>
+				)}
 				<div className="ml-auto flex flex-wrap items-center gap-2">
 					{/* Сегмент «Открытые | Все»: состояние в URL, дефолт —
 					    открытые; контейнер по фрейму ScopeFilter (b5KyT). */}
@@ -182,13 +201,6 @@ export function ConstructionsPage() {
 						<ScopeSegmentButton label="Открытые" active={scope === "open"} onClick={() => setScope("open")} />
 						<ScopeSegmentButton label="Все" active={scope === "all"} onClick={() => setScope("all")} />
 					</div>
-					{/* Разбор входящих запускается из тулбара раздела: кнопка в
-					    варианте Secondary дизайн-системы (поверхность + бордер),
-					    ведёт в раздел «Входящие». */}
-					{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
-					<Button variant="secondary" asChild>
-						<Link to="/inbox">Разобрать входящие</Link>
-					</Button>
 					{/* Ручной проход подсказок рядом с синхронизацией
 					    (POST /hints/pass): иконочная кнопка по фрейму HintsPassBtn
 					    (Y9mB6), результат — строки состояния под шапкой.
@@ -274,7 +286,7 @@ function ScopeSegmentButton({ label, active, onClick }: { label: string; active:
 	);
 }
 
-/** Шапка раздела: итог журнала с разбивкой, котировки, счётчики и статусы синхронизации. */
+/** Шапка раздела: итог журнала с разбивкой, котировки и статусы синхронизации. */
 function ConstructionsHeader({
 	overview,
 	syncMutation,
@@ -296,12 +308,13 @@ function ConstructionsHeader({
 
 	return (
 		<header className="flex flex-col gap-2">
-			{/* Детальная сводка раздела: итог с разбивкой, отметка времени марок
-			    и счётчики; компактный итог на любом экране живёт в топбаре каркаса
-			    и читает тот же кэш обзора. */}
+			{/* Детальная сводка раздела: итог с разбивкой и отметка времени
+			    марок; компактный итог на любом экране живёт в топбаре каркаса
+			    и читает тот же кэш обзора. Счётчики конструкций — рядом с
+			    титулом тулбара, в строке итога их нет. */}
 			{/* Шапка итога — одна строка по референсу design.pen (фрейм списка):
-			    итог 18/600 $accentStrong, разбивка 11 $textSecondary, котировки и
-			    счётчики 11 $textMuted; паддинги [14,16]; сегменты выравнены по
+			    итог 18/600 $accentStrong, разбивка 11 $textSecondary, котировки
+			    11 $textMuted; паддинги [14,16]; сегменты выравнены по
 			    базовой линии и переносятся на узком экране. */}
 			{/* Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown */}
 			{/* Traceability: openspec:ui/design-system#requirement-screenshot-acceptance */}
@@ -316,14 +329,10 @@ function ConstructionsHeader({
 					<p className="text-[11px] text-text-secondary">{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
 						summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
 					}`}</p>
-					{/* Счётчики всегда по полному набору конструкций, независимо
+					{/* Котировки всегда по полному набору конструкций, независимо
 					    от области видимости списка.
 					    Traceability: openspec:ui/screens#scenario-list-scope-all-shows-archived */}
 					{quotesNote !== null && <p className="text-[11px] text-text-muted">{quotesNote}</p>}
-					<p className="text-[11px] text-text-muted">
-						{formatCount(summary.constructionCount, { one: "конструкция", few: "конструкции", many: "конструкций" })} (
-						{summary.openCount} {pluralForm(summary.openCount, { one: "открыта", few: "открыты", many: "открыто" })})
-					</p>
 				</div>
 			)}
 
