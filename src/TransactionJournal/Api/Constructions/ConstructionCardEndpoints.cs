@@ -642,10 +642,15 @@ public static class ConstructionCardEndpoints
 			data.Metrics.MarkValue,
 			data.Metrics.CapitalUsagePercent,
 			data.Metrics.RealRiskUsdt,
+			// Худший исход публикуется рядом с реальным риском: знаковая
+			// величина границы индикатора карточки со статусом состояния
+			// проходит из метрик аналитики без пересчёта.
+			// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+			data.Metrics.WorstCaseUsdt,
 			// Статус проходит рядом с величиной: конечный риск отличим от
 			// неограниченного хвоста и неполных данных без догадок по null.
 			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-			RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
+			RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt, data.Metrics.WorstCaseUsdt),
 			data.Metrics.OpenedAt,
 			data.Metrics.ClosedAt,
 			data.Metrics.Duration is { } duration ? (long?)Math.Round(duration.TotalSeconds) : null),
@@ -868,6 +873,7 @@ public sealed record ConstructionCardResponse(
 /// <param name="MarkValue">Стоимость открытых остатков по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
+/// <param name="WorstCaseUsdt">Худший исход в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия — время первой сделки; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой.</param>
@@ -876,6 +882,9 @@ public sealed record ConstructionCardResponse(
 // полный индикатор карточки строится с насечкой только конечного риска.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
+// Худший исход входит в контракт рядом с реальным риском: граница индикатора
+// карточки ставится знаковой величиной худшего исхода.
+// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 public sealed record ConstructionCardMetricsResponse(
 	decimal RealizedPnL,
 	decimal? UnrealizedPnL,
@@ -888,6 +897,7 @@ public sealed record ConstructionCardMetricsResponse(
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
+	decimal? WorstCaseUsdt,
 	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,

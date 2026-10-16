@@ -26,6 +26,7 @@ namespace TransactionJournal.Application;
 /// <param name="MarkValue">Стоимость открытых позиций конструкции по маркам; null при закрытой конструкции или недоступной оценке марок.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала — стоимость в процентах от капитала; null без базы процентов или стоимости.</param>
 /// <param name="RealRiskUsdt">Реальный риск конструкции в USDT — наихудший результат открытых остатков на экспирации; null, когда худший случай неограничен или символ остатка не разобран — причина различима статусом.</param>
+/// <param name="WorstCaseUsdt">Худший исход конструкции в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: конечный (`finite`), неограниченный (`unbounded`) или нерассчитанный (`unavailable`); незаданный читается как «не рассчитан», а не как конечный.</param>
 // Капитал передаётся незаданным как есть: прочерк вместо значения — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
@@ -45,6 +46,10 @@ namespace TransactionJournal.Application;
 // надо различать, а конечный ноль не превращать в отсутствие величины.
 // Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
 // Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
+// Худший исход идёт рядом с реальным риском со знаком и тем же статусом:
+// насечке индикатора нужна знаковая величина, а не клэмпированные потери.
+// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
 public sealed record ConstructionListItem(
 	long ConstructionId,
 	string Name,
@@ -64,6 +69,7 @@ public sealed record ConstructionListItem(
 	decimal? MarkValue = null,
 	decimal? CapitalUsagePercent = null,
 	decimal? RealRiskUsdt = null,
+	decimal? WorstCaseUsdt = null,
 	RealRiskStatus RealRiskStatus = RealRiskStatus.Unavailable);
 
 /// <summary>

@@ -7,8 +7,8 @@
 
 ## 2. Контракты API
 
-- [ ] 2.1 Расширить `RealRiskContract` сериализацией `worstCaseUsdt` рядом с `realRiskUsdt`/`realRiskStatus` (число только при `finite`); проверить в `RealRiskContractTests`, что unbounded/unavailable дают null + статус (`scenario-worst-case-null-with-status`)
-- [ ] 2.2 Пробросить `worstCaseUsdt` в `ConstructionListRows`, `ConstructionsEndpoints` (список и превью) и `ConstructionCardEndpoints` (метрики карточки); проверить контрактными тестами `ConstructionsSectionApiTests` и `ConstructionCardApiTests` на присутствие поля в JSON
+- [x] 2.1 Расширить `RealRiskContract` сериализацией `worstCaseUsdt` рядом с `realRiskUsdt`/`realRiskStatus` (число только при `finite`); проверить в `RealRiskContractTests`, что unbounded/unavailable дают null + статус (`scenario-worst-case-null-with-status`)
+- [x] 2.2 Пробросить `worstCaseUsdt` в `ConstructionListRows`, `ConstructionsEndpoints` (список и превью) и `ConstructionCardEndpoints` (метрики карточки); проверить контрактными тестами `ConstructionsSectionApiTests` и `ConstructionCardApiTests` на присутствие поля в JSON
 
 ## 3. Фронтенд: геометрия и индикатор
 

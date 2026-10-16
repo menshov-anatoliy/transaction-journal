@@ -87,10 +87,14 @@ public static class ConstructionsEndpoints
 					item.MarkValue,
 					item.CapitalUsagePercent,
 					item.RealRiskUsdt,
+					// Худший исход публикуется рядом с реальным риском: знаковая
+					// величина со статусом состояния переиспользуется без пересчёта.
+					// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+					item.WorstCaseUsdt,
 					// Статус проходит рядом с величиной: конечный риск отличим от
 					// неограниченного хвоста и неполных данных без догадок по null.
 					// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt),
+					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt, item.WorstCaseUsdt),
 					item.OpenedAt,
 					item.ClosedAt,
 					liveCounts.GetValueOrDefault(item.ConstructionId)))
@@ -143,10 +147,15 @@ public static class ConstructionsEndpoints
 				data.Metrics.MarkValue,
 				data.Metrics.CapitalUsagePercent,
 				data.Metrics.RealRiskUsdt,
+				// Худший исход публикуется рядом с реальным риском: знаковая
+				// величина границы индикатора со статусом состояния проходит
+				// из метрик аналитики без пересчёта.
+				// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+				data.Metrics.WorstCaseUsdt,
 				// Статус проходит рядом с величиной: конечный риск отличим от
 				// неограниченного хвоста и неполных данных без догадок по null.
 				// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
+				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt, data.Metrics.WorstCaseUsdt),
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
 				data.MarksAsOf,
@@ -212,6 +221,7 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="MarkValue">Стоимость открытых позиций по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
+/// <param name="WorstCaseUsdt">Худший исход в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
@@ -221,6 +231,9 @@ public sealed record ConstructionsSummaryResponse(
 // хвост и неполные данные без догадок по null.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
+// Худший исход входит в контракт рядом с реальным риском: насечке индикатора
+// строки нужна знаковая величина со статусом состояния.
+// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 public sealed record ConstructionRowResponse(
 	long ConstructionId,
 	string Name,
@@ -238,6 +251,7 @@ public sealed record ConstructionRowResponse(
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
+	decimal? WorstCaseUsdt,
 	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
@@ -264,6 +278,7 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="MarkValue">Стоимость открытых позиций по маркам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
+/// <param name="WorstCaseUsdt">Худший исход в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
@@ -275,6 +290,9 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 // конечного риска.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
+// Худший исход входит в контракт превью рядом с реальным риском: граница
+// индикатора ставится знаковой величиной худшего исхода.
+// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 public sealed record ConstructionPreviewResponse(
 	long ConstructionId,
 	string Name,
@@ -292,6 +310,7 @@ public sealed record ConstructionPreviewResponse(
 	decimal? MarkValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
+	decimal? WorstCaseUsdt,
 	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,

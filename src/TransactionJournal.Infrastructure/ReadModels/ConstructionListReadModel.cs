@@ -98,6 +98,10 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				item.MarkValue,
 				item.CapitalUsagePercent,
 				item.RealRiskUsdt,
+				// Худший исход проходит из метрик рядом с реальным риском:
+				// знак величины и статус состояния переиспользуются без пересчёта.
+				// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+				item.WorstCaseUsdt,
 				item.RealRiskStatus));
 		}
 

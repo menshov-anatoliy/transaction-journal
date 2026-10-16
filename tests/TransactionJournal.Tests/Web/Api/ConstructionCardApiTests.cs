@@ -85,6 +85,10 @@ public sealed class ConstructionCardApiTests
 		// величина проходит из метрик аналитики без пересчёта.
 		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 		Assert.That(metrics["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
+		// Худший исход публикуется рядом с риском: знаковая величина границы
+		// индикатора карточки — реализованный результат 60.25 минус риск 150.
+		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+		Assert.That(metrics["worstCaseUsdt"]!.GetValue<decimal>(), Is.EqualTo(-89.75m));
 		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
 		Assert.That(metrics["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(metrics["closedAt"], Is.Null);
@@ -320,6 +324,9 @@ public sealed class ConstructionCardApiTests
 		var metrics = payload!["metrics"]!;
 		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unbounded"));
 		Assert.That(metrics["realRiskUsdt"], Is.Null);
+		// Худший исход без величины переиспользует статус реального риска.
+		// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
+		Assert.That(metrics["worstCaseUsdt"], Is.Null);
 		RealRiskContractChecks.AssertNumberOnlyWhenFinite(metrics);
 	}
 
@@ -342,6 +349,9 @@ public sealed class ConstructionCardApiTests
 		var metrics = payload!["metrics"]!;
 		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unavailable"));
 		Assert.That(metrics["realRiskUsdt"], Is.Null);
+		// Худший исход без величины переиспользует статус реального риска.
+		// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
+		Assert.That(metrics["worstCaseUsdt"], Is.Null);
 		RealRiskContractChecks.AssertNumberOnlyWhenFinite(metrics);
 	}
 
@@ -1475,6 +1485,10 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			// Число реального риска выдаётся только конечному состоянию:
 			// unbounded и unavailable идут с null, инвариант «число только при finite».
 			RealRiskUsdt = _realRiskStatus == RealRiskStatus.Finite ? 150m : null,
+			// Худший исход переиспользует то же правило: число только при
+			// конечном риске, иначе null со статусом состояния.
+			// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
+			WorstCaseUsdt = _realRiskStatus == RealRiskStatus.Finite ? -89.75m : null,
 			RealRiskStatus = _realRiskStatus,
 			OpenedAt = openedAt,
 			ClosedAt = null,
