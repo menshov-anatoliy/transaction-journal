@@ -16,7 +16,9 @@ namespace TransactionJournal.Tests.Analytics;
 /// конечный риск с числовым совпадением и ручным расчётом, голый короткий
 /// перп — в опционной группе и без опций — неограничен, линейная нога входит
 /// в группу ранней экспирации своей базы, перп без опций той же базы
-/// образует собственную группу, а null-набор позиций отклоняется.
+/// образует собственную группу, гарантированная прибыль остатков даёт
+/// положительный неклэмпированный минимум платежа при нулевом риске,
+/// а null-набор позиций отклоняется.
 /// </summary>
 [TestClass]
 public class RealRiskCalculatorTests
@@ -53,8 +55,9 @@ public class RealRiskCalculatorTests
 		// Act
 		var result = _calculator.CalculateResult(positions);
 
-		// Assert: ниже нижнего страйка платёж равен −150, риск конечен и положителен.
-		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(150m)));
+		// Assert: ниже нижнего страйка платёж равен −150, риск конечен и положителен,
+		// неклэмпированный худший платёж остатков равен −150.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(150m, -150m)));
 	}
 
 	[TestMethod]
@@ -75,8 +78,9 @@ public class RealRiskCalculatorTests
 		// Act
 		var result = _calculator.CalculateResult(positions);
 
-		// Assert: −100 + (−50) = −150 — суммарный худший исход, риск конечен и равен 150.
-		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(150m)));
+		// Assert: −100 + (−50) = −150 — суммарный худший исход, риск конечен
+		// и равен 150, неклэмпированный платёж остатков равен −150.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(150m, -150m)));
 	}
 
 	[TestMethod]
@@ -100,6 +104,8 @@ public class RealRiskCalculatorTests
 		// Assert: наклон платежа на +∞ отрицателен — статус unbounded без числа.
 		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unbounded));
 		Assert.That(result.Usdt, Is.Null);
+		// Неклэмпированный худший платёж отсутствует вместе с величиной риска.
+		Assert.That(result.WorstPayoffUsdt, Is.Null);
 	}
 
 	[TestMethod]
@@ -176,7 +182,7 @@ public class RealRiskCalculatorTests
 		// и совпадает с ручным расчётом: узел нулевой цены платит
 		// +80 − 4340 − 4100 = −8360, узел страйка платит +80 + 60 + 300 = +440,
 		// минимум группы −8360.
-		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(8360m)));
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(8360m, -8360m)));
 	}
 
 	[TestMethod]
@@ -198,8 +204,9 @@ public class RealRiskCalculatorTests
 		var result = _calculator.CalculateResult(positions);
 
 		// Assert: узел нулевой цены платит −60 + 90 = +30, узел страйка 100
-		// платит −60 − 10 = −70; минимум группы −70, риск конечен и равен 70.
-		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(70m)));
+		// платит −60 − 10 = −70; минимум группы −70, риск конечен и равен 70,
+		// неклэмпированный платёж остатков равен −70.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(70m, -70m)));
 	}
 
 	[TestMethod]
@@ -269,8 +276,8 @@ public class RealRiskCalculatorTests
 		// Assert: ранняя группа платит минимум −70 (узел страйка 100: −60 от
 		// колла и −10 от перпа), вторая группа — −50, риск равен 70 + 50 = 120.
 		// Прикрепление перпа ко второй группе дало бы 220, отдельная группа
-		// короткого перпа — неограниченность.
-		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(120m)));
+		// короткого перпа — неограниченность; неклэмпированный платёж равен −120.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(120m, -120m)));
 	}
 
 	[TestMethod]
@@ -288,8 +295,8 @@ public class RealRiskCalculatorTests
 		var result = _calculator.CalculateResult(positions);
 
 		// Assert: платёж в узле нулевой цены равен −0.04 × 4100 = −164,
-		// риск конечен и равен 164.
-		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(164m)));
+		// риск конечен и равен 164, неклэмпированный платёж остатков равен −164.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(164m, -164m)));
 	}
 
 	[TestMethod]
@@ -306,9 +313,11 @@ public class RealRiskCalculatorTests
 		// Act
 		var result = _calculator.CalculateResult(positions);
 
-		// Assert: статус «не рассчитан» без числа, а не ноль.
+		// Assert: статус «не рассчитан» без числа, а не ноль; худший платёж
+		// остатков также отсутствует вместе с величиной риска.
 		Assert.That(result.Status, Is.EqualTo(RealRiskStatus.Unavailable));
 		Assert.That(result.Usdt, Is.Null);
+		Assert.That(result.WorstPayoffUsdt, Is.Null);
 	}
 
 	[TestMethod]
@@ -354,8 +363,9 @@ public class RealRiskCalculatorTests
 		var evaluated = _calculator.CalculateResult(withMarks);
 		var failed = _calculator.CalculateResult(withoutMarks);
 
-		// Assert: сбой марок не меняет ни величину, ни состояние результата.
-		Assert.That(evaluated, Is.EqualTo(RealRiskResult.Finite(150m)));
+		// Assert: сбой марок не меняет ни величину, ни состояние результата,
+		// неклэмпированный платёж остатков остаётся −150.
+		Assert.That(evaluated, Is.EqualTo(RealRiskResult.Finite(150m, -150m)));
 		Assert.That(failed, Is.EqualTo(evaluated));
 	}
 
@@ -375,8 +385,36 @@ public class RealRiskCalculatorTests
 		// Act
 		var result = _calculator.CalculateResult(positions);
 
-		// Assert: риск конечен и нулевой, а не отсутствующий.
-		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(0m)));
+		// Assert: риск конечен и нулевой, худший платёж остатков также нулевой,
+		// а не отсутствующие.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(0m, 0m)));
+	}
+
+	[TestMethod]
+	[Description("Гарантированная прибыль остатков даёт положительный минимум платежа при нулевом риске")]
+	public void TryIfGuaranteedResidualProfitYieldsPositiveMinimumAndZeroRisk()
+	{
+		// Arrange: открытые остатки полностью зафиксированы синтетическим
+		// паритетным локом — короткий перп BTCUSDT −1 по средней 195.7 накрыт
+		// длинным коллом 100 по средней 60.
+		// Требование: суммарный минимум платежа группы положителен (+35.7) и
+		// публикуется без клэмпа как худший платёж остатков, а реальный риск
+		// остаётся нулевым — клэмп не прячет гарантированную прибыль остатков.
+		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+		// Traceability: openspec:analytics/performance#scenario-worst-case-guaranteed-profit
+		var positions = new[]
+		{
+			OpenResidual("BTC-27DEC24-100-C", 1m, 60m),
+			OpenResidual("BTCUSDT", -1m, 195.7m),
+		};
+
+		// Act
+		var result = _calculator.CalculateResult(positions);
+
+		// Assert: наклон за последним узлом равен +1 − 1 = 0, минимум платежа
+		// достигается в узле страйка: (195.7 − 100) − 60 = +35.7; риск клэмпится
+		// нулём, неклэмпированный худший платёж остаётся положительным.
+		Assert.That(result, Is.EqualTo(RealRiskResult.Finite(0m, 35.7m)));
 	}
 
 	[TestMethod]

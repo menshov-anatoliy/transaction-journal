@@ -32,7 +32,9 @@ public sealed class ConstructionMetricsCalculator
 	/// открытых остатков на экспирации — выводится из структуры ног и средних цен
 	/// открытых остатков и от текущих марок не зависит; в метрики он переносится
 	/// вместе со статусом, различающим конечный, неограниченный и нерассчитанный
-	/// риск, без изменения расчёта результата конструкции.
+	/// риск, без изменения расчёта результата конструкции. Рядом публикуется
+	/// худший исход — реализованный результат плюс неклэмпированный минимум
+	/// платежа групп остатков — с тем же статусом, что и реальный риск.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, для которой вычисляются метрики.</param>
 	/// <param name="allocatedCapitalUsdt">Текущий выделенный капитал конструкции в USDT — база процентов; null, когда капитал не задан.</param>
@@ -100,6 +102,16 @@ public sealed class ConstructionMetricsCalculator
 		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
 		var realRisk = _realRiskCalculator.CalculateResult(positionList);
 
+		// Худший исход — знаковая метрика рядом с реальным риском: реализованный
+		// результат плюс неклэмпированный минимум платежа групп остатков. Число
+		// есть только при конечном риске, статус переиспользуется у реального
+		// риска; без открытых остатков платёж нулевой и худший исход равен
+		// реализованному результату.
+		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+		decimal? worstCaseUsdt = realRisk.WorstPayoffUsdt == null
+			? null
+			: realizedPnL + realRisk.WorstPayoffUsdt.GetValueOrDefault();
+
 		// Проценты — чистые функции текущих данных: базой служит текущее значение
 		// выделенного капитала, поэтому правка капитала меняет только процентные
 		// величины; незаданный или нулевой капитал базы не образует — проценты
@@ -141,6 +153,7 @@ public sealed class ConstructionMetricsCalculator
 			MarkValue = markValue,
 			RealRiskUsdt = realRisk.Usdt,
 			RealRiskStatus = realRisk.Status,
+			WorstCaseUsdt = worstCaseUsdt,
 			RealizedPnLPercent = Percent(realizedPnL),
 			UnrealizedPnLPercent = Percent(unrealizedPnL),
 			AdjustmentsPnLPercent = Percent(adjustmentsPnL),

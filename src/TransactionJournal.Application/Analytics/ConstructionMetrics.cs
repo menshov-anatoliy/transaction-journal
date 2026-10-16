@@ -80,6 +80,19 @@ public sealed record ConstructionMetrics
 	/// </summary>
 	public RealRiskStatus RealRiskStatus { get; init; } = RealRiskStatus.Unavailable;
 
+	/// <summary>
+	/// Худший исход конструкции в USDT — знаковая величина: реализованный
+	/// результат плюс неклэмпированный суммарный минимум платежа групп открытых
+	/// остатков. При остаточном риске равен «реализованный минус реальный
+	/// риск», при гарантированной прибыли остатков превышает реализованный
+	/// результат; без открытых остатков равен реализованному результату.
+	/// Число есть только при конечном риске, статус переиспользуется у
+	/// <see cref="RealRiskStatus"/>; метрика выводится из структуры ног и
+	/// средних цен остатков и от текущих марок не зависит.
+	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+	/// </summary>
+	public decimal? WorstCaseUsdt { get; init; }
+
 	/// <summary>Реализованный PnL в процентах от текущего выделенного капитала; null при нулевом капитале.</summary>
 	public required decimal? RealizedPnLPercent { get; init; }
 

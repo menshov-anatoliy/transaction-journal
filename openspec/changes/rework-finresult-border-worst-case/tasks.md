@@ -2,8 +2,8 @@
 
 ## 1. Расчёт худшего исхода (домен/приложение)
 
-- [ ] 1.1 Расширить `RealRiskResult` неклэмпированным худшим платежом остатков (сегодня внутренняя переменная `worst` до `Math.Max(0, −worst)`): значение при `finite`, null при `unbounded`/`unavailable`, 0 без остатков; проверить новыми случаями в `RealRiskCalculatorTests` (гарантированная прибыль группы даёт положительный минимум, `realRiskUsdt` остаётся 0) с метками `Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric`
-- [ ] 1.2 Добавить `WorstCaseUsdt` в `ConstructionMetrics` и собрать в `ConstructionMetricsCalculator` как `realized + worstPayoff`; покрыть юнит-тестами сценарии `scenario-worst-case-guaranteed-profit` и `scenario-worst-case-closed-equals-realized` с соответствующими traceability-метками
+- [x] 1.1 Расширить `RealRiskResult` неклэмпированным худшим платежом остатков (сегодня внутренняя переменная `worst` до `Math.Max(0, −worst)`): значение при `finite`, null при `unbounded`/`unavailable`, 0 без остатков; проверить новыми случаями в `RealRiskCalculatorTests` (гарантированная прибыль группы даёт положительный минимум, `realRiskUsdt` остаётся 0) с метками `Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric`
+- [x] 1.2 Добавить `WorstCaseUsdt` в `ConstructionMetrics` и собрать в `ConstructionMetricsCalculator` как `realized + worstPayoff`; покрыть юнит-тестами сценарии `scenario-worst-case-guaranteed-profit` и `scenario-worst-case-closed-equals-realized` с соответствующими traceability-метками
 
 ## 2. Контракты API
 
