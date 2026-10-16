@@ -12,9 +12,9 @@ import {
 // и доступность выдаёт каждый из трёх видов.
 // Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финансового-результата-конструкции
 
-// Вход кейса C3: граница реального риска прижата к левому краю
-// (−550 = −250 − 300), маркер — итог −70, подписи «риск есть /
-// 300 USDT · 100%» и «−70».
+// Вход кейса C3: граница худшего исхода прижата к левому краю
+// (−550 = −250 − 300), маркер — итог −70, подписи «худший исход /
+// −550 USDT · 183%» и «−70».
 const CASE_C3 = {
 	plannedRisk: 300,
 	plannedProfit: 900,
@@ -23,6 +23,7 @@ const CASE_C3 = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: 300,
+	worstCase: -550,
 	realRiskStatus: "finite",
 } as const;
 
@@ -36,12 +37,13 @@ const CASE_C6 = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: 300,
+	worstCase: -150,
 	realRiskStatus: "finite",
 } as const;
 
 // Вход сценария finresult-unbounded-risk: открытый нетто-короткий колл,
 // плановый риск 400, положительный итог +5 942.16 — хвост не ограничен,
-// числа реального риска в контракте нет.
+// числа реального риска и худшего исхода в контракте нет.
 const CASE_UNBOUNDED = {
 	plannedRisk: 400,
 	plannedProfit: 900,
@@ -50,6 +52,7 @@ const CASE_UNBOUNDED = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: null,
+	worstCase: null,
 	realRiskStatus: "unbounded",
 } as const;
 
@@ -63,6 +66,7 @@ const CASE_UNAVAILABLE = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: null,
+	worstCase: null,
 	realRiskStatus: "unavailable",
 } as const;
 
@@ -76,12 +80,13 @@ const CASE_UNBOUNDED_WITHOUT_PLAN = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: null,
+	worstCase: null,
 	realRiskStatus: "unbounded",
 } as const;
 
 describe("полный индикатор", () => {
-	// Граница прижата к левому краю, но подписывается реальным риском целиком;
-	// маркер подписан итогом.
+	// Граница прижата к левому краю, но подписывается значением худшего
+	// исхода целиком с честным процентом; маркер подписан итогом.
 	// Traceability: openspec:ui/screens#scenario-finresult-border-left-clip
 	it("показывает подписи шкалы, границы и маркера кейса C3", () => {
 		// Act: полный вид для карточки и превью конструкции.
@@ -91,8 +96,8 @@ describe("полный индикатор", () => {
 		expect(screen.getByText("−300")).toBeInTheDocument();
 		expect(screen.getByText("0")).toBeInTheDocument();
 		expect(screen.getByText("+900")).toBeInTheDocument();
-		expect(screen.getByText("риск есть")).toBeInTheDocument();
-		expect(screen.getByText("300 USDT · 100%")).toBeInTheDocument();
+		expect(screen.getByText("худший исход")).toBeInTheDocument();
+		expect(screen.getByText("−550 USDT · 183%")).toBeInTheDocument();
 		expect(screen.getByText("−70")).toBeInTheDocument();
 	});
 
@@ -130,7 +135,7 @@ describe("полный индикатор", () => {
 	});
 
 	// Свежая позиция: ликвидация вернёт около нуля, весь реальный риск (120)
-	// впереди — граница стоит на −реальныйРиск со своей метрикой.
+	// впереди — граница стоит на −реальныйРиск со своим значением.
 	// Traceability: openspec:ui/screens#scenario-finresult-fresh-position-real-risk
 	it("показывает свежую позицию: маркер «≈ 0», граница по метрике риска", () => {
 		// Act: сделок закрытия нет, метрика реального риска доступна.
@@ -144,19 +149,21 @@ describe("полный индикатор", () => {
 					quotesDegraded: false,
 					hasOpenResidual: true,
 					realRisk: 120,
+					worstCase: -120,
 					realRiskStatus: "finite",
 				}}
 			/>,
 		);
 
-		// Assert: маркер «≈ 0», граница подписана метрикой реального риска.
+		// Assert: маркер «≈ 0», граница подписана значением худшего исхода
+		// со знаком и процентом от планового риска.
 		expect(screen.getByText("≈ 0")).toBeInTheDocument();
-		expect(screen.getByText("риск есть")).toBeInTheDocument();
-		expect(screen.getByText("120 USDT · 40%")).toBeInTheDocument();
+		expect(screen.getByText("худший исход")).toBeInTheDocument();
+		expect(screen.getByText("−120 USDT · 40%")).toBeInTheDocument();
 	});
 
 	// Закрытая конструкция: реального риска нет — граница на realized с
-	// подписью «риска нет» без процентов.
+	// подписью «риска нет» и значением худшего исхода (равен реализованному).
 	// Traceability: openspec:ui/screens#scenario-finresult-closed-no-risk
 	it("показывает закрытую позицию: «риска нет», граница на realized", () => {
 		// Act: остатков нет, реализованная выше целевого профита, риск 0.
@@ -170,15 +177,80 @@ describe("полный индикатор", () => {
 					quotesDegraded: false,
 					hasOpenResidual: false,
 					realRisk: 0,
+					worstCase: 945,
 					realRiskStatus: "finite",
 				}}
 			/>,
 		);
 
-		// Assert: подпись «риска нет» и итог +945 на краю шкалы.
+		// Assert: подпись «риска нет», значение +945 и итог на краю шкалы.
 		expect(screen.getByText("риска нет")).toBeInTheDocument();
-		expect(screen.getByText("0 USDT · 0%")).toBeInTheDocument();
+		expect(screen.getByText("+945 USDT · 105%")).toBeInTheDocument();
 		expect(screen.getByText("+945")).toBeInTheDocument();
+	});
+
+	// Тон подписи границы — по знаку худшего исхода, не по знаку итога:
+	// при плюсовом итоге отрицательный исход подписан красным.
+	// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+	it("тонит подпись границы по знаку худшего исхода, а не итога", () => {
+		// Act: итог +849 положителен, худший исход −150 отрицателен.
+		const { container } = render(
+			<FullFinResultIndicator
+				input={{
+					plannedRisk: 300,
+					plannedProfit: 900,
+					realized: 150,
+					unrealized: 699,
+					quotesDegraded: false,
+					hasOpenResidual: true,
+					realRisk: 300,
+					worstCase: -150,
+					realRiskStatus: "finite",
+				}}
+			/>,
+		);
+
+		// Assert: обе строки подписи границы красные, маркер итога зелёный.
+		const borderLabel = container.querySelector<HTMLElement>('[data-part="border-label"]');
+		const borderLines = borderLabel?.children ?? [];
+		expect(borderLines).toHaveLength(2);
+		expect(borderLines[0].className).toContain("fin-negative");
+		expect(borderLines[0].className).not.toContain("fin-positive-strong");
+		expect(borderLines[1].className).toContain("fin-negative");
+		const markerLabel = screen.getByText("+849");
+		expect(markerLabel.className).toContain("fin-positive-strong");
+	});
+
+	// Маркер итога не прижимается к границе худшего исхода: расхождение
+	// оценки ликвидации и худшего исхода показывается в истинных положениях.
+	// Traceability: openspec:ui/screens#scenario-finresult-marker-not-clamped
+	it("показывает маркер левее границы в истинном положении", () => {
+		// Act: устаревшая марка опустила итог до −150 при худшем исходе −70.
+		const { container } = render(
+			<FullFinResultIndicator
+				input={{
+					plannedRisk: 300,
+					plannedProfit: 900,
+					realized: -250,
+					unrealized: 100,
+					quotesDegraded: false,
+					hasOpenResidual: true,
+					realRisk: 70,
+					worstCase: -70,
+					realRiskStatus: "finite",
+				}}
+			/>,
+		);
+
+		// Assert: маркер стоит левее насечки — позиция итога −150 из шкалы
+		// −300…+900, а не прижата к границе −70.
+		const marker = container.querySelector<HTMLElement>('[data-part="marker"]');
+		const border = container.querySelector<HTMLElement>('[data-part="border"]');
+		const markerLeft = Number.parseFloat(marker?.style.left ?? "");
+		const borderLeft = Number.parseFloat(border?.style.left ?? "");
+		expect(markerLeft).toBeCloseTo((150 / 1200) * 100, 3);
+		expect(borderLeft).toBeCloseTo((230 / 1200) * 100, 3);
+		expect(markerLeft).toBeLessThan(borderLeft);
 	});
 });
 
@@ -189,7 +261,7 @@ describe("средний индикатор", () => {
 
 		// Assert: те же смысловые подписи, что и в полном виде; маркер — итог.
 		expect(screen.getByText("−300")).toBeInTheDocument();
-		expect(screen.getByText("риск есть")).toBeInTheDocument();
+		expect(screen.getByText("худший исход")).toBeInTheDocument();
 		expect(screen.getByText("−70")).toBeInTheDocument();
 	});
 
@@ -391,7 +463,7 @@ describe("компактный индикатор", () => {
 		// Act: плановые границы не заданы.
 		const { container } = render(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, quotesDegraded: false, hasOpenResidual: true, realRisk: 300, realRiskStatus: "finite" }}
+				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, quotesDegraded: false, hasOpenResidual: true, realRisk: 300, worstCase: -350, realRiskStatus: "finite" }}
 			/>,
 		);
 
@@ -409,7 +481,7 @@ describe("компактный индикатор", () => {
 		// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 		const { container } = render(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: true, realRisk: 300, realRiskStatus: "finite" }}
+				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: true, realRisk: 300, worstCase: -550, realRiskStatus: "finite" }}
 			/>,
 		);
 
@@ -429,7 +501,7 @@ describe("компактный индикатор", () => {
 		render(<FullFinResultIndicator input={CASE_C3} />);
 
 		// Assert: контейнер границы — flex-колонка из двух строк.
-		const borderLabel = screen.getByText("риск есть").parentElement;
+		const borderLabel = screen.getByText("худший исход").parentElement;
 		expect(borderLabel).toHaveAttribute("data-part", "border-label");
 		expect(borderLabel).toHaveClass("flex", "flex-col");
 		expect(borderLabel?.children).toHaveLength(2);
@@ -439,17 +511,17 @@ describe("компактный индикатор", () => {
 	// собирается по фактической стороне из разноса, а не по канонической.
 	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 	it("рендерит метку границы в стеке фактической стороны", () => {
-		// Act: итог +420 и граница +100 на одной позиции — нижний уровень
+		// Act: итог +420 и граница +420 на одной позиции — нижний уровень
 		// занят маркером, граница уходит наверх.
 		const { container } = render(
 			<FullFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: 520, unrealized: -100, quotesDegraded: false, hasOpenResidual: true, realRisk: 100, realRiskStatus: "finite" }}
+				input={{ plannedRisk: 300, plannedProfit: 900, realized: 520, unrealized: -100, quotesDegraded: false, hasOpenResidual: true, realRisk: 100, worstCase: 420, realRiskStatus: "finite" }}
 			/>,
 		);
 
 		// Assert: подпись границы живёт в стеке над полосой (первый ребёнок
 		// корня), а не в стеке под полосой.
-		const borderLabel = screen.getByText("риск есть").parentElement;
+		const borderLabel = screen.getByText("худший исход").parentElement;
 		expect(borderLabel).not.toBeNull();
 		const root = container.firstElementChild as HTMLElement;
 		expect(borderLabel?.parentElement).toBe(root.firstElementChild);
@@ -528,7 +600,7 @@ describe("доступность индикатора", () => {
 		render(<FullFinResultIndicator input={CASE_C3} />);
 
 		// Assert: состояние озвучивается подписями границы и итога маркера.
-		const labelled = screen.getByRole("img", { name: /риск есть 300 USDT · 100%/ });
+		const labelled = screen.getByRole("img", { name: /худший исход −550 USDT · 183%/ });
 		expect(labelled).toHaveAttribute("aria-label", expect.stringContaining("−70"));
 	});
 });

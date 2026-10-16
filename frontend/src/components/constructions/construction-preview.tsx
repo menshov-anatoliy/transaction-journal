@@ -64,10 +64,11 @@ export function ConstructionPreviewCard({ preview, liveHintCount }: Construction
 					hasOpenResidual: preview.counts.openPositions > 0,
 					// Пара «число + статус» из контракта API: конечный риск
 					// даёт насечку, unbounded/unavailable — состояние
-					// без насечки.
+					// без насечки. Худший исход ставит позицию границы.
 					// Traceability: openspec:ui/screens#requirement-risk-profit-hint
 					// Traceability: change:show-unbounded-finresult-risk/design#d1
 					realRisk: preview.realRiskUsdt,
+					worstCase: preview.worstCaseUsdt,
 					realRiskStatus: preview.realRiskStatus,
 				}}
 			/>

@@ -12,9 +12,9 @@
 
 ## 3. Фронтенд: геометрия и индикатор
 
-- [ ] 3.1 Ввести `worstCase` в `FinResultInput` и ставить `borderAt` из него (убрать формулу `realized − realRisk`); обновить `geometry.test.ts`: граница на значении худшего исхода (`scenario-finresult-border-real-risk`), гарантированная прибыль ставит насечку правее реализованного (`scenario-finresult-guaranteed-profit-border`)
-- [ ] 3.2 Пересобрать подпись границы в `resolveBorderLabels`: титул «худший исход» (при `realRisk = 0` — «риска нет»), значение со знаком, процент от плановой границы зоны по знаку с округлением до целого, без процента при незаданной/нулевой базе и нулевом значении; честный процент > 100% при клипе слева; покрыть тестами сценарии `scenario-finresult-fresh-position-real-risk`, `scenario-finresult-closed-no-risk`, `scenario-finresult-border-left-clip`, `scenario-finresult-percent-omitted-without-plan`
-- [ ] 3.3 Тон подписи границы — по знаку худшего исхода (не по знаку итога); маркер остаётся в истинном положении без прижатия к границе; покрыть в `fin-result-indicator.test.tsx` и `geometry.test.ts` сценарий `scenario-finresult-marker-not-clamped`; компактный пресет не изменяется (регрессионный снимок существующих тестов компакта зелёный)
+- [x] 3.1 Ввести `worstCase` в `FinResultInput` и ставить `borderAt` из него (убрать формулу `realized − realRisk`); обновить `geometry.test.ts`: граница на значении худшего исхода (`scenario-finresult-border-real-risk`), гарантированная прибыль ставит насечку правее реализованного (`scenario-finresult-guaranteed-profit-border`)
+- [x] 3.2 Пересобрать подпись границы в `resolveBorderLabels`: титул «худший исход» (при `realRisk = 0` — «риска нет»), значение со знаком, процент от плановой границы зоны по знаку с округлением до целого, без процента при незаданной/нулевой базе и нулевом значении; честный процент > 100% при клипе слева; покрыть тестами сценарии `scenario-finresult-fresh-position-real-risk`, `scenario-finresult-closed-no-risk`, `scenario-finresult-border-left-clip`, `scenario-finresult-percent-omitted-without-plan`
+- [x] 3.3 Тон подписи границы — по знаку худшего исхода (не по знаку итога); маркер остаётся в истинном положении без прижатия к границе; покрыть в `fin-result-indicator.test.tsx` и `geometry.test.ts` сценарий `scenario-finresult-marker-not-clamped`; компактный пресет не изменяется (регрессионный снимок существующих тестов компакта зелёный)
 
 ## 4. Интеграционная сверка
 

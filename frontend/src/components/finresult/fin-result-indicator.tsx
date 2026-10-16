@@ -14,7 +14,7 @@ import {
 // средний (сводные блоки) и компактный (строки таблиц). Все три вида рендерят
 // одну геометрию калькулятора в долях шкалы и отличаются только пресетом
 // размеров: полоса с зонами планового риска/профита/сверхприбыли, заливка
-// результата, насечка границы реального риска и маркер итога. У полного и
+// результата, насечка границы худшего исхода и маркер итога. У полного и
 // среднего видов подписи (деления шкалы над полосой, граница и маркер под
 // ней) размещает калькулятор: разнос по сторонам полосы, вертикальным
 // уровням и выравниванию считается по измеренной ширине полосы. Состояние
@@ -100,7 +100,7 @@ const MEDIUM_PRESET: SizePreset = {
 	scaleLabelClass: "text-[10.5px]",
 	markerLabelClass: "text-[9.5px]",
 	// Средний вид (мастер rMxFZ): плановые границы подписаны приглушённо —
-	// цветными остаются только граница реального риска и маркер итога.
+	// цветными остаются только граница худшего исхода и маркер итога.
 	// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
 	riskScaleToneClass: "text-text-muted",
 	profitScaleToneClass: "font-medium text-text-muted",
@@ -311,13 +311,14 @@ function collectLabelItems(
 	side: "above" | "below",
 	placements: NonNullable<FinResultGeometry["placements"]>,
 ): LabelItemView[] {
-	// Подпись границы: «риск есть»/«риска нет» и значение реального риска
-	// «150 USDT · 50%»; зелёная при выходе в плюс или отсутствии риска,
-	// иначе красная.
+	// Подпись границы: титул «худший исход»/«риска нет» и значение худшего
+	// исхода «−120 USDT · 40%»; тон — по знаку худшего исхода, а не знаку
+	// итога: отрицательный исход красный даже при плюсовом итоге.
+	// Traceability: openspec:ui/screens#requirement-risk-profit-hint
 	const borderToneClass =
-		geometry.tone === "positive" || geometry.labels.borderTitle === "риска нет"
-			? "text-[color:var(--fin-positive-strong)]"
-			: "text-[color:var(--fin-negative)]";
+		geometry.borderTone === "negative"
+			? "text-[color:var(--fin-negative)]"
+			: "text-[color:var(--fin-positive-strong)]";
 
 	const items: LabelItemView[] = [];
 	const add = (candidate: LabelItemCandidate) => {

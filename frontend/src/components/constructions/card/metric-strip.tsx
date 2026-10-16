@@ -359,10 +359,11 @@ export function ConstructionMetricStrip({ card, onDispute, onRevert }: Construct
 					hasOpenResidual: card.hasOpenResidual,
 					// Пара «число + статус» из контракта API: конечный риск
 					// даёт насечку, unbounded/unavailable — состояние
-					// без насечки.
+					// без насечки. Худший исход ставит позицию границы.
 					// Traceability: openspec:ui/screens#requirement-risk-profit-hint
 					// Traceability: change:show-unbounded-finresult-risk/design#d1
 					realRisk: metrics.realRiskUsdt,
+					worstCase: metrics.worstCaseUsdt,
 					realRiskStatus: metrics.realRiskStatus,
 				}}
 			/>

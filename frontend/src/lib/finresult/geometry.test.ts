@@ -5,11 +5,12 @@ import {
 } from "./geometry";
 
 // Калькулятор геометрии индикатора финрезультата: чистая математика в долях
-// шкалы, без React и DOM. Кейсы C1–C7 покрывают семантику реального риска:
-// граница = реализованный результат − реальный риск, маркер = итог. Доли
-// пересчитаны модельно из входов; пиксельные сверки с дизайн-макетом
-// (стенд Y5nap, полный индикатор 936 px) оставлены только там, где макет
-// согласуется с новой семантикой — прежде всего позиции маркеров.
+// шкалы, без React и DOM. Кейсы C1–C7 покрывают семантику худшего исхода:
+// граница = worstCaseUsdt (при остаточном риске — «реализованный −
+// реальный риск»), маркер = итог. Доли пересчитаны модельно из входов;
+// пиксельные сверки с дизайн-макетом (стенд Y5nap, полный индикатор
+// 936 px) оставлены только там, где макет согласуется с новой семантикой —
+// прежде всего позиции маркеров.
 // Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финансового-результата-конструкции
 
 // Полный индикатор макета: ширина полосы 936 px.
@@ -28,10 +29,10 @@ function expectMatchesLayout(actual: number, px: number, width: number = FULL_WI
 // как в подписях шкалы «−300 / 0 / +900» всех кейсов макета. Остатки
 // закрыты (hasOpenResidual: false) — так сбой котировок не делает
 // индикатор неполным; кейсы с открытыми остатками переопределяют флаг.
-// Пара реального риска обязательна: по умолчанию конечный риск 300 —
-// равный плановому, как в подписях границы макета «300 USDT · 100%».
+// Пара реального риска и худшего исхода обязательна: по умолчанию
+// конечный риск 300 — равный плановому, как в границах макета.
 function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
-	return {
+	const merged = {
 		plannedRisk: 300,
 		plannedProfit: 900,
 		realized: 0,
@@ -39,8 +40,20 @@ function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
 		quotesDegraded: false,
 		hasOpenResidual: false,
 		realRisk: 300,
-		realRiskStatus: "finite",
+		realRiskStatus: "finite" as const,
 		...overrides,
+	};
+
+	return {
+		...merged,
+		// Худший исход кейсов по умолчанию эквивалентен прежней формуле
+		// «реализованный − реальный риск»; кейсы гарантированной прибыли
+		// остатков задают worstCase явно.
+		worstCase:
+			overrides.worstCase ??
+			(merged.realRiskStatus === "finite" && merged.realRisk !== null
+				? (merged.realized ?? 0) - merged.realRisk
+				: null),
 	};
 }
 
@@ -84,22 +97,24 @@ describe("кейс C1 · только что открыли", () => {
 		expect(geometry.superZone).toBeNull();
 	});
 
-	it("подписи: риск есть 100%, маркер «≈ 0»", () => {
+	it("подписи: худший исход 100%, маркер «≈ 0»", () => {
 		// Act.
 		const geometry = computeFinResultGeometry(CASES.c1);
 
-		// Assert: подписи кейса 1:1 из макета.
+		// Assert: подписи кейса 1:1 из макета (граница подписана значением
+		// худшего исхода со знаком).
 		expect(geometry.labels.risk).toBe("−300");
 		expect(geometry.labels.profit).toBe("+900");
-		expect(geometry.labels.borderTitle).toBe("риск есть");
-		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("−300 USDT · 100%");
 		expect(geometry.labels.marker).toBe("≈ 0");
 		expect(geometry.tone).toBe("negative");
+		expect(geometry.borderTone).toBe("negative");
 	});
 });
 
 describe("кейс C2 · результат в зоне риска, прибыли нет", () => {
-	// Реализованный убыток 250: граница реального риска уходит за левый
+	// Реализованный убыток 250: граница худшего исхода уходит за левый
 	// край шкалы (−550 = −250 − 300) и прижимается к краю, маркер стоит
 	// на итоге −250 — точка отсчёта реальный риск, а не плановый.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финансового-результата-конструкции
@@ -121,14 +136,14 @@ describe("кейс C2 · результат в зоне риска, прибыл
 		expect(geometry.fillMain).toEqual({ from: 50 / 1200, to: 0.25 });
 	});
 
-	it("подписи: риск есть 300 USDT · 100%, маркер «−250»", () => {
+	it("подписи: худший исход −550 USDT · 183%, маркер «−250»", () => {
 		// Act.
 		const geometry = computeFinResultGeometry(CASES.c2);
 
-		// Assert: граница подписывается величиной реального риска (300),
-		// а не остатком до неё; маркер — итог.
-		expect(geometry.labels.borderTitle).toBe("риск есть");
-		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
+		// Assert: граница подписывается значением худшего исхода (−550) с
+		// честным процентом от планового риска; маркер — итог.
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("−550 USDT · 183%");
 		expect(geometry.labels.marker).toBe("−250");
 		expect(geometry.tone).toBe("negative");
 	});
@@ -154,13 +169,13 @@ describe("кейс C3 · нереализованная 180 меньше рис�
 		expect(geometry.fillMain).toEqual({ from: 230 / 1200, to: 0.25 });
 	});
 
-	it("подписи: маркер «−70» — итог, граница по реальному риску", () => {
+	it("подписи: маркер «−70» — итог, граница по худшему исходу", () => {
 		// Act.
 		const geometry = computeFinResultGeometry(CASES.c3);
 
-		// Assert: у маркера подпись итога, граница — реальный риск 300.
+		// Assert: у маркера подпись итога, граница — худший исход −550.
 		expect(geometry.labels.marker).toBe("−70");
-		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
+		expect(geometry.labels.borderValue).toBe("−550 USDT · 183%");
 		expect(geometry.tone).toBe("negative");
 	});
 });
@@ -187,14 +202,17 @@ describe("кейс C4 · суммарный результат выше план
 		expect(geometry.fillMain).toEqual({ from: 0.25, to: 435 / 1200 });
 	});
 
-	it("подписи: маркер «+135» — итог, граница по реальному риску", () => {
+	it("подписи: маркер «+135» — итог, граница по худшему исходу", () => {
 		// Act.
 		const geometry = computeFinResultGeometry(CASES.c4);
 
-		// Assert: маркер — итог, граница — реальный риск 300.
+		// Assert: маркер — итог, граница — худший исход −550; тон подписи
+		// границы — по знаку исхода (отрицателен), итога — плюс.
 		expect(geometry.labels.marker).toBe("+135");
-		expect(geometry.labels.borderTitle).toBe("риск есть");
-		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("−550 USDT · 183%");
+		expect(geometry.tone).toBe("positive");
+		expect(geometry.borderTone).toBe("negative");
 	});
 });
 
@@ -218,13 +236,14 @@ describe("кейс C5 · нереализованная приближается
 		expect(geometry.tone).toBe("positive");
 	});
 
-	it("подписи: риск есть 300 USDT · 100%, маркер «+849»", () => {
+	it("подписи: худший исход −150 USDT · 50%, маркер «+849»", () => {
 		// Act.
 		const geometry = computeFinResultGeometry(CASES.c5);
 
-		// Assert: граница подписывается реальным риском (300), маркер — итог.
-		expect(geometry.labels.borderTitle).toBe("риск есть");
-		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
+		// Assert: граница подписана значением худшего исхода (−150) с
+		// процентом от планового риска, маркер — итог.
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("−150 USDT · 50%");
 		expect(geometry.labels.marker).toBe("+849");
 	});
 });
@@ -291,11 +310,12 @@ describe("кейс C6 · сверхприбыль: итог превысил п�
 	});
 });
 
-describe("кейс C7 · граница реального риска правее плана: сверхприбыли нет", () => {
-	// Реализованная 950 за +900 при нулевом реальном риске, итог +850
-	// (нереализованная −100): граница правее планового профита не создаёт
-	// золотую зону и не растягивает шкалу — насечка клипуется по правому
-	// краю +900, истинное значение остаётся в подписи границы.
+describe("кейс C7 · граница худшего исхода правее плана: сверхприбыли нет", () => {
+	// Реализованная 950 за +900 при нулевом реальном риске (худший исход
+	// равен реализованному), итог +850 (нереализованная −100): граница
+	// правее планового профита не создаёт золотую зону и не растягивает
+	// шкалу — насечка клипуется по правому краю +900, истинное значение
+	// остаётся в подписи границы.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финансового-результата-конструкции
 	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-border
 
@@ -319,15 +339,18 @@ describe("кейс C7 · граница реального риска праве
 		expect(geometry.fillMain).toEqual({ from: 0.25, to: 1150 / 1200 });
 	});
 
-	it("подписи: риска нет 0 USDT · 0%, маркер «+850»", () => {
+	it("подписи: риска нет +950 USDT · 106%, маркер «+850»", () => {
 		// Act.
 		const geometry = computeFinResultGeometry(CASES.c7);
 
-		// Assert: у нулевого реального риска нет и процентов, маркер — итог.
+		// Assert: граница подписана худшим исходом (+950, равен
+		// реализованному) с честным процентом от планового профита;
+		// маркер — итог.
 		expect(geometry.labels.borderTitle).toBe("риска нет");
-		expect(geometry.labels.borderValue).toBe("0 USDT · 0%");
+		expect(geometry.labels.borderValue).toBe("+950 USDT · 106%");
 		expect(geometry.labels.marker).toBe("+850");
 		expect(geometry.tone).toBe("positive");
+		expect(geometry.borderTone).toBe("positive");
 	});
 });
 
@@ -376,23 +399,29 @@ describe("единая заливка отрицательного итога", 
 	});
 });
 
-describe("граница реального риска", () => {
-	// Граница = реализованный результат − реальный риск: где конструкция
-	// окажется при худшем исходе открытых остатков с учётом закрытых сделок.
+describe("граница худшего исхода", () => {
+	// Граница ставится контрактной знаковой метрикой худшего исхода: при
+	// остаточном риске она равна «реализованный минус реальный риск»,
+	// подписывается самим значением со знаком и процентом от плановой
+	// границы зоны по знаку значения.
 	// Traceability: openspec:ui/screens#scenario-finresult-border-real-risk
 
-	it("реальный риск 150: граница между realized и нулём", () => {
-		// Act: реализованная +200, реальный риск 150 → граница +50.
-		const geometry = computeFinResultGeometry(caseInput({ realized: 200, realRisk: 150 }));
+	it("реальный риск 150: граница на значении худшего исхода +50", () => {
+		// Act: реализованная +200, реальный риск 150 → худший исход +50.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 200, realRisk: 150, worstCase: 50 }),
+		);
 
 		// Assert: граница на +50, маркер на итоге +200.
 		expect(geometry.borderAt).toBeCloseTo(350 / 1200, 4);
 		expect(geometry.markerAt).toBeCloseTo(500 / 1200, 4);
 
-		// Assert: подпись границы — величина реального риска в USDT и процентах.
-		expect(geometry.labels.borderTitle).toBe("риск есть");
-		expect(geometry.labels.borderValue).toBe("150 USDT · 50%");
+		// Assert: подпись границы — значение худшего исхода со знаком и
+		// процентом от планового профита (50/900).
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("+50 USDT · 6%");
 		expect(geometry.labels.marker).toBe("+200");
+		expect(geometry.borderTone).toBe("positive");
 	});
 
 	// Свежая позиция: ликвидация сейчас вернёт около нуля, а весь реальный
@@ -400,18 +429,114 @@ describe("граница реального риска", () => {
 	// Traceability: openspec:ui/screens#scenario-finresult-fresh-position-real-risk
 	it("свежая позиция: маркер «≈ 0», граница на −реальныйРиск", () => {
 		// Act: сделок закрытия нет, метрика реального риска доступна.
-		const geometry = computeFinResultGeometry(caseInput({ realized: 0, realRisk: 120 }));
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 0, realRisk: 120, worstCase: -120 }),
+		);
 
 		// Assert: маркер у нуля, граница −120 не совпадает с левым краем шкалы.
 		expect(geometry.markerAt).toBeCloseTo(0.25, 3);
 		expect(geometry.labels.marker).toBe("≈ 0");
 		expect(geometry.borderAt).toBeCloseTo(180 / 1200, 4);
 
-		// Assert: подпись границы — доступная метрика 120 USDT · 40%.
-		expect(geometry.labels.borderValue).toBe("120 USDT · 40%");
+		// Assert: подпись границы — худший исход −120 со знаком и процентом
+		// от планового риска (120/300); тон — по знаку исхода.
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("−120 USDT · 40%");
+		expect(geometry.borderTone).toBe("negative");
 	});
 
-	// Насечка считается только по контрактному реальному риску: без числа
+	// Гарантированная прибыль остатков: полный синтетический паритетный лок
+	// даёт положительный вклад в худший исход — насечка стоит правее
+	// реализованного результата при нулевом реальном риске.
+	// Traceability: openspec:ui/screens#scenario-finresult-guaranteed-profit-border
+	it("гарантированная прибыль остатков ставит границу правее реализованного", () => {
+		// Act: реализованный −46.6, паритетный лок с худшим платежом +35.7
+		// → худший исход −10.9; планового риска нет — база процента не задана.
+		const geometry = computeFinResultGeometry(
+			caseInput({
+				plannedRisk: null,
+				realized: -46.6,
+				unrealized: null,
+				realRisk: 0,
+				worstCase: -10.9,
+			}),
+		);
+
+		// Assert: насечка −10.9 стоит правее маркера реализованного −46.6.
+		expect(geometry.borderAt).toBeCloseTo(889.1 / 1800, 4);
+		expect(geometry.markerAt).toBeCloseTo(853.4 / 1800, 4);
+		expect(geometry.borderAt ?? 0).toBeGreaterThan(geometry.markerAt ?? 0);
+
+		// Assert: титул «риска нет» при нулевом реальном риске; процент не
+		// выводится — плановой базы для отрицательного исхода нет.
+		expect(geometry.labels.borderTitle).toBe("риска нет");
+		expect(geometry.labels.borderValue).toBe("−10.9 USDT");
+	});
+
+	// Клип слева: худший исход за плановым риском прижимает насечку к левому
+	// краю шкалы, процент остаётся честным — больше 100%.
+	// Traceability: openspec:ui/screens#scenario-finresult-border-left-clip
+	it("худший исход за левым краем: насечка клипуется, процент 130%", () => {
+		// Act: плановый риск 400, худший исход −520 — меньше −Риск.
+		const geometry = computeFinResultGeometry(
+			caseInput({ plannedRisk: 400, realRisk: 520, worstCase: -520 }),
+		);
+
+		// Assert: насечка прижата к левому краю шкалы.
+		expect(geometry.borderAt).toBe(0);
+
+		// Assert: подпись показывает истинное значение и честный процент
+		// 520/400.
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("−520 USDT · 130%");
+	});
+
+	// Процент не выводится при незаданной плановой границе зоны: для
+	// положительного исхода базой служит плановый профит.
+	// Traceability: openspec:ui/screens#scenario-finresult-percent-omitted-without-plan
+	it("процент без планового профита не выводится", () => {
+		// Act: плановый профит не задан, плановый риск 300, худший исход +50.
+		const geometry = computeFinResultGeometry(
+			caseInput({ plannedProfit: null, realized: 100, realRisk: 50, worstCase: 50 }),
+		);
+
+		// Assert: подпись без процента, значение со знаком; насечка на +50
+		// шкалы −300…+300.
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("+50 USDT");
+		expect(geometry.borderAt).toBeCloseTo(350 / 600, 4);
+	});
+
+	// Нулевое значение границы процента не получает даже при заданной базе.
+	it("нулевое значение — подпись без процента", () => {
+		// Act: закрытая безубыточная конструкция: остатков нет, исход 0.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 0, realRisk: 0, worstCase: 0 }),
+		);
+
+		// Assert: «риска нет» и «0 USDT» без процента.
+		expect(geometry.labels.borderTitle).toBe("риска нет");
+		expect(geometry.labels.borderValue).toBe("0 USDT");
+		expect(geometry.borderAt).toBeCloseTo(0.25, 4);
+	});
+
+	// Маркер итога не прижимается к границе: расхождение оценки ликвидации
+	// и худшего исхода показывается в истинных положениях.
+	// Traceability: openspec:ui/screens#scenario-finresult-marker-not-clamped
+	it("маркер остаётся в истинном положении левее границы", () => {
+		// Act: устаревшая марка опустила итог до −150, худший исход −70.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: -250, unrealized: 100, realRisk: 70, worstCase: -70 }),
+		);
+
+		// Assert: маркер на истинном итоге −150, строго левее насечки
+		// худшего исхода −70, без прижатия к границе.
+		expect(geometry.markerAt).toBeCloseTo(150 / 1200, 4);
+		expect(geometry.borderAt).toBeCloseTo(230 / 1200, 4);
+		expect(geometry.markerAt ?? 0).toBeLessThan(geometry.borderAt ?? 0);
+	});
+
+	// Насечка считается только по контрактному худшему исходу: без числа
 	// и при не конечном статусе насечки нет — подстановка планового риска
 	// отменена спецификацией.
 	// Traceability: openspec:ui/screens#scenario-finresult-real-risk-fallback-planned
@@ -423,6 +548,7 @@ describe("граница реального риска", () => {
 
 		// Assert: границы нет вовсе, плановое деление остаётся плановым.
 		expect(geometry.borderAt).toBeNull();
+		expect(geometry.borderTone).toBeNull();
 		expect(geometry.labels.borderTitle).toBeNull();
 		expect(geometry.labels.borderValue).toBeNull();
 		expect(geometry.labels.risk).toBe("плановый риск −300");
@@ -527,29 +653,31 @@ describe("состояние риска без насечки", () => {
 	});
 
 	it("finite: насечка и подпись границы работают как раньше", () => {
-		// Act: конечный реальный риск 150.
+		// Act: конечный реальный риск 150 при реализованной +200 —
+		// худший исход +50.
 		const geometry = computeFinResultGeometry(
-			caseInput({ realized: 200, realRisk: 150, realRiskStatus: "finite" }),
+			caseInput({ realized: 200, realRisk: 150, worstCase: 50 }),
 		);
 
-		// Assert: граница 200 − 150 = +50, подпись по реальному риску,
+		// Assert: граница на худшем исходе +50, подпись значением исхода,
 		// состояние не задаётся.
 		expect(geometry.borderAt).toBeCloseTo(350 / 1200, 4);
-		expect(geometry.labels.borderTitle).toBe("риск есть");
-		expect(geometry.labels.borderValue).toBe("150 USDT · 50%");
+		expect(geometry.labels.borderTitle).toBe("худший исход");
+		expect(geometry.labels.borderValue).toBe("+50 USDT · 6%");
 		expect(geometry.labels.riskState).toBeNull();
 		expect(geometry.labels.risk).toBe("−300");
 		expect(geometry.realRiskStatus).toBe("finite");
 	});
 
 	it("finite с нулевым риском: граница на нуле, состояния нет", () => {
-		// Act: реальный риск 0 при закрытых остатках.
+		// Act: реальный риск 0 при закрытых остатках — худший исход равен
+		// реализованному.
 		const geometry = computeFinResultGeometry(
-			caseInput({ realized: 945, unrealized: null, realRisk: 0, realRiskStatus: "finite" }),
+			caseInput({ realized: 945, unrealized: null, realRisk: 0, worstCase: 945 }),
 		);
 
-		// Assert: граница 945 − 0 = 945 совпадает с итогом и правым краем
-		// растянутой шкалы, «риска нет», состояние отсутствует.
+		// Assert: граница 945 совпадает с итогом и правым краем растянутой
+		// шкалы, «риска нет», состояние отсутствует.
 		expect(geometry.borderAt).toBe(1);
 		expect(geometry.labels.borderTitle).toBe("риска нет");
 		expect(geometry.labels.riskState).toBeNull();
@@ -665,7 +793,7 @@ describe("разнос и прижатие меток", () => {
 		);
 
 		// Assert: маркер «+5 000» выровнен по правому краю, деление риска и
-		// граница «300 USDT · 100%» — по левому.
+		// граница «−300 USDT · 100%» — по левому.
 		expect(geometry.placements?.marker).toEqual({ side: "below", level: 0, align: "end" });
 		expect(geometry.placements?.risk).toEqual({ side: "above", level: 0, align: "start" });
 		expect(geometry.placements?.border).toEqual({ side: "below", level: 0, align: "start" });
@@ -709,7 +837,7 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.labels.risk).toBe("−300");
 		expect(geometry.labels.profit).toBeNull();
 		expect(geometry.markerAt).toBeCloseTo(0.25, 3);
-		// Граница реальным риском (−450 = −150 − 300) уходит за левый край — клип.
+		// Граница худшим исходом (−450 = −150 − 300) уходит за левый край — клип.
 		expect(geometry.borderAt).toBe(0);
 	});
 
@@ -725,7 +853,7 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.labels.risk).toBeNull();
 		expect(geometry.labels.profit).toBe("+900");
 		expect(geometry.markerAt).toBeCloseTo(1200 / 1800, 3);
-		// Насечка по реальному риску (дефолт 300): 200 − 300 = −100.
+		// Насечка худшим исходом (дефолт −100): 200 − 300 = −100.
 		expect(geometry.borderAt).toBeCloseTo(800 / 1800, 4);
 	});
 
@@ -743,13 +871,13 @@ describe("состояния индикатора из §9 концепта", ()
 		expect(geometry.labels.marker).toBe("+5\u00A0000");
 	});
 
-	it("состояние 4: нет открытых остатков — маркер на итоге, граница по реальному риску", () => {
+	it("состояние 4: нет открытых остатков — маркер на итоге, граница по худшему исходу", () => {
 		// Act: нереализованной части нет.
 		const geometry = computeFinResultGeometry(
 			caseInput({ realized: -250, unrealized: null }),
 		);
 
-		// Assert: маркер на итоге −250; граница по реальному риску
+		// Assert: маркер на итоге −250; граница по худшему исходу
 		// (−550 = −250 − 300) прижата к левому краю — маркер и граница
 		// не совпадают.
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
@@ -771,12 +899,13 @@ describe("состояния индикатора из §9 концепта", ()
 		);
 
 		// Assert: нереализованная часть скрыта, индикатор помечен неполным;
-		// маркер — realized −250, граница по реальному риску прижата к краю.
+		// маркер — realized −250, граница по худшему исходу прижата к краю.
 		expect(geometry.incomplete).toBe(true);
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.borderAt).toBe(0);
-		// Граница со своей подписью остаётся: риск виден и без котировок.
-		expect(geometry.labels.borderValue).toBe("300 USDT · 100%");
+		// Граница со своей подписью остаётся: худший исход виден и без
+		// котировок.
+		expect(geometry.labels.borderValue).toBe("−550 USDT · 183%");
 		// Ноль остаётся нулём, а отсутствие данных не превращается в ноль.
 		expect(geometry.labels.marker).toBeNull();
 	});
@@ -799,24 +928,26 @@ describe("состояния индикатора из §9 концепта", ()
 	});
 
 	// Закрытая конструкция с нулевым реальным риском: граница совпадает
-	// с realized, подпись «риска нет» без процентов.
+	// с realized, подпись «риска нет» со значением худшего исхода
+	// (равен реализованному) и честным процентом от планового профита.
 	// Traceability: openspec:ui/screens#scenario-finresult-closed-no-risk
 	it("состояние 6: закрытая конструкция — рисков нет, граница на realized", () => {
 		// Act: остатков нет, реализованная выше целевого профита, риск 0.
 		const geometry = computeFinResultGeometry(
-			caseInput({ realized: 945, unrealized: null, realRisk: 0 }),
+			caseInput({ realized: 945, unrealized: null, realRisk: 0, worstCase: 945 }),
 		);
 
 		// Assert: граница = realized 945 на краю шкалы, маркер на ней,
 		// золотая зона от реализованной, нереализованной нет.
 		expect(geometry.incomplete).toBe(false);
 		expect(geometry.borderAt).toBe(1);
+		expect(geometry.borderTone).toBe("positive");
 		expect(geometry.markerAt).toBe(1);
 		// Заливка итога — зелёный участок до профита, золото — за профитом.
 		expect(geometry.fillMain).toEqual({ from: 300 / 1245, to: 1200 / 1245 });
 		expect(geometry.superZone).toEqual({ from: 1200 / 1245, to: 1 });
 		expect(geometry.labels.borderTitle).toBe("риска нет");
-		expect(geometry.labels.borderValue).toBe("0 USDT · 0%");
+		expect(geometry.labels.borderValue).toBe("+945 USDT · 105%");
 		expect(geometry.labels.marker).toBe("+945");
 	});
 });
@@ -829,6 +960,7 @@ describe("отказ на некорректных входах", () => {
 		["Infinity в unrealized", caseInput({ unrealized: Number.POSITIVE_INFINITY })],
 		["NaN в plannedRisk", caseInput({ plannedRisk: Number.NaN })],
 		["NaN в realRisk", caseInput({ realRisk: Number.NaN })],
+		["NaN в worstCase", caseInput({ worstCase: Number.NaN })],
 	])("ThrowOn%s", (_name, input) => {
 		// Act + Assert: некорректное значение отвергается ошибкой.
 		expect(() => computeFinResultGeometry(input)).toThrow();

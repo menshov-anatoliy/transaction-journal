@@ -224,10 +224,12 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 								hasOpenResidual: hasOpenResidual(row.original),
 								// Пара «число + статус» из контракта API: конечный
 								// риск даёт насечку, unbounded/unavailable —
-								// состояние без насечки.
+								// состояние без насечки. Худший исход ставит
+								// позицию границы.
 								// Traceability: openspec:ui/screens#requirement-risk-profit-hint
 								// Traceability: change:show-unbounded-finresult-risk/design#d1
 								realRisk: row.original.realRiskUsdt,
+								worstCase: row.original.worstCaseUsdt,
 								realRiskStatus: row.original.realRiskStatus,
 							}}
 						/>

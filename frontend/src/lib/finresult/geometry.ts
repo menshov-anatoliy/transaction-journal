@@ -7,16 +7,19 @@ import type { RealRiskStatus } from "../api/constructions";
 // не считает ничего сам — одна геометрия на все представления.
 // Шкала: зона риска от −Риск до 0, зона планового профита от 0 до +Профит;
 // при выходе маркера итога за +Профит справа добавляется золотая зона до
-// итога, граница реального риска в расчёте шкалы не участвует и клипуется
-// её краем. Граница — «реализованный результат минус реальный риск»,
+// итога, граница худшего исхода в расчёте шкалы не участвует и клипуется
+// её краем. Граница — худший исход конструкции (worstCaseUsdt:
+// реализованный результат плюс худший платёж открытых остатков),
 // маркер — позиция итога (реализованный + нереализованный); итог рисуется
 // одной заливкой без разложения на реализованную и нереализованную части.
-// Насечка границы ставится только при конечном реальном риске: состояния
-// unbounded/unavailable возвращают borderAt: null со статусом состояния,
-// а плановое деление подписывается плановым риском. Числовая заглушка
-// границы плановым риском не применяется ни в каком состоянии: пара
-// «число + статус» приходит из контракта API обязательными полями.
+// Насечка границы ставится только при конечном риске с числом худшего
+// исхода: состояния unbounded/unavailable возвращают borderAt: null со
+// статусом состояния, а плановое деление подписывается плановым риском.
+// Числовая заглушка границы плановым риском не применяется ни в каком
+// состоянии: пара «число + статус» приходит из контракта API обязательными
+// полями.
 // Traceability: openspec:ui/screens#requirement-risk-profit-hint
+// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 // Traceability: change:show-unbounded-finresult-risk/design#d2
 
 /** Состояние риска без числовой границы. */
@@ -44,11 +47,21 @@ export interface FinResultInput {
 	readonly hasOpenResidual: boolean;
 	/**
 	 * Реальный риск открытых остатков в USDT (наихудший результат на
-	 * экспирации); число приходит только при статусе finite, null —
-	 * вместе с состояниями unbounded/unavailable. Пара обязательна:
-	 * без числа геометрия не рисует насечку границы.
+	 * экспирации, клэмпится нулём); число приходит только при статусе
+	 * finite, null — вместе с состояниями unbounded/unavailable. Нужен
+	 * геометрии для титула границы «риска нет» при нулевом риске.
 	 */
 	readonly realRisk: number | null;
+	/**
+	 * Худший исход конструкции в USDT — знаковая величина: реализованный
+	 * результат плюс неклэмпированный минимум платежа групп открытых
+	 * остатков. Число приходит только при статусе finite, null — вместе
+	 * с состояниями unbounded/unavailable; ставит позицию насечки границы
+	 * и определяет её подпись и тон.
+	 * Traceability: openspec:ui/screens#requirement-risk-profit-hint
+	 * Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+	 */
+	readonly worstCase: number | null;
 	/**
 	 * Состояние реального риска из контракта API, пара к realRisk:
 	 * finite — конечный риск с числом, unbounded — неограниченный хвост,
@@ -116,8 +129,14 @@ export interface FinResultGeometry {
 	readonly profitZone: FinResultSpan | null;
 	/** Золотая зона сверхприбыли за плановым профитом; null — превышения нет. */
 	readonly superZone: FinResultSpan | null;
-	/** Позиция границы реального риска (с клипом слева); null — данных нет либо риск не конечный. */
+	/** Позиция границы худшего исхода (с клипом слева); null — данных нет либо риск не конечный. */
 	readonly borderAt: number | null;
+	/**
+	 * Тон подписи границы — по знаку худшего исхода, а не итога:
+	 * отрицательный исход красный даже при плюсовом итоге; null — границы
+	 * нет. Traceability: openspec:ui/screens#requirement-risk-profit-hint
+	 */
+	readonly borderTone: "positive" | "negative" | null;
 	/**
 	 * Состояние реального риска: различает конечный риск, неограниченный
 	 * хвост и нехватку данных; пробрасывается из входа как есть.
@@ -164,6 +183,7 @@ export function computeFinResultGeometry(
 	assertFinite("realized", input.realized);
 	assertFinite("unrealized", input.unrealized);
 	assertFinite("realRisk", input.realRisk);
+	assertFinite("worstCase", input.worstCase);
 
 	// Нереализованная часть существует только при открытых остатках и
 	// доступных котировках: сбой скрывает её, не подменяя нулём.
@@ -201,20 +221,18 @@ export function computeFinResultGeometry(
 		return buildNeutralGeometry(realized, total, incomplete, input.realRiskStatus, riskState, layout);
 	}
 
-	// Граница реального риска: «реализованный результат минус реальный
-	// риск» — где конструкция оказалась бы при худшем исходе открытых
-	// остатков с учётом уже реализованной прибыли. Насечка скрыта без
-	// данных о позиции (realized === null), без числа реального риска
-	// (realRisk === null — пара конечного риска) и при не конечном риске:
-	// unbounded/unavailable конечной границы не имеют. Свежая позиция
-	// попадает на −реальныйРиск естественно, по формуле: спец-случай из
-	// #62 упразднён.
+	// Граница худшего исхода: контрактная знаковая метрика worstCaseUsdt —
+	// реализованный результат плюс неклэмпированный минимум платежа групп
+	// открытых остатков. Насечка скрыта при не конечном риске
+	// (unbounded/unavailable конечной границы не имеют) и без числа
+	// худшего исхода из контракта. Свежая позиция попадает на
+	// −реальныйРиск естественно, гарантированная прибыль остатков ставит
+	// насечку правее реализованного результата.
 	// Traceability: openspec:ui/screens#scenario-finresult-border-real-risk
 	// Traceability: openspec:ui/screens#scenario-finresult-fresh-position-real-risk
+	// Traceability: openspec:ui/screens#scenario-finresult-guaranteed-profit-border
 	const borderValue =
-		riskState === null && realized !== null && input.realRisk !== null
-			? realized - input.realRisk
-			: null;
+		riskState === null && input.worstCase !== null ? input.worstCase : null;
 
 	// Шкала: базовые зоны из плановых показателей, при сверхприбыли —
 	// золотая надбавка справа.
@@ -240,6 +258,10 @@ export function computeFinResultGeometry(
 	// в подписи.
 	// Traceability: openspec:ui/screens#scenario-finresult-border-left-clip
 	const borderAt = borderValue === null ? null : toFraction(borderValue);
+	// Маркер итога стоит в истинном положении оценки ликвидации и не
+	// прижимается к границе худшего исхода: расхождение (широкий спред,
+	// устаревшие марки) показывается честно.
+	// Traceability: openspec:ui/screens#scenario-finresult-marker-not-clamped
 	const markerAt = total === null ? null : toFraction(total);
 	const markerClipped = total !== null && (total > scale.max || total < scale.min);
 
@@ -259,12 +281,13 @@ export function computeFinResultGeometry(
 					),
 				);
 
-	// Подпись границы есть только при конечном риске с числом: у
-	// unbounded/unavailable нет ни числового значения реального риска,
-	// ни процента.
+	// Подпись границы есть только при конечном риске с числом худшего
+	// исхода: у unbounded/unavailable нет ни числа, ни процента.
 	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
 	const borderLabels =
-		riskState === null ? resolveBorderLabels(realized, input.plannedRisk, input.realRisk) : null;
+		riskState === null && input.worstCase !== null
+			? resolveBorderLabels(input.plannedRisk, input.plannedProfit, input.worstCase, input.realRisk)
+			: null;
 	const markerLabel = resolveMarkerLabel(realized, unrealized, total, input.quotesDegraded);
 
 	const labels = {
@@ -315,6 +338,7 @@ export function computeFinResultGeometry(
 		profitZone,
 		superZone,
 		borderAt,
+		borderTone: borderValue === null ? null : borderValue < 0 ? "negative" : "positive",
 		realRiskStatus: input.realRiskStatus,
 		markerAt,
 		markerClipped,
@@ -357,6 +381,7 @@ function buildNeutralGeometry(
 		profitZone: null,
 		superZone: null,
 		borderAt: null,
+		borderTone: null,
 		realRiskStatus: riskStatus,
 		markerAt: null,
 		markerClipped: false,
@@ -433,26 +458,37 @@ function resolveRiskTickLabel(
 	return riskState === null ? amount : `плановый риск ${amount}`;
 }
 
-// Подпись границы: заголовок «риск есть», пока реальный риск положителен,
-// иначе «риска нет»; значение — величина реального риска «150 USDT · 50%»,
-// проценты — только при заданном плановом риске. Без числа реального риска
-// подписи нет: заглушка плановым риском не подставляется.
-// Traceability: openspec:ui/screens#scenario-finresult-closed-no-risk
+// Подпись границы: титул «худший исход», при нулевом реальном риске —
+// «риска нет»; значение — сам худший исход со знаком «+50 USDT · 6%».
+// Процент считается от плановой границы зоны по знаку значения: от
+// планового риска при отрицательном исходе, от планового профита при
+// неотрицательном, и округляется до целого. Процента нет при незаданной
+// или нулевой базе и при нулевом значении; процент всегда честный,
+// включая больше 100% при клипе насечки за плановой границей.
 // Traceability: openspec:ui/screens#requirement-risk-profit-hint
-// Traceability: change:show-unbounded-finresult-risk/design#d2
+// Traceability: openspec:ui/screens#scenario-finresult-border-real-risk
+// Traceability: openspec:ui/screens#scenario-finresult-closed-no-risk
+// Traceability: openspec:ui/screens#scenario-finresult-percent-omitted-without-plan
 function resolveBorderLabels(
-	realized: number | null,
 	plannedRisk: number | null,
+	plannedProfit: number | null,
+	worstCase: number,
 	realRisk: number | null,
 ): { title: string; value: string } | null {
-	if (realized === null || realRisk === null) {
-		return null;
+	const title = realRisk === 0 ? "риска нет" : "худший исход";
+
+	// База процента выбирается знаком худшего исхода; нулевое значение
+	// процента не получает вовсе.
+	// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+	let percent: number | null = null;
+	if (worstCase !== 0) {
+		const base = worstCase < 0 ? plannedRisk : plannedProfit;
+		if (base !== null && base > 0) {
+			percent = Math.round((Math.abs(worstCase) / base) * 100);
+		}
 	}
 
-	const title = realRisk > 0 ? "риск есть" : "риска нет";
-	const percent =
-		plannedRisk !== null && plannedRisk > 0 ? Math.round((realRisk / plannedRisk) * 100) : null;
-	const value = `${formatFinMagnitude(realRisk)} USDT${percent === null ? "" : ` · ${percent}%`}`;
+	const value = `${formatFinAmount(worstCase)} USDT${percent === null ? "" : ` · ${percent}%`}`;
 
 	return { title, value };
 }

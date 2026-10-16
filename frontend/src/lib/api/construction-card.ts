@@ -35,6 +35,10 @@ export interface ConstructionCardMetrics {
 	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
+	// Худший исход конструкции — знаковая величина рядом с реальным риском:
+	// число при том же статусе finite, null при unbounded/unavailable.
+	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+	readonly worstCaseUsdt: number | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly durationSeconds: number | null;

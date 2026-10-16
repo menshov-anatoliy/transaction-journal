@@ -47,6 +47,12 @@ export interface ConstructionRow {
 	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
+	// Худший исход конструкции — знаковая величина рядом с реальным риском
+	// (реализованный результат плюс неклэмпированный минимум платежа групп
+	// остатков): число при том же статусе finite, null при
+	// unbounded/unavailable. Ставит границу индикатора финрезультата.
+	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+	readonly worstCaseUsdt: number | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly liveHintCount: number;
@@ -90,6 +96,10 @@ export interface ConstructionPreview {
 	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
+	// Худший исход конструкции — знаковая величина рядом с реальным риском:
+	// число при том же статусе finite, null при unbounded/unavailable.
+	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+	readonly worstCaseUsdt: number | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly marksAsOf: string | null;
