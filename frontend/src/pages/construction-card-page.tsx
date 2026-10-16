@@ -134,6 +134,12 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 		commands.addAdjustment,
 		commands.editAdjustment,
 		commands.deleteAdjustment,
+		// Ошибки спора и возврата синтетической связки (400, 404 при возврате
+		// неоспоренной) показываются у шапки карточки, как у прочих команд
+		// (design.md, решение 4).
+		// Traceability: openspec:ui/screens#scenario-dispute-action-updates-logical-layer
+		commands.disputeSynthetic,
+		commands.revertSynthetic,
 	);
 
 	return (

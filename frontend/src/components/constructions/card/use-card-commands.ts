@@ -3,7 +3,8 @@ import * as cardApi from "@/lib/api/construction-card";
 
 /**
  * Команды карточки конструкции: мутации действий шапки, комментариев,
- * пометок закрытия, сделок и корректировок. Успех любой команды перечитывает
+ * пометок закрытия, сделок, корректировок и спора синтетических связок.
+ * Успех любой команды перечитывает
  * снимок карточки целиком — экран всегда показывает согласованное состояние,
  * как блазор-референс после каждого действия.
  */
@@ -121,6 +122,25 @@ export function useCardCommands(constructionId: number) {
 		onSuccess: invalidate,
 	});
 
+	// Оспаривание распознанной связки: спор выводит связку из логического
+	// слоя (лока и логического размера ноги) ближайшим перечитыванием
+	// карточки — без оптимистичных правок, агрегаты пересчитываются из
+	// свежего снимка (design.md, решение 4).
+	// Traceability: openspec:ui/screens#scenario-dispute-action-updates-logical-layer
+	// Traceability: change:add-synthetic-close-dispute-ui/design#d4
+	const disputeSynthetic = useMutation({
+		mutationFn: (key: cardApi.SyntheticCloseDisputeInput) => cardApi.disputeSyntheticClose(constructionId, key),
+		onSuccess: invalidate,
+	});
+
+	// Возврат оспоренной связки стирает спор, и связка снова входит в лок
+	// и логический размер ноги тем же перечитыванием снимка карточки.
+	// Traceability: openspec:ui/screens#scenario-revert-action-restores-link
+	const revertSynthetic = useMutation({
+		mutationFn: (key: cardApi.SyntheticCloseDisputeInput) => cardApi.revertSyntheticClose(constructionId, key),
+		onSuccess: invalidate,
+	});
+
 	return {
 		rename,
 		status,
@@ -139,5 +159,7 @@ export function useCardCommands(constructionId: number) {
 		addAdjustment,
 		editAdjustment,
 		deleteAdjustment,
+		disputeSynthetic,
+		revertSynthetic,
 	};
 }
