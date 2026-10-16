@@ -7,7 +7,7 @@
 
 ## 2. API-клиент frontend
 
-- [ ] 2.1 Расширить TS-тип `ConstructionCardSyntheticClose` полями `linearExecId`/`counterOptionExecId` и добавить функции `disputeSyntheticClose`/`revertSyntheticClose` к эндпоинтам `synthetic-closes/dispute|revert` в `construction-card.ts`; проверить, что `vitest run` и проверка типов фронтенда проходят
+- [x] 2.1 Расширить TS-тип `ConstructionCardSyntheticClose` полями `linearExecId`/`counterOptionExecId` и добавить функции `disputeSyntheticClose`/`revertSyntheticClose` к эндпоинтам `synthetic-closes/dispute|revert` в `construction-card.ts`; проверить, что `vitest run` и проверка типов фронтенда проходят
 
 ## 3. Команды спора и раскрывающийся список
 

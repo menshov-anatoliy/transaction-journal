@@ -104,7 +104,14 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 		// Traceability: openspec:ui/screens#scenario-detail-synthetic-locked-line-shown
 		// Arrange: связка закрытия 0.3 путовой ноги из 0.5, лок 35.7 USDT.
 		const card = makeCard({
-			syntheticCloses: [{ closedLegSymbol: "ETH-28MAR-1600-P", quantity: 0.3, lockedValueUsdt: 35.7, disputed: false }],
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.3,
+				lockedValueUsdt: 35.7,
+				disputed: false,
+				linearExecId: "exec-linear-1",
+				counterOptionExecId: "exec-option-1",
+			}],
 		});
 
 		// Act: рендер сводки карточки.
@@ -121,8 +128,22 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 		// Arrange: две связки по одной и той же ноге: 0.1 + 0.2 из 0.5.
 		const card = makeCard({
 			syntheticCloses: [
-				{ closedLegSymbol: "ETH-28MAR-1600-P", quantity: 0.1, lockedValueUsdt: 12, disputed: false },
-				{ closedLegSymbol: "ETH-28MAR-1600-P", quantity: 0.2, lockedValueUsdt: 23.7, disputed: false },
+				{
+					closedLegSymbol: "ETH-28MAR-1600-P",
+					quantity: 0.1,
+					lockedValueUsdt: 12,
+					disputed: false,
+					linearExecId: "exec-linear-1",
+					counterOptionExecId: "exec-option-1",
+				},
+				{
+					closedLegSymbol: "ETH-28MAR-1600-P",
+					quantity: 0.2,
+					lockedValueUsdt: 23.7,
+					disputed: false,
+					linearExecId: "exec-linear-2",
+					counterOptionExecId: "exec-option-2",
+				},
 			],
 		});
 
@@ -156,7 +177,14 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 		// Traceability: openspec:ui/screens#scenario-detail-synthetic-line-absent
 		// Arrange: единственная связка оспорена.
 		const card = makeCard({
-			syntheticCloses: [{ closedLegSymbol: "ETH-28MAR-1600-P", quantity: 0.3, lockedValueUsdt: 35.7, disputed: true }],
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.3,
+				lockedValueUsdt: 35.7,
+				disputed: true,
+				linearExecId: "exec-linear-1",
+				counterOptionExecId: "exec-option-1",
+			}],
 		});
 
 		// Act: рендер сводки карточки.
@@ -170,7 +198,14 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 	it("не пересчитывает инструментальные величины сводки логическим слоем", () => {
 		// Arrange: связка уводит 0.3 из ноги с инструментальным остатком 0.5.
 		const card = makeCard({
-			syntheticCloses: [{ closedLegSymbol: "ETH-28MAR-1600-P", quantity: 0.3, lockedValueUsdt: 35.7, disputed: false }],
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.3,
+				lockedValueUsdt: 35.7,
+				disputed: false,
+				linearExecId: "exec-linear-1",
+				counterOptionExecId: "exec-option-1",
+			}],
 		});
 
 		// Act: рендер сводки карточки.

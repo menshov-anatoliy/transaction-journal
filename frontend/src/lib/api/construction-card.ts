@@ -77,6 +77,15 @@ export interface ConstructionCardSyntheticClose {
 	readonly lockedValueUsdt: number;
 	/** Признак ручного оспаривания: спорная связка в логический слой не входит. */
 	readonly disputed: boolean;
+	// Пара execId замыкает запись зеркально бэкенду: UI адресует связку
+	// в готовых эндпоинтах спора и возврата, старшие потребители ответа
+	// не ломаются.
+	// Traceability: change:add-synthetic-close-dispute-ui/design#d1
+	// Traceability: change:add-synthetic-close-dispute-ui/specs/ui/screens/spec#requirement-detail-synthetic-close-dispute-list
+	/** Биржевой идентификатор линейного исполнения связки — первый ключ команд спора. */
+	readonly linearExecId: string;
+	/** Биржевой идентификатор встречного опционного исполнения связки — второй ключ команд спора. */
+	readonly counterOptionExecId: string;
 }
 
 /** Строка таблицы сделок карточки. */
@@ -297,6 +306,37 @@ export function editManualCloseMark(markId: number, mark: ManualCloseMarkInput):
 /** Удаляет ручную пометку закрытия. */
 export function deleteManualCloseMark(markId: number): Promise<void> {
 	return apiCommand(`/close-marks/${markId}`, { method: "DELETE" });
+}
+
+/** Ключ связки для команд спора: пара execId линейного и встречного опционного исполнений. */
+export interface SyntheticCloseDisputeInput {
+	readonly linearExecId: string;
+	readonly counterOptionExecId: string;
+}
+
+// Оспаривание распознанной связки: спор скрывает связку из логического слоя
+// до явного возврата, карточка перечитывается ближайшим чтением и показывает
+// связку с признаком спора.
+// Traceability: change:add-synthetic-close-dispute-ui/specs/ui/screens/spec#requirement-detail-synthetic-close-dispute-list
+/** Оспаривает распознанную синтетическую связку карточки. */
+export function disputeSyntheticClose(constructionId: number, key: SyntheticCloseDisputeInput): Promise<void> {
+	return apiCommand(`/constructions/${constructionId}/synthetic-closes/dispute`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(key),
+	});
+}
+
+// Возврат оспоренной связки: спор стирается, и связка снова входит
+// в логический слой ближайшим чтением карточки.
+// Traceability: change:add-synthetic-close-dispute-ui/specs/ui/screens/spec#requirement-detail-synthetic-close-dispute-list
+/** Возвращает оспоренную синтетическую связку в логический слой. */
+export function revertSyntheticClose(constructionId: number, key: SyntheticCloseDisputeInput): Promise<void> {
+	return apiCommand(`/constructions/${constructionId}/synthetic-closes/revert`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(key),
+	});
 }
 
 /** Читает цели переноса сделки: активные конструкции без текущей. */
