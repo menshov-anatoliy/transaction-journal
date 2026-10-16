@@ -1023,11 +1023,12 @@
                           "type": "frame",
                           "id": "z7VSz",
                           "name": "Развёрнута",
-                          "width": 104,
-                          "height": 56,
+                          "width": 112,
+                          "height": 72,
                           "fill": "$surface",
                           "cornerRadius": 6,
                           "stroke": "$border",
+                          "layout": "vertical",
                           "children": [
                             {
                               "type": "frame",
@@ -1035,15 +1036,82 @@
                               "name": "Разделы",
                               "width": "fill_container",
                               "height": "fill_container",
-                              "layout": "vertical"
+                              "layout": "vertical",
+                              "gap": 3,
+                              "padding": [
+                                6,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "DHGs1",
+                                  "name": "Строка раздела",
+                                  "width": "fill_container",
+                                  "height": 5,
+                                  "fill": "$surface2",
+                                  "cornerRadius": 1.5
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "UKV1t",
+                                  "name": "Строка раздела",
+                                  "width": "fill_container",
+                                  "height": 5,
+                                  "fill": "$surface2",
+                                  "cornerRadius": 1.5
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "HW56u",
+                                  "name": "Строка раздела",
+                                  "width": "fill_container",
+                                  "height": 5,
+                                  "fill": "$surface2",
+                                  "cornerRadius": 1.5
+                                }
+                              ]
                             },
                             {
                               "type": "frame",
-                              "id": "CJWgf",
-                              "name": "Иконочная колонка",
-                              "width": 14,
-                              "height": "fill_container",
-                              "fill": "$surface2"
+                              "id": "M398Qz",
+                              "name": "Футер",
+                              "width": "fill_container",
+                              "height": 12,
+                              "stroke": "$divider",
+                              "strokeWidth": {
+                                "top": 1
+                              },
+                              "padding": [
+                                0,
+                                5
+                              ],
+                              "justifyContent": "end",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "Uoayy",
+                                  "name": "Collapse",
+                                  "width": 10,
+                                  "height": 10,
+                                  "cornerRadius": 2,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "qYJBI",
+                                      "name": "CollapseIcon",
+                                      "width": 6,
+                                      "height": 6,
+                                      "icon": "panel-left-close",
+                                      "library": "lucide",
+                                      "fill": "$textMuted"
+                                    }
+                                  ]
+                                }
+                              ]
                             }
                           ]
                         },
@@ -1053,7 +1121,7 @@
                           "name": "Arrow",
                           "width": 12,
                           "height": 12,
-                          "icon": "arrow-right",
+                          "icon": "arrow-left-right",
                           "library": "lucide",
                           "fill": "$textMuted"
                         },
@@ -1061,11 +1129,106 @@
                           "type": "frame",
                           "id": "qJBBa",
                           "name": "Свёрнута",
-                          "width": 14,
-                          "height": 56,
-                          "fill": "$surface2",
+                          "width": 16,
+                          "height": 72,
+                          "fill": "$surface",
                           "cornerRadius": 6,
-                          "stroke": "$border"
+                          "stroke": "$border",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "padding": [
+                            4,
+                            0
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "nTDRQ",
+                              "name": "Миниатюра активная",
+                              "width": 10,
+                              "height": 10,
+                              "fill": "$accentSoft",
+                              "cornerRadius": 2,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "UcVKT",
+                                  "name": "Icon",
+                                  "width": 6,
+                                  "height": 6,
+                                  "icon": "layers",
+                                  "library": "lucide",
+                                  "fill": "$textPrimary"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "icon",
+                              "id": "Y3L8Zc",
+                              "name": "Миниатюра inbox",
+                              "width": 8,
+                              "height": 8,
+                              "icon": "inbox",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "qnskt",
+                              "name": "Миниатюра lightbulb",
+                              "width": 8,
+                              "height": 8,
+                              "icon": "lightbulb",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "y0qg91",
+                              "name": "Миниатюра bot",
+                              "width": 8,
+                              "height": 8,
+                              "icon": "bot",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "iynwQ",
+                              "name": "Миниатюра refresh-cw",
+                              "width": 8,
+                              "height": 8,
+                              "icon": "refresh-cw",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "zKyd0",
+                              "name": "Expand",
+                              "width": 10,
+                              "height": 10,
+                              "cornerRadius": 2,
+                              "stroke": "$border",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "ovxTz",
+                                  "name": "ExpandIcon",
+                                  "width": 6,
+                                  "height": 6,
+                                  "icon": "panel-left-open",
+                                  "library": "lucide",
+                                  "fill": "$textMuted"
+                                }
+                              ]
+                            }
+                          ]
                         }
                       ]
                     },
@@ -1074,7 +1237,7 @@
                       "id": "PLgXc",
                       "name": "Caption",
                       "fill": "$textMuted",
-                      "content": "Развёрнута ↔ свёрнута до иконочной колонки",
+                      "content": "Развёрнута ↔ свёрнута до рейки миниатюр",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "normal"
@@ -1100,27 +1263,85 @@
                           "type": "frame",
                           "id": "L8FMM",
                           "name": "Развёрнута",
-                          "width": 104,
-                          "height": 56,
+                          "width": 112,
+                          "height": 72,
                           "fill": "$surface",
                           "cornerRadius": 6,
                           "stroke": "$border",
+                          "layout": "vertical",
                           "children": [
-                            {
-                              "type": "frame",
-                              "id": "QfTbY",
-                              "name": "Иконочная колонка",
-                              "width": 14,
-                              "height": "fill_container",
-                              "fill": "$surface2"
-                            },
                             {
                               "type": "frame",
                               "id": "WSPkl",
                               "name": "Контекст",
                               "width": "fill_container",
                               "height": "fill_container",
-                              "layout": "vertical"
+                              "layout": "vertical",
+                              "gap": 3,
+                              "padding": [
+                                6,
+                                5
+                              ],
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "AOw5v",
+                                  "name": "Карточка контекста",
+                                  "width": "fill_container",
+                                  "height": 26,
+                                  "fill": "$surface2",
+                                  "cornerRadius": 3
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "jj1Aa",
+                                  "name": "Строка контекста",
+                                  "width": "fill_container",
+                                  "height": 5,
+                                  "fill": "$surface2",
+                                  "cornerRadius": 1.5
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "IjlMN",
+                              "name": "Футер",
+                              "width": "fill_container",
+                              "height": 12,
+                              "stroke": "$divider",
+                              "strokeWidth": {
+                                "top": 1
+                              },
+                              "padding": [
+                                0,
+                                5
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "fqtw7",
+                                  "name": "Collapse",
+                                  "width": 10,
+                                  "height": 10,
+                                  "cornerRadius": 2,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "g9pLFG",
+                                      "name": "CollapseIcon",
+                                      "width": 6,
+                                      "height": 6,
+                                      "icon": "panel-right-close",
+                                      "library": "lucide",
+                                      "fill": "$textMuted"
+                                    }
+                                  ]
+                                }
+                              ]
                             }
                           ]
                         },
@@ -1130,7 +1351,7 @@
                           "name": "Arrow",
                           "width": 12,
                           "height": 12,
-                          "icon": "arrow-right",
+                          "icon": "arrow-left-right",
                           "library": "lucide",
                           "fill": "$textMuted"
                         },
@@ -1138,11 +1359,73 @@
                           "type": "frame",
                           "id": "FzMEC",
                           "name": "Свёрнута",
-                          "width": 14,
-                          "height": 56,
-                          "fill": "$surface2",
+                          "width": 16,
+                          "height": 72,
+                          "fill": "$surface",
                           "cornerRadius": 6,
-                          "stroke": "$border"
+                          "stroke": "$border",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "padding": [
+                            4,
+                            0
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "hdozd",
+                              "name": "Миниатюра activity",
+                              "width": 8,
+                              "height": 8,
+                              "icon": "activity",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "wtol1",
+                              "name": "Миниатюра message-square",
+                              "width": 8,
+                              "height": 8,
+                              "icon": "message-square",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "AhfP1",
+                              "name": "Миниатюра book-open",
+                              "width": 8,
+                              "height": 8,
+                              "icon": "book-open",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "VEfEl",
+                              "name": "Expand",
+                              "width": 10,
+                              "height": 10,
+                              "cornerRadius": 2,
+                              "stroke": "$border",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon",
+                                  "id": "F2WGK",
+                                  "name": "ExpandIcon",
+                                  "width": 6,
+                                  "height": 6,
+                                  "icon": "panel-right-open",
+                                  "library": "lucide",
+                                  "fill": "$textMuted"
+                                }
+                              ]
+                            }
+                          ]
                         }
                       ]
                     },
