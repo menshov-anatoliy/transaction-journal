@@ -56,7 +56,13 @@ public static class ConstructionCardEndpoints
 			}
 
 			return Results.Json(ToCardResponse(data));
-		});
+		})
+		// Контракт снимка публикуется в OpenAPI типизированной схемой ответа:
+		// аддитивные поля строки syntheticCloses становятся видны в документе
+		// и проверяемы контрактным тестом, а потребители снимка не затронуты.
+		// Traceability: openspec:http-api/transport#scenario-openapi-schema-published
+		// Traceability: change:add-synthetic-close-dispute-ui/design#d1
+		.Produces<ConstructionCardResponse>();
 
 			// Переименование конструкции: свободная правка имени, остальные данные
 			// не затрагиваются; ручное имя фиксируется и не перезаписывается сборкой.

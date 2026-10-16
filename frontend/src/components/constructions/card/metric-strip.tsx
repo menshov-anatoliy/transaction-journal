@@ -323,10 +323,16 @@ export function ConstructionMetricStrip({ card, onDispute, onRevert }: Construct
 											variant="ghost"
 											size="sm"
 											className="ml-auto h-6 px-2 text-[11px]"
-											onClick={() =>
-												close.disputed
-													? onRevert({ linearExecId: close.linearExecId, counterOptionExecId: close.counterOptionExecId })
-													: onDispute({ linearExecId: close.linearExecId, counterOptionExecId: close.counterOptionExecId })}
+											onClick={() => {
+												// Ключ связки — пара execId: она адресует и JSX-ключ
+												// строки списка, и команду спора или возврата.
+												const execIdKey = { linearExecId: close.linearExecId, counterOptionExecId: close.counterOptionExecId };
+												if (close.disputed) {
+													onRevert(execIdKey);
+												} else {
+													onDispute(execIdKey);
+												}
+											}}
 										>
 											{close.disputed ? "Вернуть" : "Оспорить"}
 										</Button>

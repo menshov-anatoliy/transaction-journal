@@ -60,6 +60,9 @@ function DisputeCommandsHarness() {
 			{commands.disputeSynthetic.error !== null && (
 				<span role="alert">{commands.disputeSynthetic.error.message}</span>
 			)}
+			{commands.revertSynthetic.error !== null && (
+				<span role="alert">{commands.revertSynthetic.error.message}</span>
+			)}
 		</div>
 	);
 }
@@ -150,5 +153,23 @@ describe("useCardCommands: спор синтетической связки", ()
 		// Assert: ошибка мутации всплывает в состоянии команды — её сообщение
 		// и становится значением firstError страницы карточки у шапки.
 		expect(await screen.findByRole("alert")).toHaveTextContent("связка уже оспорена");
+	});
+
+	it("сбой возврата попадает в ошибку мутации для firstError страницы карточки", async () => {
+		// Негативный путь команды «Вернуть»: сбой эндпоинта возврата показывается
+		// пользователю так же, как сбой спора — ошибкой мутации, из которой
+		// шапка карточки берёт firstError; перечитывания при сбое не происходит.
+		// Traceability: openspec:ui/screens#scenario-revert-action-restores-link
+		// Arrange: эндпоинт возврата отвечает ошибкой с человекочитаемой причиной.
+		cardApi.revertSyntheticClose.mockRejectedValue(new Error("связка уже возвращена"));
+		const user = userEvent.setup();
+		renderCommands();
+
+		// Act: нажатие «Вернуть» на оспоренной связке.
+		await user.click(screen.getByRole("button", { name: "Вернуть" }));
+
+		// Assert: ошибка мутации всплывает в состоянии команды — её сообщение
+		// и становится значением firstError страницы карточки у шапки.
+		expect(await screen.findByRole("alert")).toHaveTextContent("связка уже возвращена");
 	});
 });

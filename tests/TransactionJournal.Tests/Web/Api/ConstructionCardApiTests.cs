@@ -217,18 +217,24 @@ public sealed class ConstructionCardApiTests
 		Assert.That(close["counterOptionExecId"]!.GetValue<string>(), Is.EqualTo("case-call"));
 
 		// OpenAPI-описание карточки дополнено аддитивно: схема строки связки
-		// несёт пару execId рядом с прежними обязательными полями, а схемы
-		// команд существующих потребителей остались на месте.
-		// OpenAPI-описание карточки дополнено аддитивно: документ публикуется
-		// с маршрутом карточки, а схемы команд существующих потребителей
-		// не потеряны — их контракты ответа не затронуты.
+		// несёт пару execId рядом с прежними полями, а схемы команд
+		// существующих потребителей остались на месте — их контракты
+		// ответа не затронуты.
 		var document = await (await client.GetAsync("/openapi/v1.json")).Content.ReadFromJsonAsync<JsonNode>();
 		var paths = document!["paths"]!.AsObject();
 		Assert.That(paths.Select(path => path.Key), Does.Contain("/api/v1/constructions/{constructionId}"));
-		var schemas = document["components"]!["schemas"]!.AsObject().Select(schema => schema.Key).ToArray();
-		Assert.That(schemas, Does.Contain("RenameConstructionRequest"));
-		Assert.That(schemas, Does.Contain("SetCommentRequest"));
-		Assert.That(schemas, Does.Contain("DisputeSyntheticCloseRequest"));
+		var schemas = document["components"]!["schemas"]!.AsObject();
+		var schemaNames = schemas.Select(schema => schema.Key).ToArray();
+		Assert.That(schemaNames, Does.Contain("RenameConstructionRequest"));
+		Assert.That(schemaNames, Does.Contain("SetCommentRequest"));
+		Assert.That(schemaNames, Does.Contain("DisputeSyntheticCloseRequest"));
+		// Схема строки syntheticCloses публикует пару execId — UI адресует
+		// связку в готовых эндпоинтах спора и возврата без отдельного
+		// запроса ключей связки.
+		var closeSchemaProperties = schemas["ConstructionCardSyntheticCloseResponse"]!["properties"]!
+			.AsObject().Select(property => property.Key).ToArray();
+		Assert.That(closeSchemaProperties, Does.Contain("linearExecId"));
+		Assert.That(closeSchemaProperties, Does.Contain("counterOptionExecId"));
 	}
 
 	[TestMethod]
