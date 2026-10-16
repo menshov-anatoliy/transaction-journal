@@ -383,7 +383,7 @@
           "id": "g0z20",
           "name": "Каркас",
           "clip": true,
-          "width": 1440,
+          "width": 1600,
           "height": 620,
           "layout": "vertical",
           "gap": 28,
@@ -400,6 +400,7 @@
               "strokeWidth": {
                 "bottom": 1
               },
+              "strokeAlignment": "inner",
               "alignItems": "center",
               "children": [
                 {
@@ -409,6 +410,12 @@
                   "width": 240,
                   "height": "fill_container",
                   "fill": "$bg",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "right": 1,
+                    "bottom": 1
+                  },
+                  "strokeAlignment": "inner",
                   "gap": 10,
                   "padding": [
                     0,
@@ -487,6 +494,11 @@
                   "width": "fill_container",
                   "height": "fill_container",
                   "fill": "$surface",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "strokeAlignment": "inner",
                   "gap": 10,
                   "padding": [
                     0,
@@ -609,6 +621,26 @@
                       "fontFamily": "$font",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "Z9SndU",
+                      "name": "SyncIcon",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "refresh-cw",
+                      "library": "lucide",
+                      "fill": "$textMuted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "zMCol",
+                      "name": "SyncStatus",
+                      "fill": "$textMuted",
+                      "content": "Обновлено 12:04",
+                      "fontFamily": "$font",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -619,6 +651,12 @@
                   "width": 360,
                   "height": "fill_container",
                   "fill": "$bg",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "bottom": 1,
+                    "left": 1
+                  },
+                  "strokeAlignment": "inner",
                   "gap": 10,
                   "padding": [
                     0,
@@ -670,26 +708,6 @@
                           "fontWeight": "normal"
                         }
                       ]
-                    },
-                    {
-                      "type": "icon",
-                      "id": "Z9SndU",
-                      "name": "SyncIcon",
-                      "width": 12,
-                      "height": 12,
-                      "icon": "refresh-cw",
-                      "library": "lucide",
-                      "fill": "$textMuted"
-                    },
-                    {
-                      "type": "text",
-                      "id": "zMCol",
-                      "name": "SyncStatus",
-                      "fill": "$textMuted",
-                      "content": "Обновлено 12:04",
-                      "fontFamily": "$font",
-                      "fontSize": 11.5,
-                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -2788,6 +2806,12 @@
             },
             "meh33": {
               "content": "Конструкции"
+            },
+            "MyZsE": {
+              "enabled": false
+            },
+            "I1JbT": {
+              "enabled": false
             }
           }
         },
@@ -5240,15 +5264,31 @@
                           ]
                         }
                       ]
-                    },
-                    {
-                      "id": "hbtxu",
-                      "type": "ref",
-                      "ref": "N6abN",
-                      "name": "Превью",
-                      "width": 352
                     }
                   ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "U0hJx",
+              "name": "Правая колонка",
+              "width": 360,
+              "height": "fill_container",
+              "stroke": "$divider",
+              "strokeWidth": {
+                "left": 1
+              },
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "padding": 12,
+              "children": [
+                {
+                  "id": "hbtxu",
+                  "type": "ref",
+                  "ref": "N6abN",
+                  "name": "Превью",
+                  "width": "fill_container"
                 }
               ]
             }
@@ -9331,6 +9371,7 @@
               "ref": "Pb7hc",
               "name": "Панель чатов",
               "height": "fill_container",
+              "width": 360,
               "descendants": {
                 "S67th3": {
                   "children": [
@@ -9437,6 +9478,9 @@
               "enabled": false
             },
             "I1JbT": {
+              "enabled": false
+            },
+            "ot9ii": {
               "enabled": false
             },
             "bOfzl": {
@@ -9975,6 +10019,9 @@
             "I1JbT": {
               "enabled": false
             },
+            "ot9ii": {
+              "enabled": false
+            },
             "bOfzl": {
               "enabled": false
             }
@@ -10407,6 +10454,9 @@
             },
             "I1JbT": {
               "enabled": false
+            },
+            "ot9ii": {
+              "enabled": true
             },
             "bOfzl": {
               "enabled": false
@@ -11781,371 +11831,387 @@
                           ]
                         }
                       ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "CNTat",
+              "name": "Правая колонка",
+              "width": 360,
+              "height": "fill_container",
+              "stroke": "$divider",
+              "strokeWidth": {
+                "left": 1
+              },
+              "strokeAlignment": "inner",
+              "layout": "vertical",
+              "padding": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "P9U8QH",
+                  "name": "Конструкции-цели",
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "m9kwpl",
+                      "name": "T",
+                      "fill": "$textMuted",
+                      "content": "КОНСТРУКЦИИ-ЦЕЛИ",
+                      "fontFamily": "$font",
+                      "fontSize": 10,
+                      "fontWeight": "normal",
+                      "letterSpacing": 0.5
                     },
                     {
                       "type": "frame",
-                      "id": "P9U8QH",
-                      "name": "Конструкции-цели",
-                      "width": 320,
+                      "id": "VZPxZ",
+                      "name": "Цель:Контртренд ETH под прикрытием",
+                      "width": "fill_container",
                       "fill": "$surface",
-                      "cornerRadius": 12,
+                      "cornerRadius": 9,
                       "stroke": "$border",
-                      "layout": "vertical",
-                      "gap": 10,
-                      "padding": 14,
+                      "strokeWidth": 1,
+                      "gap": 8,
+                      "padding": [
+                        9,
+                        11
+                      ],
+                      "alignItems": "center",
                       "children": [
                         {
-                          "type": "text",
-                          "id": "m9kwpl",
-                          "name": "T",
-                          "fill": "$textMuted",
-                          "content": "КОНСТРУКЦИИ-ЦЕЛИ",
-                          "fontFamily": "$font",
-                          "fontSize": 10,
-                          "fontWeight": "normal",
-                          "letterSpacing": 0.5
-                        },
-                        {
                           "type": "frame",
-                          "id": "VZPxZ",
-                          "name": "Цель:Контртренд ETH под прикрытием",
+                          "id": "rZ6su",
+                          "name": "Info",
                           "width": "fill_container",
-                          "fill": "$surface",
-                          "cornerRadius": 9,
-                          "stroke": "$border",
-                          "strokeWidth": 1,
-                          "gap": 8,
-                          "padding": [
-                            9,
-                            11
-                          ],
-                          "alignItems": "center",
+                          "layout": "vertical",
+                          "gap": 2,
                           "children": [
                             {
-                              "type": "frame",
-                              "id": "rZ6su",
-                              "name": "Info",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 2,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "Ps9xn",
-                                  "name": "N",
-                                  "fill": "$textPrimary",
-                                  "content": "Контртренд ETH под прикрытием",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12.5,
-                                  "fontWeight": "500"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "Z4qkX",
-                                  "name": "M",
-                                  "fill": "$textMuted",
-                                  "content": "открыта · итог +385,30",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "icon",
-                              "id": "DH2hF",
-                              "name": "Arrow",
-                              "width": 14,
-                              "height": 14,
-                              "icon": "arrow-right",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "jMnKo",
-                          "name": "Цель:Стреддл BTC — оценка риска",
-                          "width": "fill_container",
-                          "fill": "$accentSofter",
-                          "cornerRadius": 9,
-                          "stroke": "$accent",
-                          "strokeWidth": 1.5,
-                          "gap": 8,
-                          "padding": [
-                            9,
-                            11
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "KWwbl",
-                              "name": "Info",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 2,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "F320M",
-                                  "name": "N",
-                                  "fill": "$textPrimary",
-                                  "content": "Стреддл BTC — оценка риска",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12.5,
-                                  "fontWeight": "500"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "nyVdn",
-                                  "name": "M",
-                                  "fill": "$textMuted",
-                                  "content": "открыта · итог −30,60",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "icon",
-                              "id": "cbGsP",
-                              "name": "Arrow",
-                              "width": 14,
-                              "height": 14,
-                              "icon": "arrow-right",
-                              "library": "lucide",
-                              "fill": "$accentStrong"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "WLXtK",
-                          "name": "Цель:Железная бабочка ETH",
-                          "width": "fill_container",
-                          "fill": "$surface",
-                          "cornerRadius": 9,
-                          "stroke": "$border",
-                          "strokeWidth": 1,
-                          "gap": 8,
-                          "padding": [
-                            9,
-                            11
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "Tzwcr",
-                              "name": "Info",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 2,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "m4PRl",
-                                  "name": "N",
-                                  "fill": "$textPrimary",
-                                  "content": "Железная бабочка ETH",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12.5,
-                                  "fontWeight": "500"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "cLtmW",
-                                  "name": "M",
-                                  "fill": "$textMuted",
-                                  "content": "открыта · итог +53,90",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "icon",
-                              "id": "ecZmP",
-                              "name": "Arrow",
-                              "width": 14,
-                              "height": 14,
-                              "icon": "arrow-right",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "Y6xCFI",
-                          "name": "Цель:Календарь BTC (архив)",
-                          "width": "fill_container",
-                          "fill": "$surface",
-                          "cornerRadius": 9,
-                          "stroke": "$border",
-                          "strokeWidth": 1,
-                          "gap": 8,
-                          "padding": [
-                            9,
-                            11
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "r7zP9",
-                              "name": "Info",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 2,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "z2AKbw",
-                                  "name": "N",
-                                  "fill": "$textPrimary",
-                                  "content": "Календарь BTC (архив)",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12.5,
-                                  "fontWeight": "500"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "GPWgO",
-                                  "name": "M",
-                                  "fill": "$textMuted",
-                                  "content": "закрыта · итог +512,80",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "icon",
-                              "id": "q86E68",
-                              "name": "Arrow",
-                              "width": 14,
-                              "height": 14,
-                              "icon": "arrow-right",
-                              "library": "lucide",
-                              "fill": "$textMuted"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "JkO8D",
-                          "name": "DropHint",
-                          "width": "fill_container",
-                          "fill": "$accentSofter",
-                          "cornerRadius": 9,
-                          "gap": 8,
-                          "padding": [
-                            8,
-                            11
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "icon",
-                              "id": "d4OMz",
-                              "name": "Hand",
-                              "width": 13,
-                              "height": 13,
-                              "icon": "mouse-pointer-2",
-                              "library": "lucide",
-                              "fill": "$accentStrong"
+                              "type": "text",
+                              "id": "Ps9xn",
+                              "name": "N",
+                              "fill": "$textPrimary",
+                              "content": "Контртренд ETH под прикрытием",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "500"
                             },
                             {
                               "type": "text",
-                              "id": "C59jkY",
-                              "name": "T",
-                              "fill": "$accentStrong",
-                              "textGrowth": "fixed-width",
-                              "width": "fill_container",
-                              "content": "Отпустите, чтобы привязать 3 сделки",
+                              "id": "Z4qkX",
+                              "name": "M",
+                              "fill": "$textMuted",
+                              "content": "открыта · итог +385,30",
                               "fontFamily": "$font",
-                              "fontSize": 11.5,
+                              "fontSize": 11,
                               "fontWeight": "normal"
                             }
                           ]
                         },
                         {
+                          "type": "icon",
+                          "id": "DH2hF",
+                          "name": "Arrow",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "arrow-right",
+                          "library": "lucide",
+                          "fill": "$textMuted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jMnKo",
+                      "name": "Цель:Стреддл BTC — оценка риска",
+                      "width": "fill_container",
+                      "fill": "$accentSofter",
+                      "cornerRadius": 9,
+                      "stroke": "$accent",
+                      "strokeWidth": 1.5,
+                      "gap": 8,
+                      "padding": [
+                        9,
+                        11
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
                           "type": "frame",
-                          "id": "g7OSCw",
-                          "name": "Selected",
+                          "id": "KWwbl",
+                          "name": "Info",
                           "width": "fill_container",
                           "layout": "vertical",
-                          "gap": 8,
-                          "padding": [
-                            10,
-                            0,
-                            0,
-                            0
-                          ],
+                          "gap": 2,
                           "children": [
                             {
-                              "type": "frame",
-                              "id": "GGJu1",
-                              "name": "Row",
-                              "width": "fill_container",
-                              "gap": 8,
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "o0uiPT",
-                                  "name": "T",
-                                  "fill": "$textPrimary",
-                                  "content": "Выбрано: 3 сделки",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "wMRj4",
-                                  "name": "Sp",
-                                  "width": "fill_container",
-                                  "height": 1
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "mq1QS",
-                                  "name": "Sum",
-                                  "fill": "$textMuted",
-                                  "content": "+21 530 объём",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                }
-                              ]
+                              "type": "text",
+                              "id": "F320M",
+                              "name": "N",
+                              "fill": "$textPrimary",
+                              "content": "Стреддл BTC — оценка риска",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "500"
                             },
                             {
-                              "id": "mT7xr",
-                              "type": "ref",
-                              "ref": "Kn5dY",
-                              "name": "Create",
-                              "width": "fill_container",
-                              "justifyContent": "center",
-                              "padding": [
-                                7,
-                                10
-                              ],
-                              "stroke": "$border",
-                              "descendants": {
-                                "MIT6Q": {
-                                  "content": "Создать конструкцию из выбранного",
-                                  "fontSize": 11.5
-                                }
-                              }
+                              "type": "text",
+                              "id": "nyVdn",
+                              "name": "M",
+                              "fill": "$textMuted",
+                              "content": "открыта · итог −30,60",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
                             }
                           ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "cbGsP",
+                          "name": "Arrow",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "arrow-right",
+                          "library": "lucide",
+                          "fill": "$accentStrong"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "WLXtK",
+                      "name": "Цель:Железная бабочка ETH",
+                      "width": "fill_container",
+                      "fill": "$surface",
+                      "cornerRadius": 9,
+                      "stroke": "$border",
+                      "strokeWidth": 1,
+                      "gap": 8,
+                      "padding": [
+                        9,
+                        11
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Tzwcr",
+                          "name": "Info",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "m4PRl",
+                              "name": "N",
+                              "fill": "$textPrimary",
+                              "content": "Железная бабочка ETH",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "cLtmW",
+                              "name": "M",
+                              "fill": "$textMuted",
+                              "content": "открыта · итог +53,90",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "ecZmP",
+                          "name": "Arrow",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "arrow-right",
+                          "library": "lucide",
+                          "fill": "$textMuted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Y6xCFI",
+                      "name": "Цель:Календарь BTC (архив)",
+                      "width": "fill_container",
+                      "fill": "$surface",
+                      "cornerRadius": 9,
+                      "stroke": "$border",
+                      "strokeWidth": 1,
+                      "gap": 8,
+                      "padding": [
+                        9,
+                        11
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "r7zP9",
+                          "name": "Info",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "z2AKbw",
+                              "name": "N",
+                              "fill": "$textPrimary",
+                              "content": "Календарь BTC (архив)",
+                              "fontFamily": "$font",
+                              "fontSize": 12.5,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "GPWgO",
+                              "name": "M",
+                              "fill": "$textMuted",
+                              "content": "закрыта · итог +512,80",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "icon",
+                          "id": "q86E68",
+                          "name": "Arrow",
+                          "width": 14,
+                          "height": 14,
+                          "icon": "arrow-right",
+                          "library": "lucide",
+                          "fill": "$textMuted"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "JkO8D",
+                      "name": "DropHint",
+                      "width": "fill_container",
+                      "fill": "$accentSofter",
+                      "cornerRadius": 9,
+                      "gap": 8,
+                      "padding": [
+                        8,
+                        11
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "d4OMz",
+                          "name": "Hand",
+                          "width": 13,
+                          "height": 13,
+                          "icon": "mouse-pointer-2",
+                          "library": "lucide",
+                          "fill": "$accentStrong"
+                        },
+                        {
+                          "type": "text",
+                          "id": "C59jkY",
+                          "name": "T",
+                          "fill": "$accentStrong",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Отпустите, чтобы привязать 3 сделки",
+                          "fontFamily": "$font",
+                          "fontSize": 11.5,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "g7OSCw",
+                      "name": "Selected",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": [
+                        10,
+                        0,
+                        0,
+                        0
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "GGJu1",
+                          "name": "Row",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "o0uiPT",
+                              "name": "T",
+                              "fill": "$textPrimary",
+                              "content": "Выбрано: 3 сделки",
+                              "fontFamily": "$font",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "wMRj4",
+                              "name": "Sp",
+                              "width": "fill_container",
+                              "height": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "mq1QS",
+                              "name": "Sum",
+                              "fill": "$textMuted",
+                              "content": "+21 530 объём",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "id": "mT7xr",
+                          "type": "ref",
+                          "ref": "Kn5dY",
+                          "name": "Create",
+                          "width": "fill_container",
+                          "justifyContent": "center",
+                          "padding": [
+                            7,
+                            10
+                          ],
+                          "stroke": "$border",
+                          "descendants": {
+                            "MIT6Q": {
+                              "content": "Создать конструкцию из выбранного",
+                              "fontSize": 11.5
+                            }
+                          }
                         }
                       ]
                     }
@@ -12185,6 +12251,9 @@
               "enabled": false
             },
             "I1JbT": {
+              "enabled": false
+            },
+            "ot9ii": {
               "enabled": false
             },
             "bOfzl": {
@@ -12646,6 +12715,9 @@
               "enabled": false
             },
             "I1JbT": {
+              "enabled": false
+            },
+            "ot9ii": {
               "enabled": false
             },
             "bOfzl": {
@@ -13313,6 +13385,9 @@
               "enabled": false
             },
             "I1JbT": {
+              "enabled": false
+            },
+            "ot9ii": {
               "enabled": false
             },
             "bOfzl": {
@@ -18838,1986 +18913,10 @@
         },
         {
           "type": "frame",
-          "id": "peQC3",
-          "name": "Ряд 2 · К2 + К3",
-          "gap": 40,
-          "children": [
-            {
-              "type": "frame",
-              "id": "YGRpd",
-              "name": "К2 · Обёртка",
-              "layout": "vertical",
-              "gap": 12,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "jrTGm",
-                  "name": "К2 · Метка",
-                  "fill": "$textPrimary",
-                  "content": "К2 · Панели в полную высоту: бренд в шапке центральной зоны",
-                  "fontFamily": "$font",
-                  "fontSize": 16,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "frame",
-                  "id": "qDiD6",
-                  "name": "К2 · Концепт",
-                  "clip": true,
-                  "width": 1440,
-                  "height": 560,
-                  "fill": "$surface",
-                  "layout": "vertical",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "XATN3",
-                      "name": "Body",
-                      "width": "fill_container",
-                      "height": "fill_container",
-                      "children": [
-                        {
-                          "id": "YRPY5",
-                          "type": "ref",
-                          "ref": "t4nFb",
-                          "name": "Навигация",
-                          "width": 240,
-                          "height": "fill_container"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "o41VvC",
-                          "name": "Центральная колонка",
-                          "width": "fill_container",
-                          "height": "fill_container",
-                          "fill": "$surface",
-                          "layout": "vertical",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "YkDNn",
-                              "name": "Шапка зоны · строка 1",
-                              "width": "fill_container",
-                              "height": 48,
-                              "fill": "$surface",
-                              "gap": 10,
-                              "padding": [
-                                0,
-                                20
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "vbnzL",
-                                  "name": "Логотип",
-                                  "width": 22,
-                                  "height": 22,
-                                  "fill": "$accent",
-                                  "cornerRadius": 6,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "HIDnz",
-                                      "name": "Лого-глиф",
-                                      "fill": "#FFFFFF",
-                                      "content": "B",
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "700"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "gf3BC",
-                                  "name": "Бренд",
-                                  "fill": "$textPrimary",
-                                  "content": "Журнал Bybit",
-                                  "fontFamily": "$font",
-                                  "fontSize": 14,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "Z5XSWV",
-                                  "name": "Крошка раздела",
-                                  "fill": "$textMuted",
-                                  "content": "Журнал / Конструкции",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "G3M0X6",
-                                  "name": "Бейдж входящих",
-                                  "fill": "$accent",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    2,
-                                    8
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "hCKrd",
-                                      "name": "Бейдж · текст",
-                                      "fill": "#FFFFFF",
-                                      "content": "12",
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "600"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "RbAVf",
-                                  "name": "Spacer",
-                                  "width": "fill_container",
-                                  "height": 1
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "Ty3Gs",
-                                  "name": "Итог журнала",
-                                  "fill": "$accentStrong",
-                                  "content": "+1 284 USDT",
-                                  "fontFamily": "$font",
-                                  "fontSize": 14,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "SmM63",
-                                  "name": "Итог · части",
-                                  "fill": "$textMuted",
-                                  "content": "реализов. +940 / нереализов. +344",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "JlZFu",
-                                  "name": "Синхро",
-                                  "fill": "$textMuted",
-                                  "content": "Обновлено 12:04",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "L2rwV7",
-                              "name": "Разделитель шапки",
-                              "width": "fill_container",
-                              "height": 1,
-                              "fill": "$divider"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "s9NQc",
-                              "name": "Шапка зоны · строка 2",
-                              "width": "fill_container",
-                              "height": 52,
-                              "fill": "$surface",
-                              "gap": 10,
-                              "padding": [
-                                0,
-                                20
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "buoOh",
-                                  "name": "Заголовок страницы",
-                                  "fill": "$textPrimary",
-                                  "content": "Конструкции",
-                                  "fontFamily": "$font",
-                                  "fontSize": 18,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "tGstG",
-                                  "name": "Чип · область",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "biPJv",
-                                      "name": "Чип · область · Текст",
-                                      "fill": "$textSecondary",
-                                      "content": "Открытые ▾",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "miACa",
-                                  "name": "Чип · подсказки",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "uvmvh",
-                                      "name": "Чип · подсказки · Текст",
-                                      "fill": "$textSecondary",
-                                      "content": "Подсказки",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "f8yfQ",
-                                  "name": "Spacer",
-                                  "width": "fill_container",
-                                  "height": 1
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "B4CJOa",
-                                  "name": "Чип · панель",
-                                  "fill": "$infoSoft",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "kQp1Q",
-                                      "name": "Чип · панель · Текст",
-                                      "fill": "$info",
-                                      "content": "Панель: Карточка · BTC-280324",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "vXOJc",
-                              "name": "Центр",
-                              "width": "fill_container",
-                              "height": "fill_container",
-                              "fill": "$surface",
-                              "layout": "vertical",
-                              "gap": 12,
-                              "padding": 20,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "A0Ww6",
-                                  "name": "Подпись центра",
-                                  "fill": "$textSecondary",
-                                  "content": "Центральная зона — текущая страница",
-                                  "fontFamily": "$font",
-                                  "fontSize": 13,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "XRfuh",
-                                  "name": "Заглушка контента",
-                                  "width": "fill_container",
-                                  "height": "fill_container",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 10,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "ajjUh",
-                                      "name": "Заглушка · текст",
-                                      "fill": "$textMuted",
-                                      "content": "Содержимое страницы",
-                                      "fontFamily": "$font",
-                                      "fontSize": 13,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "bDO0Q",
-                          "name": "Панель/Контекст",
-                          "width": 360,
-                          "height": "fill_container",
-                          "fill": "$bg",
-                          "stroke": "$divider",
-                          "strokeWidth": {
-                            "left": 1
-                          },
-                          "layout": "vertical",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "i9MSz",
-                              "name": "Контекст",
-                              "width": "fill_container",
-                              "height": "fill_container",
-                              "layout": "vertical",
-                              "padding": [
-                                14,
-                                12
-                              ],
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "WGEmH",
-                                  "name": "Краткая карточка (схема)",
-                                  "width": "fill_container",
-                                  "fill": "$surface",
-                                  "cornerRadius": 12,
-                                  "stroke": "$border",
-                                  "layout": "vertical",
-                                  "gap": 10,
-                                  "padding": 12,
-                                  "children": [
-                                    {
-                                      "type": "frame",
-                                      "id": "ULSFu",
-                                      "name": "TitleRow",
-                                      "width": "fill_container",
-                                      "gap": 8,
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "DJm3I",
-                                          "name": "Title",
-                                          "fill": "$textPrimary",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Контртренд ETH под прикрытием",
-                                          "fontFamily": "$font",
-                                          "fontSize": 13,
-                                          "fontWeight": "600"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "ydFm5",
-                                          "name": "Status",
-                                          "fill": "$accent",
-                                          "content": "открыта",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "y60Ym",
-                                      "name": "Индикатор (схема)",
-                                      "clip": true,
-                                      "width": "fill_container",
-                                      "height": 10,
-                                      "cornerRadius": 5,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "dsm8u",
-                                          "name": "RiskZone",
-                                          "fill": "$riskZone",
-                                          "width": 67,
-                                          "height": "fill_container"
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "NCKQ6",
-                                          "name": "ProfitZone",
-                                          "fill": "$profitZone",
-                                          "width": 167,
-                                          "height": "fill_container"
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "qBeoX",
-                                          "name": "GoldZone",
-                                          "fill": "$superZone",
-                                          "width": 34,
-                                          "height": "fill_container"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "Lxdn5",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "oqmvQ",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Реализов.",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "WpbGV",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "+1 240,55",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "zURtF",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "yXuZR",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Нереализов.",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "l3xSOc",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "−180,20",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "CJHAQ",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "bGaFx",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Итог",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "B7PBV",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "+1 060,35 USDT",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "qCXkH",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "utaGZ",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Риск / профит",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "e9zI8B",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "300 / 900",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "n8KCHM",
-                                      "name": "Действие",
-                                      "cornerRadius": 8,
-                                      "stroke": "$border",
-                                      "padding": [
-                                        6,
-                                        10
-                                      ],
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "Q0IOB",
-                                          "name": "Label",
-                                          "fill": "$textSecondary",
-                                          "content": "Открыть карточку",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "g6DQKH",
-                                  "name": "Примечание",
-                                  "fill": "$textMuted",
-                                  "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "Контекст: краткая карточка · чаты конструкции · карточка правила",
-                                  "fontFamily": "$font",
-                                  "fontSize": 10.5,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "w7C1r",
-                              "name": "Футер",
-                              "width": "fill_container",
-                              "height": 44,
-                              "stroke": "$divider",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "padding": [
-                                0,
-                                12
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "c12SI1",
-                                  "name": "Collapse",
-                                  "width": 30,
-                                  "height": 30,
-                                  "cornerRadius": 8,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "Wn9Nd",
-                                      "name": "CollapseIcon",
-                                      "width": 15,
-                                      "height": 15,
-                                      "icon": "panel-right-close",
-                                      "library": "lucide",
-                                      "fill": "$textMuted"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "id": "m2a4f",
-                  "name": "К2 · Примечание",
-                  "fill": "$textSecondary",
-                  "textGrowth": "fixed-width",
-                  "width": 1440,
-                  "content": "Глобального топбара нет: навигация и контекст-панель тянутся на всю высоту. Центральная зона получает двухстрочную шапку — строка 1: бренд, крошка, входящие, итог и синхронизация; строка 2: заголовок страницы, действия и чип открытой панели. Плюс: максимум вертикали у панелей, весь контекст в одном месте. Минус: бренд «плавает» вместе с центром, панели визуально отделены от шапки.",
-                  "lineHeight": 1.5,
-                  "fontFamily": "$font",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "bkHp3",
-              "name": "К3 · Обёртка",
-              "layout": "vertical",
-              "gap": 12,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "HxXcf",
-                  "name": "К3 · Метка",
-                  "fill": "$textPrimary",
-                  "content": "К3 · Компактный топбар + контекстная шапка зоны",
-                  "fontFamily": "$font",
-                  "fontSize": 16,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "frame",
-                  "id": "M58PgM",
-                  "name": "К3 · Концепт",
-                  "clip": true,
-                  "width": 1440,
-                  "height": 560,
-                  "fill": "$surface",
-                  "layout": "vertical",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "zxItw",
-                      "name": "Топбар · глобальный",
-                      "width": "fill_container",
-                      "height": 40,
-                      "fill": "$surface",
-                      "gap": 10,
-                      "padding": [
-                        0,
-                        16
-                      ],
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "ohXmb",
-                          "name": "Логотип",
-                          "width": 18,
-                          "height": 18,
-                          "fill": "$accent",
-                          "cornerRadius": 5,
-                          "justifyContent": "center",
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "eRTrr",
-                              "name": "Лого-глиф",
-                              "fill": "#FFFFFF",
-                              "content": "B",
-                              "fontFamily": "$font",
-                              "fontSize": 10,
-                              "fontWeight": "700"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "HKK7B",
-                          "name": "Бренд",
-                          "fill": "$textPrimary",
-                          "content": "Журнал Bybit",
-                          "fontFamily": "$font",
-                          "fontSize": 13,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "SJmP8",
-                          "name": "Spacer",
-                          "width": "fill_container",
-                          "height": 1
-                        },
-                        {
-                          "type": "text",
-                          "id": "iJSna",
-                          "name": "Итог журнала",
-                          "fill": "$accentStrong",
-                          "content": "+1 284 USDT",
-                          "fontFamily": "$font",
-                          "fontSize": 13,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "G09YVM",
-                          "name": "Итог · части",
-                          "fill": "$textMuted",
-                          "content": "реализов. +940 / нереализов. +344",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "qbopf",
-                          "name": "Синхро",
-                          "fill": "$textMuted",
-                          "content": "Обновлено 12:04",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "K8lAD",
-                      "name": "Разделитель топбара",
-                      "width": "fill_container",
-                      "height": 1,
-                      "fill": "$divider"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "O42bS",
-                      "name": "Body",
-                      "width": "fill_container",
-                      "height": "fill_container",
-                      "children": [
-                        {
-                          "id": "FLOik",
-                          "type": "ref",
-                          "ref": "t4nFb",
-                          "name": "Навигация",
-                          "width": 240,
-                          "height": "fill_container"
-                        },
-                        {
-                          "type": "frame",
-                          "id": "vaG9V",
-                          "name": "Центральная колонка",
-                          "width": "fill_container",
-                          "height": "fill_container",
-                          "fill": "$surface",
-                          "layout": "vertical",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "wnPsh",
-                              "name": "Шапка зоны",
-                              "width": "fill_container",
-                              "height": 56,
-                              "fill": "$surface",
-                              "gap": 10,
-                              "padding": [
-                                0,
-                                20
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "IF7jn",
-                                  "name": "Крошка раздела",
-                                  "fill": "$textMuted",
-                                  "content": "Журнал / Конструкции",
-                                  "fontFamily": "$font",
-                                  "fontSize": 12,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "QmO4Y",
-                                  "name": "Бейдж входящих",
-                                  "fill": "$accent",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    2,
-                                    8
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "VJM3y",
-                                      "name": "Бейдж · текст",
-                                      "fill": "#FFFFFF",
-                                      "content": "12",
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "600"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "ju4Mz",
-                                  "name": "Заголовок страницы",
-                                  "fill": "$textPrimary",
-                                  "content": "Конструкции",
-                                  "fontFamily": "$font",
-                                  "fontSize": 17,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "Vo6zi",
-                                  "name": "Чип · область",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "fmGl1",
-                                      "name": "Чип · область · Текст",
-                                      "fill": "$textSecondary",
-                                      "content": "Открытые ▾",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "pa0b3",
-                                  "name": "Чип · подсказки",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "odJDU",
-                                      "name": "Чип · подсказки · Текст",
-                                      "fill": "$textSecondary",
-                                      "content": "Подсказки",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "POxfy",
-                                  "name": "Spacer",
-                                  "width": "fill_container",
-                                  "height": 1
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "OCHCD",
-                                  "name": "Чип · панель",
-                                  "fill": "$infoSoft",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "Q4vfih",
-                                      "name": "Чип · панель · Текст",
-                                      "fill": "$info",
-                                      "content": "Панель: Карточка · BTC-280324",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "hp5Ca",
-                              "name": "Разделитель шапки",
-                              "width": "fill_container",
-                              "height": 1,
-                              "fill": "$divider"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "U2CfHH",
-                              "name": "Центр",
-                              "width": "fill_container",
-                              "height": "fill_container",
-                              "fill": "$surface",
-                              "layout": "vertical",
-                              "gap": 12,
-                              "padding": 20,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "k9Kbiz",
-                                  "name": "Подпись центра",
-                                  "fill": "$textSecondary",
-                                  "content": "Центральная зона — текущая страница",
-                                  "fontFamily": "$font",
-                                  "fontSize": 13,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "JyA7s",
-                                  "name": "Заглушка контента",
-                                  "width": "fill_container",
-                                  "height": "fill_container",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 10,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "Tv3O9",
-                                      "name": "Заглушка · текст",
-                                      "fill": "$textMuted",
-                                      "content": "Содержимое страницы",
-                                      "fontFamily": "$font",
-                                      "fontSize": 13,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "BzITZ",
-                          "name": "Панель/Контекст",
-                          "width": 360,
-                          "height": "fill_container",
-                          "fill": "$bg",
-                          "stroke": "$divider",
-                          "strokeWidth": {
-                            "left": 1
-                          },
-                          "layout": "vertical",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "PXRYZ",
-                              "name": "Контекст",
-                              "width": "fill_container",
-                              "height": "fill_container",
-                              "layout": "vertical",
-                              "padding": [
-                                14,
-                                12
-                              ],
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "J815a",
-                                  "name": "Краткая карточка (схема)",
-                                  "width": "fill_container",
-                                  "fill": "$surface",
-                                  "cornerRadius": 12,
-                                  "stroke": "$border",
-                                  "layout": "vertical",
-                                  "gap": 10,
-                                  "padding": 12,
-                                  "children": [
-                                    {
-                                      "type": "frame",
-                                      "id": "uAwMR",
-                                      "name": "TitleRow",
-                                      "width": "fill_container",
-                                      "gap": 8,
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "Lo6VE",
-                                          "name": "Title",
-                                          "fill": "$textPrimary",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Контртренд ETH под прикрытием",
-                                          "fontFamily": "$font",
-                                          "fontSize": 13,
-                                          "fontWeight": "600"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "H02Hse",
-                                          "name": "Status",
-                                          "fill": "$accent",
-                                          "content": "открыта",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "qX3Zp",
-                                      "name": "Индикатор (схема)",
-                                      "clip": true,
-                                      "width": "fill_container",
-                                      "height": 10,
-                                      "cornerRadius": 5,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "j5RvBG",
-                                          "name": "RiskZone",
-                                          "fill": "$riskZone",
-                                          "width": 67,
-                                          "height": "fill_container"
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "VWWDl",
-                                          "name": "ProfitZone",
-                                          "fill": "$profitZone",
-                                          "width": 167,
-                                          "height": "fill_container"
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "n4JiKp",
-                                          "name": "GoldZone",
-                                          "fill": "$superZone",
-                                          "width": 34,
-                                          "height": "fill_container"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "VFRxN",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "K6plE",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Реализов.",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "zy1ra",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "+1 240,55",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "AiEs0",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "T9hk6r",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Нереализов.",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "HJ6KQ",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "−180,20",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "yXPHi",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "Kz0C2",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Итог",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "IO4la",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "+1 060,35 USDT",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "Zv2Qf",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "jXLsk",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Риск / профит",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "nzllN",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "300 / 900",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "s8rUxu",
-                                      "name": "Действие",
-                                      "cornerRadius": 8,
-                                      "stroke": "$border",
-                                      "padding": [
-                                        6,
-                                        10
-                                      ],
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "J30jP9",
-                                          "name": "Label",
-                                          "fill": "$textSecondary",
-                                          "content": "Открыть карточку",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "hpKnl",
-                                  "name": "Примечание",
-                                  "fill": "$textMuted",
-                                  "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "Контекст: краткая карточка · чаты конструкции · карточка правила",
-                                  "fontFamily": "$font",
-                                  "fontSize": 10.5,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "f1a4yW",
-                              "name": "Футер",
-                              "width": "fill_container",
-                              "height": 44,
-                              "stroke": "$divider",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "padding": [
-                                0,
-                                12
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "y0LaY2",
-                                  "name": "Collapse",
-                                  "width": 30,
-                                  "height": 30,
-                                  "cornerRadius": 8,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "A8EE4",
-                                      "name": "CollapseIcon",
-                                      "width": 15,
-                                      "height": 15,
-                                      "icon": "panel-right-close",
-                                      "library": "lucide",
-                                      "fill": "$textMuted"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "id": "e5wkH7",
-                  "name": "К3 · Примечание",
-                  "fill": "$textSecondary",
-                  "textGrowth": "fixed-width",
-                  "width": 1440,
-                  "content": "Глобальная полоса сжимается до 40 px и несёт только сквозное: бренд, итог журнала, время синхронизации. Весь контекст страницы — крошка, входящие, заголовок, действия, чип панели — живёт в шапке центральной зоны. Плюс: честное разделение «глобальное / страничное», шапка зоны настраивается под страницу. Минус: над контентом две горизонтальные полосы.",
-                  "lineHeight": 1.5,
-                  "fontFamily": "$font",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
           "id": "J8EcN1",
-          "name": "Ряд 3 · К4 + Легенда",
+          "name": "Ряд 3 · Легенда",
           "gap": 40,
           "children": [
-            {
-              "type": "frame",
-              "id": "drX0z",
-              "name": "К4 · Обёртка",
-              "layout": "vertical",
-              "gap": 12,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "glGX8",
-                  "name": "К4 · Метка",
-                  "fill": "$textPrimary",
-                  "content": "К4 · Бренд в панели навигации: шапка центра целиком под контекст",
-                  "fontFamily": "$font",
-                  "fontSize": 16,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "frame",
-                  "id": "rnfav",
-                  "name": "К4 · Концепт",
-                  "clip": true,
-                  "width": 1440,
-                  "height": 560,
-                  "fill": "$surface",
-                  "layout": "vertical",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "IO5s0",
-                      "name": "Body",
-                      "width": "fill_container",
-                      "height": "fill_container",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "f12Odq",
-                          "name": "Навигационная колонка",
-                          "width": 240,
-                          "height": "fill_container",
-                          "fill": "$bg",
-                          "layout": "vertical",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "USFOl",
-                              "name": "Бренд-блок",
-                              "width": "fill_container",
-                              "height": 56,
-                              "fill": "$surface",
-                              "gap": 10,
-                              "padding": [
-                                0,
-                                16
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "RqT8I",
-                                  "name": "Логотип",
-                                  "width": 22,
-                                  "height": 22,
-                                  "fill": "$accent",
-                                  "cornerRadius": 6,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "ST6s7",
-                                      "name": "Лого-глиф",
-                                      "fill": "#FFFFFF",
-                                      "content": "B",
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "700"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "JSnmR",
-                                  "name": "Бренд",
-                                  "fill": "$textPrimary",
-                                  "content": "Журнал Bybit",
-                                  "fontFamily": "$font",
-                                  "fontSize": 14,
-                                  "fontWeight": "600"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "Alw78",
-                              "name": "Разделитель бренда",
-                              "width": "fill_container",
-                              "height": 1,
-                              "fill": "$divider"
-                            },
-                            {
-                              "id": "jwATp",
-                              "type": "ref",
-                              "ref": "t4nFb",
-                              "name": "Навигация",
-                              "width": "fill_container",
-                              "height": "fill_container"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "vIycH",
-                          "name": "Центральная колонка",
-                          "width": "fill_container",
-                          "height": "fill_container",
-                          "fill": "$surface",
-                          "layout": "vertical",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "p61XAh",
-                              "name": "Шапка зоны",
-                              "width": "fill_container",
-                              "height": 64,
-                              "fill": "$surface",
-                              "gap": 10,
-                              "padding": [
-                                0,
-                                20
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "EcYPH",
-                                  "name": "Бейдж входящих",
-                                  "fill": "$accent",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    2,
-                                    8
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "jIf7v",
-                                      "name": "Бейдж · текст",
-                                      "fill": "#FFFFFF",
-                                      "content": "12",
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "600"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "fCt45",
-                                  "name": "Заголовок страницы",
-                                  "fill": "$textPrimary",
-                                  "content": "Конструкции",
-                                  "fontFamily": "$font",
-                                  "fontSize": 17,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "Hd7cs",
-                                  "name": "Чип · область",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "vg2HN",
-                                      "name": "Чип · область · Текст",
-                                      "fill": "$textSecondary",
-                                      "content": "Открытые ▾",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "ajGHt",
-                                  "name": "Чип · подсказки",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "H1jdV",
-                                      "name": "Чип · подсказки · Текст",
-                                      "fill": "$textSecondary",
-                                      "content": "Подсказки",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "Jun5f",
-                                  "name": "Spacer",
-                                  "width": "fill_container",
-                                  "height": 1
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "Ffwib",
-                                  "name": "Чип · панель",
-                                  "fill": "$infoSoft",
-                                  "cornerRadius": 999,
-                                  "padding": [
-                                    6,
-                                    12
-                                  ],
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "t2VQ9",
-                                      "name": "Чип · панель · Текст",
-                                      "fill": "$info",
-                                      "content": "Панель: Карточка · BTC-280324",
-                                      "fontFamily": "$font",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "T5lAYn",
-                                  "name": "Итог журнала",
-                                  "fill": "$accentStrong",
-                                  "content": "+1 284 USDT",
-                                  "fontFamily": "$font",
-                                  "fontSize": 14,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "G8RkR7",
-                                  "name": "Синхро",
-                                  "fill": "$textMuted",
-                                  "content": "Обновлено 12:04",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "cXmIT",
-                              "name": "Разделитель шапки",
-                              "width": "fill_container",
-                              "height": 1,
-                              "fill": "$divider"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "O2wyvu",
-                              "name": "Центр",
-                              "width": "fill_container",
-                              "height": "fill_container",
-                              "fill": "$surface",
-                              "layout": "vertical",
-                              "gap": 12,
-                              "padding": 20,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "v0rrhC",
-                                  "name": "Подпись центра",
-                                  "fill": "$textSecondary",
-                                  "content": "Центральная зона — текущая страница",
-                                  "fontFamily": "$font",
-                                  "fontSize": 13,
-                                  "fontWeight": "600"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "i320xQ",
-                                  "name": "Заглушка контента",
-                                  "width": "fill_container",
-                                  "height": "fill_container",
-                                  "fill": "$surface2",
-                                  "cornerRadius": 10,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "BJPF1",
-                                      "name": "Заглушка · текст",
-                                      "fill": "$textMuted",
-                                      "content": "Содержимое страницы",
-                                      "fontFamily": "$font",
-                                      "fontSize": 13,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "IcgP4",
-                          "name": "Панель/Контекст",
-                          "width": 360,
-                          "height": "fill_container",
-                          "fill": "$bg",
-                          "stroke": "$divider",
-                          "strokeWidth": {
-                            "left": 1
-                          },
-                          "layout": "vertical",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "DDbrh",
-                              "name": "Контекст",
-                              "width": "fill_container",
-                              "height": "fill_container",
-                              "layout": "vertical",
-                              "padding": [
-                                14,
-                                12
-                              ],
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "P3CqWx",
-                                  "name": "Краткая карточка (схема)",
-                                  "width": "fill_container",
-                                  "fill": "$surface",
-                                  "cornerRadius": 12,
-                                  "stroke": "$border",
-                                  "layout": "vertical",
-                                  "gap": 10,
-                                  "padding": 12,
-                                  "children": [
-                                    {
-                                      "type": "frame",
-                                      "id": "C1RZwx",
-                                      "name": "TitleRow",
-                                      "width": "fill_container",
-                                      "gap": 8,
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "b4AB1",
-                                          "name": "Title",
-                                          "fill": "$textPrimary",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Контртренд ETH под прикрытием",
-                                          "fontFamily": "$font",
-                                          "fontSize": 13,
-                                          "fontWeight": "600"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "fAlfW",
-                                          "name": "Status",
-                                          "fill": "$accent",
-                                          "content": "открыта",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "I57hW6",
-                                      "name": "Индикатор (схема)",
-                                      "clip": true,
-                                      "width": "fill_container",
-                                      "height": 10,
-                                      "cornerRadius": 5,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "Za8MZ",
-                                          "name": "RiskZone",
-                                          "fill": "$riskZone",
-                                          "width": 67,
-                                          "height": "fill_container"
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "V0tkW",
-                                          "name": "ProfitZone",
-                                          "fill": "$profitZone",
-                                          "width": 167,
-                                          "height": "fill_container"
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "Yogjh",
-                                          "name": "GoldZone",
-                                          "fill": "$superZone",
-                                          "width": 34,
-                                          "height": "fill_container"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "ujRsr",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "ugKKF",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Реализов.",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "AedlE",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "+1 240,55",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "wFsgM",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "R4q2d",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Нереализов.",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "zGykA",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "−180,20",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "dHxo4",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "lsiXb",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Итог",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "XXV3q",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "+1 060,35 USDT",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "vEwQz",
-                                      "name": "Метрика",
-                                      "width": "fill_container",
-                                      "alignItems": "center",
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "lDVlW",
-                                          "name": "Label",
-                                          "fill": "$textMuted",
-                                          "textGrowth": "fixed-width",
-                                          "width": "fill_container",
-                                          "content": "Риск / профит",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        },
-                                        {
-                                          "type": "text",
-                                          "id": "qmxd6",
-                                          "name": "Value",
-                                          "fill": "$textSecondary",
-                                          "content": "300 / 900",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "KL5JR",
-                                      "name": "Действие",
-                                      "cornerRadius": 8,
-                                      "stroke": "$border",
-                                      "padding": [
-                                        6,
-                                        10
-                                      ],
-                                      "children": [
-                                        {
-                                          "type": "text",
-                                          "id": "XtpgC",
-                                          "name": "Label",
-                                          "fill": "$textSecondary",
-                                          "content": "Открыть карточку",
-                                          "fontFamily": "$font",
-                                          "fontSize": 11.5,
-                                          "fontWeight": "normal"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "text",
-                                  "id": "e2XBxI",
-                                  "name": "Примечание",
-                                  "fill": "$textMuted",
-                                  "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "Контекст: краткая карточка · чаты конструкции · карточка правила",
-                                  "fontFamily": "$font",
-                                  "fontSize": 10.5,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "DB8lW",
-                              "name": "Футер",
-                              "width": "fill_container",
-                              "height": 44,
-                              "stroke": "$divider",
-                              "strokeWidth": {
-                                "top": 1
-                              },
-                              "padding": [
-                                0,
-                                12
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "RfvUm",
-                                  "name": "Collapse",
-                                  "width": 30,
-                                  "height": 30,
-                                  "cornerRadius": 8,
-                                  "justifyContent": "center",
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "icon",
-                                      "id": "sZQgL",
-                                      "name": "CollapseIcon",
-                                      "width": 15,
-                                      "height": 15,
-                                      "icon": "panel-right-close",
-                                      "library": "lucide",
-                                      "fill": "$textMuted"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "text",
-                  "id": "j4z78Z",
-                  "name": "К4 · Примечание",
-                  "fill": "$textSecondary",
-                  "textGrowth": "fixed-width",
-                  "width": 1440,
-                  "content": "Топбара нет вовсе: бренд живёт в шапке панели навигации (в свёрнутом состоянии — лого над рейкой миниатюр). Шапка центральной зоны полностью отдана контексту: входящие, заголовок, действия, чип панели, итог и синхронизация. Плюс: максимум места под контент, центр самодостаточен. Минус: бренд привязан к панели, при свёрнутой панели остаётся только лого.",
-                  "lineHeight": 1.5,
-                  "fontFamily": "$font",
-                  "fontSize": 12,
-                  "fontWeight": "normal"
-                }
-              ]
-            },
             {
               "type": "frame",
               "id": "vF5hb",
