@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
 import type { LayoutPanel } from "./layout-geometry";
 
-// Рейка прокручивает только миниатюры; управление остаётся в футере под ней.
+/*
+	Рейка занимает всю высоту свёрнутой панели: футеров у панелей нет,
+	управление свёрнутостью живёт в сегментах топбара. При переполнении
+	прокручивается только рейка.
+*/
 // Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
 export function PanelMiniatureRail({
 	side,

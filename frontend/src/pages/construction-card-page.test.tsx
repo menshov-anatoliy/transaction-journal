@@ -171,11 +171,12 @@ vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 }));
 
 // Данные каркаса AppLayout для проверки слота контекстной панели: счётчик
-// входящих и общий обзор журнала — заглушки, к тестируемому слоту отношения
-// не имеют.
+// входящих, общий обзор журнала и журнал синхронизаций — заглушки, к
+// тестируемому слоту отношения не имеют.
 const frameApi = vi.hoisted(() => ({
 	fetchInboxCount: vi.fn(),
 	fetchConstructionsOverview: vi.fn(),
+	fetchSyncRuns: vi.fn(),
 }));
 vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/inbox")>()),
@@ -184,6 +185,10 @@ vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 vi.mock("@/lib/api/constructions", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/constructions")>()),
 	fetchConstructionsOverview: frameApi.fetchConstructionsOverview,
+}));
+vi.mock("@/lib/api/sync", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/sync")>()),
+	fetchSyncRuns: frameApi.fetchSyncRuns,
 }));
 // Тред чата изолируется от assistant-ui runtime: для слота достаточно
 // факта монтирования панели и восстановления выбора из URL.
@@ -259,6 +264,9 @@ beforeEach(() => {
 	vi.mocked(listChatMessages).mockResolvedValue([]);
 	frameApi.fetchInboxCount.mockResolvedValue(0);
 	frameApi.fetchConstructionsOverview.mockResolvedValue(overview);
+	// Статус синхронизации топбара без успешных запусков скрыт — к проверкам
+	// карточки отношения не имеет.
+	frameApi.fetchSyncRuns.mockResolvedValue([]);
 });
 
 afterEach(() => vi.unstubAllGlobals());

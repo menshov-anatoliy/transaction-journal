@@ -13,8 +13,11 @@ import { useCallback, useMemo, useState } from "react";
 /** Панели каркаса с сохраняемой геометрией. */
 export type LayoutPanel = "left" | "right";
 
-// Свёрнутая навигация занимает только рейку миниатюр шириной 44 px.
+// Свёрнутая панель занимает только рейку миниатюр шириной 44 px; та же
+// константа сжимает сегмент топбара над панелью, чтобы колонка не
+// разъезжалась (design.md D1).
 // Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
+// Traceability: openspec:ui/screens#scenario-frame-topbar-segments-align-to-columns
 export const COLLAPSED_LEFT_WIDTH_REM = 2.75;
 
 /** Допустимый диапазон ширины панели в rem: левая 4.25–20, правая 20–40. */

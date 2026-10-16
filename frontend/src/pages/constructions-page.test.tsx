@@ -148,6 +148,7 @@ vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 vi.mock("@/lib/api/sync", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/sync")>()),
 	runSync: vi.fn(),
+	fetchSyncRuns: vi.fn(),
 }));
 
 const api = {
@@ -228,6 +229,9 @@ beforeEach(() => {
 	lastSearch = "";
 	api.constructions.fetchConstructionsOverview.mockResolvedValue(overview);
 	api.constructions.fetchConstructionPreview.mockResolvedValue(preview);
+	// Статус синхронизации топбара без успешных запусков скрыт — к проверкам
+	// страницы отношения не имеет.
+	api.sync.fetchSyncRuns.mockResolvedValue([]);
 	api.hints.runHintsPass.mockResolvedValue({
 		outcome: "completed",
 		asOf: "2026-06-20T14:30:00",

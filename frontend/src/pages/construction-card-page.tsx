@@ -108,9 +108,14 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 	// (design.md D4): у карточки контекст существует всегда, поэтому регистрация
 	// постоянна и панель развёрнута по умолчанию; ширину и свёрнутость задаёт
 	// каркас, панель свою геометрию не хранит. Выбор чата остаётся в URL (?chat=).
+	// Короткое название «Чаты» идёт в чип сегмента контекста топбара.
 	// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
 	const chatsPanelRegistration = React.useMemo(
-		() => ({ content: <ConstructionChatsPanel constructionId={constructionId} isClosed={isClosed} constructionName={card.name} /> }),
+		() => ({
+			chipLabel: "Чаты",
+			content: <ConstructionChatsPanel constructionId={constructionId} isClosed={isClosed} constructionName={card.name} />,
+		}),
 		[constructionId, isClosed, card.name],
 	);
 	useContextPanel(chatsPanelRegistration);

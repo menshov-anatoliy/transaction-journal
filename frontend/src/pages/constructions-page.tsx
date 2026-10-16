@@ -141,16 +141,21 @@ export function ConstructionsPage() {
 	const selectedRow = overviewQuery.data?.items.find((row) => row.constructionId === selectedId) ?? null;
 
 	// Регистрация краткой карточки в правой контекстной панели каркаса:
-	// без выделения регистрация null — панель свёрнута. Объект регистрации
-	// обязан быть memo-стабильным, иначе эффект контекстной панели
-	// перезапускается на каждом рендере страницы. Число живых подсказок
-	// берётся из строки обзора для строки периода карточки.
+	// без выделения регистрация null — панель и сегмент контекста скрыты.
+	// Объект регистрации обязан быть memo-стабильным, иначе эффект
+	// контекстной панели перезапускается на каждом рендере страницы. Число
+	// живых подсказок берётся из строки обзора для строки периода карточки.
+	// Короткое название «Конструкция» идёт в чип сегмента контекста топбара.
 	// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
 	const panelRegistration = React.useMemo(
 		() =>
 			selectedId === null
 				? null
-				: { content: <SelectedConstructionBrief constructionId={selectedId} liveHintCount={selectedRow?.liveHintCount} /> },
+				: {
+						chipLabel: "Конструкция",
+						content: <SelectedConstructionBrief constructionId={selectedId} liveHintCount={selectedRow?.liveHintCount} />,
+					},
 		[selectedId, selectedRow],
 	);
 	useContextPanel(panelRegistration);
