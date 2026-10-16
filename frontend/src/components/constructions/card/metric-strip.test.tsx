@@ -1,15 +1,19 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConstructionCard } from "@/lib/api/construction-card";
+import type { ConstructionCard, SyntheticCloseDisputeInput } from "@/lib/api/construction-card";
 import { ConstructionMetricStrip } from "./metric-strip";
 
 // Проверяется строка «зафиксировано синтетикой» сводки деталей конструкции
 // (мастер design.pen Z5uVG в карточке «Сводка метрик» h69OG): величина
 // паритетного лока к экспирации и логический размер закрываемой ноги
 // «0.5 → 0.2»; индикатор финрезультата и инструментальные величины
-// строкой не пересчитываются. Спорные связки и отсутствие связок скрывают
-// строку целиком.
+// строкой не пересчитываются. Строка живёт, пока есть распознанные связки:
+// она несёт переключатель раскрывающегося списка связок с действиями
+// «Оспорить»/«Вернуть», а величины считаются только по неоспоренным
+// связкам; без связок строка отсутствует целиком.
 // Traceability: openspec:ui/screens#requirement-detail-synthetic-close-line
+// Traceability: openspec:ui/screens#requirement-detail-synthetic-close-dispute-list
 
 /** Базовый снимок карточки: открытый стреддл с одной опционной ногой. */
 function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
@@ -96,6 +100,15 @@ beforeEach(() => {
 	setViewport(1280);
 });
 
+/** Рендер сводки с заглушками команд спора и возврата связки. */
+function renderStrip(
+	card: ConstructionCard,
+	onDispute: (key: SyntheticCloseDisputeInput) => void = () => undefined,
+	onRevert: (key: SyntheticCloseDisputeInput) => void = () => undefined,
+) {
+	return render(<ConstructionMetricStrip card={card} onDispute={onDispute} onRevert={onRevert} />);
+}
+
 describe("ConstructionMetricStrip: строка «зафиксировано синтетикой»", () => {
 	it("показывает лок к экспирации и логический размер ноги при неоспоренной связке", () => {
 		// Сценарий «Сводка показывает зафиксированный синтетикой результат»:
@@ -115,7 +128,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 		});
 
 		// Act: рендер сводки карточки.
-		render(<ConstructionMetricStrip card={card} />);
+		renderStrip(card);
 
 		// Assert: строка выводится с величиной лока и сокращением ноги
 		// 0.5 → 0.2; инструментальные величины в строке не повторяются.
@@ -148,7 +161,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 		});
 
 		// Act: рендер сводки карточки.
-		render(<ConstructionMetricStrip card={card} />);
+		renderStrip(card);
 
 		// Assert: лок 35.7 USDT, логический размер ноги 0.5 − 0.3 = 0.2.
 		expect(screen.getByText("+35.7 USDT")).toBeTruthy();
@@ -163,18 +176,20 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 		const card = makeCard({ syntheticCloses: [] });
 
 		// Act: рендер сводки карточки.
-		render(<ConstructionMetricStrip card={card} />);
+		renderStrip(card);
 
-		// Assert: ни строки, ни её узлов в DOM нет — отображение не
-		// отличается от конструкции без синтетики.
-		expect(screen.queryByText("зафиксировано синтетикой")).toBeNull();
+		// Assert: ни строки-переключателя, ни разделителя, ни списка в DOM
+		// нет — отображение не отличается от конструкции без синтетики.
+		expect(screen.queryByRole("button", { name: /зафиксировано синтетикой/ })).toBeNull();
 		expect(document.querySelector('[data-slot="synthetic-locked-line"]')).toBeNull();
+		expect(document.querySelector('[data-slot="synthetic-closes-list"]')).toBeNull();
 	});
 
-	it("не выводит строку, когда все связки оспорены", () => {
-		// Сценарий «Без связок и при споре строка отсутствует»: спорная
-		// связка не входит ни в лок, ни в логический слой ноги.
-		// Traceability: openspec:ui/screens#scenario-detail-synthetic-line-absent
+	it("оставляет строку-переключатель без величин, когда все связки оспорены", async () => {
+		// Сценарий «Список доступен при всех оспоренных связках»: строка
+		// с величиной лока отсутствует, но доступ к списку сохраняется,
+		// и возврат связки остаётся достижим.
+		// Traceability: openspec:ui/screens#scenario-dispute-list-available-when-all-disputed
 		// Arrange: единственная связка оспорена.
 		const card = makeCard({
 			syntheticCloses: [{
@@ -187,12 +202,168 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 			}],
 		});
 
-		// Act: рендер сводки карточки.
-		render(<ConstructionMetricStrip card={card} />);
+		// Act: рендер сводки карточки, затем раскрытие списка связок.
+		renderStrip(card);
+		const user = userEvent.setup();
+		await user.click(screen.getByRole("button", { name: /зафиксировано синтетикой/ }));
 
-		// Assert: строка отсутствует целиком, включая разделитель.
-		expect(screen.queryByText("зафиксировано синтетикой")).toBeNull();
-		expect(document.querySelector('[data-slot="synthetic-locked-line"]')).toBeNull();
+		// Assert: строка-переключатель осталась без величин лока и ног;
+		// раскрытый список показывает оспоренную связку с признаком спора
+		// и действием возврата.
+		expect(screen.queryByText("+35.7 USDT")).toBeNull();
+		expect(document.querySelector('[data-slot="synthetic-locked-value"]')).toBeNull();
+		expect(document.querySelector('[data-slot="synthetic-locked-legs"]')).toBeNull();
+		expect(document.querySelector('[data-slot="synthetic-close-row"][data-disputed="true"]')).not.toBeNull();
+		expect(screen.getByText("оспорена")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Вернуть" })).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "Оспорить" })).toBeNull();
+	});
+
+	it("раскрытие списка показывает каждую связку и признак спора", async () => {
+		// Сценарий «Раскрытие списка показывает каждую связку»: обе связки
+		// с закрываемой ногой, количеством и локом к экспирации; оспоренная
+		// помечена признаком спора.
+		// Traceability: openspec:ui/screens#scenario-dispute-list-expands-shows-links
+		// Arrange: две распознанные связки путовой ноги, вторая оспорена.
+		const card = makeCard({
+			syntheticCloses: [
+				{
+					closedLegSymbol: "ETH-28MAR-1600-P",
+					quantity: 0.2,
+					lockedValueUsdt: 23.7,
+					disputed: false,
+					linearExecId: "exec-linear-2",
+					counterOptionExecId: "exec-option-2",
+				},
+				{
+					closedLegSymbol: "ETH-28MAR-1600-P",
+					quantity: 0.3,
+					lockedValueUsdt: 35.7,
+					disputed: true,
+					linearExecId: "exec-linear-1",
+					counterOptionExecId: "exec-option-1",
+				},
+			],
+		});
+		const user = userEvent.setup();
+		renderStrip(card);
+
+		// Act: до раскрытия список связок свёрнут; клик по переключателю
+		// в строке синтетики разворачивает список.
+		expect(document.querySelector('[data-slot="synthetic-closes-list"]')).toBeNull();
+		await user.click(screen.getByRole("button", { name: /зафиксировано синтетикой/ }));
+
+		// Assert: список показывает обе связки — ногу, количество и лок;
+		// оспоренная связка приглушена признаком «оспорена», действия
+		// соответствуют состояниям связок.
+		const rows = document.querySelectorAll('[data-slot="synthetic-close-row"]');
+		expect(rows.length).toBe(2);
+		expect(screen.getAllByText("ETH-28MAR-1600-P").length).toBe(2);
+		expect(screen.getByText("· 0.2")).toBeTruthy();
+		expect(screen.getByText("· лок +23.7 USDT")).toBeTruthy();
+		expect(screen.getByText("· 0.3")).toBeTruthy();
+		expect(screen.getByText("· лок +35.7 USDT")).toBeTruthy();
+		expect(screen.getByText("оспорена")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Оспорить" })).toBeTruthy();
+		expect(screen.getByRole("button", { name: "Вернуть" })).toBeTruthy();
+	});
+
+	it("нажатие «Вернуть» вызывает возврат оспоренной связки парой execId", async () => {
+		// Сценарий «Возврат восстанавливает связку в логическом слое»:
+		// действие «Вернуть» адресует оспоренную связку парой execId
+		// и передаёт её команде возврата карточки.
+		// Traceability: openspec:ui/screens#scenario-revert-action-restores-link
+		// Arrange: раскрытый список с оспоренной связкой; замер возврата.
+		const onRevert = vi.fn();
+		const card = makeCard({
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.3,
+				lockedValueUsdt: 35.7,
+				disputed: true,
+				linearExecId: "exec-linear-1",
+				counterOptionExecId: "exec-option-1",
+			}],
+		});
+		const user = userEvent.setup();
+		renderStrip(card, () => undefined, onRevert);
+		await user.click(screen.getByRole("button", { name: /зафиксировано синтетикой/ }));
+
+		// Act: владелец возвращает оспоренную связку.
+		await user.click(screen.getByRole("button", { name: "Вернуть" }));
+
+		// Assert: команда возврата получила пару execId связки, спор
+		// не был отправлен.
+		expect(onRevert).toHaveBeenCalledWith({
+			linearExecId: "exec-linear-1",
+			counterOptionExecId: "exec-option-1",
+		});
+		expect(onRevert).toHaveBeenCalledTimes(1);
+	});
+
+	it("нажатие «Оспорить» вызывает оспаривание неоспоренной связки парой execId", async () => {
+		// Arrange: раскрытый список с неоспоренной связкой; замер спора.
+		const onDispute = vi.fn();
+		const card = makeCard({
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.2,
+				lockedValueUsdt: 23.7,
+				disputed: false,
+				linearExecId: "exec-linear-2",
+				counterOptionExecId: "exec-option-2",
+			}],
+		});
+		const user = userEvent.setup();
+		renderStrip(card, onDispute);
+		await user.click(screen.getByRole("button", { name: /зафиксировано синтетикой/ }));
+
+		// Act: владелец оспаривает ложную связку.
+		await user.click(screen.getByRole("button", { name: "Оспорить" }));
+
+		// Assert: команда спора получила пару execId связки, возврат
+		// не был отправлен.
+		expect(onDispute).toHaveBeenCalledWith({
+			linearExecId: "exec-linear-2",
+			counterOptionExecId: "exec-option-2",
+		});
+		expect(onDispute).toHaveBeenCalledTimes(1);
+	});
+
+	it("считает агрегаты строки только по неоспоренным связкам", () => {
+		// Arrange: смесь связок — неоспоренная 0.2 с локом 23.7 и
+		// оспоренная 0.3 с локом 35.7; спорная в логический слой не входит.
+		const card = makeCard({
+			syntheticCloses: [
+				{
+					closedLegSymbol: "ETH-28MAR-1600-P",
+					quantity: 0.2,
+					lockedValueUsdt: 23.7,
+					disputed: false,
+					linearExecId: "exec-linear-2",
+					counterOptionExecId: "exec-option-2",
+				},
+				{
+					closedLegSymbol: "ETH-28MAR-1600-P",
+					quantity: 0.3,
+					lockedValueUsdt: 35.7,
+					disputed: true,
+					linearExecId: "exec-linear-1",
+					counterOptionExecId: "exec-option-1",
+				},
+			],
+		});
+
+		// Act: рендер сводки карточки со свёрнутым списком связок.
+		renderStrip(card);
+
+		// Assert: в строке лок только неоспоренной связки (+23.7 USDT),
+		// нога сокращена только на неоспоренное количество 0.5 → 0.3;
+		// спорный лок не суммируется и спорное количество не вычитается.
+		expect(screen.getByText("+23.7 USDT")).toBeTruthy();
+		expect(screen.queryByText("+59.4 USDT")).toBeNull();
+		expect(screen.getByText("ETH-28MAR-1600-P · нога 0.5 → 0.3")).toBeTruthy();
+		expect(screen.queryByText("ETH-28MAR-1600-P · нога 0.5 → 0")).toBeNull();
 	});
 
 	it("не пересчитывает инструментальные величины сводки логическим слоем", () => {
@@ -209,7 +380,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 		});
 
 		// Act: рендер сводки карточки.
-		render(<ConstructionMetricStrip card={card} />);
+		renderStrip(card);
 
 		// Assert: «Реализованный результат» остаётся инструментальным —
 		// его величина совпадает с metrics.realizedPnL, лок в него не вмешался.

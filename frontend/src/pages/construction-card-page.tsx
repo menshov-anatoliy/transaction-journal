@@ -146,7 +146,15 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 		<section className="flex flex-col gap-5 p-6">
 			<ConstructionHeader card={card} commands={commands} actionError={actionError} onDeleted={() => navigate("/")} />
 
-			<ConstructionMetricStrip card={card} />
+			{/* Строка синтетики ведёт команды спора: «Оспорить»/«Вернуть»
+			    адресуют связку парой execId через мутации карточки с
+			    перечитыванием снимка (design.md, решение 4). */}
+			{/* Traceability: openspec:ui/screens#requirement-detail-synthetic-close-dispute-list */}
+			<ConstructionMetricStrip
+				card={card}
+				onDispute={(key) => commands.disputeSynthetic.mutate(key)}
+				onRevert={(key) => commands.revertSynthetic.mutate(key)}
+			/>
 
 			{/* Комментарий конструкции: MD-рендер по политике §10; иконка-карандаш
 			    открывает модальный split-редактор. */}
