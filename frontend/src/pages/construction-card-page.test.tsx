@@ -171,11 +171,12 @@ vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 }));
 
 // Данные каркаса AppLayout для проверки слота контекстной панели: счётчик
-// входящих и общий обзор журнала — заглушки, к тестируемому слоту отношения
-// не имеют.
+// входящих, общий обзор журнала и журнал синхронизаций — заглушки, к
+// тестируемому слоту отношения не имеют.
 const frameApi = vi.hoisted(() => ({
 	fetchInboxCount: vi.fn(),
 	fetchConstructionsOverview: vi.fn(),
+	fetchSyncRuns: vi.fn(),
 }));
 vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/inbox")>()),
@@ -184,6 +185,10 @@ vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 vi.mock("@/lib/api/constructions", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/constructions")>()),
 	fetchConstructionsOverview: frameApi.fetchConstructionsOverview,
+}));
+vi.mock("@/lib/api/sync", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/sync")>()),
+	fetchSyncRuns: frameApi.fetchSyncRuns,
 }));
 // Тред чата изолируется от assistant-ui runtime: для слота достаточно
 // факта монтирования панели и восстановления выбора из URL.
@@ -259,6 +264,9 @@ beforeEach(() => {
 	vi.mocked(listChatMessages).mockResolvedValue([]);
 	frameApi.fetchInboxCount.mockResolvedValue(0);
 	frameApi.fetchConstructionsOverview.mockResolvedValue(overview);
+	// Статус синхронизации топбара без успешных запусков скрыт — к проверкам
+	// карточки отношения не имеет.
+	frameApi.fetchSyncRuns.mockResolvedValue([]);
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -792,5 +800,52 @@ describe("карточка конструкции: панель чатов в к
 		expect(within(reloaded).getByRole("button", { name: /GLM-5\.3/ })).toHaveClass("bg-surface-2");
 		expect(screen.getByLabelText("URL")).toHaveTextContent("chat=active-1");
 		expect(screen.getByLabelText("URL")).toHaveTextContent("other=keep");
+	});
+});
+
+// Шапка сегмента «страница» топбара на карточке (решение раунд-сверки 3.0,
+// макет QbFRE): трёхуровневая крошка «Журнал / Конструкции / Карточка»,
+// после загрузки заголовок «<имя конструкции> · Карточка», до загрузки —
+// fallback «Карточка конструкции»; чипов сегмента страницы на экране нет.
+// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+// Traceability: change:rework-contextual-topbar/tasks#3.0
+describe("карточка конструкции: шапка сегмента страницы топбара", () => {
+	it("TryIfPageHeaderRegistersCardNameBreadcrumbTailAndChatsChipAfterLoad", async () => {
+		// Act: карточка внутри каркаса — регистрация шапки работает только в слоте Outlet.
+		renderCardPageInFrame();
+
+		// Assert: заголовок сегмента — «<имя конструкции> · Карточка»; ждём
+		// именно текст: сначала срабатывает fallback-регистрация, затем
+		// перерегистрация по загруженной карточке.
+		const title = await screen.findByText("ETH-240628-3200C+P · Карточка");
+		expect(title).toHaveAttribute("data-testid", "topbar-page-title");
+
+		// Assert: крошка трёхуровневая — хвост «Карточка» после раздела «Конструкции».
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Конструкции/Карточка");
+
+		// Assert: чип сегмента контекста — «Чаты конструкции»; чипов сегмента страницы нет.
+		// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+		expect(screen.getByTestId("context-chip")).toHaveTextContent("Чаты конструкции");
+		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
+	});
+
+	it("TryIfPageHeaderFallsBackToCardTitleWhileCardLoading", async () => {
+		// Arrange: чтение карточки не завершается — имени для заголовка нет.
+		cardApi.fetchConstructionCard.mockReturnValue(new Promise(() => {}));
+
+		// Act: карточка внутри каркаса.
+		renderCardPageInFrame();
+
+		// Assert: до загрузки сегмент показывает fallback «Карточка
+		// конструкции» при уже зарегистрированном хвосте крошки; контекстная
+		// панель с чипом чатов ещё не выведена.
+		const title = await screen.findByTestId("topbar-page-title");
+		expect(title).toHaveTextContent("Карточка конструкции");
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Конструкции/Карточка");
+		expect(screen.queryByTestId("context-chip")).not.toBeInTheDocument();
 	});
 });

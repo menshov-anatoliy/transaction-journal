@@ -1,8 +1,10 @@
 ﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, RouterProvider, createMemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AppLayout } from "@/components/layout/AppLayout";
+import type { ConstructionsOverview } from "@/lib/api/constructions";
 import { InboxPage } from "./inbox-page";
 
 // Экран «Входящие» проверяется как пользовательский сценарий: фильтры,
@@ -14,6 +16,12 @@ import { InboxPage } from "./inbox-page";
 // дизайн-примитивов, панель целей и выделение строк по Body #5 (TECU5).
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 // Traceability: change:reconcile-frontend-with-design/design#D2
+// Контекстный топбар (решения раунд-сверки 4.0): панель «Конструкции-цели»
+// проверяется внутри каркаса — регистрация useContextPanel вне Outlet-контекста
+// превращается в no-op, поэтому сценарии целей, формы создания и сборки
+// рендерят страницу в AppLayout.
+// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+// Traceability: change:rework-contextual-topbar/tasks#4.0
 
 vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/inbox")>()),
@@ -21,9 +29,40 @@ vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 	bindInboxTrades: vi.fn(),
 	createConstructionFromInbox: vi.fn(),
 	assembleInbox: vi.fn(),
+	// Счётчик каркаса (пункт меню и бейдж крошки) — заглушка к проверкам страницы.
+	fetchInboxCount: vi.fn(),
+}));
+
+// Обзор журнала и журнал синхронизаций читает каркас AppLayout (итог в
+// топбаре): заглушки каркасных данных, к проверкам «Входящих» отношения
+// не имеют.
+vi.mock("@/lib/api/constructions", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/constructions")>()),
+	fetchConstructionsOverview: vi.fn(),
+}));
+
+vi.mock("@/lib/api/sync", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/sync")>()),
+	fetchSyncRuns: vi.fn(),
 }));
 
 const api = vi.mocked(await import("@/lib/api/inbox"));
+const constructionsApi = vi.mocked(await import("@/lib/api/constructions"));
+const syncApi = vi.mocked(await import("@/lib/api/sync"));
+
+/** Пустой обзор журнала для топбара каркаса: итог и счётчики не проверяются. */
+const frameOverview: ConstructionsOverview = {
+	summary: {
+		totalPnL: 0,
+		realizedPnL: 0,
+		unrealizedPnL: 0,
+		marksAsOf: null,
+		hasMarkFailure: false,
+		constructionCount: 1,
+		openCount: 1,
+	},
+	items: [],
+};
 
 function renderPage() {
 	const queryClient = new QueryClient({
@@ -36,6 +75,27 @@ function renderPage() {
 					<Route path="/inbox" element={<InboxPage />} />
 				</Routes>
 			</MemoryRouter>
+		</QueryClientProvider>,
+	);
+}
+
+/**
+ * Страница внутри каркаса: только здесь работает слот контекстной панели
+ * (useOutletContext), поэтому содержимое панели «Конструкции-цели»
+ * проверяется в этой обвязке.
+ */
+function renderPageInFrame() {
+	setViewport(1280);
+	const queryClient = new QueryClient({
+		defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+	});
+	const router = createMemoryRouter(
+		[{ element: <AppLayout />, children: [{ path: "/inbox", element: <InboxPage /> }] }],
+		{ initialEntries: ["/inbox?from=2026-09-01&to=2026-10-08&sides=buy,sell"] },
+	);
+	return render(
+		<QueryClientProvider client={queryClient}>
+			<RouterProvider router={router} />
 		</QueryClientProvider>,
 	);
 }
@@ -62,6 +122,9 @@ function setViewport(width: number) {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	// Геометрия панелей каркаса хранится в localStorage: между тестами
+	// файла накопленная свёрнутость/ширина искажают следующий рендер каркаса.
+	localStorage.clear();
 	api.fetchInboxOverview.mockResolvedValue({
 		items: [
 			{
@@ -92,11 +155,17 @@ beforeEach(() => {
 	api.bindInboxTrades.mockResolvedValue(undefined);
 	api.createConstructionFromInbox.mockResolvedValue({ constructionId: 9 });
 	api.assembleInbox.mockResolvedValue({ constructionsCount: 1, boundCount: 2, tradesInInbox: 0 });
+	// Данные каркаса AppLayout: счётчик входящих, общий обзор журнала и
+	// журнал синхронизаций (статус синхронизации топбара скрыт без запусков).
+	api.fetchInboxCount.mockResolvedValue(0);
+	constructionsApi.fetchConstructionsOverview.mockResolvedValue(frameOverview);
+	syncApi.fetchSyncRuns.mockResolvedValue([]);
 });
 
 describe("раздел «Входящие»", () => {
 	it("показывает непривязанные сделки и конструкции-цели", async () => {
-		renderPage();
+		// Цели рендерятся в контекстной панели каркаса — страница в каркасе.
+		renderPageInFrame();
 		expect(await screen.findByRole("heading", { name: "Входящие", level: 1 })).toBeInTheDocument();
 		// Титул раздела — Inter 21/600 дизайн-системы, не дефолтный text-2xl.
 		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
@@ -105,9 +174,47 @@ describe("раздел «Входящие»", () => {
 		expect(screen.getByText("Календарь ETH")).toBeInTheDocument();
 	});
 
+	// Регистрация панели «Конструкции-цели» в правой контекстной панели
+	// каркаса: содержимое панели и чип короткого названия в сегменте
+	// контекста (решение раунд-сверки 4.0, мастер B1GoG1).
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+	// Traceability: change:rework-contextual-topbar/tasks#4.0
+	it("регистрирует цели в контекстной панели каркаса с чипом «Конструкции-цели»", async () => {
+		renderPageInFrame();
+
+		// Assert: содержимое целей живёт в панели каркаса, а не в теле страницы;
+		// чип сегмента контекста несёт короткое название «Конструкции-цели».
+		// Панель появляется до загрузки обзора, поэтому содержимое ждём
+		// отдельно: регистрация обновляется вслед за целями из данных.
+		await screen.findByText("exec-buy");
+		const panel = await screen.findByTestId("context-panel");
+		expect(await within(panel).findByText("Календарь ETH")).toBeInTheDocument();
+		expect(within(panel).getByRole("heading", { name: "КОНСТРУКЦИИ-ЦЕЛИ" })).toBeInTheDocument();
+		const chip = within(screen.getByTestId("topbar-segment-context")).getByTestId("context-chip");
+		expect(chip).toHaveTextContent("Конструкции-цели");
+	});
+
+	// Кнопка «Собрать из Входящих» — в строке H1 шапки раздела, справа от
+	// счётчика; из панели целей кнопка убрана (решение раунд-сверки 4.0).
+	// Traceability: openspec:ui/screens#scenario-inbox-assembly-without-confirmation
+	// Traceability: change:rework-contextual-topbar/tasks#4.0
+	it("размещает «Собрать из Входящих» в строке H1 шапки раздела, а не в панели целей", async () => {
+		renderPageInFrame();
+		await screen.findByText("exec-buy");
+
+		// Assert: кнопка — сосед H1 в одной строке шапки, вне контекстной панели.
+		const headerRow = screen.getByRole("heading", { name: "Входящие", level: 1 }).closest("div");
+		expect(headerRow).not.toBeNull();
+		const assembleButton = within(headerRow as HTMLElement).getByRole("button", { name: "Собрать из Входящих" });
+		// Вариант Secondary дизайн-системы: белая поверхность с бордером.
+		expect(assembleButton.className).toContain("bg-card");
+		expect(screen.getByTestId("context-panel").contains(assembleButton)).toBe(false);
+		expect(within(screen.getByTestId("context-panel")).queryByRole("button", { name: /Собрать из Входящих/i })).not.toBeInTheDocument();
+	});
+
 	it("фильтрует сделки по направлению и привязывает выбранные кнопкой", async () => {
 		const user = userEvent.setup();
-		renderPage();
+		renderPageInFrame();
 		await screen.findByText("exec-buy");
 
 		await user.click(screen.getByLabelText(/покупка/i));
@@ -121,7 +228,7 @@ describe("раздел «Входящие»", () => {
 
 	it("создаёт конструкцию из выбранного и запускает сборку из входящих", async () => {
 		const user = userEvent.setup();
-		renderPage();
+		renderPageInFrame();
 		await screen.findByText("exec-buy");
 
 		await clickSelectAllInTable(user);
@@ -181,7 +288,8 @@ describe("раздел «Входящие»", () => {
 
 	it("тонирование направления и выбор строки по мастеру Body #5", async () => {
 		const user = userEvent.setup();
-		renderPage();
+		// Блок выбранного живёт в контекстной панели каркаса.
+		renderPageInFrame();
 		await screen.findByText("exec-buy");
 
 		// Направление тонировано: покупка — $info, продажа — $risk.
@@ -203,7 +311,8 @@ describe("раздел «Входящие»", () => {
 	});
 
 	it("оформляет панель целей по мастеру: подпись, пилюли радиуса 9, мета", async () => {
-		renderPage();
+		// Панель целей монтируется в контекстную панель каркаса.
+		renderPageInFrame();
 		await screen.findByText("exec-buy");
 
 		// Заголовок-подпись (m9kwpl): Inter 10, letterSpacing 0.5, textMuted.

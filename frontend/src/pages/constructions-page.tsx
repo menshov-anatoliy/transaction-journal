@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { Lightbulb, Loader2, RefreshCw } from "lucide-react";
-import { Link, useSearchParams } from "react-router";
-import type { ConstructionsOverview } from "@/lib/api/constructions";
+import { useSearchParams } from "react-router";
+import type { ConstructionsOverview, ConstructionsSummary } from "@/lib/api/constructions";
 import { fetchConstructionPreview } from "@/lib/api/constructions";
 import { constructionsOverviewQueryKey, useConstructionsOverviewQuery } from "@/lib/api/constructions-overview-query";
 import { runHintsPass, type HintPassResult } from "@/lib/api/hints";
@@ -11,15 +11,16 @@ import { ConstructionPreviewCard } from "@/components/constructions/construction
 import { ConstructionsTable } from "@/components/constructions/constructions-table";
 import { useContextPanel } from "@/components/layout/context-panel";
 import { Button } from "@/components/ui/button";
-import { formatMoment } from "@/lib/format/display-time";
-import { formatCount, pluralForm } from "@/lib/format/plural";
+import { formatClock, formatMoment } from "@/lib/format/display-time";
 import { formatSignedAmount } from "@/lib/format/quantity";
 import { useIsMobile } from "@/lib/use-mobile";
 import { cn } from "@/lib/utils";
 
-// Раздел «Конструкции» — главный экран SPA: шапка с итогом журнала,
-// счётчиками, сегментом области видимости и тулбаром (разбор входящих,
-// ручной проход подсказок, синхронизация); таблица с выделением строк.
+// Раздел «Конструкции» — главный экран SPA: тулбар с титулом раздела и
+// счётчиками конструкций, сегментом области видимости и действиями (ручной
+// проход подсказок, синхронизация); строка итога сводки; таблица с выделением
+// строк. Вход в разбор входящих — через раздел «Входящие» панели навигации,
+// кнопки в тулбаре раздела нет (решение раунд-сверки формы).
 // Выделение и область видимости живут в URL и переживают перезагрузку;
 // краткая карточка выделенной конструкции регистрируется в правой
 // контекстной панели каркаса через useContextPanel (design.md D3–D6).
@@ -58,12 +59,20 @@ export function ConstructionsPage() {
 	// сводка списка не плодит дублирующих обращений к API.
 	// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
 	const overviewQuery = useConstructionsOverviewQuery();
+	// Счётчики у титула тулбара: полный набор конструкций, открыто и архив;
+	// читаются из сводки обзора тем же запросом.
+	const summary = overviewQuery.data?.summary;
 
 	// Синхронизация из шапки: после закрытого запуска раздел перечитывает
 	// обзор — новые сделки меняют итог и строки.
 	const syncMutation = useMutation({
 		mutationFn: runSync,
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: constructionsOverviewQueryKey }),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: constructionsOverviewQueryKey });
+			// Обновление статуса верхней панели после ручного запуска.
+			// Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+			void queryClient.invalidateQueries({ queryKey: ["sync-runs"] });
+		},
 	});
 
 	// Ручной проход подсказок из тулбара: по завершению перечитываются
@@ -141,78 +150,106 @@ export function ConstructionsPage() {
 	const selectedRow = overviewQuery.data?.items.find((row) => row.constructionId === selectedId) ?? null;
 
 	// Регистрация краткой карточки в правой контекстной панели каркаса:
-	// без выделения регистрация null — панель свёрнута. Объект регистрации
-	// обязан быть memo-стабильным, иначе эффект контекстной панели
-	// перезапускается на каждом рендере страницы. Число живых подсказок
-	// берётся из строки обзора для строки периода карточки.
+	// без выделения регистрация null — панель и сегмент контекста скрыты.
+	// Объект регистрации обязан быть memo-стабильным, иначе эффект
+	// контекстной панели перезапускается на каждом рендере страницы. Число
+	// живых подсказок берётся из строки обзора для строки периода карточки.
+	// Короткое название «Конструкция» идёт в чип сегмента контекста топбара.
 	// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
 	const panelRegistration = React.useMemo(
 		() =>
 			selectedId === null
 				? null
-				: { content: <SelectedConstructionBrief constructionId={selectedId} liveHintCount={selectedRow?.liveHintCount} /> },
+				: {
+						chipLabel: "Конструкция",
+						content: <SelectedConstructionBrief constructionId={selectedId} liveHintCount={selectedRow?.liveHintCount} />,
+					},
 		[selectedId, selectedRow],
 	);
 	useContextPanel(panelRegistration);
 
 	return (
 		<section className="flex flex-col gap-4 p-6">
-			{/* Тулбар раздела: титул, сегмент области видимости и действия —
-			    разбор входящих, ручной проход подсказок и синхронизация в одном
-			    ряду (design.md D5, D6; TitleRow мастера «Экран/Конструкции»). */}
-			<div className="flex flex-wrap items-center gap-3">
-				{/* Титул раздела — Inter 21/600 дизайн-системы (H1 Body-экранов).
-				    Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
-				<h1 className="page-title">Конструкции</h1>
-				<div className="ml-auto flex flex-wrap items-center gap-2">
-					{/* Сегмент «Открытые | Все»: состояние в URL, дефолт —
-					    открытые; контейнер по фрейму ScopeFilter (b5KyT). */}
-					{/* Traceability: openspec:ui/screens#scenario-list-scope-open-default */}
-					<div
-						data-slot="scope-filter"
-						role="group"
-						aria-label="Область видимости"
-						className="bg-card flex items-center gap-1 rounded-[9px] border p-[3px]"
-					>
-						<ScopeSegmentButton label="Открытые" active={scope === "open"} onClick={() => setScope("open")} />
-						<ScopeSegmentButton label="Все" active={scope === "all"} onClick={() => setScope("all")} />
+			{isMobile ? (
+				/*
+					Мобильный экран «Конструкций» (раунд-сверка 10.0, мастер
+					iGlhI): сразу под топбаром блок «Итог», затем список —
+					H1-тулбар (титул, счётчики-строка, область видимости,
+					проход подсказок, синхронизация) и десктопная шапка сводки
+					скрыты; синхронизация на мобильном — через раздел
+					«Синхронизация».
+				*/
+				// Traceability: change:rework-contextual-topbar/tasks#10.0
+				<MobileSummaryBlock summary={summary} />
+			) : (
+				<>
+				{/* Тулбар раздела: титул со счётчиками конструкций, сегмент области
+				    видимости и действия — ручной проход подсказок и синхронизация в
+				    одном ряду (design.md D5, D6; TitleRow мастера «Экран/Конструкции»). */}
+				<div className="flex flex-wrap items-center gap-3">
+					{/* Титул раздела — Inter 21/600 дизайн-системы (H1 Body-экранов).
+					    Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
+					<h1 className="page-title">Конструкции</h1>
+					{/* Счётчики конструкций рядом с титулом — формат макета «Counters»
+					    «конструкций N · открыто N · архив N» (12.5 $textSecondary,
+					    мастер NwnY4), архив — все минус открытые. Считаются по полному
+					    набору журнала, независимо от области видимости списка. Кнопку
+					    «Разобрать входящие» из тулбара убрали решением раунд-сверки:
+					    вход — через раздел «Входящие» панели навигации.
+					    Traceability: change:rework-contextual-topbar/tasks#2.0
+					    Traceability: openspec:ui/screens#requirement-construction-list-screen */}
+					{summary !== undefined && (
+						<p data-slot="constructions-counters" className="text-[12.5px] text-text-secondary">
+							{`конструкций ${summary.constructionCount} · открыто ${summary.openCount} · архив ${
+								summary.constructionCount - summary.openCount
+							}`}
+						</p>
+					)}
+					<div className="ml-auto flex flex-wrap items-center gap-2">
+						{/* Сегмент «Открытые | Все»: состояние в URL, дефолт —
+						    открытые; контейнер по фрейму ScopeFilter (b5KyT). */}
+						{/* Traceability: openspec:ui/screens#scenario-list-scope-open-default */}
+						<div
+							data-slot="scope-filter"
+							role="group"
+							aria-label="Область видимости"
+							className="bg-card flex items-center gap-1 rounded-[9px] border p-[3px]"
+						>
+							<ScopeSegmentButton label="Открытые" active={scope === "open"} onClick={() => setScope("open")} />
+							<ScopeSegmentButton label="Все" active={scope === "all"} onClick={() => setScope("all")} />
+						</div>
+						{/* Ручной проход подсказок рядом с синхронизацией
+						    (POST /hints/pass): иконочная кнопка по фрейму HintsPassBtn
+						    (Y9mB6), результат — строки состояния под шапкой.
+						    Traceability: openspec:ui/screens#scenario-ui-manual-pass-runs-engine */}
+						<Button
+							size="sm"
+							variant="outline"
+							aria-label="Запустить проход подсказок"
+							title="Запустить проход подсказок"
+							disabled={passMutation.isPending}
+							onClick={() => passMutation.mutate()}
+						>
+							{passMutation.isPending ? (
+								<Loader2 aria-hidden className="animate-spin" />
+							) : (
+								<Lightbulb aria-hidden className="size-3.5" />
+							)}
+						</Button>
+						<Button size="sm" variant="outline" disabled={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
+							<RefreshCw aria-hidden className={syncMutation.isPending ? "animate-spin" : undefined} />
+							Синхронизировать
+						</Button>
 					</div>
-					{/* Разбор входящих запускается из тулбара раздела: кнопка в
-					    варианте Secondary дизайн-системы (поверхность + бордер),
-					    ведёт в раздел «Входящие». */}
-					{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
-					<Button variant="secondary" asChild>
-						<Link to="/inbox">Разобрать входящие</Link>
-					</Button>
-					{/* Ручной проход подсказок рядом с синхронизацией
-					    (POST /hints/pass): иконочная кнопка по фрейму HintsPassBtn
-					    (Y9mB6), результат — строки состояния под шапкой.
-					    Traceability: openspec:ui/screens#scenario-ui-manual-pass-runs-engine */}
-					<Button
-						size="sm"
-						variant="outline"
-						aria-label="Запустить проход подсказок"
-						title="Запустить проход подсказок"
-						disabled={passMutation.isPending}
-						onClick={() => passMutation.mutate()}
-					>
-						{passMutation.isPending ? (
-							<Loader2 aria-hidden className="animate-spin" />
-						) : (
-							<Lightbulb aria-hidden className="size-3.5" />
-						)}
-					</Button>
-					<Button size="sm" variant="outline" disabled={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
-						<RefreshCw aria-hidden className={syncMutation.isPending ? "animate-spin" : undefined} />
-						Синхронизировать
-					</Button>
 				</div>
-			</div>
-			<ConstructionsHeader overview={overviewQuery.data} syncMutation={syncMutation} />
-			{/* Состояние и итог ручного прохода: строки состояния живут под
-			    сводкой раздела, проблемы корпуса — агрегированным списком.
-			    Traceability: openspec:ui/screens#scenario-ui-manual-pass-corpus-error */}
-			<PassStatus mutation={passMutation} />
+				<ConstructionsHeader overview={overviewQuery.data} syncMutation={syncMutation} />
+				{/* Состояние и итог ручного прохода: строки состояния живут под
+				    сводкой раздела, проблемы корпуса — агрегированным списком.
+				    Traceability: openspec:ui/screens#scenario-ui-manual-pass-corpus-error */}
+				<PassStatus mutation={passMutation} />
+				</>
+			)}
 			{/* На мобильном правая контекстная панель каркаса скрыта: краткая
 			    карточка выделенной конструкции открывается в drawer.
 			    Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
@@ -252,6 +289,61 @@ export function ConstructionsPage() {
 	);
 }
 
+/** Разбивка P&L строки итога: «реализов. … / нереализов. …» — общая для шапки раздела и мобильного блока. */
+function pnlBreakdownText(summary: ConstructionsSummary): string {
+	return `реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
+		summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
+	}`;
+}
+
+/** Подпись котировок строки итога: деградации общие с десктопной сводкой, отметку времени марок форматирует инстанс. */
+function quotesNoteText(summary: ConstructionsSummary, formatMarksTime: (marksAsOf: string) => string): string {
+	return summary.hasMarkFailure
+		? "котировки: сбой котировок"
+		: summary.marksAsOf === null
+			? "котировки: нет открытых остатков"
+			: formatMarksTime(summary.marksAsOf);
+}
+
+/*
+	Блок «Итог» мобильного экрана «Конструкции» (раунд-сверка 10.0, мастер
+	iGlhI «Экран/Mobile · Конструкции»): прозрачный блок сразу под топбаром,
+	без карточки — паддинги [14,16], межстрочный зазор 3, три строки: итог
+	18/600 $accentStrong; «реализов. … / нереализов. … · котировки HH:MM»
+	11 normal $textSecondary (время котировок — из той же сводки обзора, что
+	и строка итога, деградации повторяют десктопную сводку); «конструкций
+	N · открыто N» 11 normal $textMuted — на мобильном без «архива»,
+	источник счётчиков тот же, что у строки у H1 десктопа (решение 2.0).
+	H1-тулбар с областью видимости и синхронизацией на мобильном скрыт —
+	список идёт сразу за блоком.
+*/
+// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
+// Traceability: change:rework-contextual-topbar/tasks#2.0
+// Traceability: change:rework-contextual-topbar/tasks#10.0
+function MobileSummaryBlock({ summary }: { summary: ConstructionsOverview["summary"] | undefined }) {
+	if (summary === undefined) {
+		return <p className="text-muted-foreground px-4 py-3.5 text-sm">чтение журнала…</p>;
+	}
+
+	// Котировки — сегмент строки разбивки; при норме показывается только
+	// время (формат мастера iGlhI), сбои повторяют тексты десктопной сводки.
+	const quotesNote = quotesNoteText(summary, (marksAsOf) => `котировки ${formatClock(marksAsOf)}`);
+
+	return (
+		<div
+			data-slot="constructions-mobile-summary"
+			data-testid="constructions-mobile-summary"
+			className="flex flex-col gap-[3px] px-4 py-3.5"
+		>
+			<p className="text-[18px] font-semibold text-accent-strong">
+				{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
+			</p>
+			<p className="text-[11px] text-text-secondary">{`${pnlBreakdownText(summary)} · ${quotesNote}`}</p>
+			<p className="text-[11px] text-text-muted">{`конструкций ${summary.constructionCount} · открыто ${summary.openCount}`}</p>
+		</div>
+	);
+}
+
 /** Кнопка сегмента «Открытые | Все»: активная — акцентная пилюля. */
 function ScopeSegmentButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
 	return (
@@ -269,7 +361,7 @@ function ScopeSegmentButton({ label, active, onClick }: { label: string; active:
 	);
 }
 
-/** Шапка раздела: итог журнала с разбивкой, котировки, счётчики и статусы синхронизации. */
+/** Шапка раздела: итог журнала с разбивкой, котировки и статусы синхронизации. */
 function ConstructionsHeader({
 	overview,
 	syncMutation,
@@ -283,42 +375,34 @@ function ConstructionsHeader({
 	const quotesNote =
 		summary === undefined
 			? null
-			: summary.hasMarkFailure
-				? "котировки: сбой котировок"
-				: summary.marksAsOf === null
-					? "котировки: нет открытых остатков"
-					: `котировки на ${formatMoment(summary.marksAsOf)}`;
+			: quotesNoteText(summary, (marksAsOf) => `котировки на ${formatMoment(marksAsOf)}`);
 
 	return (
 		<header className="flex flex-col gap-2">
-			{/* Детальная сводка раздела: итог с разбивкой, отметка времени марок
-			    и счётчики; компактный итог на любом экране живёт в топбаре каркаса
-			    и читает тот же кэш обзора. */}
-			{/* Шапка итога — одна строка по референсу design.pen (фрейм списка):
-			    итог 18/600 $accentStrong, разбивка 11 $textSecondary, котировки и
-			    счётчики 11 $textMuted; паддинги [14,16]; сегменты выравнены по
-			    базовой линии и переносятся на узком экране. */}
+			{/* Детальная сводка раздела: итог с разбивкой и отметка времени
+			    марок; компактный итог на любом экране живёт в топбаре каркаса
+			    и читает тот же кэш обзора. Счётчики конструкций — рядом с
+			    титулом тулбара, в строке итога их нет. */}
+			{/* Шапка итога — одна строка по мастеру ud07u design.pen (после
+			    синхронизации К1): итог 20/600 $accentStrong (J3jIaE), разбивка
+			    12.5 $textSecondary (g2EeYx), котировки 11.5 $textMuted (otg5U);
+			    паддинги [14,16]; сегменты выравнены по базовой линии и
+			    переносятся на узком экране. */}
 			{/* Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown */}
 			{/* Traceability: openspec:ui/design-system#requirement-screenshot-acceptance */}
 			{summary === undefined ? (
 				<p className="text-muted-foreground text-sm">чтение журнала…</p>
 			) : (
 				<div data-slot="constructions-summary" className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3.5">
-					<p className="text-[18px] font-semibold text-accent-strong">
+					<p className="text-[20px] font-semibold text-accent-strong">
 						{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
 						{summary.totalPnL === null && summary.hasMarkFailure ? " (неполный: сбой котировок)" : ""}
 					</p>
-					<p className="text-[11px] text-text-secondary">{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
-						summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
-					}`}</p>
-					{/* Счётчики всегда по полному набору конструкций, независимо
+					<p className="text-[12.5px] text-text-secondary">{pnlBreakdownText(summary)}</p>
+					{/* Котировки всегда по полному набору конструкций, независимо
 					    от области видимости списка.
 					    Traceability: openspec:ui/screens#scenario-list-scope-all-shows-archived */}
-					{quotesNote !== null && <p className="text-[11px] text-text-muted">{quotesNote}</p>}
-					<p className="text-[11px] text-text-muted">
-						{formatCount(summary.constructionCount, { one: "конструкция", few: "конструкции", many: "конструкций" })} (
-						{summary.openCount} {pluralForm(summary.openCount, { one: "открыта", few: "открыты", many: "открыто" })})
-					</p>
+					{quotesNote !== null && <p className="text-[11.5px] text-text-muted">{quotesNote}</p>}
 				</div>
 			)}
 
@@ -373,7 +457,11 @@ function ConstructionsMain({
 	}
 
 	return (
-		<div className="rounded-lg border">
+		// Таблица списка — карточка с белой заливкой $surface и каймой $border
+		// по фрейму «Таблица конструкций» мастера ud07u design.pen.
+		// Traceability: openspec:ui/screens#requirement-construction-list-screen
+		// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+		<div className="bg-card overflow-hidden rounded-lg border">
 			<ConstructionsTable rows={rows} selectedId={selectedId} onSelect={onSelect} onOpenInNewWindow={onOpenInNewWindow} />
 		</div>
 	);

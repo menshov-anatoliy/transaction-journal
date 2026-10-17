@@ -37,7 +37,11 @@ export function ConstructionPreviewCard({ preview, liveHintCount }: Construction
 			: Math.max(0, Math.floor((Date.parse(preview.closedAt ?? new Date().toISOString()) - Date.parse(preview.openedAt)) / 86_400_000));
 
 	return (
-		<section data-slot="construction-preview" className="flex flex-col gap-3">
+		// Карточка-превью — белая поверхность $surface с каймой $border,
+		// радиус 12, паддинг 16 и зазор 12 по мастеру N6abN design.pen.
+		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
+		// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+		<section data-slot="construction-preview" className="flex flex-col gap-3 rounded-lg border bg-card p-4">
 			{/* Шапка карточки: имя Inter 14/600 на textPrimary и статусная
 			    пилюля справа (фрейм Header мастера N6abN). */}
 			<header className="flex items-center justify-between gap-2">

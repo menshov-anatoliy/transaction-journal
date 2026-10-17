@@ -11,6 +11,7 @@ import {
 	type InboxTargetConstruction,
 	type InboxTrade,
 } from "@/lib/api/inbox";
+import { useContextPanel } from "@/components/layout/context-panel";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,14 @@ import { cn } from "@/lib/utils";
 // фильтров, панель «Конструкции-цели» и чекбоксы перенесены по мастер-нодам
 // Body #5 «Входящие» (TECU5) макета design.pen.
 // Traceability: change:reconcile-frontend-with-design/design#D2
+// Контекстный топбар (решения раунд-сверки 4.0, мастер B1GoG1): список
+// «КОНСТРУКЦИИ-ЦЕЛИ» живёт в правой контекстной панели каркаса через
+// useContextPanel (чип «Конструкции-цели»), кнопка «Собрать из Входящих» —
+// в строке H1 шапки раздела; крошка и заголовок сегмента страницы —
+// fallback из appSections (шапка не регистрируется, чипов у сегмента
+// страницы нет, как на экранах «Конструкции» и «Карточка конструкции»).
+// Traceability: change:rework-contextual-topbar/tasks#4.0
+// Traceability: change:rework-contextual-topbar/tasks#4.1
 
 const inboxOverviewKey = ["inbox-overview"] as const;
 const inboxCountKey = ["inbox-count"] as const;
@@ -231,15 +240,21 @@ export function InboxPage() {
 		setSearchParams(new URLSearchParams(), { replace: true });
 	};
 
-	const bindToTarget = (constructionId: number, execIds: readonly string[]) => {
-		if (execIds.length == 0 || busy) {
-			return;
-		}
+	// Обработчики целей и формы создания завёрнуты в useCallback: они входят
+	// в memo-стабильную регистрацию контекстной панели (контракт useContextPanel),
+	// поэтому их идентичность должна меняться только при смене зависимостей.
+	const bindToTarget = React.useCallback(
+		(constructionId: number, execIds: readonly string[]) => {
+			if (execIds.length == 0 || busy) {
+				return;
+			}
 
-		bindMutation.mutate({ constructionId, execIds });
-	};
+			bindMutation.mutate({ constructionId, execIds });
+		},
+		[bindMutation.mutate, busy],
+	);
 
-	const onCreate = () => {
+	const onCreate = React.useCallback(() => {
 		const name = createName.trim();
 		if (name.length == 0 || selectedExecIds.length == 0 || busy) {
 			return;
@@ -255,22 +270,88 @@ export function InboxPage() {
 			allocatedCapitalUsdt: capitalValue,
 			execIds: selectedExecIds,
 		});
-	};
+	}, [createName, createCapital, selectedExecIds, busy, createMutation.mutate]);
 
-	const onDragStart = (trade: InboxTrade) => {
-		const ids = selectedExecIds.includes(trade.execId) ? selectedExecIds : [trade.execId];
-		setDragExecIds(ids);
-	};
+	const onDragStart = React.useCallback(
+		(trade: InboxTrade) => {
+			const ids = selectedExecIds.includes(trade.execId) ? selectedExecIds : [trade.execId];
+			setDragExecIds(ids);
+		},
+		[selectedExecIds],
+	);
 
-	const onDropTarget = (constructionId: number) => {
-		setTargetHighlightId(null);
-		const ids = dragExecIds.length > 0 ? dragExecIds : selectedExecIds;
-		bindToTarget(constructionId, ids);
-		setDragExecIds([]);
-	};
+	const onDropTarget = React.useCallback(
+		(constructionId: number) => {
+			setTargetHighlightId(null);
+			const ids = dragExecIds.length > 0 ? dragExecIds : selectedExecIds;
+			bindToTarget(constructionId, ids);
+			setDragExecIds([]);
+		},
+		[bindToTarget, dragExecIds, selectedExecIds],
+	);
+
+	// Панель «Конструкции-цели» переносится из тела страницы в правую
+	// контекстную панель каркаса (решение раунд-сверки 4.0, мастер B1GoG1):
+	// пилюли целей с drag&drop, подсказка «Отпустите…» и блок «Выбрано: N»
+	// с формой создания конструкции регистрируются слотом useContextPanel;
+	// чип сегмента контекста — «Конструкции-цели», чип мастера «Карточка ·
+	// BTC-280324» отклонён как нестыковка мастера (design.md D9). На мобильном
+	// регистрация не выполняется: контекстная панель каркаса скрыта, а
+	// drag-функциональность на мобильный не переносится (Mobile — стадия
+	// 10.x сохраняет текущий просмотр целей в теле страницы).
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+	// Traceability: openspec:ui/screens#requirement-inbox-screen
+	// Traceability: change:rework-contextual-topbar/tasks#4.0
+	const goalsPanelRegistration = React.useMemo(
+		() =>
+			isMobile
+				? null
+				: {
+						chipLabel: "Конструкции-цели",
+						content: (
+							<GoalsTargetsPanel
+								targets={overviewQuery.data?.targets}
+								selectedExecIds={selectedExecIds}
+								selectedVolume={selectedVolume}
+								busy={busy}
+								createName={createName}
+								onCreateNameChange={setCreateName}
+								createCapital={createCapital}
+								onCreateCapitalChange={setCreateCapital}
+								onCreate={onCreate}
+								bindToTarget={bindToTarget}
+								targetHighlightId={targetHighlightId}
+								onTargetHighlightChange={setTargetHighlightId}
+								onDropTarget={onDropTarget}
+								dragExecIds={dragExecIds}
+							/>
+						),
+					},
+		[
+			isMobile,
+			overviewQuery.data?.targets,
+			selectedExecIds,
+			selectedVolume,
+			busy,
+			createName,
+			createCapital,
+			onCreate,
+			bindToTarget,
+			targetHighlightId,
+			onDropTarget,
+			dragExecIds,
+		],
+	);
+	useContextPanel(goalsPanelRegistration);
 
 	return (
 		<section className="flex flex-col gap-6 p-6">
+			{/* Крошка и заголовок сегмента страницы — fallback из appSections:
+			    шапка раздела не регистрируется через usePageHeader, чипов у
+			    сегмента страницы нет (решение раунд-сверки 4.0, прецедент
+			    экранов «Конструкции» и «Карточка конструкции»).
+			    Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+			    Traceability: change:rework-contextual-topbar/tasks#4.0 */}
 			<div className="flex flex-wrap items-center gap-3">
 				<h1 className="page-title">Входящие</h1>
 				{overviewQuery.data !== undefined && (
@@ -285,7 +366,22 @@ export function InboxPage() {
 						})}
 					</span>
 				)}
+				{isMobile == false && (
+					// «Собрать из Входящих» — secondary-кнопка в строке H1 шапки
+					// раздела, справа от счётчика (решение раунд-сверки 4.0, как
+					// «Синхронизировать» на «Конструкциях»); из панели целей
+					// кнопка убрана. Инкрементальная сборка запускается без
+					// диалога подтверждения.
+					// Traceability: openspec:ui/screens#scenario-inbox-assembly-without-confirmation
+					// Traceability: change:rework-contextual-topbar/tasks#4.0
+					<Button variant="secondary" size="sm" disabled={busy} onClick={() => assembleMutation.mutate()}>
+						{assembleMutation.isPending ? "Сборка выполняется…" : "Собрать из Входящих"}
+					</Button>
+				)}
 			</div>
+
+			{/* Итог последней сборки виден под действием, которое её запустило. */}
+			{assembleMutation.data !== undefined && <AssembleStatus result={assembleMutation.data} />}
 
 			{/*
 				Строка фильтров перенесена с дизайн-ноды «Фильтры» (ZvdbR) Body #5:
@@ -353,9 +449,13 @@ export function InboxPage() {
 				<p className="text-muted-foreground text-sm">По заданным фильтрам ничего не найдено.</p>
 			)}
 
-			{/* Main мастера (lFPDa): таблица и панель целей — отдельные карточки
-			    радиуса 12, зазор 20, панель фиксированной шириной 320. */}
-			<div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+			{/* Main мастера (lFPDa, макет B1GoG1): таблица непривязанных сделок —
+			    карточка радиуса 12; панель целей из прежнего grid-ряда перенесена
+			    в контекстную панель каркаса (решение раунд-сверки 4.0), поэтому
+			    таблица занимает всю ширину центральной зоны. На мобильном
+			    просмотр целей остаётся в теле страницы (стадия Mobile 10.x).
+			    Traceability: change:rework-contextual-topbar/tasks#4.0 */}
+			<div className="flex flex-col gap-5">
 				<div className="min-w-0">
 					{visibleTrades.length > 0 && (
 						<div className="overflow-hidden rounded-lg border bg-card">
@@ -446,122 +546,30 @@ export function InboxPage() {
 					)}
 				</div>
 
-				{/*
-					Панель «Конструкции-цели» перенесена с мастер-ноды P9U8QH
-					Body #5: карточка $surface радиуса 12 с каймой $border,
-					паддинги 14, зазор 10, заголовок-подпись Inter 10 c
-					letterSpacing 0.5 на $textMuted. Пилюли-цели (VZPxZ и
-					родственные): радиус 9, паддинги [9,11], имя 12.5/500,
-					мета 11 $textMuted, стрелка arrow-right 14; подсветка
-					перетаскивания (jMnKo) — заливка $accentSofter с каймой
-					$accent 1.5 и стрелкой $accentStrong, индиго-подсветки нет.
-				*/}
-				{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
-				{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
-				{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
-				<aside className="flex flex-col gap-2.5 rounded-lg border bg-card p-3.5">
-					<h2 className="text-[10px] font-normal tracking-[0.5px] text-text-muted">КОНСТРУКЦИИ-ЦЕЛИ</h2>
-					{isMobile ? (
-						<>
-							<p className="text-muted-foreground text-sm">
-								мобильный режим: доступен только просмотр входящих; привязка, создание и сборка выполняются на desktop.
-							</p>
-							<ul className="flex flex-col gap-2.5">
-								{overviewQuery.data?.targets.map((target) => (
-									<li key={target.constructionId} className="rounded-[9px] border px-[11px] py-[9px]">
-										<div className="text-[12.5px] font-medium">{target.name}</div>
-										<div className="text-[11px] text-text-muted">
-											{targetStatusLabel(target.status)} · итог {target.totalPnL === null ? "—" : formatSignedAmount(target.totalPnL)}
-										</div>
-									</li>
-								))}
-							</ul>
-						</>
-					) : (
-						<>
-							{overviewQuery.data?.targets.map((target) => {
-								const highlighted = targetHighlightId === target.constructionId;
-								return (
-									<button
-										key={target.constructionId}
-										type="button"
-										onClick={() => bindToTarget(target.constructionId, selectedExecIds)}
-										onDragOver={(event) => {
-											event.preventDefault();
-											setTargetHighlightId(target.constructionId);
-										}}
-										onDragLeave={() => setTargetHighlightId((current) => (current === target.constructionId ? null : current))}
-										onDrop={(event) => {
-											event.preventDefault();
-											onDropTarget(target.constructionId);
-										}}
-										disabled={selectedCount == 0 && dragExecIds.length == 0 || busy}
-										className={cn(
-											"flex w-full items-center gap-2 rounded-[9px] border px-[11px] py-[9px] text-left",
-											highlighted ? "border-primary border-[1.5px] bg-accent-softer" : "bg-card",
-										)}
-									>
-										<span className="flex min-w-0 flex-1 flex-col gap-0.5">
-											<span className="truncate text-[12.5px] font-medium text-foreground">{target.name}</span>
-											<span className="text-[11px] text-text-muted">
-												{targetStatusLabel(target.status)} · итог {target.totalPnL === null ? "—" : formatSignedAmount(target.totalPnL)}
-											</span>
-										</span>
-										<ArrowRight
-											aria-hidden="true"
-											className={cn("size-3.5 shrink-0", highlighted ? "text-accent-strong" : "text-text-muted")}
-										/>
-									</button>
-								);
-							})}
-
-							{/* Подсказка сброса перетаскивания (JkO8D): заливка
-							    $accentSofter, подпись и курсор — $accentStrong. */}
-							{dragExecIds.length > 0 && (
-								<div className="flex items-center gap-2 rounded-[9px] bg-accent-softer px-[11px] py-2">
-									<MousePointer2 aria-hidden="true" className="size-[13px] shrink-0 text-accent-strong" />
-									<span className="text-[11.5px] text-accent-strong">
-										Отпустите, чтобы привязать {formatCount(dragExecIds.length, bindPluralForms)}
-									</span>
-								</div>
-							)}
-
-							{/* Блок выбранного (g7OSCw): «Выбрано: N …» Inter 12/600,
-							    суммарный объём 11 $textMuted; доменная форма создания
-							    конструкции — на примитивах-полях дизайн-системы. */}
-							<div className="flex flex-col gap-2 pt-2.5">
-								<div className="flex items-center gap-2">
-									<span className="text-xs font-semibold text-foreground">Выбрано: {formatCount(selectedCount, dealPluralForms)}</span>
-									<span className="h-px flex-1" />
-									<span className="text-[11px] text-text-muted">{formatSignedAmount(selectedVolume, 0)} объём</span>
-								</div>
-								<div className="flex flex-col gap-2">
-									<label className="flex flex-col gap-1 text-xs text-text-secondary">
-										Имя конструкции
-										<Input value={createName} onChange={(event) => setCreateName(event.currentTarget.value)} />
-									</label>
-									<label className="flex flex-col gap-1 text-xs text-text-secondary">
-										Капитал (USDT, опционально)
-										<Input value={createCapital} onChange={(event) => setCreateCapital(event.currentTarget.value)} />
-									</label>
-									<Button
-										variant="ghost"
-										className="h-auto w-full justify-center border px-2.5 py-[7px] text-[11.5px]"
-										onClick={onCreate}
-										disabled={selectedCount == 0 || createName.trim().length == 0 || busy}
-									>
-										Создать конструкцию из выбранного
-									</Button>
-								</div>
-							</div>
-
-							<Button variant="secondary" className="h-auto px-3 py-[7px] text-xs" onClick={() => assembleMutation.mutate()} disabled={busy}>
-								{assembleMutation.isPending ? "Сборка выполняется…" : "Собрать из Входящих"}
-							</Button>
-							{assembleMutation.data !== undefined && <AssembleStatus result={assembleMutation.data} />}
-						</>
-					)}
-				</aside>
+				{/* На мобильном просмотр целей остаётся в теле страницы:
+				    карточка-список мастера P9U8QH без перетаскивания; тяжёлые
+				    операции распределения — desktop-сценарий. Поведение Mobile
+				    (стадия 10.x) сохранено решением раунд-сверки 4.0.
+				    Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
+				    Traceability: change:rework-contextual-topbar/tasks#4.0 */}
+				{isMobile && (
+					<aside className="flex flex-col gap-2.5 rounded-lg border bg-card p-3.5">
+						<h2 className="text-[10px] font-normal tracking-[0.5px] text-text-muted">КОНСТРУКЦИИ-ЦЕЛИ</h2>
+						<p className="text-muted-foreground text-sm">
+							мобильный режим: доступен только просмотр входящих; привязка, создание и сборка выполняются на desktop.
+						</p>
+						<ul className="flex flex-col gap-2.5">
+							{overviewQuery.data?.targets.map((target) => (
+								<li key={target.constructionId} className="rounded-[9px] border px-[11px] py-[9px]">
+									<div className="text-[12.5px] font-medium">{target.name}</div>
+									<div className="text-[11px] text-text-muted">
+										{targetStatusLabel(target.status)} · итог {target.totalPnL === null ? "—" : formatSignedAmount(target.totalPnL)}
+									</div>
+								</li>
+							))}
+						</ul>
+					</aside>
+				)}
 			</div>
 
 			{errorText !== null && (
@@ -579,6 +587,150 @@ function AssembleStatus({ result }: { result: AssembleInboxResult }) {
 			Сборка завершена: создано конструкций {result.constructionsCount}, привязано сделок {result.boundCount}, осталось во Входящих{" "}
 			{result.tradesInInbox}.
 		</p>
+	);
+}
+
+/** Пропсы десктопной панели «Конструкции-цели» контекстной панели каркаса. */
+interface GoalsTargetsPanelProps {
+	/** Конструкции-цели из обзора входящих; при загрузке — undefined. */
+	readonly targets: readonly InboxTargetConstruction[] | undefined;
+	/** Выбранные сделки — управляют доступностью привязки и блока выбранного. */
+	readonly selectedExecIds: readonly string[];
+	/** Суммарный объём выбранных сделок для блока выбранного мастера. */
+	readonly selectedVolume: number;
+	/** Общая занятость мутаций разбора — блокирует действия панели. */
+	readonly busy: boolean;
+	readonly createName: string;
+	readonly onCreateNameChange: (value: string) => void;
+	readonly createCapital: string;
+	readonly onCreateCapitalChange: (value: string) => void;
+	readonly onCreate: () => void;
+	readonly bindToTarget: (constructionId: number, execIds: readonly string[]) => void;
+	readonly targetHighlightId: number | null;
+	readonly onTargetHighlightChange: React.Dispatch<React.SetStateAction<number | null>>;
+	readonly onDropTarget: (constructionId: number) => void;
+	readonly dragExecIds: readonly string[];
+}
+
+/**
+ * Панель «Конструкции-цели» рабочего стола: пилюли целей с привязкой
+ * кнопкой и drag&drop, подсказка сброса перетаскивания и блок выбранного
+ * с формой создания конструкции. Монтируется страницей в слот правой
+ * контекстной панели каркаса (useContextPanel): хром карточки задаёт
+ * панель каркаса, компонент рисует только содержимое.
+ *
+ * Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+ * Traceability: change:rework-contextual-topbar/tasks#4.0
+ */
+function GoalsTargetsPanel({
+	targets,
+	selectedExecIds,
+	selectedVolume,
+	busy,
+	createName,
+	onCreateNameChange,
+	createCapital,
+	onCreateCapitalChange,
+	onCreate,
+	bindToTarget,
+	targetHighlightId,
+	onTargetHighlightChange,
+	onDropTarget,
+	dragExecIds,
+}: GoalsTargetsPanelProps) {
+	const selectedCount = selectedExecIds.length;
+
+	return (
+		<div className="flex flex-col gap-2.5">
+			{/* Заголовок-подпись панели мастера Body #5 (m9kwpl): Inter 10,
+			    letterSpacing 0.5, $textMuted; хром карточки P9U8QH задаёт
+			    панель каркаса. */}
+			<h2 className="text-[10px] font-normal tracking-[0.5px] text-text-muted">КОНСТРУКЦИИ-ЦЕЛИ</h2>
+			{/*
+				Пилюли-цели (VZPxZ и родственные): радиус 9, паддинги [9,11],
+				имя 12.5/500, мета 11 $textMuted, стрелка arrow-right 14;
+				подсветка перетаскивания (jMnKo) — заливка $accentSofter с
+				каймой $accent 1.5 и стрелкой $accentStrong, индиго-подсветки нет.
+			*/}
+			{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+			{targets?.map((target) => {
+				const highlighted = targetHighlightId === target.constructionId;
+				return (
+					<button
+						key={target.constructionId}
+						type="button"
+						onClick={() => bindToTarget(target.constructionId, selectedExecIds)}
+						onDragOver={(event) => {
+							event.preventDefault();
+							onTargetHighlightChange(target.constructionId);
+						}}
+						onDragLeave={() => onTargetHighlightChange((current) => (current === target.constructionId ? null : current))}
+						onDrop={(event) => {
+							event.preventDefault();
+							onDropTarget(target.constructionId);
+						}}
+						disabled={selectedCount == 0 && dragExecIds.length == 0 || busy}
+						className={cn(
+							"flex w-full items-center gap-2 rounded-[9px] border px-[11px] py-[9px] text-left",
+							highlighted ? "border-primary border-[1.5px] bg-accent-softer" : "bg-card",
+						)}
+					>
+						<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+							<span className="truncate text-[12.5px] font-medium text-foreground">{target.name}</span>
+							<span className="text-[11px] text-text-muted">
+								{targetStatusLabel(target.status)} · итог {target.totalPnL === null ? "—" : formatSignedAmount(target.totalPnL)}
+							</span>
+						</span>
+						<ArrowRight
+							aria-hidden="true"
+							className={cn("size-3.5 shrink-0", highlighted ? "text-accent-strong" : "text-text-muted")}
+						/>
+					</button>
+				);
+			})}
+
+			{/* Подсказка сброса перетаскивания (JkO8D): заливка
+			    $accentSofter, подпись и курсор — $accentStrong. */}
+			{dragExecIds.length > 0 && (
+				<div className="flex items-center gap-2 rounded-[9px] bg-accent-softer px-[11px] py-2">
+					<MousePointer2 aria-hidden="true" className="size-[13px] shrink-0 text-accent-strong" />
+					<span className="text-[11.5px] text-accent-strong">
+						Отпустите, чтобы привязать {formatCount(dragExecIds.length, bindPluralForms)}
+					</span>
+				</div>
+			)}
+
+			{/* Блок выбранного (g7OSCw): «Выбрано: N …» Inter 12/600,
+			    суммарный объём 11 $textMuted; доменная форма создания
+			    конструкции — на примитивах-полях дизайн-системы. */}
+			<div className="flex flex-col gap-2 pt-2.5">
+				<div className="flex items-center gap-2">
+					<span className="text-xs font-semibold text-foreground">Выбрано: {formatCount(selectedCount, dealPluralForms)}</span>
+					<span className="h-px flex-1" />
+					<span className="text-[11px] text-text-muted">{formatSignedAmount(selectedVolume, 0)} объём</span>
+				</div>
+				<div className="flex flex-col gap-2">
+					<label className="flex flex-col gap-1 text-xs text-text-secondary">
+						Имя конструкции
+						<Input value={createName} onChange={(event) => onCreateNameChange(event.currentTarget.value)} />
+					</label>
+					<label className="flex flex-col gap-1 text-xs text-text-secondary">
+						Капитал (USDT, опционально)
+						<Input value={createCapital} onChange={(event) => onCreateCapitalChange(event.currentTarget.value)} />
+					</label>
+					<Button
+						variant="ghost"
+						className="h-auto w-full justify-center border px-2.5 py-[7px] text-[11.5px]"
+						onClick={onCreate}
+						disabled={selectedCount == 0 || createName.trim().length == 0 || busy}
+					>
+						Создать конструкцию из выбранного
+					</Button>
+				</div>
+			</div>
+		</div>
 	);
 }
 

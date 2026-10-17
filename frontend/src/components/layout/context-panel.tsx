@@ -1,13 +1,14 @@
 import { useEffect, type ReactNode } from "react";
 import { useOutletContext } from "react-router";
+import type { AppOutletContext } from "./outlet-context";
 
 /**
- * Слот контекстной правой панели (design.md D3): содержимое задаётся
- * текущим экраном через Outlet-контекст. Без регистрации панель свёрнута
- * и центр занимает всю ширину; появление контекста разворачивает панель
- * на сохранённую ширину.
+ * Слот контекстной правой панели (design.md D3–D4): содержимое задаётся
+ * текущим экраном через Outlet-контекст. Без регистрации панель и сегмент
+ * контекста топбара скрыты и центр занимает всю ширину; появление
+ * контекста разворачивает панель на сохранённую ширину.
  *
- * Контракт для страниц: хук `useContextPanel({ content, iconActions })`
+ * Контракт для страниц: хук `useContextPanel({ chipLabel, content, iconActions })`
  * регистрирует содержимое на время жизни вызывающего компонента.
  *
  * Traceability: openspec:ui/screens#requirement-app-frame-navigation
@@ -17,9 +18,17 @@ import { useOutletContext } from "react-router";
 
 /** Регистрация контекста правой панели экраном. */
 export interface ContextPanelRegistration {
+	/**
+	 * Короткое название содержимого для чипа сегмента контекста топбара
+	 * («что открыто»); клик по чипу не проектируется.
+	 *
+	 * Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+	 */
+	chipLabel: string;
 	/** Основное содержимое панели (например, краткая карточка конструкции). */
 	content: ReactNode;
-	/** Иконочные действия в колонке панели над кнопкой сворачивания. */
+	/** Иконочные действия в рейке свёрнутой панели. */
+	/** Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail */
 	iconActions?: ReactNode;
 }
 
@@ -41,10 +50,11 @@ export interface ContextPanelApi {
  * Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
  */
 export function useContextPanel(registration: ContextPanelRegistration | null): void {
-	const api = useOutletContext<ContextPanelApi | null>();
+	const api = useOutletContext<AppOutletContext | null>();
+	const panelApi = api?.contextPanel ?? null;
 
 	useEffect(() => {
-		api?.setRegistration(registration);
-		return () => api?.setRegistration(null);
-	}, [api, registration]);
+		panelApi?.setRegistration(registration);
+		return () => panelApi?.setRegistration(null);
+	}, [panelApi, registration]);
 }

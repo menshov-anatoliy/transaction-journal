@@ -191,6 +191,54 @@
 	--radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+	Узкая навигационная колонка сохраняет логотип и кнопку сворачивания внутри
+	своей границы; центр при нехватке ширины переносит статус и итог на вторую
+	строку, не обрезая их. Крошка и заголовок допускают визуальное усечение,
+	действия регистрации остаются доступными.
+	Traceability: openspec:ui/screens#requirement-app-frame-navigation
+*/
+.topbar-page-segment {
+	container: page-segment / inline-size;
+}
+
+.topbar-page-breadcrumb-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+@container page-segment (max-width: 42rem) {
+	.topbar-page-content {
+		align-content: center;
+		column-gap: 0.5rem;
+		flex-wrap: wrap;
+		row-gap: 0;
+		align-self: stretch;
+	}
+
+	.topbar-page-breadcrumb {
+		flex: 1 1 0%;
+		overflow: hidden;
+	}
+
+	.topbar-page-title {
+		flex: 0 1 auto;
+		max-width: 25%;
+	}
+
+	.topbar-page-chips {
+		flex: 0 0 auto;
+	}
+
+	.topbar-page-summary {
+		flex: 1 0 100%;
+		justify-content: flex-end;
+		margin-left: 0;
+	}
+}
+
 @theme {
 	/* Семейства темы указывают на локальные self-hosted шрифты (design.md D4):
 		--font-sans через --default-font-family Tailwind становится шрифтом

@@ -85,6 +85,43 @@ public sealed class SyncSettingsApiTests
 	}
 
 	[TestMethod]
+	[Description("Фильтр успешного запуска применяется до ограничения журнала")]
+	// Статус верхней панели должен находить последний успех, даже если более
+	// двадцати новых запусков завершились неудачно.
+	// Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+	public async Task TryIfSyncRunsFilterSuccessfulStatusBeforeLimit()
+	{
+		var runs = Enumerable.Range(1, 22)
+			.Select(id =>
+			{
+				var startedAt = new DateTimeOffset(2026, 10, 8, 9, 0, 0, TimeSpan.Zero).AddMinutes(id);
+				return new SyncRunRow(
+					Id: id,
+					StartedAt: startedAt,
+					FinishedAt: startedAt.AddMinutes(1),
+					Mode: SyncRunMode.Incremental,
+					Status: id == 1 ? SyncRunStatus.Succeeded : SyncRunStatus.Failed,
+					Error: id == 1 ? null : "failure",
+					NewExecutions: 0,
+					NewDeliveries: 0,
+					NewInstruments: 0,
+					WarningsJson: new SyncRunWarnings().ToJson());
+			})
+			.ToArray();
+		await using var factory = new SectionApiFactory(services =>
+			services.ReplaceSyncJournal(new StubSyncJournalReadModel(runs)));
+		using var client = factory.CreateClient();
+
+		var response = await client.GetAsync("/api/v1/sync/runs?limit=1&status=succeeded");
+
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+		var run = payload!["runs"]!.AsArray().Single();
+		Assert.That(run!["id"]!.GetValue<long>(), Is.EqualTo(1));
+		Assert.That(run["status"]!.GetValue<string>(), Is.EqualTo("succeeded"));
+	}
+
+	[TestMethod]
 	[Description("Опасная зона запускает пересбор и сброс состояния категории")]
 	// Опасная зона `/sync-settings` обязана уметь запускать полный пересбор и
 	// сбрасывать состояние linear/option через HTTP-контракт `/api/v1`.
@@ -201,8 +238,15 @@ internal sealed class StubBackupPolicyStore(bool enabled) : IBackupPolicyStore
 
 internal sealed class StubSyncJournalReadModel(params SyncRunRow[] rows) : ISyncJournalReadModel
 {
-	public Task<IReadOnlyList<SyncRunRow>> ReadAsync(int limit = 20, CancellationToken cancellationToken = default) =>
-		Task.FromResult<IReadOnlyList<SyncRunRow>>(rows.Take(limit).ToArray());
+	public Task<IReadOnlyList<SyncRunRow>> ReadAsync(
+		int limit = 20,
+		CancellationToken cancellationToken = default,
+		SyncRunStatus? status = null)
+	{
+		var filtered = status.HasValue ? rows.Where(row => row.Status == status.Value) : rows;
+		return Task.FromResult<IReadOnlyList<SyncRunRow>>(
+			filtered.OrderByDescending(row => row.Id).Take(limit).ToArray());
+	}
 
 	public Task<SyncRunRow?> ReadLastCompletedAsync(CancellationToken cancellationToken = default) =>
 		Task.FromResult(rows.LastOrDefault(row => row.Status != SyncRunStatus.Running));

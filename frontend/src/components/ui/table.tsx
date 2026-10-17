@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils";
 
 // Варианты плотности таблиц дизайн-системы design.pen: вместо единого p-2
 // каждый экран получает собственную геометрию ячеек (design.md D6).
-// Паддинги мастера — [вертикаль, горизонт]: comfortable 9/10 — таблица
-// конструкций (Body #1), regular 8/10 — входящие (Body #5), compact 7/6 —
-// четыре таблицы карточки конструкции (Body #2, кегль 11, заголовки 9.5/600),
+// Паддинги мастера (по фреймам design.pen, порядок [вертикаль, горизонт]) —
+// comfortable 9/8 — таблица конструкций (Body #1, ячейки pad=[9,8], шапка
+// pad=8), regular 8/10 — входящие (Body #5), compact 7/6 — четыре таблицы
+// карточки конструкции (Body #2, кегль 11, заголовки 9.5/600),
 // dense 6/12 — журнал запусков синхронизации (Body #8, кегль 11.5 — самый
 // плотный экран).
 // Traceability: change:reconcile-frontend-with-design/design#D6
@@ -19,7 +20,7 @@ export type TableDensity = "comfortable" | "regular" | "compact" | "dense";
 // Кегли ячеек (12 и 11.5) заданы требованием типографики дизайн-системы.
 // Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 export const tableDensityCellClasses: Record<TableDensity, string> = {
-	comfortable: "py-[9px] px-2.5 text-xs",
+	comfortable: "py-[9px] px-2 text-xs",
 	regular: "py-2 px-2.5 text-xs",
 	compact: "py-[7px] px-1.5 text-[11px]",
 	dense: "py-1.5 px-3 text-[11.5px]",
@@ -29,7 +30,7 @@ export const tableDensityCellClasses: Record<TableDensity, string> = {
 // Заголовки всех таблиц мастера — Inter 11/600 вторичным текстом.
 // Traceability: change:reconcile-frontend-with-design/design#D6
 export const tableDensityHeadClasses: Record<TableDensity, string> = {
-	comfortable: "py-2 px-2.5 text-[11px]",
+	comfortable: "py-2 px-2 text-[11px]",
 	regular: "py-2 px-2.5 text-[11px]",
 	compact: "py-1.5 px-1.5 text-[9.5px]",
 	dense: "py-1.5 px-3 text-[11px]",
