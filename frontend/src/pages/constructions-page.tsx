@@ -452,7 +452,11 @@ function ConstructionsMain({
 	}
 
 	return (
-		<div className="rounded-lg border">
+		// Таблица списка — карточка с белой заливкой $surface и каймой $border
+		// по фрейму «Таблица конструкций» мастера ud07u design.pen.
+		// Traceability: openspec:ui/screens#requirement-construction-list-screen
+		// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+		<div className="bg-card overflow-hidden rounded-lg border">
 			<ConstructionsTable rows={rows} selectedId={selectedId} onSelect={onSelect} onOpenInNewWindow={onOpenInNewWindow} />
 		</div>
 	);

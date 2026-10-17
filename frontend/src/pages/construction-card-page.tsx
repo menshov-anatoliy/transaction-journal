@@ -183,22 +183,31 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 				onRevert={(key) => commands.revertSynthetic.mutate(key)}
 			/>
 
-			{/* Комментарий конструкции: MD-рендер по политике §10; иконка-карандаш
-			    открывает модальный split-редактор. */}
-			<div className="flex items-start gap-2">
-				<span className="text-muted-foreground text-sm">комментарий</span>
-				<div className="min-w-0 flex-1">
-					{card.comment === null ? (
-						<span className="text-muted-foreground text-sm">—</span>
-					) : (
-						<MarkdownViewer text={card.comment} />
-					)}
+			{/* Комментарий конструкции — карточка по фрейму «Комментарий» мастера
+			    QbFRE design.pen: белая поверхность $surface с каймой $border,
+			    радиус 12, паддинги [14,18], в головке заголовок Inter 13.5 и
+			    кнопка «изменить» (паддинг [6,10]); MD-рендер по политике §10. */}
+			{/* Traceability: openspec:ui/screens#requirement-construction-detail-screen */}
+			<section data-slot="construction-comment" className="flex flex-col gap-2.5 rounded-lg border bg-card px-[18px] py-3.5">
+				<div className="flex items-center gap-2">
+					<h2 className="text-[13.5px] font-semibold text-foreground">Комментарий конструкции</h2>
+					<Button
+						variant="outline"
+						size="sm"
+						className="ml-auto h-auto px-2.5 py-1.5"
+						onClick={() => setCommentOpen(true)}
+						aria-label="изменить комментарий конструкции"
+					>
+						<Pencil aria-hidden />
+						изменить
+					</Button>
 				</div>
-				<Button variant="outline" size="sm" onClick={() => setCommentOpen(true)} aria-label="изменить комментарий конструкции">
-					<Pencil aria-hidden />
-					изменить
-				</Button>
-			</div>
+				{card.comment === null ? (
+					<p className="text-muted-foreground text-sm">—</p>
+				) : (
+					<MarkdownViewer text={card.comment} />
+				)}
+			</section>
 
 			<MarkdownEditDialog
 				open={commentOpen}
