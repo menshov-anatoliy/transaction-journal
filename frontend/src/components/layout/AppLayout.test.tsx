@@ -177,6 +177,7 @@ function renderLayout(withContext = false, overflowContext = false, headerRegist
 				{ path: "hints", element: <h1>Подсказки</h1> },
 				{ path: "inbox", element: <h1>Входящие</h1> },
 				{ path: "agent", element: <AgentPage /> },
+				{ path: "sync-settings", element: <h1>Синхронизация</h1> },
 			],
 		}],
 		{ initialEntries: ["/"] },
@@ -464,6 +465,39 @@ describe("сегмент страницы", () => {
 		expect(crumb.textContent).toBe("Журнал/Подсказки");
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Подсказки");
 		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("context-panel")).not.toBeInTheDocument();
+	});
+
+	it("экран «Синхронизация» без регистрации показывает крошку и заголовок раздела, контекст скрыт", async () => {
+		// Решения раунд-сверки 9.0 (мастер uxrZO «Экран/Синхронизация»): сегмент
+		// страницы — без регистрации: fallback appSections даёт крошку
+		// «Журнал / Синхронизация» и заголовок «Синхронизация», чипов нет;
+		// контекст страница не регистрирует, поэтому сегмент контекста и
+		// панель скрыты (прецеденты 5.0/7.0). Глобальный статус «Обновлено
+		// HH:MM» в топбаре не меняется (инвариант каркаса D5) — источник тот
+		// же fetchSyncRuns.
+		// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+		// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
+		// Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		syncApi.fetchSyncRuns.mockResolvedValue([makeSyncRun("succeeded", "2026-10-16T10:05:00")]);
+		const user = userEvent.setup();
+		renderLayout();
+
+		// Act: переход в раздел «Синхронизация».
+		await user.click(screen.getByRole("link", { name: "Синхронизация" }));
+		expect(await screen.findByRole("heading", { name: "Синхронизация" })).toBeInTheDocument();
+
+		// Assert: крошка и заголовок — из конфигурации разделов, чипов и
+		// контекстного сегмента с панелью нет, статус «Обновлено HH:MM»
+		// показывает последний успешный запуск.
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Синхронизация");
+		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Синхронизация");
+		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
+		expect(screen.getByTestId("sync-status")).toHaveTextContent(/Обновлено \d{2}:\d{2}/);
 		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
 		expect(screen.queryByTestId("context-panel")).not.toBeInTheDocument();
 	});

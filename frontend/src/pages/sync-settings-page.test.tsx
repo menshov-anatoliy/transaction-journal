@@ -113,6 +113,104 @@ describe("раздел «Синхронизация»", () => {
 		expect(screen.getByText(/Пропущенные области: option:BTC/i)).toBeInTheDocument();
 		expect(screen.getByText(/Неразрешённые инструменты:/i)).toBeInTheDocument();
 		expect(screen.getByText(/Непокрытые базовые активы: ETH/i)).toBeInTheDocument();
+		// Блок «Результат запуска» постоянный: собирается по последней записи
+		// журнала без ручного запуска (решение раунд-сверки 9.0).
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		expect(screen.getByText(/Результат запуска /)).toBeInTheDocument();
+	});
+
+	it("показывает строку последнего запуска в шапке карточки", async () => {
+		// Решения раунд-сверки 9.0: справа шапки карточки — постоянная строка
+		// «последний запуск: <статус> · <dd.MM HH:mm> · <N,N с>» по последней
+		// записи журнала; статус словами, длительность «90,0 с» (запятая).
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		renderPage();
+
+		// Assert: успешный запуск 09:00:00→09:01:30 даёт «успешно · 90,0 с».
+		expect(await screen.findByTestId("last-run-label")).toHaveTextContent(
+			/^последний запуск: успешно · \d{2}\.\d{2} \d{2}:\d{2} · 90,0 с$/,
+		);
+	});
+
+	it("скрывает строку последнего запуска и результат, когда журнал пуст", async () => {
+		// Решения раунд-сверки 9.0: без записей журнала строка «последний
+		// запуск» в шапке карточки и блок «Результат запуска» скрыты.
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		api.fetchSyncRuns.mockResolvedValue([]);
+		renderPage();
+
+		expect(await screen.findByText("Запусков синхронизации пока нет.")).toBeInTheDocument();
+		expect(screen.queryByTestId("last-run-label")).not.toBeInTheDocument();
+		expect(screen.queryByText(/Результат запуска /)).not.toBeInTheDocument();
+	});
+
+	it("показывает выполняющийся запуск без длительности и результата", async () => {
+		// Решения раунд-сверки 9.0: выполняющийся запуск — «выполняется» в
+		// строке шапки и «выполняется…» в колонке «Итог»; длительности нет,
+		// блок «Результат запуска» для незакрытого запуска скрыт.
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		api.fetchSyncRuns.mockResolvedValue([
+			{
+				id: 12,
+				startedAt: "2026-10-08T09:00:00Z",
+				finishedAt: null,
+				mode: "incremental",
+				status: "running",
+				error: null,
+				newExecutions: 0,
+				newDeliveries: 0,
+				newInstruments: 0,
+				skippedAreas: [],
+				unresolvedInstruments: [],
+				uncoveredBaseCoins: [],
+			},
+		]);
+		renderPage();
+
+		expect(await screen.findByTestId("last-run-label")).toHaveTextContent(
+			/^последний запуск: выполняется · \d{2}\.\d{2} \d{2}:\d{2}$/,
+		);
+		expect(await screen.findByText("выполняется…")).toBeInTheDocument();
+		expect(screen.queryByText(/Результат запуска /)).not.toBeInTheDocument();
+	});
+
+	it("переключает бэкап тумблером с ролью switch и клавиатурой Space", async () => {
+		// Решения раунд-сверки 9.0: «резервная копия перед синхронизацией» —
+		// тумблер Switch (role="switch", aria-checked, клавиатура Space),
+		// а не чекбокс.
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		// Настройки гонятся последовательно: старт — включено, после клика —
+		// выключено, после Space — снова включено.
+		const settingsState = (enabled: boolean) => ({
+			bybit: {
+				isConfigured: true,
+				maskedApiKey: "abcd······wxyz",
+				accountDescription: "Unified (UTA), subaccount disabled",
+				secretStorage: "файл appsettings.Local.json, секция Bybit",
+				setupHint: null,
+			},
+			backupBeforeSyncEnabled: enabled,
+			backupPolicyError: null,
+		});
+		api.fetchSyncSettings
+			.mockResolvedValueOnce(settingsState(true))
+			.mockResolvedValueOnce(settingsState(false))
+			.mockResolvedValueOnce(settingsState(true));
+		const user = userEvent.setup();
+		renderPage();
+
+		// Act/Assert: клик по тумблеру выключает опцию (проверяется первый
+		// аргумент вызова — react-query передаёт мутации служебный контекст).
+		const toggle = await screen.findByRole("switch", { name: /резервная копия перед синхронизацией/i });
+		expect(toggle).toBeChecked();
+		await user.click(toggle);
+		await waitFor(() => expect(api.setSyncBackupBeforeSync.mock.calls[0][0]).toBe(false));
+
+		// Act/Assert: Space на сфокусированном тумблере (фокус остался после
+		// клика) возвращает опцию.
+		toggle.focus();
+		await user.keyboard(" ");
+		await waitFor(() => expect(api.setSyncBackupBeforeSync.mock.calls.at(-1)?.[0]).toBe(true));
 	});
 
 	it("показывает инструкцию appsettings при незастроенном ключе", async () => {
@@ -225,28 +323,36 @@ describe("раздел «Синхронизация»", () => {
 	it("держит журнал запусков в плотности dense мастера с шапкой surface2", async () => {
 		// Arrange: журнал D91td мастера — ячейки [6,12], кегль 11.5, текст
 		// $textSecondary, шапка на $surface2, прерванный запуск — $neg.
+		// Колонки «Время | Режим | Исполнений | Итог» со словесным итогом —
+		// решение раунд-сверки 9.0 (мастер uxrZO).
 		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 		// Traceability: change:reconcile-frontend-with-design/design#D6
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
 		renderPage();
 		await screen.findByRole("table");
 
 		// Assert: плотность dense общего слоя таблиц ([6,12]·11.5).
 		expect(screen.getByRole("table")).toHaveAttribute("data-density", "dense");
 
-		// Assert: шапка журнала залита $surface2 (нода HR мастера).
+		// Assert: шапка журнала залита $surface2 (нода HR мастера) и несёт
+		// четыре колонки решения 9.0.
 		const headerRow = screen.getByText("Время").closest("tr");
 		expect(headerRow?.className).toContain("bg-surface-2");
+		expect(screen.getByText("Режим")).toBeInTheDocument();
+		expect(screen.getByText("Исполнений")).toBeInTheDocument();
+		expect(screen.getByText("Итог")).toBeInTheDocument();
 
-		// Assert: ячейки успешного запуска — 11.5/normal $textSecondary.
+		// Assert: ячейки успешного запуска — 11.5/normal $textSecondary,
+		// итог словом с длительностью «90,0 с».
 		const cell = screen.getByText("догрузка").closest("td");
 		expect(cell?.className).toContain("text-[11.5px]");
 		expect(cell?.className).toContain("text-text-secondary");
+		expect(screen.getByText("успешно · 90,0 с").closest("td")).not.toBeNull();
 
-		// Assert: прерванный запуск подсвечен токеном neg (Row:4 мастера).
-		const failedCell = screen.getByText(/прерван: сбой котировок/i).closest("td");
+		// Assert: прерванный запуск подсвечен токеном neg (Row:4 мастера),
+		// итог — «прервано: <error>».
+		const failedCell = screen.getByText(/прервано: сбой котировок/i).closest("td");
 		expect(failedCell?.className).toContain("text-neg");
-		const failedStatus = screen.getByText("ошибка").closest("td");
-		expect(failedStatus?.className).toContain("text-neg");
 	});
 
 	it("оформляет секции подключения и синхронизации геометрией мастера", async () => {
