@@ -55,7 +55,9 @@ const syncApi = vi.mocked(await import("@/lib/api/sync"));
 // названия. Футеров у панелей нет: свёрнутая панель — рейка миниатюр на
 // всю высоту, сохранённая геометрия восстанавливается между сессиями.
 // Слой сверки с design.pen: сегменты, паддинги [0,16]/[0,20] и кнопки по
-// мастер-ноде jGvOM «Каркаса» g0z20, чип — примитив StatusChip тона info.
+// мастер-ноде jGvOM «Каркаса» g0z20, чип — примитив StatusChip тона info;
+// заливки и границы сегментов (тёмные $bg над панелями, светлый $surface
+// над центром, видимые линии $divider) — по мастер-нодам SrTjW/TQ8xW/ot9ii.
 // Traceability: openspec:ui/screens#requirement-app-frame-navigation
 // Traceability: openspec:ui/screens#scenario-journal-total-always-visible
 // Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
@@ -243,18 +245,37 @@ describe("раскладка каркаса приложения", () => {
 		expect(glyph).toHaveClass("text-accent-strong");
 	});
 
-	it("несёт геометрию мастера g0z20: высота 64, сегментные паддинги, фон surface", () => {
-		renderLayout();
+	it("несёт геометрию мастера g0z20: высота 64, сегментные паддинги, заливки и границы", async () => {
+		renderLayout(true);
 
-		// Assert: топбар по мастер-ноде jGvOM «Каркаса» (высота 64, заливка
-		// $surface, нижний разделитель $divider); паддинги по сегментам:
-		// навигация/контекст [0,16] (px-4), страница [0,20] (px-5).
+		// Assert: топбар по мастер-ноде jGvOM «Каркаса»: высота 64, заливка
+		// $surface на header; заливки и границы сегментов — над панелями
+		// тёмный фон панелей ($bg → bg-background) с внутренней вертикальной
+		// и нижней линиями $divider, над центром — светлый $surface
+		// (bg-surface) с нижней линией. Нижняя граница на header отсутствует:
+		// линия живёт на сегментах и иначе удвоилась бы.
+		// Traceability: openspec:ui/screens#scenario-frame-topbar-segments-align-to-columns
 		const header = screen.getByRole("banner");
 		expect(header.className).toContain("h-16");
 		expect(header.className).toContain("bg-surface");
-		expect(header.className).toContain("border-divider");
-		expect(screen.getByTestId("topbar-segment-nav").className).toContain("px-4");
-		expect(screen.getByTestId("topbar-segment-page").className).toContain("px-5");
+		expect(header.className).not.toContain("border-b");
+		const navSegment = screen.getByTestId("topbar-segment-nav");
+		expect(navSegment.className).toContain("bg-background");
+		expect(navSegment.className).toContain("border-r");
+		expect(navSegment.className).toContain("border-b");
+		expect(navSegment.className).toContain("border-divider");
+		expect(navSegment.className).toContain("px-4");
+		const pageSegment = screen.getByTestId("topbar-segment-page");
+		expect(pageSegment.className).toContain("bg-surface");
+		expect(pageSegment.className).toContain("border-b");
+		expect(pageSegment.className).toContain("border-divider");
+		expect(pageSegment.className).toContain("px-5");
+		const contextSegment = await screen.findByTestId("topbar-segment-context");
+		expect(contextSegment.className).toContain("bg-background");
+		expect(contextSegment.className).toContain("border-l");
+		expect(contextSegment.className).toContain("border-b");
+		expect(contextSegment.className).toContain("border-divider");
+		expect(contextSegment.className).toContain("px-4");
 	});
 
 	it("показывает бренд типографикой мастера WBYbU: Inter 14/600", () => {

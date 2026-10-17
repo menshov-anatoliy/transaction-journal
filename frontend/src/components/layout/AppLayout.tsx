@@ -204,12 +204,16 @@ export function AppLayout() {
 
 	/*
 		Топбар по мастер-ноде jGvOM экрана «Каркас» g0z20: высота 64, заливка
-		$surface, нижний разделитель $divider; три сегмента по колонкам
-		каркаса (design.md D1): над левой панелью — навигация [0,16], над
-		центром — страница [0,20], над правой — контекст [0,16]. Ширины
-		сегментов навигации и контекста берутся из той же геометрии панелей,
-		что и ширины aside, — колонка топбара продолжается в панель без
-		расхождений; свёрнутая панель сжимает сегмент до 44 px.
+		$surface; три сегмента по колонкам каркаса (design.md D1): над левой
+		панелью — навигация [0,16], над центром — страница [0,20], над правой —
+		контекст [0,16]. Заливка и границы живут на сегментах, а не на header:
+		сегменты навигации и контекста залиты $bg (колонка топбара
+		продолжается в панель без расхождений, в том числе свёрнутую) и несут
+		внутреннюю вертикальную + нижнюю линии $divider, сегмент страницы залит
+		$surface с нижней линией; собственная нижняя граница header удалена,
+		чтобы сегментные линии не удваивались. Ширины сегментов навигации и
+		контекста берутся из той же геометрии панелей, что и ширины aside, —
+		свёрнутая панель сжимает сегмент до 44 px.
 	*/
 	// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 	// Traceability: openspec:ui/screens#scenario-frame-topbar-segments-align-to-columns
@@ -264,19 +268,22 @@ export function AppLayout() {
 				</header>
 			)}
 			{isMobile == false && (
-				<header className="flex h-16 shrink-0 items-stretch border-b border-divider bg-surface">
+				<header className="flex h-16 shrink-0 items-stretch bg-surface">
 					<>
 						{/*
 							Сегмент навигации (design.md D2): лого-глиф, бренд и
 							ghost-кнопка сворачивания у внутреннего (правого) края;
-							свёрнутая панель — только кнопка разворачивания.
+							свёрнутая панель — только кнопка разворачивания. Заливка
+							$bg и видимая правая+нижняя границы $divider — по мастеру
+							SrTjW: тёмная колонка над панелью продолжается в саму
+							панель, в том числе свёрнутую (рейку).
 						*/}
 						<div
 							data-slot="topbar-segment"
 							data-side="nav"
 							data-testid="topbar-segment-nav"
 							className={cn(
-								"flex shrink-0 items-center gap-2.5 px-4",
+								"flex shrink-0 items-center gap-2.5 border-r border-b border-divider bg-background px-4",
 								collapsedDesktop && "px-1",
 							)}
 							style={{ width: `${collapsedDesktop ? COLLAPSED_PANEL_WIDTH_REM : left.width}rem` }}
@@ -336,14 +343,17 @@ export function AppLayout() {
 								внутреннего (левого) края и чип короткого названия
 								содержимого; свёрнутая панель — только кнопка
 								разворачивания. Существует только при регистрации
-								контекста, иначе скрыт вместе с панелью.
+								контекста, иначе скрыт вместе с панелью. Заливка $bg и
+								видимая левая+нижняя границы $divider — по мастеру
+								ot9ii: тёмная колонка над панелью продолжается в саму
+								панель, в том числе свёрнутую (рейку).
 							*/
 							<div
 								data-slot="topbar-segment"
 								data-side="context"
 								data-testid="topbar-segment-context"
 								className={cn(
-									"flex shrink-0 items-center gap-2.5 px-4",
+									"flex shrink-0 items-center gap-2.5 border-b border-l border-divider bg-background px-4",
 									right.collapsed && "px-1",
 								)}
 								style={{ width: `${right.collapsed ? COLLAPSED_PANEL_WIDTH_REM : right.width}rem` }}
@@ -497,7 +507,9 @@ function resolveSection(pathname: string): AppSection | null {
  * далее заголовок и чипы из регистрации (без регистрации — заголовок
  * раздела); справа — инварианты каркаса: статус синхронизации и итог
  * журнала с разбивкой, видимые на любом экране. Паддинги [0,20] по
- * мастеру jGvOM.
+ * мастеру jGvOM; заливка $surface (светлая над центральным фреймом) и
+ * видимая нижняя граница $divider — по мастеру TQ8xW: нижняя линия
+ * топбара живёт на сегменте, а не на header.
  *
  * Traceability: openspec:ui/screens#scenario-frame-page-header-registration
  * Traceability: openspec:ui/screens#scenario-inbox-badge-counts-unassigned
@@ -528,7 +540,7 @@ function PageHeaderSegment({
 			data-slot="topbar-segment"
 			data-side="page"
 			data-testid="topbar-segment-page"
-			className="flex min-w-0 flex-1 items-center gap-2.5 px-5"
+			className="flex min-w-0 flex-1 items-center gap-2.5 border-b border-divider bg-surface px-5"
 		>
 			{/* Крошка «Журнал / <раздел>» — одна строка 12px $textMuted без
 				выделения хвоста раздела (мастер jGvOM). */}
