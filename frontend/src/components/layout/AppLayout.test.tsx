@@ -421,6 +421,34 @@ describe("сегмент страницы", () => {
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Конструкции");
 	});
 
+	it("экран «Подсказки» без регистрации показывает крошку и заголовок раздела, контекст скрыт", async () => {
+		// Решения раунд-сверки 5.0 (мастер h4jqRW): состав сегмента страницы
+		// «Подсказок» — крошка «Журнал / Подсказки» и заголовок «Подсказки»
+		// из fallback appSections, чипов нет; страница контекст не
+		// регистрирует, поэтому контекстная панель и сегмент контекста
+		// скрыты (чип мастера «Карточка · BTC-280324» — нестыковка мастера,
+		// design D9).
+		// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+		// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
+		// Traceability: change:rework-contextual-topbar/tasks#5.0
+		const user = userEvent.setup();
+		renderLayout();
+
+		// Act: переход в раздел «Подсказки».
+		await user.click(screen.getByRole("link", { name: "Подсказки" }));
+		expect(await screen.findByRole("heading", { name: "Подсказки" })).toBeInTheDocument();
+
+		// Assert: крошка и заголовок — из конфигурации разделов, чипов и
+		// контекстного сегмента с панелью нет.
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Подсказки");
+		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Подсказки");
+		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("context-panel")).not.toBeInTheDocument();
+	});
+
 	it("рисует крошку и заголовок типографикой мастера jGvOM", () => {
 		renderLayout();
 
