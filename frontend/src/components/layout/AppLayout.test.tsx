@@ -29,7 +29,7 @@ vi.mock("@/lib/api/sync", async (importOriginal) => ({
 // Маршрут /agent рендерит реальную страницу агента: чаты пусты, каталог
 // правил не нужен для каркаса, но запросы обязаны разрешаться.
 const agentChatApi = vi.hoisted(() => ({ listChats: vi.fn() }));
-const agentRulesApi = vi.hoisted(() => ({ listRules: vi.fn() }));
+const agentRulesApi = vi.hoisted(() => ({ listRules: vi.fn(), readRule: vi.fn() }));
 
 vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/chat/api/chat-api")>()),
@@ -39,6 +39,7 @@ vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 vi.mock("@/lib/api/agent-rules", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/agent-rules")>()),
 	listRules: agentRulesApi.listRules,
+	readRule: agentRulesApi.readRule,
 }));
 
 const inboxApi = vi.mocked(await import("@/lib/api/inbox"));
@@ -537,6 +538,7 @@ describe("сегмент страницы", () => {
 		// «Журнал / Конструкции» трёхуровневой — порядок «Журнал /
 		// Конструкции / Карточка» в одной строке.
 		// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+		// Traceability: openspec:ui/screens#scenario-frame-page-header-breadcrumb-tail
 		// Traceability: change:rework-contextual-topbar/tasks#3.0
 		const segment = screen.getByTestId("topbar-segment-page");
 		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
@@ -601,6 +603,34 @@ describe("сегмент страницы", () => {
 		// Assert: заголовок сегмента страницы — «Агент · Чат» из регистрации.
 		const segment = screen.getByTestId("topbar-segment-page");
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Агент · Чат");
+	});
+
+	it("экран «Агент · Правила» показывает заголовок «Правила» и трёхуровневую крошку", async () => {
+		// Решения раунд-сверки 8.0 (мастер ZUmpr, текст cbGOV): вкладка
+		// «Правила» регистрирует заголовок «Правила» и хвост крошки —
+		// сегмент страницы показывает «Журнал / Агент / Правила»; без
+		// выбора правила контекст не зарегистрирован, сегмент контекста и
+		// панель скрыты (в мастере сегмент ot9ii disabled).
+		// Traceability: openspec:ui/screens#scenario-frame-page-header-breadcrumb-tail
+		// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
+		// Traceability: change:rework-contextual-topbar/tasks#8.0
+		const user = userEvent.setup();
+		renderLayout();
+
+		// Act: переход в раздел «Агент» и на вкладку «Правила».
+		await user.click(screen.getByRole("link", { name: "Агент" }));
+		expect(await screen.findByRole("heading", { name: "Агент", level: 1 })).toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "Правила" }));
+
+		// Assert: крошка трёхуровневая, заголовок из регистрации шапки
+		// страницы; контекстного сегмента и панели без выбора нет.
+		const title = await screen.findByTestId("topbar-page-title");
+		expect(title).toHaveTextContent("Правила");
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Агент/Правила");
+		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("context-panel")).not.toBeInTheDocument();
 	});
 
 	it("бейдж входящих дублируется у крошки на экране «Входящие»", async () => {
@@ -713,6 +743,54 @@ describe("сегмент контекста", () => {
 		// Assert: сегмента нет, центр с инвариантами топбара остался.
 		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
 		expect(screen.getByTestId("topbar-segment-page")).toBeInTheDocument();
+	});
+
+	it("вкладка «Правила» открывает карточку правила в контекст-панели с чипом кода", async () => {
+		// Решения раунд-сверки 8.0 (мастер ZUmpr): полная карточка выбранного
+		// правила живёт в контекст-панели каркаса — чип сегмента контекста
+		// «Правило · <код правила>»; возврат на вкладку чатов снимает
+		// регистрацию — панель и сегмент контекста скрываются.
+		// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+		// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
+		// Traceability: change:rework-contextual-topbar/tasks#8.0
+		agentRulesApi.listRules.mockResolvedValue({
+			items: [{ id: "ac-01", title: "Лимиты риска на период", character: "risk-mode", clarity: "crisp", subject: "construction" }],
+			total: 1,
+		});
+		agentRulesApi.readRule.mockResolvedValue({
+			id: "ac-01",
+			title: "Лимиты риска на период",
+			character: "risk-mode",
+			clarity: "crisp",
+			subject: "construction",
+			status: "active",
+			scope: "open-constructions",
+			technique: null,
+			triggerDescription: "Убыток недели приближается к лимиту периода 1% капитала.",
+			actionDescription: "Остановить наращивание риска до конца периода.",
+			thresholds: [],
+			sources: [],
+		});
+		const user = userEvent.setup();
+		renderLayout();
+
+		// Act: раздел «Агент», вкладка «Правила», выбор карточки каталога.
+		await user.click(screen.getByRole("link", { name: "Агент" }));
+		await user.click(await screen.findByRole("button", { name: "Правила" }));
+		await user.click(await screen.findByText(/Лимиты риска на период/i, { selector: "button" }));
+
+		// Assert: сегмент контекста с чипом кода и панель с полной карточкой.
+		const segment = await screen.findByTestId("topbar-segment-context");
+		expect(within(segment).getByTestId("context-chip")).toHaveTextContent("Правило · ac-01");
+		const panel = await screen.findByTestId("context-panel");
+		expect(await within(panel).findByText(/Остановить наращивание риска до конца периода/i)).toBeInTheDocument();
+
+		// Act: возврат на вкладку чатов — регистрация снята.
+		await user.click(screen.getByRole("button", { name: "Чаты" }));
+
+		// Assert: сегмент контекста и панель скрыты.
+		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("context-panel")).not.toBeInTheDocument();
 	});
 });
 

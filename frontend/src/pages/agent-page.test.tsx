@@ -1,8 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { useMemo, useState } from "react";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ContextPanelRegistration } from "@/components/layout/context-panel";
+import type { PageHeaderRegistration } from "@/components/layout/page-header";
+import type { AppOutletContext } from "@/components/layout/outlet-context";
 import { AgentPage } from "./agent-page";
 
 // Раздел «Агент» по концепции §7: форма нового чата, списки active/completed,
@@ -50,6 +54,41 @@ vi.mock("@/lib/api/constructions", () => ({
 	fetchConstructionsOverview: constructionsApi.fetchConstructionsOverview,
 }));
 
+/*
+	Стенд регистраций сегментов каркаса: вне AppLayout хуки usePageHeader и
+	useContextPanel превращаются в no-op, поэтому стенд подменяет
+	Outlet-контекст каркаса и рендерит зарегистрированные шапку страницы и
+	контекст-панель — так страница проверяет состав регистраций без каркаса.
+*/
+// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+// Traceability: change:rework-contextual-topbar/tasks#8.0
+function TopbarRegistrationOutlet() {
+	const [header, setHeader] = useState<PageHeaderRegistration | null>(null);
+	const [context, setContext] = useState<ContextPanelRegistration | null>(null);
+	const outletContext = useMemo<AppOutletContext>(
+		() => ({
+			pageHeader: { setRegistration: setHeader },
+			contextPanel: { setRegistration: setContext },
+		}),
+		[],
+	);
+	return (
+		<>
+			<div data-testid="page-header-registration">
+				{header?.title != null && <span data-testid="registered-page-title">{header.title}</span>}
+				{header?.breadcrumbTail != null && <span data-testid="registered-crumb-tail">{header.breadcrumbTail}</span>}
+			</div>
+			<Outlet context={outletContext} />
+			{context !== null && (
+				<div data-testid="registered-context-panel" data-chip-label={context.chipLabel}>
+					{context.content}
+				</div>
+			)}
+		</>
+	);
+}
+
 function renderPage(path = "/agent") {
 	const queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -57,7 +96,11 @@ function renderPage(path = "/agent") {
 	return render(
 		<QueryClientProvider client={queryClient}>
 			<MemoryRouter initialEntries={[path]}>
-				<AgentPage />
+				<Routes>
+					<Route path="/" element={<TopbarRegistrationOutlet />}>
+						<Route path="agent" element={<AgentPage />} />
+					</Route>
+				</Routes>
 			</MemoryRouter>
 		</QueryClientProvider>,
 	);
@@ -132,23 +175,79 @@ beforeEach(() => {
 });
 
 describe("страница агента", () => {
-	// Переход из источника ответа в новом окне раскрывает именно выбранное правило.
+	// Переход из источника в новом окне раскрывает именно выбранное правило:
+	// полная карточка открывается в контекст-панели каркаса с чипом
+	// «Правило · <код правила>» (раунд-сверка 8.0, мастер ZUmpr).
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
 	// Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
 	it("TryIfRuleLinkOpensCatalogWithFullCard", async () => {
 		renderPage("/agent?rule=ac-01");
-		expect(await screen.findByText("Триггер:")).toBeInTheDocument();
-		expect(screen.getByText("лимит недели")).toBeInTheDocument();
+		const panel = await screen.findByTestId("registered-context-panel");
+		expect(panel).toHaveAttribute("data-chip-label", "Правило · ac-01");
+		expect(await within(panel).findByText("Триггер:")).toBeInTheDocument();
+		expect(within(panel).getByText("лимит недели")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Правила" })).toHaveAttribute("aria-pressed", "true");
 		expect(rulesApi.readRule).toHaveBeenCalledWith("ac-01", expect.any(AbortSignal));
 	});
 
-	// Недоступность источника по прямой ссылке не маскируется приглашением выбрать правило.
-	// Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
+	// Недоступность источника по прямой ссылке не маскируется приглашением
+	// выбрать правило: сбой чтения показывается состоянием ошибки внутри
+	// контекст-панели, чип кода при этом сохраняется.
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
 	it("ThrowOnRuleLinkReadFailure", async () => {
 		rulesApi.readRule.mockRejectedValue(new Error("HTTP 404"));
 		renderPage("/agent?rule=missing");
-		expect(await screen.findByRole("alert")).toHaveTextContent("Правило недоступно: HTTP 404");
-		expect(screen.queryByText("Выберите карточку правила в списке.")).not.toBeInTheDocument();
+		const panel = await screen.findByTestId("registered-context-panel");
+		expect(panel).toHaveAttribute("data-chip-label", "Правило · missing");
+		expect(await within(panel).findByRole("alert")).toHaveTextContent("Правило недоступно: HTTP 404");
+	});
+
+	// Шапка вкладки «Правила» (мастер ZUmpr, текст cbGOV): страница
+	// регистрирует заголовок «Правила» и хвост трёхуровневой крошки —
+	// сегмент страницы показывает «Журнал / Агент / Правила».
+	// Traceability: openspec:ui/screens#scenario-frame-page-header-breadcrumb-tail
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
+	it("TryIfRulesTabRegistersTitleAndBreadcrumbTail", async () => {
+		const user = userEvent.setup();
+		renderPage();
+
+		// Act: переход на вкладку «Правила».
+		await user.click(await screen.findByRole("button", { name: /правила/i }));
+
+		// Assert: регистрация шапки — заголовок и хвост крошки «Правила».
+		expect(await screen.findByTestId("registered-page-title")).toHaveTextContent("Правила");
+		expect(screen.getByTestId("registered-crumb-tail")).toHaveTextContent("Правила");
+	});
+
+	// Контекст-панель вкладки правил (мастер ZUmpr, сегмент ot9ii disabled
+	// без выбора): без выбора панель не регистрируется; клик по заголовку
+	// карточки каталога открывает правило в панели с чипом кода; уход на
+	// вкладку чатов снимает регистрацию — панель скрывается.
+	// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
+	it("TryIfRulesContextRegistersOnlyWithSelectionAndClearsOnChatsTab", async () => {
+		const user = userEvent.setup();
+		renderPage();
+		await user.click(await screen.findByRole("button", { name: /правила/i }));
+
+		// Assert: без выбора контекст не зарегистрирован.
+		expect(screen.queryByTestId("registered-context-panel")).not.toBeInTheDocument();
+
+		// Act: клик по заголовку карточки каталога — выбор правила.
+		await user.click(await screen.findByText(/Лимиты риска на период/i, { selector: "button" }));
+
+		// Assert: панель зарегистрирована с чипом кода и полной карточкой.
+		const panel = await screen.findByTestId("registered-context-panel");
+		expect(panel).toHaveAttribute("data-chip-label", "Правило · ac-01");
+		expect(await within(panel).findByText("Триггер:")).toBeInTheDocument();
+
+		// Act: возврат на вкладку чатов.
+		await user.click(screen.getByRole("button", { name: "Чаты" }));
+
+		// Assert: регистрация снята — панель скрыта.
+		expect(screen.queryByTestId("registered-context-panel")).not.toBeInTheDocument();
 	});
 	/*
 		Таб «Чаты» перенесён на мастера D811M (раунд-сверка 6.0): слева

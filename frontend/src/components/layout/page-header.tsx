@@ -23,11 +23,14 @@ export interface PageHeaderRegistration {
 	title?: ReactNode;
 	/**
 	 * Хвост трёхуровневой крошки страницы: «Журнал / <раздел> / <хвост>».
-	 * Вложенный маршрут (карточка конструкции) регистрирует «Карточка»,
-	 * обычные разделы поле не задают и остаются двухуровневыми.
+	 * Вложенный маршрут (карточка конструкции, вкладка «Правила» агента)
+	 * регистрирует хвост, обычные разделы поле не задают и остаются
+	 * двухуровневыми.
 	 *
 	 * Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+	 * Traceability: openspec:ui/screens#scenario-frame-page-header-breadcrumb-tail
 	 * Traceability: change:rework-contextual-topbar/tasks#3.0
+	 * Traceability: change:rework-contextual-topbar/tasks#8.0
 	 */
 	breadcrumbTail?: ReactNode;
 	/** Ключевые чипы/действия страницы рядом с заголовком. */

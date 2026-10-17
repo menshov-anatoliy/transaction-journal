@@ -11,6 +11,7 @@ import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
 import type { ChatDataSource, ChatDto } from "@/chat/types";
 import { SessionItem, SourceChip } from "@/components/design";
 import { usePageHeader } from "@/components/layout/page-header";
+import { useContextPanel } from "@/components/layout/context-panel";
 import { RuleFullCard, RuleBriefPopup, RULE_CHARACTER_LABELS, RULE_CLARITY_LABELS, RULE_SUBJECT_LABELS, ruleCharacterLabel } from "@/components/agent/rule-cards";
 import { Button } from "@/components/ui/button";
 import { listRules, readRule } from "@/lib/api/agent-rules";
@@ -139,22 +140,26 @@ export function AgentPage() {
 		? null
 		: ([...activeChats, ...completedChats].find((chat) => chat.id === selectedChatId) ?? activeChats[0] ?? completedChats[0] ?? null);
 
-	// Сегмент «страница» топбара (раунды-сверки 6.0 и 7.0): крошка
+	// Сегмент «страница» топбара (раунды-сверки 6.0–8.0): крошка раздела
 	// «Журнал / Агент» и бейдж «Входящих» приходят из fallback конфигурации
-	// разделов; заголовок вкладки чатов — динамический: при выбранном чате
+	// разделов. Вкладка чатов — динамический заголовок: при выбранном чате
 	// регистрируется «Агент · Чат», в пустом состоянии и режиме
-	// «+ Новый чат» — «Агент · Чаты». Чипы страница не задаёт (чипы
-	// мастера — артефакт копирования экрана «Конструкции»), контекст не
-	// регистрирует — контекстная панель и сегмент контекста скрыты
-	// (контекст-чип мастера «Карточка · BTC-280324» — нестыковка мастера).
-	// Вкладка «Правила» пока остаётся на fallback «Агент»: состав её шапки
-	// решит раунд-сверка 8.0.
+	// «+ Новый чат» — «Агент · Чаты»; чипы мастера — артефакт копирования
+	// экрана «Конструкции», отклонены. Вкладка правил (мастер ZUmpr)
+	// регистрирует заголовок «Правила» и хвост трёхуровневой крошки
+	// «Правила» — сегмент показывает «Журнал / Агент / Правила» (текст
+	// cbGOV мастера); чипов страницы на «Агенте» нет.
 	// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+	// Traceability: openspec:ui/screens#scenario-frame-page-header-breadcrumb-tail
 	// Traceability: change:rework-contextual-topbar/tasks#6.0
 	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
 	const hasSelectedChat = selectedChat !== null;
 	const pageHeaderRegistration = React.useMemo(
-		() => ({ title: tab === "chats" ? (hasSelectedChat ? "Агент · Чат" : "Агент · Чаты") : undefined }),
+		() =>
+			tab === "rules"
+				? { title: "Правила", breadcrumbTail: "Правила" }
+				: { title: hasSelectedChat ? "Агент · Чат" : "Агент · Чаты" },
 		[tab, hasSelectedChat],
 	);
 	usePageHeader(pageHeaderRegistration);
@@ -222,6 +227,35 @@ export function AgentPage() {
 		queryFn: ({ signal }) => readRule(openedRuleId!, signal),
 		enabled: openedRuleId !== null,
 	});
+
+	// Контекст-панель вкладки правил (раунд-сверка 8.0): полная карточка
+	// выбранного правила живёт в панели каркаса — чип сегмента контекста
+	// «Правило · <код правила>» (токены чипа задаёт сам сегмент), внутри —
+	// карточка с состояниями загрузки/ошибки. Без выбора (и на вкладке
+	// чатов) контекст не регистрируется — панель и сегмент контекста
+	// скрыты (в мастере ZUmpr сегмент ot9ii disabled).
+	// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
+	const openedRule = openedRuleQuery.data;
+	const openedRuleError = openedRuleQuery.error;
+	const rulesContextRegistration = React.useMemo(() => {
+		if (tab !== "rules" || openedRuleId === null)
+			return null;
+		return {
+			chipLabel: `Правило · ${openedRuleId}`,
+			content: openedRuleQuery.isError ? (
+				<p className="text-destructive text-sm" role="alert">
+					Правило недоступно: {openedRuleError?.message}
+				</p>
+			) : openedRule !== undefined ? (
+				<RuleFullCard rule={openedRule} detail={openedRule} />
+			) : (
+				<p className="text-muted-foreground text-sm" role="status">Чтение полной карточки правила…</p>
+			),
+		};
+	}, [tab, openedRuleId, openedRule, openedRuleQuery.isError, openedRuleError]);
+	useContextPanel(rulesContextRegistration);
 
 	/*
 		Тело карточки каталога («Карточка правила/Полная», нода Body GjcwT)
@@ -673,20 +707,24 @@ export function AgentPage() {
 					)}
 				</div>
 			) : (
-				<section className="grid grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_26rem]">
+				<section className="flex min-w-0 flex-col">
 					{/*
-						Вкладка «Правила» перенесена с мастера Body #7 (R3kdzS,
-						расхождение §3.8:1 аудита): вместо строк списка li/p-2 —
-						сетка «Каталог» (cRRlh: ряды по 2 карточки, гэп 12) с
-						«Карточкой правила/Полной» (reusable Zes7z). Поиск (Q7Ur0)
-						и фильтры-чипы (viuZI) — геометрия мастера на доменной
-						таксономии корпуса (Non-Goals: данные на месте). Поведение
-						сохранено: клик по заголовку открывает полную карточку в
-						правой панели, ссылка футера — в новом окне.
+						Вкладка «Правила» по мастерам Body #7 (R3kdzS) и ZUmpr
+						«Экран/Агент · Правила»: сетка «Каталог» (cRRlh: ряды
+						по 2 карточки, гэп 12) с «Карточкой правила/Полной»
+						(reusable Zes7z) занимает всю ширину Content — полная
+						карточка выбранного правила переехала в контекст-панель
+						каркаса (регистрация useContextPanel), внутренняя
+						колонка 26rem удалена. Поиск (Q7Ur0) и фильтры-чипы
+						(viuZI) — геометрия мастера на доменной таксономии
+						корпуса (Non-Goals: данные на месте). Поведение
+						сохранено: клик по заголовку выбирает правило (открытие
+						в панели), ссылка футера — в новом окне.
 					*/}
 					{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
 					{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
 					{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+					{/* Traceability: change:rework-contextual-topbar/tasks#8.0 */}
 					<div className="flex min-w-0 flex-col gap-3.5">
 						{/*
 							Поиск мастера Q7Ur0: $surface, кайма $border, радиус 10,
@@ -750,19 +788,6 @@ export function AgentPage() {
 									</li>
 								))}
 							</ul>
-						)}
-					</div>
-					<div>
-						{/* Прямая ссылка на источник различает загрузку, недоступность и отсутствие выбора. */}
-						{/* Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent */}
-						{openedRuleId !== null && openedRuleQuery.isError ? (
-							<p className="text-destructive text-sm" role="alert">Правило недоступно: {openedRuleQuery.error.message}</p>
-						) : openedRuleQuery.data !== undefined ? (
-							<RuleFullCard rule={openedRuleQuery.data} detail={openedRuleQuery.data} />
-						) : openedRuleId !== null ? (
-							<p className="text-muted-foreground text-sm" role="status">Чтение полной карточки правила…</p>
-						) : (
-							<p className="text-muted-foreground text-sm">Выберите карточку правила в списке.</p>
 						)}
 					</div>
 				</section>

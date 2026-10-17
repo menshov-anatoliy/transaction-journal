@@ -495,12 +495,15 @@ function PageHeaderSegment({
 				{section != null && <span>{section.label}</span>}
 				{/*
 					Хвост крошки страницы из регистрации шапки: вложенный
-					маршрут (карточка конструкции) дополняет крошку третьим
-					уровнем — «Журнал / Конструкции / Карточка» (решение
-					раунд-сверки 3.0); без регистрации крошка двухуровневая.
+					маршрут (карточка конструкции, вкладка «Правила» агента)
+					дополняет крошку третьим уровнем — «Журнал / Конструкции /
+					Карточка», «Журнал / Агент / Правила»; без регистрации
+					крошка двухуровневая.
 				*/}
 				{/* Traceability: openspec:ui/screens#scenario-frame-page-header-registration */}
+				{/* Traceability: openspec:ui/screens#scenario-frame-page-header-breadcrumb-tail */}
 				{/* Traceability: change:rework-contextual-topbar/tasks#3.0 */}
+				{/* Traceability: change:rework-contextual-topbar/tasks#8.0 */}
 				{registration?.breadcrumbTail != null && (
 					<>
 						<span aria-hidden="true">/</span>
