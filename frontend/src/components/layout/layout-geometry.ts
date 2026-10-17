@@ -18,7 +18,7 @@ export type LayoutPanel = "left" | "right";
 // разъезжалась (design.md D1).
 // Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
 // Traceability: openspec:ui/screens#scenario-frame-topbar-segments-align-to-columns
-export const COLLAPSED_LEFT_WIDTH_REM = 2.75;
+export const COLLAPSED_PANEL_WIDTH_REM = 2.75;
 
 /** Допустимый диапазон ширины панели в rem: левая 4.25–20, правая 20–40. */
 export const PANEL_WIDTH_RANGE_REM: Readonly<Record<LayoutPanel, { min: number; max: number }>> = {

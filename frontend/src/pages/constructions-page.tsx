@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { Lightbulb, Loader2, RefreshCw } from "lucide-react";
 import { useSearchParams } from "react-router";
-import type { ConstructionsOverview } from "@/lib/api/constructions";
+import type { ConstructionsOverview, ConstructionsSummary } from "@/lib/api/constructions";
 import { fetchConstructionPreview } from "@/lib/api/constructions";
 import { constructionsOverviewQueryKey, useConstructionsOverviewQuery } from "@/lib/api/constructions-overview-query";
 import { runHintsPass, type HintPassResult } from "@/lib/api/hints";
@@ -284,6 +284,22 @@ export function ConstructionsPage() {
 	);
 }
 
+/** Разбивка P&L строки итога: «реализов. … / нереализов. …» — общая для шапки раздела и мобильного блока. */
+function pnlBreakdownText(summary: ConstructionsSummary): string {
+	return `реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
+		summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
+	}`;
+}
+
+/** Подпись котировок строки итога: деградации общие с десктопной сводкой, отметку времени марок форматирует инстанс. */
+function quotesNoteText(summary: ConstructionsSummary, formatMarksTime: (marksAsOf: string) => string): string {
+	return summary.hasMarkFailure
+		? "котировки: сбой котировок"
+		: summary.marksAsOf === null
+			? "котировки: нет открытых остатков"
+			: formatMarksTime(summary.marksAsOf);
+}
+
 /*
 	Блок «Итог» мобильного экрана «Конструкции» (раунд-сверка 10.0, мастер
 	iGlhI «Экран/Mobile · Конструкции»): прозрачный блок сразу под топбаром,
@@ -306,11 +322,7 @@ function MobileSummaryBlock({ summary }: { summary: ConstructionsOverview["summa
 
 	// Котировки — сегмент строки разбивки; при норме показывается только
 	// время (формат мастера iGlhI), сбои повторяют тексты десктопной сводки.
-	const quotesNote = summary.hasMarkFailure
-		? "котировки: сбой котировок"
-		: summary.marksAsOf === null
-			? "котировки: нет открытых остатков"
-			: `котировки ${formatClock(summary.marksAsOf)}`;
+	const quotesNote = quotesNoteText(summary, (marksAsOf) => `котировки ${formatClock(marksAsOf)}`);
 
 	return (
 		<div
@@ -321,11 +333,7 @@ function MobileSummaryBlock({ summary }: { summary: ConstructionsOverview["summa
 			<p className="text-[18px] font-semibold text-accent-strong">
 				{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
 			</p>
-			<p className="text-[11px] text-text-secondary">
-				{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
-					summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
-				} · ${quotesNote}`}
-			</p>
+			<p className="text-[11px] text-text-secondary">{`${pnlBreakdownText(summary)} · ${quotesNote}`}</p>
 			<p className="text-[11px] text-text-muted">{`конструкций ${summary.constructionCount} · открыто ${summary.openCount}`}</p>
 		</div>
 	);
@@ -362,11 +370,7 @@ function ConstructionsHeader({
 	const quotesNote =
 		summary === undefined
 			? null
-			: summary.hasMarkFailure
-				? "котировки: сбой котировок"
-				: summary.marksAsOf === null
-					? "котировки: нет открытых остатков"
-					: `котировки на ${formatMoment(summary.marksAsOf)}`;
+			: quotesNoteText(summary, (marksAsOf) => `котировки на ${formatMoment(marksAsOf)}`);
 
 	return (
 		<header className="flex flex-col gap-2">
@@ -389,9 +393,7 @@ function ConstructionsHeader({
 						{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
 						{summary.totalPnL === null && summary.hasMarkFailure ? " (неполный: сбой котировок)" : ""}
 					</p>
-					<p className="text-[12.5px] text-text-secondary">{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
-						summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
-					}`}</p>
+					<p className="text-[12.5px] text-text-secondary">{pnlBreakdownText(summary)}</p>
 					{/* Котировки всегда по полному набору конструкций, независимо
 					    от области видимости списка.
 					    Traceability: openspec:ui/screens#scenario-list-scope-all-shows-archived */}

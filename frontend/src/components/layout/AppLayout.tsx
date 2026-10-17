@@ -23,7 +23,7 @@ import { formatClock } from "@/lib/format/display-time";
 import { useIsMobile } from "@/lib/use-mobile";
 import { PanelMiniatureRail } from "./PanelMiniatureRail";
 import { PanelResizer } from "./PanelResizer";
-import { COLLAPSED_LEFT_WIDTH_REM, usePanelGeometry } from "./layout-geometry";
+import { COLLAPSED_PANEL_WIDTH_REM, usePanelGeometry } from "./layout-geometry";
 import type { AppSection } from "@/config/sections";
 import type { ContextPanelApi, ContextPanelRegistration } from "./context-panel";
 import type { MobileFocusApi } from "./mobile-focus";
@@ -279,7 +279,7 @@ export function AppLayout() {
 								"flex shrink-0 items-center gap-2.5 px-4",
 								collapsedDesktop && "px-1",
 							)}
-							style={{ width: `${collapsedDesktop ? COLLAPSED_LEFT_WIDTH_REM : left.width}rem` }}
+							style={{ width: `${collapsedDesktop ? COLLAPSED_PANEL_WIDTH_REM : left.width}rem` }}
 						>
 							{collapsedDesktop ? (
 								<Button
@@ -346,7 +346,7 @@ export function AppLayout() {
 									"flex shrink-0 items-center gap-2.5 px-4",
 									right.collapsed && "px-1",
 								)}
-								style={{ width: `${right.collapsed ? COLLAPSED_LEFT_WIDTH_REM : right.width}rem` }}
+								style={{ width: `${right.collapsed ? COLLAPSED_PANEL_WIDTH_REM : right.width}rem` }}
 							>
 								{right.collapsed ? (
 									<Button
@@ -394,7 +394,7 @@ export function AppLayout() {
 						data-slot="layout-panel-left"
 						data-testid="layout-panel-left"
 						className="flex h-full min-h-0 shrink-0 border-r border-divider bg-background"
-						style={{ width: `${left.collapsed ? COLLAPSED_LEFT_WIDTH_REM : left.width}rem` }}
+						style={{ width: `${left.collapsed ? COLLAPSED_PANEL_WIDTH_REM : left.width}rem` }}
 					>
 						{/*
 							Футеров у панелей нет (design.md D6): свёрнутая панель —
@@ -441,7 +441,7 @@ export function AppLayout() {
 						data-slot="layout-panel-right"
 						data-testid="context-panel"
 						className="flex h-full min-h-0 shrink-0 border-l border-divider bg-background"
-						style={{ width: `${right.collapsed ? COLLAPSED_LEFT_WIDTH_REM : right.width}rem` }}
+						style={{ width: `${right.collapsed ? COLLAPSED_PANEL_WIDTH_REM : right.width}rem` }}
 					>
 						{right.collapsed == false && (
 							<PanelResizer
@@ -609,35 +609,23 @@ function SyncStatus({ variant = "desktop" }: { variant?: "desktop" | "mobile" })
 	}
 
 	/*
+		Один рендер с вариантами (инвариант D5: условия скрытия общие).
 		Мобильная инстанс (раунд-сверка 10.0, мастер iGlhI): иконка
-		refresh-cw 13×13 + «HH:MM» 11 normal, оба $textMuted; источник и
-		условия скрытия те же, что у десктопного статуса.
+		refresh-cw 13×13 + «HH:MM» 11 normal; десктопная — 11.5px $textMuted
+		по мастеру jGvOM (нода SyncStatus), иконка 14 и префикс «Обновлено».
 	*/
 	// Traceability: change:rework-contextual-topbar/tasks#10.0
-	if (variant === "mobile") {
-		return (
-			<div
-				data-slot="sync-status"
-				data-testid="sync-status"
-				className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-text-muted"
-				title="Последний успешный запуск синхронизации"
-			>
-				<RefreshCw aria-hidden="true" className="size-[13px]" />
-				<span>{clock}</span>
-			</div>
-		);
-	}
-
-	// 11.5px $textMuted по мастеру jGvOM (нода SyncStatus).
 	return (
 		<div
 			data-slot="sync-status"
 			data-testid="sync-status"
-			className="flex items-center gap-1.5 whitespace-nowrap text-[11.5px] text-text-muted"
+			className={`flex items-center gap-1.5 whitespace-nowrap ${
+				variant === "mobile" ? "text-[11px]" : "text-[11.5px]"
+			} text-text-muted`}
 			title="Последний успешный запуск синхронизации"
 		>
-			<RefreshCw aria-hidden="true" className="size-3.5" />
-			<span>{`Обновлено ${clock}`}</span>
+			<RefreshCw aria-hidden="true" className={variant === "mobile" ? "size-[13px]" : "size-3.5"} />
+			<span>{variant === "mobile" ? clock : `Обновлено ${clock}`}</span>
 		</div>
 	);
 }

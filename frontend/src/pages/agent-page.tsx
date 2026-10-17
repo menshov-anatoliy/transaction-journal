@@ -62,6 +62,25 @@ const initialRuleFilters: RuleFilters = {
 	search: "",
 };
 
+/*
+	Действия над чатом и состояния их мутаций (завершение, продолжение,
+	удаление): одна группа вместо расползающихся по пропсам троек
+	обработчиков и pending-флагов — фокус-панель берёт её целиком,
+	список сессий использует только завершение и продолжение.
+*/
+type ChatActions = {
+	/** Завершает активный чат. */
+	onComplete: (chatId: string) => void;
+	/** Возобновляет завершённый чат. */
+	onResume: (chatId: string) => void;
+	/** Удаляет выбранный чат. */
+	onDelete: () => void;
+	completePending: boolean;
+	resumePending: boolean;
+	deletePending: boolean;
+	deleteError: Error | null;
+};
+
 const RULE_CHARACTER_ORDER = Object.keys(RULE_CHARACTER_LABELS);
 
 /*
@@ -197,6 +216,18 @@ export function AgentPage() {
 				setSelectedChatId(null);
 			},
 		});
+	};
+
+	// Действия чата с состояниями мутаций одним объектом: один и тот же
+	// набор уходит в фокус-панель и в оба списка сессий.
+	const chatActions: ChatActions = {
+		onComplete: (chatId) => completeMutation.mutate(chatId),
+		onResume: (chatId) => resumeMutation.mutate(chatId),
+		onDelete: deleteSelectedChat,
+		completePending: completeMutation.isPending,
+		resumePending: resumeMutation.isPending,
+		deletePending: deleteMutation.isPending,
+		deleteError: deleteMutation.isError ? deleteMutation.error : null,
 	};
 	const createMutation = useMutation({
 		mutationFn: (payload: { text: string; chatModel: string; constructionId: string | null; sources: readonly ChatDataSource[] }) =>
@@ -358,13 +389,7 @@ export function AgentPage() {
 				<ChatFocusPane
 					chat={selectedChat}
 					onBack={onChatBack}
-					onComplete={(chatId) => completeMutation.mutate(chatId)}
-					onResume={(chatId) => resumeMutation.mutate(chatId)}
-					onDelete={deleteSelectedChat}
-					completePending={completeMutation.isPending}
-					resumePending={resumeMutation.isPending}
-					deletePending={deleteMutation.isPending}
-					deleteError={deleteMutation.isError ? deleteMutation.error : null}
+					actions={chatActions}
 					onRuleHover={setHoveredRuleId}
 					onRuleLeave={() => setHoveredRuleId(null)}
 					onRuleOpen={setOpenedRuleId}
@@ -462,8 +487,7 @@ export function AgentPage() {
 								constructionNames={constructionNames}
 								selectedChatId={selectedChat?.id ?? null}
 								onSelect={onSelectSession}
-								onComplete={(chatId) => completeMutation.mutate(chatId)}
-								onResume={(chatId) => resumeMutation.mutate(chatId)}
+								actions={chatActions}
 							/>
 						</section>
 					)}
@@ -753,8 +777,7 @@ export function AgentPage() {
 										onSelectSession(chatId);
 										setMobileHistoryOpen(false);
 									}}
-									onComplete={(chatId) => completeMutation.mutate(chatId)}
-									onResume={(chatId) => resumeMutation.mutate(chatId)}
+									actions={chatActions}
 								/>
 							</aside>
 						</div>
@@ -870,13 +893,7 @@ export function AgentPage() {
 function ChatFocusPane({
 	chat,
 	onBack,
-	onComplete,
-	onResume,
-	onDelete,
-	completePending,
-	resumePending,
-	deletePending,
-	deleteError,
+	actions,
 	onRuleHover,
 	onRuleLeave,
 	onRuleOpen,
@@ -884,13 +901,7 @@ function ChatFocusPane({
 }: {
 	chat: ChatDto;
 	onBack: () => void;
-	onComplete: (chatId: string) => void;
-	onResume: (chatId: string) => void;
-	onDelete: () => void;
-	completePending: boolean;
-	resumePending: boolean;
-	deletePending: boolean;
-	deleteError: Error | null;
+	actions: ChatActions;
 	onRuleHover: (ruleId: string) => void;
 	onRuleLeave: () => void;
 	onRuleOpen: (ruleId: string) => void;
@@ -956,11 +967,11 @@ function ChatFocusPane({
 								<button
 									type="button"
 									role="menuitem"
-									disabled={completePending}
+									disabled={actions.completePending}
 									className="hover:bg-surface-2 flex cursor-pointer items-center rounded-sm px-2.5 py-2 text-left text-xs text-text-secondary outline-none"
 									onClick={() => {
 										setMenuOpen(false);
-										onComplete(chat.id);
+										actions.onComplete(chat.id);
 									}}
 								>
 									Завершить
@@ -969,11 +980,11 @@ function ChatFocusPane({
 								<button
 									type="button"
 									role="menuitem"
-									disabled={resumePending}
+									disabled={actions.resumePending}
 									className="hover:bg-surface-2 flex cursor-pointer items-center rounded-sm px-2.5 py-2 text-left text-xs text-text-secondary outline-none"
 									onClick={() => {
 										setMenuOpen(false);
-										onResume(chat.id);
+										actions.onResume(chat.id);
 									}}
 								>
 									Продолжить
@@ -982,11 +993,11 @@ function ChatFocusPane({
 							<button
 								type="button"
 								role="menuitem"
-								disabled={deletePending}
+								disabled={actions.deletePending}
 								className="hover:bg-neg/15 flex cursor-pointer items-center rounded-sm px-2.5 py-2 text-left text-xs text-neg outline-none"
 								onClick={() => {
 									setMenuOpen(false);
-									onDelete();
+									actions.onDelete();
 								}}
 							>
 								Удалить
@@ -995,9 +1006,9 @@ function ChatFocusPane({
 					)}
 				</div>
 			</header>
-			{deleteError !== null && (
+			{actions.deleteError !== null && (
 				<p className="text-destructive shrink-0 px-3.5 pt-2 text-sm" role="alert">
-					Не удалось удалить чат: {deleteError.message}
+					Не удалось удалить чат: {actions.deleteError.message}
 				</p>
 			)}
 			<div className="relative min-h-0 flex-1 overflow-hidden">
@@ -1043,8 +1054,7 @@ function SessionsList({
 	constructionNames,
 	selectedChatId,
 	onSelect,
-	onComplete,
-	onResume,
+	actions,
 }: {
 	createPending: boolean;
 	onCreateChat: () => void;
@@ -1057,8 +1067,8 @@ function SessionsList({
 	constructionNames: ReadonlyMap<string, string>;
 	selectedChatId: string | null;
 	onSelect: (chatId: string) => void;
-	onComplete: (chatId: string) => void;
-	onResume: (chatId: string) => void;
+	/** Завершение и продолжение из общей группы действий чата. */
+	actions: Pick<ChatActions, "onComplete" | "onResume">;
 }) {
 	return (
 		<>
@@ -1075,7 +1085,7 @@ function SessionsList({
 						constructionNames={constructionNames}
 						selectedChatId={selectedChatId}
 						onSelect={onSelect}
-						onToggle={onComplete}
+						onToggle={actions.onComplete}
 						actionLabel="Завершить чат"
 					/>
 					<ChatList
@@ -1084,7 +1094,7 @@ function SessionsList({
 						constructionNames={constructionNames}
 						selectedChatId={selectedChatId}
 						onSelect={onSelect}
-						onToggle={onResume}
+						onToggle={actions.onResume}
 						actionLabel="Продолжить чат"
 					/>
 				</>

@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-	COLLAPSED_LEFT_WIDTH_REM,
+	COLLAPSED_PANEL_WIDTH_REM,
 	PANEL_WIDTH_RANGE_REM,
 	clampPanelWidth,
 	readPanelGeometry,
@@ -27,7 +27,7 @@ beforeEach(() => {
 // Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
 // Traceability: openspec:ui/screens#scenario-frame-topbar-segments-align-to-columns
 it("свёрнутая панель занимает только ширину рейки миниатюр", () => {
-	expect(COLLAPSED_LEFT_WIDTH_REM).toBe(2.75);
+	expect(COLLAPSED_PANEL_WIDTH_REM).toBe(2.75);
 	expect(PANEL_WIDTH_RANGE_REM.left.min).toBe(4.25);
 });
 
