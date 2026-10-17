@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConstructionsOverview, ConstructionsSummary } from "@/lib/api/constructions";
 import type { SyncRunJournalEntry } from "@/lib/api/sync";
 import { appSections } from "@/config/sections";
+import { AgentPage } from "@/pages/agent-page";
 import { AppLayout } from "./AppLayout";
 import { useContextPanel } from "./context-panel";
 import { usePageHeader } from "./page-header";
@@ -23,6 +24,21 @@ vi.mock("@/lib/api/constructions", async (importOriginal) => ({
 vi.mock("@/lib/api/sync", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/sync")>()),
 	fetchSyncRuns: vi.fn(),
+}));
+
+// Маршрут /agent рендерит реальную страницу агента: чаты пусты, каталог
+// правил не нужен для каркаса, но запросы обязаны разрешаться.
+const agentChatApi = vi.hoisted(() => ({ listChats: vi.fn() }));
+const agentRulesApi = vi.hoisted(() => ({ listRules: vi.fn() }));
+
+vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/chat/api/chat-api")>()),
+	listChats: agentChatApi.listChats,
+}));
+
+vi.mock("@/lib/api/agent-rules", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/agent-rules")>()),
+	listRules: agentRulesApi.listRules,
 }));
 
 const inboxApi = vi.mocked(await import("@/lib/api/inbox"));
@@ -61,6 +77,8 @@ beforeEach(() => {
 	inboxApi.fetchInboxCount.mockResolvedValue(0);
 	constructionsApi.fetchConstructionsOverview.mockResolvedValue(makeOverview());
 	syncApi.fetchSyncRuns.mockResolvedValue([]);
+	agentChatApi.listChats.mockResolvedValue([]);
+	agentRulesApi.listRules.mockResolvedValue({ items: [], total: 0 });
 	setViewport(1280);
 });
 
@@ -158,6 +176,7 @@ function renderLayout(withContext = false, overflowContext = false, headerRegist
 				},
 				{ path: "hints", element: <h1>Подсказки</h1> },
 				{ path: "inbox", element: <h1>Входящие</h1> },
+				{ path: "agent", element: <AgentPage /> },
 			],
 		}],
 		{ initialEntries: ["/"] },
@@ -488,6 +507,32 @@ describe("сегмент страницы", () => {
 		const segment = screen.getByTestId("topbar-segment-page");
 		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
 		expect(crumb.textContent).toBe("Журнал/Конструкции/Карточка");
+	});
+
+	it("экран «Агент» показывает зарегистрированный заголовок «Агент · Чаты»", async () => {
+		// Решения раунд-сверки 6.0 (мастер D811M): крошка «Журнал / Агент» и
+		// бейдж «Входящих» — fallback из appSections; заголовок «Агент · Чаты»
+		// регистрирует страница через usePageHeader; чипов нет, контекст
+		// страница не регистрирует — сегмент контекста и панель скрыты.
+		// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+		// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
+		// Traceability: change:rework-contextual-topbar/tasks#6.0
+		const user = userEvent.setup();
+		renderLayout();
+
+		// Act: переход в раздел «Агент».
+		await user.click(screen.getByRole("link", { name: "Агент" }));
+		expect(await screen.findByRole("heading", { name: "Агент", level: 1 })).toBeInTheDocument();
+
+		// Assert: крошка из конфигурации разделов, заголовок «Агент · Чаты»
+		// из регистрации страницы; чипов и контекстного сегмента нет.
+		const segment = screen.getByTestId("topbar-segment-page");
+		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
+		expect(crumb.textContent).toBe("Журнал/Агент");
+		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Агент · Чаты");
+		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("context-panel")).not.toBeInTheDocument();
 	});
 
 	it("бейдж входящих дублируется у крошки на экране «Входящие»", async () => {

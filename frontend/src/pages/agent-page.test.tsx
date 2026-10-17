@@ -146,7 +146,14 @@ describe("страница агента", () => {
 		expect(await screen.findByRole("alert")).toHaveTextContent("Правило недоступно: HTTP 404");
 		expect(screen.queryByText("Выберите карточку правила в списке.")).not.toBeInTheDocument();
 	});
-	it("показывает форму нового чата, историю и каталог правил", async () => {
+	/*
+		Таб «Чаты» перенесён на мастера D811M (раунд-сверка 6.0): слева
+		«Список сессий» с «+ Новый чат» и капсами, в центре пустое состояние
+		с композером; вкладка правил сохраняет каталог Body #7.
+	*/
+	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("показывает список сессий, композер и каталог правил", async () => {
 		const user = userEvent.setup();
 		renderPage();
 
@@ -155,8 +162,10 @@ describe("страница агента", () => {
 		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 		expect(screen.getByRole("heading", { name: "Агент", level: 1 }).className).toContain("page-title");
 		expect(screen.getByLabelText(/модель/i)).toBeInTheDocument();
-		// Источники данных — группа чипов вместо чекбокс-филдсета (§3.4:2).
+		// Источники данных — группа чипов в тулбаре композера.
 		expect(screen.getByRole("group", { name: /источники данных/i })).toBeInTheDocument();
+		// Кнопка «+ Новый чат» — primary левой колонки «Список сессий».
+		expect(screen.getByRole("button", { name: "+ Новый чат" })).toBeInTheDocument();
 		expect(await screen.findByRole("heading", { name: /активные/i })).toBeInTheDocument();
 		expect(screen.getAllByRole("button", { name: /завершить чат/i }).length).toBeGreaterThan(0);
 		await user.click(screen.getByRole("button", { name: /правила/i }));
@@ -531,21 +540,26 @@ describe("страница агента", () => {
 	});
 
 	/*
-		Форма нового чата оформлена по мастеру Body #3 — композеру Z14sH
-		(§3.4:2 аудита): модель — чип aF5vM (surface2, радиус 8, [5,10],
-		12/500, шеврон), привязка конструкции — чип bCLlQ (infoSoft, пилюля
-		999, иконка link $info), сообщение — 13.5/normal c плейсхолдером
-		мастера; источники — чипы «Чип/Источник» с переключением выбора.
+		Композер нового чата оформлен по мастеру Z14sH «Композер/Агент»
+		(перенос D811M, раунд-сверка 6.0): модель — чип aF5vM (surface2,
+		радиус 8, [5,10], 12/500, шеврон), привязка конструкции — чип bCLlQ
+		(infoSoft, пилюля 999, иконка link $info), сообщение — многострочное
+		поле 13.5/normal с плейсхолдером мастера; источники — чипы
+		«Чип/Источник» с переключением выбора.
 	*/
 	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
-	// Traceability: change:reconcile-frontend-with-design/design#D2
-	it("оформляет поля формы нового чата по дизайн-нодам композера Body #3", async () => {
-		// Act: рендер вкладки «Чаты» с формой по умолчанию.
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("оформляет композер по дизайн-нодам мастера Z14sH", async () => {
+		// Act: рендер вкладки «Чаты»; композер доступен в режиме нового чата.
+		const user = userEvent.setup();
 		renderPage();
+		await screen.findByText(/последнее сообщение:/i);
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+		await screen.findByText("Чем помочь с журналом?");
 
 		// Assert: модель — чип aF5vM: surface2, радиус 8, паддинги [5,10], 12/500.
-		const modelSelect = await screen.findByLabelText(/модель/i);
+		const modelSelect = screen.getByLabelText(/модель/i);
 		expect(modelSelect.className).toContain("bg-secondary");
 		expect(modelSelect.className).toContain("rounded-sm");
 		expect(modelSelect.className).toContain("px-2.5");
@@ -568,12 +582,16 @@ describe("страница агента", () => {
 	});
 
 	it("переключает выбор источников чипами вместо чекбоксов (§3.4:2)", async () => {
-		// Arrange: чат-источники по умолчанию выбраны (инвариант справочника).
+		// Arrange: чат-источники по умолчанию выбраны (инвариант справочника);
+		// композер доступен в режиме нового чата — автовыбор чата гасим.
 		const user = userEvent.setup();
 		renderPage();
+		await screen.findByText(/последнее сообщение:/i);
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+		await screen.findByText("Чем помочь с журналом?");
 
 		// Assert: все три чипа — toggle-кнопки в выбранном состоянии мастера.
-		const journalChip = await screen.findByRole("button", { name: "журнал" });
+		const journalChip = screen.getByRole("button", { name: "журнал" });
 		const rulesChip = screen.getByRole("button", { name: "корпус правил" });
 		const marketChip = screen.getByRole("button", { name: "рынок Bybit" });
 		for (const chip of [journalChip, rulesChip, marketChip]) {
@@ -594,14 +612,99 @@ describe("страница агента", () => {
 		expect(marketChip.getAttribute("aria-pressed")).toBe("true");
 	});
 
+	/*
+		Пустое состояние мастера D811M (раунд-сверка 6.0): титул «Чем помочь
+		с журналом?», подпись и три карточки-подсказки с примерами мастера;
+		клик по карточке вставляет текст примера в поле композера (без
+		кавычек-ёлочек) и возвращает в него фокус.
+	*/
+	// Traceability: openspec:ui/design-system#requirement-design-composer-multiline
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("TryIfHintCardInsertsExampleIntoComposerAndFocuses", async () => {
+		// Arrange: автовыбор чата закрывает центр лентой; переход в режим
+		// нового чата открывает пустое состояние с композером.
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByText(/последнее сообщение:/i);
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+
+		// Assert: пустое состояние мастера видно, пока чат не выбран.
+		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.getByText("Новый чат создаётся первым сообщением — параметры можно задать сразу.")).toBeInTheDocument();
+		expect(screen.getByText("«Какой риск у железной бабочки ETH?»")).toBeInTheDocument();
+		expect(screen.getByText("«Что говорит корпус про голый стреддл?»")).toBeInTheDocument();
+		expect(screen.getByText("«Покажи премии опционов BTC на неделю»")).toBeInTheDocument();
+
+		// Act: клик по карточке-подсказке «Спросите о конструкции».
+		await user.click(screen.getByRole("button", { name: /Спросите о конструкции/ }));
+
+		// Assert: пример вставлен в поле композера, поле в фокусе.
+		const messageField = screen.getByLabelText(/первое сообщение/i);
+		expect(messageField).toHaveValue("Какой риск у железной бабочки ETH?");
+		expect(messageField).toHaveFocus();
+	});
+
+	/*
+		«+ Новый чат» (раунд-сверка 6.0): сбрасывает выбранный чат — центр
+		показывает пустое состояние даже при наличии чатов — и очищает
+		композер: поле, привязку к конструкции, источники к дефолту.
+	*/
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("TryIfNewChatButtonResetsSelectionAndComposerToEmptyState", async () => {
+		const user = userEvent.setup();
+		renderPage();
+
+		// Arrange: активный чат автовыбран (в центре его шапка); переходим
+		// в режим нового чата и заполняем композер, рынок снят из источников.
+		expect(await screen.findByText(/последнее сообщение:/i)).toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+		await screen.findByText("Чем помочь с журналом?");
+		await user.type(screen.getByLabelText(/первое сообщение/i), "Черновик сообщения");
+		await user.type(screen.getByLabelText(/опциональная конструкция/i), "7");
+		await user.click(screen.getByRole("button", { name: "рынок Bybit" }));
+		expect(screen.getByRole("button", { name: "рынок Bybit" }).getAttribute("aria-pressed")).toBe("false");
+
+		// Act: сброс кнопкой «+ Новый чат» левой колонки.
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+
+		// Assert: пустое состояние вместо ленты чата, композер очищен,
+		// источники вернулись к дефолту.
+		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.queryByText(/последнее сообщение:/i)).not.toBeInTheDocument();
+		expect(screen.getByLabelText(/первое сообщение/i)).toHaveValue("");
+		expect(screen.getByLabelText(/опциональная конструкция/i)).toHaveValue("");
+		expect(screen.getByRole("button", { name: "рынок Bybit" }).getAttribute("aria-pressed")).toBe("true");
+	});
+
+	/*
+		Таб «Сводки · soon» — disabled-заглушка мастера D811M (TabSummaries,
+		12.5/normal $textMuted): раздел сводок не реализован, клик невозможен.
+	*/
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("TryIfSummariesTabIsDisabledPlaceholder", () => {
+		renderPage();
+
+		// Assert: таб недоступен и стилизован цветом заглушки мастера.
+		const summariesTab = screen.getByRole("button", { name: "Сводки · soon" });
+		expect(summariesTab).toBeDisabled();
+		expect(summariesTab.className).toContain("text-text-muted");
+		expect(summariesTab.className).toContain("cursor-not-allowed");
+	});
+
 	it("создаёт чат первым сообщением с выбранными источниками", async () => {
 		const user = userEvent.setup();
 		renderPage();
 
-		// Act: снимаем рынок Bybit, вводим сообщение и создаём чат.
-		await user.click(await screen.findByRole("button", { name: "рынок Bybit" }));
+		// Arrange: композер пустого состояния после «+ Новый чат».
+		await screen.findByText(/последнее сообщение:/i);
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+		await screen.findByText("Чем помочь с журналом?");
+
+		// Act: снимаем рынок Bybit, вводим сообщение и отправляем композер
+		// кнопкой-стрелкой мастера Z14sH.
+		await user.click(screen.getByRole("button", { name: "рынок Bybit" }));
 		await user.type(screen.getByLabelText(/первое сообщение/i), "Собери сводку по лимитам");
-		await user.click(screen.getByRole("button", { name: /создать чат/i }));
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
 
 		// Assert: в создании чата остались только выбранные источники.
 		await waitFor(() =>
