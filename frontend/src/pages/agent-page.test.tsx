@@ -15,6 +15,7 @@ const chatsApi = vi.hoisted(() => ({
 	createChat: vi.fn(),
 	completeChat: vi.fn(),
 	resumeChat: vi.fn(),
+	deleteChat: vi.fn(),
 	listChatMessages: vi.fn(),
 	streamChatReply: vi.fn(),
 }));
@@ -35,6 +36,7 @@ vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 	createChat: chatsApi.createChat,
 	completeChat: chatsApi.completeChat,
 	resumeChat: chatsApi.resumeChat,
+	deleteChat: chatsApi.deleteChat,
 	listChatMessages: chatsApi.listChatMessages,
 	streamChatReply: chatsApi.streamChatReply,
 }));
@@ -81,6 +83,7 @@ beforeEach(() => {
 						params: { model: "GLM-5.3", constructionId: null, sources: ["journal", "rules-corpus", "market"] },
 						createdAt: "2026-10-08T09:00:00Z",
 						lastMessageAt: "2026-10-08T09:01:00Z",
+						firstMessagePreview: "Оцени риск стреддла",
 					},
 				]
 			: [],
@@ -95,6 +98,7 @@ beforeEach(() => {
 	});
 	chatsApi.completeChat.mockResolvedValue({ id: "chat-1", status: "completed" });
 	chatsApi.resumeChat.mockResolvedValue({ id: "chat-1", status: "active" });
+	chatsApi.deleteChat.mockResolvedValue(undefined);
 
 	rulesApi.listRules.mockResolvedValue({
 		items: [
@@ -554,7 +558,7 @@ describe("страница агента", () => {
 		// Act: рендер вкладки «Чаты»; композер доступен в режиме нового чата.
 		const user = userEvent.setup();
 		renderPage();
-		await screen.findByText(/последнее сообщение:/i);
+		await screen.findByRole("heading", { name: "Оцени риск стреддла" });
 		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
 		await screen.findByText("Чем помочь с журналом?");
 
@@ -586,7 +590,7 @@ describe("страница агента", () => {
 		// композер доступен в режиме нового чата — автовыбор чата гасим.
 		const user = userEvent.setup();
 		renderPage();
-		await screen.findByText(/последнее сообщение:/i);
+		await screen.findByRole("heading", { name: "Оцени риск стреддла" });
 		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
 		await screen.findByText("Чем помочь с журналом?");
 
@@ -625,7 +629,7 @@ describe("страница агента", () => {
 		// нового чата открывает пустое состояние с композером.
 		const user = userEvent.setup();
 		renderPage();
-		await screen.findByText(/последнее сообщение:/i);
+		await screen.findByRole("heading", { name: "Оцени риск стреддла" });
 		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
 
 		// Assert: пустое состояние мастера видно, пока чат не выбран.
@@ -656,7 +660,7 @@ describe("страница агента", () => {
 
 		// Arrange: активный чат автовыбран (в центре его шапка); переходим
 		// в режим нового чата и заполняем композер, рынок снят из источников.
-		expect(await screen.findByText(/последнее сообщение:/i)).toBeInTheDocument();
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
 		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
 		await screen.findByText("Чем помочь с журналом?");
 		await user.type(screen.getByLabelText(/первое сообщение/i), "Черновик сообщения");
@@ -667,13 +671,220 @@ describe("страница агента", () => {
 		// Act: сброс кнопкой «+ Новый чат» левой колонки.
 		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
 
-		// Assert: пустое состояние вместо ленты чата, композер очищен,
+		// Assert: пустое состояние вместо шапки чата, композер очищен,
 		// источники вернулись к дефолту.
 		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
-		expect(screen.queryByText(/последнее сообщение:/i)).not.toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "Оцени риск стреддла" })).not.toBeInTheDocument();
 		expect(screen.getByLabelText(/первое сообщение/i)).toHaveValue("");
 		expect(screen.getByLabelText(/опциональная конструкция/i)).toHaveValue("");
 		expect(screen.getByRole("button", { name: "рынок Bybit" }).getAttribute("aria-pressed")).toBe("true");
+	});
+
+	/*
+		Шапка активного чата — мастер qhGhn «ChatHead» (QP9Co, раунд-сверка
+		7.0): колонка «Чат» прозрачна — карточная рамка секции убрана;
+		заголовок — превью первого сообщения владельца
+		(ChatDto.firstMessagePreview) 16/600 $textPrimary с truncate; рядом
+		чип модели — инстанс «Чип/Источник» fYadZ (высота 25, заливка
+		$surface, радиус 999, кайма $border, иконка cpu 12 $textSecondary,
+		подпись 12/normal $textPrimary); строки «последнее сообщение» нет.
+		Кнопки — ghost r8 12/500: «Завершить» ($textSecondary) и «Удалить»
+		(текст $neg #D14B41).
+	*/
+	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("оформляет шапку активного чата по мастеру ChatHead qhGhn", async () => {
+		renderPage();
+
+		// Assert: заголовок шапки — превью первого сообщения владельца,
+		// 16/600 $textPrimary с truncate; прежняя строка «последнее
+		// сообщение» удалена, карточной рамки у колонки «Чат» нет.
+		const title = await screen.findByRole("heading", { name: "Оцени риск стреддла" });
+		expect(title.className).toContain("text-[16px]");
+		expect(title.className).toContain("font-semibold");
+		expect(title.className).toContain("text-text-primary");
+		expect(title.className).toContain("truncate");
+		expect(screen.queryByText(/последнее сообщение:/i)).not.toBeInTheDocument();
+		const chatColumn = title.closest("section") as HTMLElement;
+		expect(chatColumn.className).not.toContain("border");
+		expect(chatColumn.className).not.toContain("rounded-lg");
+
+		// Assert: чип модели — инстанс fYadZ: высота 25, заливка $surface,
+		// радиус 999, кайма $border, подпись 12/normal $textPrimary.
+		const chip = screen.getByText("GLM-5.3", { selector: "[data-slot='source-chip']" });
+		expect(chip.className).toContain("h-[25px]");
+		expect(chip.className).toContain("rounded-full");
+		expect(chip.className).toContain("border");
+		expect(chip.className).toContain("bg-card");
+		expect(chip.className).toContain("text-[12px]");
+		expect(chip.className).toContain("text-text-primary");
+
+		// Assert: иконка чипа — cpu 12 $textSecondary.
+		const icon = chip.querySelector("svg");
+		expect(icon?.getAttribute("class")).toContain("lucide-cpu");
+		expect(icon?.getAttribute("class")).toContain("text-text-secondary");
+
+		// Assert: кнопки ghost r8 12/500 — «Завершить» ($textSecondary)
+		// и «Удалить» (текст $neg #D14B41); у активного чата «Продолжить» нет.
+		const finish = screen.getByRole("button", { name: "Завершить" });
+		expect(finish.className).toContain("rounded-[8px]");
+		expect(finish.className).toContain("text-[12px]");
+		expect(finish.className).toContain("font-medium");
+		expect(finish.className).toContain("text-text-secondary");
+		const remove = screen.getByRole("button", { name: "Удалить" });
+		expect(remove.className).toContain("rounded-[8px]");
+		expect(remove.className).toContain("text-[12px]");
+		expect(remove.className).toContain("text-neg");
+		expect(screen.queryByRole("button", { name: "Продолжить" })).not.toBeInTheDocument();
+	});
+
+	/*
+		Удаление выбранного чата (раунд-сверка 7.0): кнопка «Удалить» шапки
+		вызывает существующий chat-api deleteChat; после успеха списки
+		перечитываются, а выбор переходит на следующий чат.
+	*/
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("TryIfDeleteButtonRemovesChatAndSelectsNextSession", async () => {
+		// Arrange: два активных чата; автовыбор — свежий chat-1; после
+		// удаления список активных перечитывается уже без chat-1.
+		const chat1 = {
+			id: "chat-1",
+			status: "active",
+			params: { model: "GLM-5.3", constructionId: null, sources: ["journal"] },
+			createdAt: "2026-10-08T09:00:00Z",
+			lastMessageAt: "2026-10-08T10:00:00Z",
+			firstMessagePreview: "Оцени риск стреддла",
+		};
+		const chat2 = {
+			id: "chat-2",
+			status: "active",
+			params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+			createdAt: "2026-10-08T08:00:00Z",
+			lastMessageAt: "2026-10-08T09:00:00Z",
+			firstMessagePreview: "Разбери сделку",
+		};
+		const active: Array<typeof chat1> = [chat1, chat2];
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active" ? active : [],
+		);
+		chatsApi.deleteChat.mockImplementation(async () => {
+			active.splice(active.indexOf(chat1), 1);
+			return undefined;
+		});
+		const user = userEvent.setup();
+		renderPage();
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+
+		// Act: кнопка «Удалить» шапки выбранного чата.
+		await user.click(screen.getByRole("button", { name: "Удалить" }));
+
+		// Assert: вызвался deleteChat существующего chat-api; после
+		// перечитывания списков выбран следующий чат.
+		await waitFor(() => {
+			expect(chatsApi.deleteChat).toHaveBeenCalledWith("chat-1");
+		});
+		expect(await screen.findByRole("heading", { name: "Разбери сделку" })).toBeInTheDocument();
+	});
+
+	/*
+		Удаление последнего чата оставляет пустое состояние (раунд-сверка
+		7.0): если после удаления чатов не осталось, центр показывает
+		«Чем помочь с журналом?» вместо шапки удалённого чата.
+	*/
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("TryIfDeletingLastChatShowsEmptyState", async () => {
+		// Arrange: один активный чат; после удаления список активных пуст.
+		const chat1 = {
+			id: "chat-1",
+			status: "active",
+			params: { model: "GLM-5.3", constructionId: null, sources: ["journal"] },
+			createdAt: "2026-10-08T09:00:00Z",
+			lastMessageAt: "2026-10-08T10:00:00Z",
+			firstMessagePreview: "Оцени риск стреддла",
+		};
+		const active: Array<typeof chat1> = [chat1];
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active" ? active : [],
+		);
+		chatsApi.deleteChat.mockImplementation(async () => {
+			active.length = 0;
+			return undefined;
+		});
+		const user = userEvent.setup();
+		renderPage();
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+
+		// Act: удаление единственного чата кнопкой шапки.
+		await user.click(screen.getByRole("button", { name: "Удалить" }));
+
+		// Assert: вместо шапки удалённого чата — пустое состояние.
+		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "Оцени риск стреддла" })).not.toBeInTheDocument();
+	});
+
+	/*
+		Сбой удаления не теряет выбранный чат: ошибка команды показывается
+		баннером под шапкой, чат остаётся выбранным до успеха команды.
+	*/
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("ThrowOnDeleteChatFailureKeepsChatSelectedWithAlert", async () => {
+		// Arrange: команда удаления отклоняется.
+		chatsApi.deleteChat.mockRejectedValue(new Error("HTTP 500"));
+		const user = userEvent.setup();
+		renderPage();
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+
+		// Act: попытка удаления выбранного чата.
+		await user.click(screen.getByRole("button", { name: "Удалить" }));
+
+		// Assert: баннер сбоя с человекочитаемой причиной; чат остался выбран.
+		expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось удалить чат: HTTP 500");
+		expect(screen.getByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+	});
+
+	/*
+		Шапка завершённого чата (раунд-сверка 7.0): вместо «Завершить» —
+		«Продолжить», кнопка «Удалить» сохраняется; продолжение вызывает
+		существующую команду resumeChat.
+	*/
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("TryIfCompletedChatHeaderShowsResumeAndDelete", async () => {
+		// Arrange: активных чатов нет — автовыбор берёт первый завершённый.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? []
+				: [
+						{
+							id: "chat-done",
+							status: "completed",
+							params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-07T08:00:00Z",
+							lastMessageAt: "2026-10-07T09:00:00Z",
+							firstMessagePreview: "Итоги недели",
+						},
+					],
+		);
+		const user = userEvent.setup();
+		renderPage();
+
+		// Assert: в шапке завершённого чата «Продолжить» и «Удалить»,
+		// кнопки «Завершить» нет.
+		expect(await screen.findByRole("heading", { name: "Итоги недели" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Продолжить" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Удалить" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Завершить" })).not.toBeInTheDocument();
+
+		// Act: продолжение завершённого чата кнопкой шапки.
+		await user.click(screen.getByRole("button", { name: "Продолжить" }));
+
+		// Assert: команда продолжения ушла выбранному чату.
+		await waitFor(() => {
+			expect(chatsApi.resumeChat).toHaveBeenCalledWith("chat-done");
+		});
 	});
 
 	/*
@@ -696,7 +907,7 @@ describe("страница агента", () => {
 		renderPage();
 
 		// Arrange: композер пустого состояния после «+ Новый чат».
-		await screen.findByText(/последнее сообщение:/i);
+		await screen.findByRole("heading", { name: "Оцени риск стреддла" });
 		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
 		await screen.findByText("Чем помочь с журналом?");
 

@@ -510,13 +510,16 @@ describe("сегмент страницы", () => {
 	});
 
 	it("экран «Агент» показывает зарегистрированный заголовок «Агент · Чаты»", async () => {
-		// Решения раунд-сверки 6.0 (мастер D811M): крошка «Журнал / Агент» и
-		// бейдж «Входящих» — fallback из appSections; заголовок «Агент · Чаты»
-		// регистрирует страница через usePageHeader; чипов нет, контекст
-		// страница не регистрирует — сегмент контекста и панель скрыты.
+		// Решения раунд-сверок 6.0 и 7.0 (мастера D811M/qhGhn): крошка
+		// «Журнал / Агент» и бейдж «Входящих» — fallback из appSections;
+		// заголовок вкладки чатов динамический — в пустом состоянии (и в
+		// режиме «+ Новый чат») регистрируется «Агент · Чаты»; чипов нет,
+		// контекст страница не регистрирует — сегмент контекста и панель
+		// скрыты.
 		// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
 		// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
 		// Traceability: change:rework-contextual-topbar/tasks#6.0
+		// Traceability: change:rework-contextual-topbar/tasks#7.0
 		const user = userEvent.setup();
 		renderLayout();
 
@@ -533,6 +536,37 @@ describe("сегмент страницы", () => {
 		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
 		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
 		expect(screen.queryByTestId("context-panel")).not.toBeInTheDocument();
+	});
+
+	it("экран «Агент» показывает «Агент · Чат» при выбранном чате", async () => {
+		// Решения раунд-сверки 7.0 (мастер qhGhn): заголовок топбара
+		// динамический — при выбранном чате страница регистрирует
+		// «Агент · Чат»; пустое состояние и режим «+ Новый чат» остаются
+		// на «Агент · Чаты».
+		// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+		// Traceability: change:rework-contextual-topbar/tasks#7.0
+		// Arrange: один активный чат — страница автовыбирает его, центр
+		// показывает шапку чата вместо пустого состояния.
+		agentChatApi.listChats.mockResolvedValue([
+			{
+				id: "chat-1",
+				status: "active",
+				params: { model: "GLM-5.3", constructionId: null, sources: ["journal", "rules-corpus", "market"] },
+				createdAt: "2026-10-08T09:00:00Z",
+				lastMessageAt: "2026-10-08T09:01:00Z",
+				firstMessagePreview: "Оцени риск стреддла",
+			},
+		]);
+		const user = userEvent.setup();
+		renderLayout();
+
+		// Act: переход в раздел «Агент».
+		await user.click(screen.getByRole("link", { name: "Агент" }));
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+
+		// Assert: заголовок сегмента страницы — «Агент · Чат» из регистрации.
+		const segment = screen.getByTestId("topbar-segment-page");
+		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Агент · Чат");
 	});
 
 	it("бейдж входящих дублируется у крошки на экране «Входящие»", async () => {

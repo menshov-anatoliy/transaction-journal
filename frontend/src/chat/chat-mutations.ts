@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { completeChat, resumeChat } from "@/chat/api/chat-api";
+import { completeChat, deleteChat, resumeChat } from "@/chat/api/chat-api";
 import { chatKeys } from "@/chat/chat-queries";
 
 /**
@@ -30,6 +30,24 @@ export function useResumeChatMutation() {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: (chatId: string) => resumeChat(chatId),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+		},
+	});
+}
+
+/**
+ * Мутация удаления чата: явное действие владельца, стирающее чат целиком
+ * вместе с сообщениями и без корзины. После успеха списки активных и
+ * завершённых чатов перечитываются; выбор следующего чата или пустого
+ * состояния остаётся заботой страницы — у мутации его нет.
+ */
+// Traceability: openspec:chats/history#scenario-chat-hard-delete
+// Traceability: change:rework-contextual-topbar/tasks#7.0
+export function useDeleteChatMutation() {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (chatId: string) => deleteChat(chatId),
 		onSuccess: () => {
 			void queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
 		},

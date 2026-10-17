@@ -1,10 +1,10 @@
-import { ArrowUp, BookOpen, Bot, ChevronDown, Globe, LineChart, Link, Plus, Search, type LucideIcon } from "lucide-react";
+import { ArrowUp, BookOpen, Bot, ChevronDown, Cpu, Globe, LineChart, Link, Plus, Search, type LucideIcon } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AgentChatThread } from "@/chat/components/agent-chat-thread";
 import { chatParamsFromForm, CHAT_DATA_SOURCES, DEFAULT_CHAT_MODEL } from "@/chat/chat-params";
-import { useCompleteChatMutation, useResumeChatMutation } from "@/chat/chat-mutations";
+import { useCompleteChatMutation, useDeleteChatMutation, useResumeChatMutation } from "@/chat/chat-mutations";
 import { chatKeys } from "@/chat/chat-queries";
 import { createChat, listChats } from "@/chat/api/chat-api";
 import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
@@ -27,7 +27,12 @@ import { cn } from "@/lib/utils";
 // Таб «Чаты» перенесён на мастера D811M «Экран/Агент · Чаты (новый)»
 // (change rework-contextual-topbar): список сессий — левая колонка,
 // пустое состояние с композером — центр, disabled-таб «Сводки · soon».
+// Шапка активного чата — мастер qhGhn «Экран/Агент · Чат активный»
+// (раунд-сверка 7.0): прозрачная колонка «Чат», заголовок-превью
+// первого сообщения владельца с чипом модели, ghost-кнопки
+// «Завершить»/«Продолжить» и «Удалить»; заголовок топбара динамический.
 // Traceability: change:rework-contextual-topbar/tasks#6.0
+// Traceability: change:rework-contextual-topbar/tasks#7.0
 // Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
 // Traceability: doc:.wf-research/ui-concept/concept.md#12-карта-переноса-по-инвентаризации-129
 // На мобильном чат и история работают через drawer-компоновку.
@@ -109,20 +114,6 @@ export function AgentPage() {
 	// Поле композера: карточки-подсказки вставляют пример и возвращают сюда фокус.
 	const composerInputRef = React.useRef<HTMLTextAreaElement | null>(null);
 
-	// Сегмент «страница» топбара (раунд-сверка 6.0): крошка «Журнал / Агент»
-	// и бейдж «Входящих» приходят из fallback конфигурации разделов, а
-	// заголовок «Агент · Чаты» регистрирует вкладка чатов; чипы страница
-	// не задаёт, контекст не регистрирует — контекстная панель и сегмент
-	// контекста скрыты. Вкладка «Правила» пока остаётся на fallback
-	// «Агент»: состав её шапки решит раунд-сверка 8.0.
-	// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
-	// Traceability: change:rework-contextual-topbar/tasks#6.0
-	const pageHeaderRegistration = React.useMemo(
-		() => ({ title: tab === "chats" ? "Агент · Чаты" : undefined }),
-		[tab],
-	);
-	usePageHeader(pageHeaderRegistration);
-
 	const activeQuery = useQuery({ queryKey: chatKeys.list("active"), queryFn: ({ signal }) => listChats("active", signal) });
 	const completedQuery = useQuery({ queryKey: chatKeys.list("completed"), queryFn: ({ signal }) => listChats("completed", signal) });
 
@@ -148,8 +139,47 @@ export function AgentPage() {
 		? null
 		: ([...activeChats, ...completedChats].find((chat) => chat.id === selectedChatId) ?? activeChats[0] ?? completedChats[0] ?? null);
 
+	// Сегмент «страница» топбара (раунды-сверки 6.0 и 7.0): крошка
+	// «Журнал / Агент» и бейдж «Входящих» приходят из fallback конфигурации
+	// разделов; заголовок вкладки чатов — динамический: при выбранном чате
+	// регистрируется «Агент · Чат», в пустом состоянии и режиме
+	// «+ Новый чат» — «Агент · Чаты». Чипы страница не задаёт (чипы
+	// мастера — артефакт копирования экрана «Конструкции»), контекст не
+	// регистрирует — контекстная панель и сегмент контекста скрыты
+	// (контекст-чип мастера «Карточка · BTC-280324» — нестыковка мастера).
+	// Вкладка «Правила» пока остаётся на fallback «Агент»: состав её шапки
+	// решит раунд-сверка 8.0.
+	// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	const hasSelectedChat = selectedChat !== null;
+	const pageHeaderRegistration = React.useMemo(
+		() => ({ title: tab === "chats" ? (hasSelectedChat ? "Агент · Чат" : "Агент · Чаты") : undefined }),
+		[tab, hasSelectedChat],
+	);
+	usePageHeader(pageHeaderRegistration);
+
 	const completeMutation = useCompleteChatMutation();
 	const resumeMutation = useResumeChatMutation();
+	// Удаление выбранного чата (раунд-сверка 7.0): команда deleteChat
+	// существующего chat-api; списки перечитывает сама мутация, а страница
+	// после перечитывания гасит выбор — fallback выбирает следующий чат
+	// либо показывает пустое состояние, если чатов не осталось.
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	const deleteMutation = useDeleteChatMutation();
+	const deleteSelectedChat = () => {
+		if (selectedChat === null)
+			return;
+		deleteMutation.mutate(selectedChat.id, {
+			onSuccess: async () => {
+				// Сброс выбора после перечитывания списков: иначе fallback
+				// успел бы выбрать удалённый чат из устаревшего кэша.
+				await queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+				setSelectedChatId(null);
+			},
+		});
+	};
 	const createMutation = useMutation({
 		mutationFn: (payload: { text: string; chatModel: string; constructionId: string | null; sources: readonly ChatDataSource[] }) =>
 			createChat(
@@ -513,36 +543,72 @@ export function AgentPage() {
 								</section>
 							</div>
 						) : (
-							<section className="flex min-h-[30rem] min-w-0 flex-col rounded-lg border p-3">
-								<header className="mb-2 flex items-center justify-between gap-2 border-b pb-2">
-									<div className="min-w-0">
-										<p className="truncate text-sm font-semibold">{selectedChat.params.model}</p>
-										<p className="text-muted-foreground text-xs">
-											последнее сообщение: {formatMoment(selectedChat.lastMessageAt)}
-										</p>
-									</div>
-									<div className="flex gap-2">
-										{selectedChat.status === "active" ? (
-											<Button
-												size="sm"
-												variant="outline"
-												disabled={completeMutation.isPending}
-												onClick={() => completeMutation.mutate(selectedChat.id)}
-											>
-												Завершить чат
-											</Button>
-										) : (
-											<Button
-												size="sm"
-												variant="outline"
-												disabled={resumeMutation.isPending}
-												onClick={() => resumeMutation.mutate(selectedChat.id)}
-											>
-												Продолжить чат
-											</Button>
-										)}
-									</div>
+							<section className="flex min-h-[30rem] min-w-0 flex-col gap-3.5">
+								{/*
+									Шапка активного чата — мастер qhGhn «ChatHead»
+									(QP9Co, раунд-сверка 7.0): колонка «Чат» прозрачна —
+									карточная рамка секции убрана; строка высотой 27 без
+									бордера и разделителя, gap 10. Заголовок — превью
+									первого сообщения владельца (ChatDto.firstMessagePreview)
+									16/600 $textPrimary с truncate; рядом чип модели —
+									инстанс «Чип/Источник» fYadZ (высота 25, заливка
+									$surface, радиус 999, кайма $border, иконка cpu 12
+									$textSecondary, подпись 12/normal $textPrimary);
+									строка «последнее сообщение: …» из прежней шапки
+									удалена. Кнопки — инстансы «Кнопка/Ghost» Kn5dY
+									(радиус 8, 12/500, паддинги [6,10]): «Завершить»
+									с $textSecondary и «Удалить» с текстом $neg
+									(#D14B41); у завершённого чата вместо «Завершить» —
+									«Продолжить».
+								*/}
+								{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+								{/* Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens */}
+								{/* Traceability: change:rework-contextual-topbar/tasks#7.0 */}
+								<header className="flex h-[27px] shrink-0 items-center gap-2.5">
+									<h2 className="min-w-0 truncate text-[16px] font-semibold text-text-primary">{selectedChat.firstMessagePreview}</h2>
+									<SourceChip icon={Cpu} iconClassName="text-text-secondary" className="h-[25px] shrink-0 text-text-primary">
+										{selectedChat.params.model}
+									</SourceChip>
+									<span aria-hidden="true" className="h-px min-w-4 flex-1" />
+									{selectedChat.status === "active" ? (
+										<Button
+											type="button"
+											variant="ghost"
+											disabled={completeMutation.isPending}
+											className="h-auto rounded-[8px] px-2.5 py-[6px] text-[12px]"
+											onClick={() => completeMutation.mutate(selectedChat.id)}
+										>
+											Завершить
+										</Button>
+									) : (
+										<Button
+											type="button"
+											variant="ghost"
+											disabled={resumeMutation.isPending}
+											className="h-auto rounded-[8px] px-2.5 py-[6px] text-[12px]"
+											onClick={() => resumeMutation.mutate(selectedChat.id)}
+										>
+											Продолжить
+										</Button>
+									)}
+									{/* Кнопка/Danger в контуре Ghost: текст $neg (#D14B41),
+										hover-заливка neg/15 выведена из пары дизайн-ноды
+										(состояний hover в макете нет). */}
+									<Button
+										type="button"
+										variant="ghost"
+										disabled={deleteMutation.isPending}
+										className="h-auto rounded-[8px] px-2.5 py-[6px] text-[12px] text-neg hover:bg-neg/15 hover:text-neg focus-visible:ring-neg/20"
+										onClick={deleteSelectedChat}
+									>
+										Удалить
+									</Button>
 								</header>
+								{deleteMutation.isError && (
+									<p className="text-destructive text-sm" role="alert">
+										Не удалось удалить чат: {deleteMutation.error.message}
+									</p>
+								)}
 								<div className="relative min-h-0 flex-1 overflow-hidden">
 									<ChatThreadPane
 										chat={selectedChat}
