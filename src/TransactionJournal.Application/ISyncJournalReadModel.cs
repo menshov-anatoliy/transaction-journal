@@ -17,7 +17,11 @@ public interface ISyncJournalReadModel
 	/// <summary>Читает последние запуски синхронизации новыми сверху.</summary>
 	/// <param name="limit">Максимальное число строк журнала.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	Task<IReadOnlyList<SyncRunRow>> ReadAsync(int limit = 20, CancellationToken cancellationToken = default);
+	/// <param name="status">Необязательный фильтр статуса до ограничения выборки.</param>
+	Task<IReadOnlyList<SyncRunRow>> ReadAsync(
+		int limit = 20,
+		CancellationToken cancellationToken = default,
+		SyncRunStatus? status = null);
 
 	/// <summary>
 	/// Читает последний завершённый запуск — успешный или прерванный — с его

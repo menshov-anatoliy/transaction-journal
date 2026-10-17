@@ -136,6 +136,10 @@ export function AppLayout() {
 
 	const collapsedDesktop = left.collapsed && isMobile == false;
 	const contextVisible = registration != null && isMobile == false;
+	// Шапка навигации использует фактическую ширину панели, чтобы бренд не вытеснял кнопку.
+	// Traceability: openspec:ui/screens#requirement-app-frame-navigation
+	const compactNavHeader = left.width <= 8;
+	const narrowNavHeader = left.width <= 12;
 
 	// Крошка сегмента страницы всегда из конфигурации разделов; для
 	// вложенных маршрутов (карточка конструкции) срабатывает префиксный
@@ -283,24 +287,30 @@ export function AppLayout() {
 							data-side="nav"
 							data-testid="topbar-segment-nav"
 							className={cn(
-								"flex shrink-0 items-center gap-2.5 border-r border-b border-divider bg-background px-4",
-								collapsedDesktop && "px-1",
+								"topbar-nav-segment flex shrink-0 items-center border-r border-b border-divider bg-background",
 							)}
 							style={{ width: `${collapsedDesktop ? COLLAPSED_PANEL_WIDTH_REM : left.width}rem` }}
 						>
-							{collapsedDesktop ? (
-								<Button
-									variant="ghost"
-									size="icon"
-									className="size-7"
-									aria-label="Развернуть панель навигации"
-									title="Развернуть панель навигации"
-									onClick={() => left.setCollapsed(false)}
-								>
-									<PanelLeftOpen className="size-[15px]" />
-								</Button>
-							) : (
-								<>
+							<div
+								className={cn(
+									"topbar-nav-content flex w-full min-w-0 items-center",
+									compactNavHeader ? "gap-1 px-1" : narrowNavHeader ? "gap-1 px-2" : "gap-2.5 px-4",
+									collapsedDesktop && "px-1",
+								)}
+							>
+								{collapsedDesktop ? (
+									<Button
+										variant="ghost"
+										size="icon"
+										className="size-7"
+										aria-label="Развернуть панель навигации"
+										title="Развернуть панель навигации"
+										onClick={() => left.setCollapsed(false)}
+									>
+										<PanelLeftOpen className="size-[15px]" />
+									</Button>
+								) : (
+									<>
 									{/*
 										Лого-глиф по ноде srW2i мастера: квадрат 26×26
 										(size-6.5) с радиусом 8 на паре
@@ -313,24 +323,36 @@ export function AppLayout() {
 										data-slot="topbar-logo"
 										data-testid="topbar-logo"
 										aria-hidden="true"
-										className="flex size-6.5 shrink-0 items-center justify-center rounded-sm bg-accent-soft"
+										className={cn(
+											"flex shrink-0 items-center justify-center rounded-sm bg-accent-soft",
+											compactNavHeader ? "size-5" : "size-6.5",
+										)}
 									>
 										<LineChart className="size-3.5 text-accent-strong" />
 									</span>
-									<span className="whitespace-nowrap text-sm font-semibold">Журнал Bybit</span>
+									<span
+										className={cn(
+											"topbar-nav-brand whitespace-nowrap text-sm font-semibold",
+											narrowNavHeader && "min-w-0 flex-1 truncate",
+											compactNavHeader && "hidden",
+										)}
+									>
+										Журнал Bybit
+									</span>
 									{/* Кнопки панелей — 28×28 по мастеру J8C2x/z6tizc, иконка 15 сохраняется. */}
 									<Button
 										variant="ghost"
 										size="icon"
-										className="ml-auto size-7"
+										className="topbar-nav-collapse ml-auto size-7"
 										aria-label="Свернуть панель навигации"
 										title="Свернуть панель навигации"
 										onClick={() => left.setCollapsed(true)}
 									>
 										<PanelLeftClose className="size-[15px]" />
 									</Button>
-								</>
-							)}
+									</>
+								)}
+							</div>
 						</div>
 						<PageHeaderSegment
 							section={section}
@@ -540,17 +562,15 @@ function PageHeaderSegment({
 			data-slot="topbar-segment"
 			data-side="page"
 			data-testid="topbar-segment-page"
-			className="flex min-w-0 flex-1 items-center gap-2.5 border-b border-divider bg-surface px-5"
+			className="topbar-page-segment flex min-w-0 flex-1 items-center gap-2.5 border-b border-divider bg-surface px-5"
 		>
+			<div className="topbar-page-content flex min-w-0 flex-1 items-center gap-2.5">
 			{/* Крошка «Журнал / <раздел>» — одна строка 12px $textMuted без
 				выделения хвоста раздела (мастер jGvOM). */}
 			<nav
 				aria-label="Крошка раздела"
-				className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-text-muted"
+				className="topbar-page-breadcrumb flex min-w-0 shrink items-center gap-1.5 whitespace-nowrap text-xs text-text-muted"
 			>
-				<span>Журнал</span>
-				<span aria-hidden="true">/</span>
-				{section != null && <span>{section.label}</span>}
 				{/*
 					Хвост крошки страницы из регистрации шапки: вложенный
 					маршрут (карточка конструкции, вкладка «Правила» агента)
@@ -562,12 +582,9 @@ function PageHeaderSegment({
 				{/* Traceability: openspec:ui/screens#scenario-frame-page-header-breadcrumb-tail */}
 				{/* Traceability: change:rework-contextual-topbar/tasks#3.0 */}
 				{/* Traceability: change:rework-contextual-topbar/tasks#8.0 */}
-				{registration?.breadcrumbTail != null && (
-					<>
-						<span aria-hidden="true">/</span>
-						<span>{registration.breadcrumbTail}</span>
-					</>
-				)}
+				<span className="topbar-page-breadcrumb-label">
+					{["Журнал", section?.label, registration?.breadcrumbTail].filter(Boolean).join(" / ")}
+				</span>
 				{badgeVisible && (
 					<span
 						data-slot="topbar-badge"
@@ -580,16 +597,20 @@ function PageHeaderSegment({
 			</nav>
 			{/* Заголовок страницы — 15/600 по мастеру jGvOM. */}
 			{title != null && (
-				<span data-testid="topbar-page-title" className="truncate text-[15px] font-semibold text-text-primary">
+				<span
+					data-testid="topbar-page-title"
+					className="topbar-page-title min-w-0 truncate text-[15px] font-semibold text-text-primary"
+				>
 					{title}
 				</span>
 			)}
 			{registration?.chips != null && (
-				<div className="flex min-w-0 items-center gap-2">{registration.chips}</div>
+				<div className="topbar-page-chips flex min-w-0 items-center gap-2">{registration.chips}</div>
 			)}
-			<div className="ml-auto flex shrink-0 items-center gap-2.5">
+			<div className="topbar-page-summary ml-auto flex shrink-0 items-center gap-2.5">
 				<SyncStatus />
 				<JournalTotal />
+			</div>
 			</div>
 		</div>
 	);
@@ -609,14 +630,14 @@ function PageHeaderSegment({
  */
 function SyncStatus({ variant = "desktop" }: { variant?: "desktop" | "mobile" }) {
 	const runsQuery = useQuery({
-		queryKey: ["sync-runs"],
-		queryFn: () => fetchSyncRuns(20),
+		queryKey: ["sync-runs", "last-successful"],
+		queryFn: () => fetchSyncRuns(1, "succeeded"),
 	});
-	// Последний успешный запуск — первая запись со статусом succeeded в
-	// журнале «новыми сверху»; момент обновления — завершение запуска.
-	const lastSucceeded = runsQuery.data?.find((run) => run.status === "succeeded");
+	// Сервер отбирает успешные записи до лимита, поэтому старый успех не теряется
+	// за серией новых неудачных запусков.
+	const lastSucceeded = runsQuery.data?.[0];
 	const clock = formatClock(lastSucceeded?.finishedAt ?? lastSucceeded?.startedAt);
-	if (clock === null) {
+	if (runsQuery.isError || clock === null) {
 		return null;
 	}
 

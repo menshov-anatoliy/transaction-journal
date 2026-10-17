@@ -199,11 +199,12 @@ function renderLayout(withContext = false, overflowContext = false, headerRegist
 		}],
 		{ initialEntries: ["/"] },
 	);
-	return render(
+	const view = render(
 		<QueryClientProvider client={queryClient}>
 			<RouterProvider router={router} />
 		</QueryClientProvider>,
 	);
+	return { ...view, queryClient };
 }
 
 function setViewport(width: number) {
@@ -227,6 +228,21 @@ describe("раскладка каркаса приложения", () => {
 		const segment = screen.getByTestId("topbar-segment-nav");
 		expect(within(segment).getByText("Журнал Bybit")).toBeInTheDocument();
 		expect(within(segment).getByTestId("topbar-logo")).toBeInTheDocument();
+	});
+
+	it("уплотняет навигационный сегмент минимальной ширины, сохраняя кнопку внутри", () => {
+		// При минимальной ширине бренд уступает место кнопке, лого остаётся компактным.
+		// Traceability: openspec:ui/screens#requirement-app-frame-navigation
+		localStorage.setItem("tj.layout.left", JSON.stringify({ width: 4.25, collapsed: false }));
+		renderLayout();
+
+		const segment = screen.getByTestId("topbar-segment-nav");
+		const logo = within(segment).getByTestId("topbar-logo");
+		const collapse = within(segment).getByRole("button", { name: "Свернуть панель навигации" });
+		const brand = within(segment).getByText("Журнал Bybit");
+		expect(logo.className).toContain("size-5");
+		expect(brand).toHaveClass("hidden");
+		expect(collapse.parentElement).toHaveClass("topbar-nav-content", "gap-1", "px-1");
 	});
 
 	it("рисует лого-глиф токенами мастера srW2i", () => {
@@ -264,7 +280,7 @@ describe("раскладка каркаса приложения", () => {
 		expect(navSegment.className).toContain("border-r");
 		expect(navSegment.className).toContain("border-b");
 		expect(navSegment.className).toContain("border-divider");
-		expect(navSegment.className).toContain("px-4");
+		expect(navSegment.querySelector(".topbar-nav-content")).toHaveClass("px-4");
 		const pageSegment = screen.getByTestId("topbar-segment-page");
 		expect(pageSegment.className).toContain("bg-surface");
 		expect(pageSegment.className).toContain("border-b");
@@ -446,7 +462,7 @@ describe("мобильный топбар", () => {
 		["пустом журнале", []],
 		[
 			"журнале без успешных запусков",
-			[makeSyncRun("failed", "2026-10-16T12:00:00"), makeSyncRun("running", null)],
+			[],
 		],
 	];
 	it.each(hiddenStatusCases)("скрывает статус при %s без деградации топбара", async (_case, runs) => {
@@ -616,7 +632,7 @@ describe("сегмент страницы", () => {
 		// контекстного сегмента с панелью нет.
 		const segment = screen.getByTestId("topbar-segment-page");
 		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
-		expect(crumb.textContent).toBe("Журнал/Подсказки");
+		expect(crumb.textContent).toBe("Журнал / Подсказки");
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Подсказки");
 		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
 		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
@@ -648,7 +664,7 @@ describe("сегмент страницы", () => {
 		// показывает последний успешный запуск.
 		const segment = screen.getByTestId("topbar-segment-page");
 		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
-		expect(crumb.textContent).toBe("Журнал/Синхронизация");
+		expect(crumb.textContent).toBe("Журнал / Синхронизация");
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Синхронизация");
 		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
 		expect(screen.getByTestId("sync-status")).toHaveTextContent(/Обновлено \d{2}:\d{2}/);
@@ -680,6 +696,8 @@ describe("сегмент страницы", () => {
 		// Assert: заголовок и чип из регистрации появляются в сегменте
 		// страницы рядом с крошкой раздела.
 		const segment = screen.getByTestId("topbar-segment-page");
+		expect(segment.firstElementChild).toHaveClass("topbar-page-content");
+		expect(within(segment).getByTestId("journal-total")).toBeInTheDocument();
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Карточка конструкции");
 		expect(within(segment).getByTestId("page-chip")).toBeInTheDocument();
 	});
@@ -695,7 +713,7 @@ describe("сегмент страницы", () => {
 		// Traceability: change:rework-contextual-topbar/tasks#3.0
 		const segment = screen.getByTestId("topbar-segment-page");
 		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
-		expect(crumb.textContent).toBe("Журнал/Конструкции/Карточка");
+		expect(crumb.textContent).toBe("Журнал / Конструкции / Карточка");
 	});
 
 	it("экран «Агент» показывает зарегистрированный заголовок «Агент · Чаты»", async () => {
@@ -720,7 +738,7 @@ describe("сегмент страницы", () => {
 		// из регистрации страницы; чипов и контекстного сегмента нет.
 		const segment = screen.getByTestId("topbar-segment-page");
 		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
-		expect(crumb.textContent).toBe("Журнал/Агент");
+		expect(crumb.textContent).toBe("Журнал / Агент");
 		expect(within(segment).getByTestId("topbar-page-title")).toHaveTextContent("Агент · Чаты");
 		expect(within(segment).queryByTestId("page-chip")).not.toBeInTheDocument();
 		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
@@ -781,7 +799,7 @@ describe("сегмент страницы", () => {
 		expect(title).toHaveTextContent("Правила");
 		const segment = screen.getByTestId("topbar-segment-page");
 		const crumb = within(segment).getByRole("navigation", { name: "Крошка раздела" });
-		expect(crumb.textContent).toBe("Журнал/Агент/Правила");
+		expect(crumb.textContent).toBe("Журнал / Агент / Правила");
 		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
 		expect(screen.queryByTestId("context-panel")).not.toBeInTheDocument();
 	});
@@ -814,30 +832,21 @@ describe("сегмент страницы", () => {
 // Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
 describe("статус синхронизации", () => {
 	it("показывает «Обновлено HH:MM» по последнему успешному запуску", async () => {
-		// Arrange: последний успешный запуск завершился в 11:05, более свежий
-		// запуск сбойный, ранее был ещё один успешный.
-		syncApi.fetchSyncRuns.mockResolvedValue([
-			makeSyncRun("failed", "2026-10-16T12:00:00"),
-			makeSyncRun("succeeded", "2026-10-16T11:05:00"),
-			makeSyncRun("succeeded", "2026-10-16T09:30:00"),
-		]);
+		// API возвращает последний успешный запуск, отфильтрованный до лимита.
+		syncApi.fetchSyncRuns.mockResolvedValue([makeSyncRun("succeeded", "2026-10-16T11:05:00")]);
 		renderLayout();
 
-		// Assert: время берётся из последнего успешного запуска, а не из
-		// более свежего сбойного и не из более раннего успешного; формат
-		// HH:MM в зоне браузера.
+		// Assert: запрос сразу ограничивает выборку последним успехом.
 		const status = await screen.findByTestId("sync-status");
 		expect(status).toHaveTextContent("Обновлено 11:05");
+		expect(syncApi.fetchSyncRuns).toHaveBeenCalledWith(1, "succeeded");
 		// 11.5px $textMuted по мастеру (нода SyncStatus).
 		expect(status.className).toContain("text-[11.5px]");
 	});
 
 	it("скрыт, когда успешных запусков нет", async () => {
 		// Arrange: журнал есть, но все запуски сбойные.
-		syncApi.fetchSyncRuns.mockResolvedValue([
-			makeSyncRun("failed", "2026-10-16T12:00:00"),
-			makeSyncRun("failed", "2026-10-16T09:00:00"),
-		]);
+		syncApi.fetchSyncRuns.mockResolvedValue([]);
 		renderLayout();
 
 		// Assert: блока нет, итог журнала продолжает работать.
@@ -863,6 +872,19 @@ describe("статус синхронизации", () => {
 		await screen.findByTestId("journal-total");
 		expect(screen.queryByTestId("sync-status")).not.toBeInTheDocument();
 		expect(screen.getByText("Журнал Bybit")).toBeInTheDocument();
+	});
+
+	it("скрывает статус при ошибке повторной загрузки, даже если кэш содержит успех", async () => {
+		syncApi.fetchSyncRuns
+			.mockResolvedValueOnce([makeSyncRun("succeeded", "2026-10-16T11:05:00")])
+			.mockRejectedValueOnce(new Error("API ответил ошибкой 500"));
+		const { queryClient } = renderLayout();
+
+		expect(await screen.findByTestId("sync-status")).toBeInTheDocument();
+		await queryClient.invalidateQueries({ queryKey: ["sync-runs", "last-successful"] });
+
+		await waitFor(() => expect(screen.queryByTestId("sync-status")).not.toBeInTheDocument());
+		expect(screen.getByTestId("journal-total")).toBeInTheDocument();
 	});
 });
 

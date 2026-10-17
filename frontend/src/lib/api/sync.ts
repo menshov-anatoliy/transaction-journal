@@ -93,8 +93,12 @@ export function setSyncBackupBeforeSync(enabled: boolean): Promise<void> {
 }
 
 /** Читает журнал запусков синхронизации новыми сверху. */
-export function fetchSyncRuns(limit = 20): Promise<readonly SyncRunJournalEntry[]> {
-	return apiFetch<{ runs: readonly SyncRunJournalEntry[] }>(`/sync/runs?limit=${limit}`).then((payload) => payload.runs);
+export function fetchSyncRuns(limit = 20, status?: SyncRunStatus): Promise<readonly SyncRunJournalEntry[]> {
+	const query = new URLSearchParams({ limit: String(limit) });
+	if (status !== undefined) {
+		query.set("status", status);
+	}
+	return apiFetch<{ runs: readonly SyncRunJournalEntry[] }>(`/sync/runs?${query}`).then((payload) => payload.runs);
 }
 
 /** Запускает полный пересбор конструкций из опасной зоны. */

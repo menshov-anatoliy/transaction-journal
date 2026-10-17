@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SyncRunJournalEntry, SyncRunSummary } from "@/lib/api/sync";
 import { SyncSettingsPage } from "./sync-settings-page";
 
 // Раздел «Синхронизация» проверяется как пользовательский сценарий: настройки,
@@ -35,6 +36,24 @@ function renderPage() {
 			<SyncSettingsPage />
 		</QueryClientProvider>,
 	);
+}
+
+function makeRunJournalEntry(overrides: Partial<SyncRunJournalEntry> = {}): SyncRunJournalEntry {
+	return {
+		id: 11,
+		startedAt: "2026-10-08T09:00:00Z",
+		finishedAt: "2026-10-08T09:01:30Z",
+		mode: "incremental",
+		status: "succeeded",
+		error: null,
+		newExecutions: 5,
+		newDeliveries: 1,
+		newInstruments: 2,
+		skippedAreas: [],
+		unresolvedInstruments: [],
+		uncoveredBaseCoins: [],
+		...overrides,
+	};
 }
 
 beforeEach(() => {
@@ -174,6 +193,41 @@ describe("раздел «Синхронизация»", () => {
 		expect(screen.queryByText(/Результат запуска /)).not.toBeInTheDocument();
 	});
 
+	it("скрывает старый итог во время ручной мутации", async () => {
+		// Старый итог не должен выглядеть актуальным, пока выполняется новый запуск.
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		let finishSync: ((summary: SyncRunSummary) => void) | undefined;
+		api.runSync.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishSync = resolve;
+				}),
+		);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByText(/Результат запуска /);
+
+		await user.click(screen.getByRole("button", { name: /синхронизировать сейчас/i }));
+
+		await waitFor(() => expect(api.runSync).toHaveBeenCalled());
+		expect(screen.queryByText(/Результат запуска /)).not.toBeInTheDocument();
+		finishSync?.({
+			mode: "incremental",
+			status: "succeeded",
+			startedAt: "2026-10-08T09:05:00Z",
+			finishedAt: "2026-10-08T09:06:00Z",
+			newExecutions: 2,
+			newDeliveries: 0,
+			newInstruments: 1,
+			projectionError: null,
+			reconciliationWarnings: [],
+			skippedAreas: [],
+			unresolvedInstruments: [],
+			uncoveredBaseCoins: [],
+		});
+		expect(await screen.findByText(/исполнений 2/i)).toBeInTheDocument();
+	});
+
 	it("переключает бэкап тумблером с ролью switch и клавиатурой Space", async () => {
 		// Решения раунд-сверки 9.0: «резервная копия перед синхронизацией» —
 		// тумблер Switch (role="switch", aria-checked, клавиатура Space),
@@ -233,6 +287,20 @@ describe("раздел «Синхронизация»", () => {
 	});
 
 	it("выполняет ручную синхронизацию, пересбор и сброс категории", async () => {
+		// Журнал может ещё содержать running-строку того же запуска; расширенный
+		// ручной итог сохраняет приоритет, пока эта строка не обновилась.
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		api.fetchSyncRuns.mockResolvedValue([
+			makeRunJournalEntry({
+				id: 12,
+				startedAt: "2026-10-08T09:05:00Z",
+				finishedAt: null,
+				status: "running",
+				newExecutions: 0,
+				newDeliveries: 0,
+				newInstruments: 0,
+			}),
+		]);
 		const user = userEvent.setup();
 		renderPage();
 		await screen.findByRole("heading", { name: "Синхронизация", level: 1 });
@@ -249,6 +317,32 @@ describe("раздел «Синхронизация»", () => {
 		await user.click(screen.getByRole("button", { name: /сбросить option/i }));
 		await waitFor(() => expect(api.resetSyncCategory).toHaveBeenCalled());
 		expect(api.resetSyncCategory.mock.calls[0][0]).toBe("option");
+	});
+
+	it("заменяет ручной итог, если журнал уже содержит более новый запуск", async () => {
+		// Более новая запись журнала вытесняет прежний расширенный ручной итог.
+		// Traceability: change:rework-contextual-topbar/tasks#9.0
+		api.fetchSyncRuns
+			.mockResolvedValueOnce([makeRunJournalEntry()])
+			.mockResolvedValueOnce([
+				makeRunJournalEntry({
+					id: 12,
+					startedAt: "2026-10-08T09:07:00Z",
+					finishedAt: "2026-10-08T09:08:00Z",
+					newExecutions: 99,
+				}),
+			]);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByText(/Результат запуска /);
+
+		await user.click(screen.getByRole("button", { name: /синхронизировать сейчас/i }));
+
+		await waitFor(() => expect(api.runSync).toHaveBeenCalled());
+		const result = await screen.findByRole("status");
+		expect(within(result).getByText(/исполнений 99/i)).toBeInTheDocument();
+		expect(within(result).queryByText(/исполнений 2/i)).not.toBeInTheDocument();
+		expect(screen.queryByText(/расхождение 3\.5/i)).not.toBeInTheDocument();
 	});
 
 	it("оформляет опасную зону парой neg/negSoft с плотными Danger-кнопками мастера", async () => {

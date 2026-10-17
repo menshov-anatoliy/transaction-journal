@@ -25,11 +25,21 @@ public sealed class SyncJournalReadModel : ISyncJournalReadModel
 	}
 
 	/// <inheritdoc />
-	public async Task<IReadOnlyList<SyncRunRow>> ReadAsync(int limit = 20, CancellationToken cancellationToken = default)
+	public async Task<IReadOnlyList<SyncRunRow>> ReadAsync(
+		int limit = 20,
+		CancellationToken cancellationToken = default,
+		SyncRunStatus? status = null)
 	{
 		using var db = new JournalDbContext(_options);
-		var runs = await db.SyncRuns
-			.AsNoTracking()
+		var query = db.SyncRuns.AsNoTracking();
+		if (status.HasValue)
+		{
+			// Сначала применяем статус, иначе свежие неудачи могут скрыть старый успех за лимитом.
+			// Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+			query = query.Where(run => run.Status == status.Value);
+		}
+
+		var runs = await query
 			// Порядок новыми сверху держится на монотонном суррогатном ключе вставки:
 			// запуски открываются последовательно, а SQLite не упорядочивает по
 			// DateTimeOffset.
@@ -80,4 +90,3 @@ public sealed class SyncJournalReadModel : ISyncJournalReadModel
 				run.WarningsJson);
 	}
 }
-

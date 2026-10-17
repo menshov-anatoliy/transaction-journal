@@ -80,11 +80,19 @@ export function SyncSettingsPage() {
 	// запуска»: оба показываются по журналу, а не только после ручного запуска.
 	// Traceability: change:rework-contextual-topbar/tasks#9.0
 	const lastRun = runsQuery.data !== undefined ? runsQuery.data[0] : undefined;
-	// Результат ручного запуска богаче записи журнала (несёт projectionError и
-	// предупреждения сверки), поэтому сразу после запуска показывается он;
-	// иначе блок собирается из последней записи журнала. Выполняющийся запуск
-	// результата ещё не имеет — блок скрыт до закрытия запуска.
-	const resultSummary = lastRunResult ?? journalEntryToRunSummary(lastRun);
+	// Результат ручного запуска богаче записи журнала, поэтому имеет приоритет
+	// над записью того же запуска, пока журнал не содержит более новый запуск.
+	// Во время мутации прежний результат скрыт; выполняющийся запуск результата
+	// ещё не имеет.
+	// Traceability: change:rework-contextual-topbar/tasks#9.0
+	const manualResultIsCurrent =
+		lastRunResult !== null &&
+		(lastRun === undefined || Date.parse(lastRunResult.startedAt) >= Date.parse(lastRun.startedAt));
+	const resultSummary = syncMutation.isPending
+		? undefined
+		: manualResultIsCurrent
+			? lastRunResult
+			: journalEntryToRunSummary(lastRun);
 
 	return (
 		<section className="flex flex-col gap-3.5 px-7 pt-5 pb-6">
@@ -187,7 +195,7 @@ export function SyncSettingsPage() {
 				)}
 				{/* Блок результата постоянный — по последней записи журнала; сразу
 					после ручного запуска показывается его расширенный итог. */}
-				{resultSummary !== null && (
+				{resultSummary != null && (
 					<SyncRunResultNote summary={resultSummary} />
 				)}
 

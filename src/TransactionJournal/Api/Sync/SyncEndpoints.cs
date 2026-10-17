@@ -124,11 +124,15 @@ public static class SyncEndpoints
 		group.MapGet("/runs", async (
 			ISyncJournalReadModel journal,
 			int? limit,
+			SyncRunStatus? status,
 			CancellationToken cancellationToken) =>
 		{
 			try
 			{
-				var rows = await journal.ReadAsync(limit ?? 20, cancellationToken);
+				// Фильтр успешных запусков применяется до лимита, поэтому новые
+				// неудачные строки не скрывают последний успешный запуск.
+				// Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+				var rows = await journal.ReadAsync(limit ?? 20, cancellationToken, status);
 				return Results.Json(new SyncRunsResponse(rows
 					.Select(row => new SyncRunJournalEntryResponse(
 						row.Id,

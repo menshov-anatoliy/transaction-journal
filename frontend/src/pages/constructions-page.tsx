@@ -67,7 +67,12 @@ export function ConstructionsPage() {
 	// обзор — новые сделки меняют итог и строки.
 	const syncMutation = useMutation({
 		mutationFn: runSync,
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: constructionsOverviewQueryKey }),
+		onSuccess: () => {
+			void queryClient.invalidateQueries({ queryKey: constructionsOverviewQueryKey });
+			// Обновление статуса верхней панели после ручного запуска.
+			// Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+			void queryClient.invalidateQueries({ queryKey: ["sync-runs"] });
+		},
 	});
 
 	// Ручной проход подсказок из тулбара: по завершению перечитываются
