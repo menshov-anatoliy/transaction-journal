@@ -11,7 +11,7 @@ import { ConstructionPreviewCard } from "@/components/constructions/construction
 import { ConstructionsTable } from "@/components/constructions/constructions-table";
 import { useContextPanel } from "@/components/layout/context-panel";
 import { Button } from "@/components/ui/button";
-import { formatMoment } from "@/lib/format/display-time";
+import { formatClock, formatMoment } from "@/lib/format/display-time";
 import { formatSignedAmount } from "@/lib/format/quantity";
 import { useIsMobile } from "@/lib/use-mobile";
 import { cn } from "@/lib/utils";
@@ -166,70 +166,85 @@ export function ConstructionsPage() {
 
 	return (
 		<section className="flex flex-col gap-4 p-6">
-			{/* Тулбар раздела: титул со счётчиками конструкций, сегмент области
-			    видимости и действия — ручной проход подсказок и синхронизация в
-			    одном ряду (design.md D5, D6; TitleRow мастера «Экран/Конструкции»). */}
-			<div className="flex flex-wrap items-center gap-3">
-				{/* Титул раздела — Inter 21/600 дизайн-системы (H1 Body-экранов).
-				    Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
-				<h1 className="page-title">Конструкции</h1>
-				{/* Счётчики конструкций рядом с титулом — формат макета «Counters»
-				    «конструкций N · открыто N · архив N» (12.5 $textSecondary,
-				    мастер NwnY4), архив — все минус открытые. Считаются по полному
-				    набору журнала, независимо от области видимости списка. Кнопку
-				    «Разобрать входящие» из тулбара убрали решением раунд-сверки:
-				    вход — через раздел «Входящие» панели навигации.
-				    Traceability: change:rework-contextual-topbar/tasks#2.0
-				    Traceability: openspec:ui/screens#requirement-construction-list-screen */}
-				{summary !== undefined && (
-					<p data-slot="constructions-counters" className="text-[12.5px] text-text-secondary">
-						{`конструкций ${summary.constructionCount} · открыто ${summary.openCount} · архив ${
-							summary.constructionCount - summary.openCount
-						}`}
-					</p>
-				)}
-				<div className="ml-auto flex flex-wrap items-center gap-2">
-					{/* Сегмент «Открытые | Все»: состояние в URL, дефолт —
-					    открытые; контейнер по фрейму ScopeFilter (b5KyT). */}
-					{/* Traceability: openspec:ui/screens#scenario-list-scope-open-default */}
-					<div
-						data-slot="scope-filter"
-						role="group"
-						aria-label="Область видимости"
-						className="bg-card flex items-center gap-1 rounded-[9px] border p-[3px]"
-					>
-						<ScopeSegmentButton label="Открытые" active={scope === "open"} onClick={() => setScope("open")} />
-						<ScopeSegmentButton label="Все" active={scope === "all"} onClick={() => setScope("all")} />
+			{isMobile ? (
+				/*
+					Мобильный экран «Конструкций» (раунд-сверка 10.0, мастер
+					iGlhI): сразу под топбаром блок «Итог», затем список —
+					H1-тулбар (титул, счётчики-строка, область видимости,
+					проход подсказок, синхронизация) и десктопная шапка сводки
+					скрыты; синхронизация на мобильном — через раздел
+					«Синхронизация».
+				*/
+				// Traceability: change:rework-contextual-topbar/tasks#10.0
+				<MobileSummaryBlock summary={summary} />
+			) : (
+				<>
+				{/* Тулбар раздела: титул со счётчиками конструкций, сегмент области
+				    видимости и действия — ручной проход подсказок и синхронизация в
+				    одном ряду (design.md D5, D6; TitleRow мастера «Экран/Конструкции»). */}
+				<div className="flex flex-wrap items-center gap-3">
+					{/* Титул раздела — Inter 21/600 дизайн-системы (H1 Body-экранов).
+					    Traceability: openspec:ui/design-system#requirement-typography-matches-design-system */}
+					<h1 className="page-title">Конструкции</h1>
+					{/* Счётчики конструкций рядом с титулом — формат макета «Counters»
+					    «конструкций N · открыто N · архив N» (12.5 $textSecondary,
+					    мастер NwnY4), архив — все минус открытые. Считаются по полному
+					    набору журнала, независимо от области видимости списка. Кнопку
+					    «Разобрать входящие» из тулбара убрали решением раунд-сверки:
+					    вход — через раздел «Входящие» панели навигации.
+					    Traceability: change:rework-contextual-topbar/tasks#2.0
+					    Traceability: openspec:ui/screens#requirement-construction-list-screen */}
+					{summary !== undefined && (
+						<p data-slot="constructions-counters" className="text-[12.5px] text-text-secondary">
+							{`конструкций ${summary.constructionCount} · открыто ${summary.openCount} · архив ${
+								summary.constructionCount - summary.openCount
+							}`}
+						</p>
+					)}
+					<div className="ml-auto flex flex-wrap items-center gap-2">
+						{/* Сегмент «Открытые | Все»: состояние в URL, дефолт —
+						    открытые; контейнер по фрейму ScopeFilter (b5KyT). */}
+						{/* Traceability: openspec:ui/screens#scenario-list-scope-open-default */}
+						<div
+							data-slot="scope-filter"
+							role="group"
+							aria-label="Область видимости"
+							className="bg-card flex items-center gap-1 rounded-[9px] border p-[3px]"
+						>
+							<ScopeSegmentButton label="Открытые" active={scope === "open"} onClick={() => setScope("open")} />
+							<ScopeSegmentButton label="Все" active={scope === "all"} onClick={() => setScope("all")} />
+						</div>
+						{/* Ручной проход подсказок рядом с синхронизацией
+						    (POST /hints/pass): иконочная кнопка по фрейму HintsPassBtn
+						    (Y9mB6), результат — строки состояния под шапкой.
+						    Traceability: openspec:ui/screens#scenario-ui-manual-pass-runs-engine */}
+						<Button
+							size="sm"
+							variant="outline"
+							aria-label="Запустить проход подсказок"
+							title="Запустить проход подсказок"
+							disabled={passMutation.isPending}
+							onClick={() => passMutation.mutate()}
+						>
+							{passMutation.isPending ? (
+								<Loader2 aria-hidden className="animate-spin" />
+							) : (
+								<Lightbulb aria-hidden className="size-3.5" />
+							)}
+						</Button>
+						<Button size="sm" variant="outline" disabled={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
+							<RefreshCw aria-hidden className={syncMutation.isPending ? "animate-spin" : undefined} />
+							Синхронизировать
+						</Button>
 					</div>
-					{/* Ручной проход подсказок рядом с синхронизацией
-					    (POST /hints/pass): иконочная кнопка по фрейму HintsPassBtn
-					    (Y9mB6), результат — строки состояния под шапкой.
-					    Traceability: openspec:ui/screens#scenario-ui-manual-pass-runs-engine */}
-					<Button
-						size="sm"
-						variant="outline"
-						aria-label="Запустить проход подсказок"
-						title="Запустить проход подсказок"
-						disabled={passMutation.isPending}
-						onClick={() => passMutation.mutate()}
-					>
-						{passMutation.isPending ? (
-							<Loader2 aria-hidden className="animate-spin" />
-						) : (
-							<Lightbulb aria-hidden className="size-3.5" />
-						)}
-					</Button>
-					<Button size="sm" variant="outline" disabled={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
-						<RefreshCw aria-hidden className={syncMutation.isPending ? "animate-spin" : undefined} />
-						Синхронизировать
-					</Button>
 				</div>
-			</div>
-			<ConstructionsHeader overview={overviewQuery.data} syncMutation={syncMutation} />
-			{/* Состояние и итог ручного прохода: строки состояния живут под
-			    сводкой раздела, проблемы корпуса — агрегированным списком.
-			    Traceability: openspec:ui/screens#scenario-ui-manual-pass-corpus-error */}
-			<PassStatus mutation={passMutation} />
+				<ConstructionsHeader overview={overviewQuery.data} syncMutation={syncMutation} />
+				{/* Состояние и итог ручного прохода: строки состояния живут под
+				    сводкой раздела, проблемы корпуса — агрегированным списком.
+				    Traceability: openspec:ui/screens#scenario-ui-manual-pass-corpus-error */}
+				<PassStatus mutation={passMutation} />
+				</>
+			)}
 			{/* На мобильном правая контекстная панель каркаса скрыта: краткая
 			    карточка выделенной конструкции открывается в drawer.
 			    Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
@@ -266,6 +281,53 @@ export function ConstructionsPage() {
 				</div>
 			)}
 		</section>
+	);
+}
+
+/*
+	Блок «Итог» мобильного экрана «Конструкции» (раунд-сверка 10.0, мастер
+	iGlhI «Экран/Mobile · Конструкции»): прозрачный блок сразу под топбаром,
+	без карточки — паддинги [14,16], межстрочный зазор 3, три строки: итог
+	18/600 $accentStrong; «реализов. … / нереализов. … · котировки HH:MM»
+	11 normal $textSecondary (время котировок — из той же сводки обзора, что
+	и строка итога, деградации повторяют десктопную сводку); «конструкций
+	N · открыто N» 11 normal $textMuted — на мобильном без «архива»,
+	источник счётчиков тот же, что у строки у H1 десктопа (решение 2.0).
+	H1-тулбар с областью видимости и синхронизацией на мобильном скрыт —
+	список идёт сразу за блоком.
+*/
+// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
+// Traceability: change:rework-contextual-topbar/tasks#2.0
+// Traceability: change:rework-contextual-topbar/tasks#10.0
+function MobileSummaryBlock({ summary }: { summary: ConstructionsOverview["summary"] | undefined }) {
+	if (summary === undefined) {
+		return <p className="text-muted-foreground px-4 py-3.5 text-sm">чтение журнала…</p>;
+	}
+
+	// Котировки — сегмент строки разбивки; при норме показывается только
+	// время (формат мастера iGlhI), сбои повторяют тексты десктопной сводки.
+	const quotesNote = summary.hasMarkFailure
+		? "котировки: сбой котировок"
+		: summary.marksAsOf === null
+			? "котировки: нет открытых остатков"
+			: `котировки ${formatClock(summary.marksAsOf)}`;
+
+	return (
+		<div
+			data-slot="constructions-mobile-summary"
+			data-testid="constructions-mobile-summary"
+			className="flex flex-col gap-[3px] px-4 py-3.5"
+		>
+			<p className="text-[18px] font-semibold text-accent-strong">
+				{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
+			</p>
+			<p className="text-[11px] text-text-secondary">
+				{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. ${
+					summary.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(summary.unrealizedPnL)
+				} · ${quotesNote}`}
+			</p>
+			<p className="text-[11px] text-text-muted">{`конструкций ${summary.constructionCount} · открыто ${summary.openCount}`}</p>
+		</div>
 	);
 }
 

@@ -66,10 +66,12 @@ vi.mock("@/lib/api/constructions", () => ({
 function TopbarRegistrationOutlet() {
 	const [header, setHeader] = useState<PageHeaderRegistration | null>(null);
 	const [context, setContext] = useState<ContextPanelRegistration | null>(null);
+	const [mobileFocus, setMobileFocus] = useState(false);
 	const outletContext = useMemo<AppOutletContext>(
 		() => ({
 			pageHeader: { setRegistration: setHeader },
 			contextPanel: { setRegistration: setContext },
+			mobileFocus: { setActive: setMobileFocus },
 		}),
 		[],
 	);
@@ -79,6 +81,10 @@ function TopbarRegistrationOutlet() {
 				{header?.title != null && <span data-testid="registered-page-title">{header.title}</span>}
 				{header?.breadcrumbTail != null && <span data-testid="registered-crumb-tail">{header.breadcrumbTail}</span>}
 			</div>
+			{/* Индикатор запроса фокусного мобильного хрома: страница просит
+			    каркас скрыть мобильный топбар (раунд-сверка 10.0). */}
+			{/* Traceability: change:rework-contextual-topbar/tasks#10.0 */}
+			<div data-testid="registered-mobile-focus" data-active={mobileFocus} />
 			<Outlet context={outletContext} />
 			{context !== null && (
 				<div data-testid="registered-context-panel" data-chip-label={context.chipLabel}>
@@ -110,6 +116,21 @@ function renderPage(path = "/agent") {
 // проверяется перечень пунктов именно этой подгруппы.
 function subgroupContainer(section: HTMLElement, name: RegExp): HTMLElement {
 	return within(section).getByRole("heading", { name }).closest("div") as HTMLElement;
+}
+
+/** Мобильный вьюпорт 390 (мастера iGlhI/OvuY9): matchMedia подменяется до рендера. */
+function setViewport(width: number) {
+	Object.defineProperty(window, "innerWidth", { value: width, writable: true, configurable: true });
+	window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+		matches: query.includes("max-width") ? width <= 1023 : false,
+		media: query,
+		onchange: null,
+		addEventListener: vi.fn(),
+		removeEventListener: vi.fn(),
+		addListener: vi.fn(),
+		removeListener: vi.fn(),
+		dispatchEvent: vi.fn(),
+	})) as typeof window.matchMedia;
 }
 
 beforeEach(() => {
@@ -1211,5 +1232,175 @@ describe("страница агента", () => {
 		const gist = screen.getByText(/Остановить наращивание риска/i);
 		expect(gist.closest("div")?.className).toContain("text-xs");
 		expect(gist.closest("div")?.className).toContain("leading-[1.45]");
+	});
+});
+
+/*
+	Мобильный фокусный режим активного чата (раунд-сверка 10.0, мастер
+	OvuY9 «Экран/Mobile · Агент · Чат»): при выбранном чате экран занимает
+	только чат — страница запрашивает у каркаса скрытие глобального
+	мобильного топбара (useMobileFocus), шапка фокусного режима 52 px несёт
+	«Назад» (гасит автовыбор — возврат к пустому состоянию «Агент · Чаты»),
+	превью первого сообщения 13/600, чип модели и меню «More» с операциями
+	шапки чата раунда 7.0 («Завершить»/«Продолжить», «Удалить»).
+*/
+// Traceability: openspec:chats/history#requirement-chat-manual-completion-and-deletion
+// Traceability: change:rework-contextual-topbar/tasks#7.0
+// Traceability: change:rework-contextual-topbar/tasks#10.0
+describe("мобильный фокусный режим чата", () => {
+	it("показывает шапку мастера OvuY9 и запрашивает скрытие глобального топбара", async () => {
+		setViewport(390);
+		renderPage();
+
+		// Assert: активный чат автовыбран — страница запросила у каркаса
+		// скрытие мобильного топбара и показывает только чат.
+		const header = await screen.findByTestId("chat-focus-header");
+		expect(screen.getByTestId("registered-mobile-focus")).toHaveAttribute("data-active", "true");
+		expect(screen.queryByRole("heading", { name: "Агент", level: 1 })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Правила" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Список сессий" })).not.toBeInTheDocument();
+
+		// Assert: шапка 52 px ($surface, border-b 1 $divider, [0,14], гэп 10).
+		expect(header.className).toContain("h-13");
+		expect(header.className).toContain("bg-surface");
+		expect(header.className).toContain("border-divider");
+		expect(header.className).toContain("px-3.5");
+		expect(header.className).toContain("gap-2.5");
+
+		// Assert: «Назад» — chevron-left 18×18 $textPrimary.
+		const back = within(header).getByRole("button", { name: "Назад к списку чатов" });
+		const backIcon = back.querySelector("svg");
+		expect(backIcon?.getAttribute("class")).toContain("lucide-chevron-left");
+		expect(backIcon?.getAttribute("class")).toContain("size-4.5");
+		expect(backIcon?.getAttribute("class")).toContain("text-text-primary");
+
+		// Assert: заголовок — превью первого сообщения 13/600 $textPrimary
+		// с truncate.
+		const title = within(header).getByRole("heading", { name: "Оцени риск стреддла" });
+		expect(title.className).toContain("text-[13px]");
+		expect(title.className).toContain("font-semibold");
+		expect(title.className).toContain("text-text-primary");
+		expect(title.className).toContain("truncate");
+
+		// Assert: чип модели — $surface2, радиус 999, паддинги [3,8],
+		// 10 normal $textSecondary.
+		const chip = within(header).getByText("GLM-5.3");
+		expect(chip.className).toContain("bg-surface-2");
+		expect(chip.className).toContain("rounded-full");
+		expect(chip.className).toContain("px-2");
+		expect(chip.className).toContain("py-[3px]");
+		expect(chip.className).toContain("text-[10px]");
+		expect(chip.className).toContain("text-text-secondary");
+
+		// Assert: «More» — more-horizontal 16×16 $textSecondary.
+		const more = within(header).getByRole("button", { name: "Действия чата" });
+		const moreIcon = more.querySelector("svg");
+		expect(moreIcon?.getAttribute("class")).toContain("lucide-more-horizontal");
+		expect(moreIcon?.getAttribute("class")).toContain("size-4");
+		expect(moreIcon?.getAttribute("class")).toContain("text-text-secondary");
+	});
+
+	it("«Назад» гасит автовыбор и возвращает пустое состояние с глобальным топбаром", async () => {
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByTestId("chat-focus-header");
+
+		// Act: «Назад» в шапке фокусного режима.
+		await user.click(screen.getByRole("button", { name: "Назад к списку чатов" }));
+
+		// Assert: фокус снят — запрос каркасу погашен, страница вернулась
+		// к состоянию «Агент · Чаты»: пустое состояние с композером,
+		// автовыбор чата не сработал (шапки чата больше нет).
+		expect(screen.queryByTestId("chat-focus-header")).not.toBeInTheDocument();
+		expect(screen.getByTestId("registered-mobile-focus")).toHaveAttribute("data-active", "false");
+		expect(screen.getByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.getByLabelText(/первое сообщение/i)).toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "Оцени риск стреддла" })).not.toBeInTheDocument();
+		expect(screen.getByRole("heading", { name: "Агент", level: 1 })).toBeInTheDocument();
+	});
+
+	it("меню «More» завершает выбранный чат операцией шапки раунда 7.0", async () => {
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByTestId("chat-focus-header");
+
+		// Act: открытие меню «More» и выбор «Завершить».
+		await user.click(screen.getByRole("button", { name: "Действия чата" }));
+		const menu = screen.getByRole("menu", { name: "Действия чата" });
+		await user.click(within(menu).getByRole("menuitem", { name: "Завершить" }));
+
+		// Assert: команда завершения ушла выбранному чату.
+		await waitFor(() => {
+			expect(chatsApi.completeChat).toHaveBeenCalledWith("chat-1");
+		});
+	});
+
+	it("«Удалить» из меню «More» удаляет последний чат в пустое состояние", async () => {
+		// Arrange: единственный активный чат; после удаления список пуст.
+		const chat1 = {
+			id: "chat-1",
+			status: "active",
+			params: { model: "GLM-5.3", constructionId: null, sources: ["journal"] },
+			createdAt: "2026-10-08T09:00:00Z",
+			lastMessageAt: "2026-10-08T10:00:00Z",
+			firstMessagePreview: "Оцени риск стреддла",
+		};
+		const active: Array<typeof chat1> = [chat1];
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active" ? active : [],
+		);
+		chatsApi.deleteChat.mockImplementation(async () => {
+			active.length = 0;
+			return undefined;
+		});
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByTestId("chat-focus-header");
+
+		// Act: «Удалить» из меню «More».
+		await user.click(screen.getByRole("button", { name: "Действия чата" }));
+		await user.click(within(screen.getByRole("menu", { name: "Действия чата" })).getByRole("menuitem", { name: "Удалить" }));
+
+		// Assert: deleteChat вызван, чатов не осталось — пустое состояние,
+		// шапки фокусного режима больше нет.
+		await waitFor(() => {
+			expect(chatsApi.deleteChat).toHaveBeenCalledWith("chat-1");
+		});
+		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.queryByTestId("chat-focus-header")).not.toBeInTheDocument();
+	});
+
+	it("меню «More» завершённого чата предлагает «Продолжить» вместо «Завершить»", async () => {
+		// Arrange: активных чатов нет — автовыбор берёт завершённый.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? []
+				: [
+						{
+							id: "chat-done",
+							status: "completed",
+							params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-07T08:00:00Z",
+							lastMessageAt: "2026-10-07T09:00:00Z",
+							firstMessagePreview: "Итоги недели",
+						},
+					],
+		);
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByTestId("chat-focus-header");
+
+		// Act: открытие меню «More».
+		await user.click(screen.getByRole("button", { name: "Действия чата" }));
+
+		// Assert: в меню «Продолжить» вместо «Завершить», «Удалить» на месте.
+		const menu = screen.getByRole("menu", { name: "Действия чата" });
+		expect(within(menu).getByRole("menuitem", { name: "Продолжить" })).toBeInTheDocument();
+		expect(within(menu).queryByRole("menuitem", { name: "Завершить" })).not.toBeInTheDocument();
+		expect(within(menu).getByRole("menuitem", { name: "Удалить" })).toBeInTheDocument();
 	});
 });

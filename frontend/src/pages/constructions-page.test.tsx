@@ -635,4 +635,44 @@ describe("раздел «Конструкции»", () => {
 		await user.click(screen.getByRole("button", { name: "Закрыть" }));
 		expect(screen.queryByRole("heading", { name: "Краткая карточка" })).not.toBeInTheDocument();
 	});
+
+	it("мобильный экран показывает блок «Итог» вместо H1-тулбара и шапки сводки", async () => {
+		// Решения раунд-сверки 10.0 (мастер iGlhI «Экран/Mobile ·
+		// Конструкции»): сразу под топбаром прозрачный блок «Итог» — итог
+		// 18/600 $accentStrong, разбивка с котировками 11 $textSecondary,
+		// счётчики «конструкций N · открыто N» 11 $textMuted без «архива»
+		// (источник — сводка обзора, решение 2.0); H1-тулбар с областью
+		// видимости и синхронизацией скрыт, список идёт сразу за блоком.
+		// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
+		// Traceability: change:rework-contextual-topbar/tasks#2.0
+		// Traceability: change:rework-contextual-topbar/tasks#10.0
+		// Arrange: мобильный вьюпорт 390.
+		setViewport(390);
+		renderPage();
+
+		// Assert: блок «Итог» — три строки с токенами мастера iGlhI.
+		const block = await screen.findByTestId("constructions-mobile-summary");
+		const total = within(block).getByText("+100.5 USDT");
+		expect(total.className).toContain("text-[18px]");
+		expect(total.className).toContain("font-semibold");
+		expect(total.className).toContain("text-accent-strong");
+		const breakdown = within(block).getByText(/реализов\. \+60\.25 \/ нереализов\. \+40\.25 · котировки \d{2}:\d{2}/);
+		expect(breakdown.className).toContain("text-[11px]");
+		expect(breakdown.className).toContain("text-text-secondary");
+		const counters = within(block).getByText("конструкций 3 · открыто 1");
+		expect(counters.className).toContain("text-[11px]");
+		expect(counters.className).toContain("text-text-muted");
+
+		// Assert: H1-тулбар скрыт — титул, счётчики-строка, сегмент области,
+		// синхронизация и десктопная шапка сводки отсутствуют.
+		expect(screen.queryByRole("heading", { name: "Конструкции", level: 1 })).not.toBeInTheDocument();
+		expect(screen.queryByText("конструкций 3 · открыто 1 · архив 2")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Открытые" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /синхронизировать/i })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Запустить проход подсказок" })).not.toBeInTheDocument();
+		expect(screen.queryByTestId("constructions-summary")).not.toBeInTheDocument();
+
+		// Assert: список следует сразу за блоком — мобильные карточки строк.
+		expect(screen.getByRole("button", { name: /ETH-240628/ })).toBeInTheDocument();
+	});
 });

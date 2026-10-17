@@ -26,6 +26,7 @@ import { PanelResizer } from "./PanelResizer";
 import { COLLAPSED_LEFT_WIDTH_REM, usePanelGeometry } from "./layout-geometry";
 import type { AppSection } from "@/config/sections";
 import type { ContextPanelApi, ContextPanelRegistration } from "./context-panel";
+import type { MobileFocusApi } from "./mobile-focus";
 import type { PageHeaderApi, PageHeaderRegistration } from "./page-header";
 import type { AppOutletContext } from "./outlet-context";
 
@@ -44,9 +45,13 @@ import type { AppOutletContext } from "./outlet-context";
  * каркаса (итог журнала, статус синхронизации), а заголовок и чипы
  * регистрирует текущий экран (usePageHeader); сегмент контекста показывает
  * кнопку сворачивания и чип короткого названия из регистрации контекста,
- * без регистрации контекста панель и сегмент скрыты. На мобильном остаются
- * только бренд, итог и кнопка drawer-шторки — механика панелей на мобильный
- * не переносится (Non-Goals design.md, стадия Mobile отдельная).
+ * без регистрации контекста панель и сегмент скрыты. Сегментная механика
+ * существует только на десктопе (lg+): мобильный топбар 52 px (раунд-сверка
+ * 10.0, мастер iGlhI) несёт лишь кнопку drawer-шторки, бренд и статус
+ * синхронизации — итог журнала, крошка, заголовок, чипы страницы и
+ * контекст-сегмент на мобильном отсутствуют, механика шторки не меняется;
+ * фокусный мобильный экран — активный чат агента — скрывает топбар целиком
+ * запросом useMobileFocus (мастер OvuY9).
  *
  * Traceability: openspec:ui/screens#requirement-app-frame-navigation
  * Traceability: openspec:ui/screens#scenario-journal-total-always-visible
@@ -65,6 +70,7 @@ import type { AppOutletContext } from "./outlet-context";
  * Traceability: change:rework-contextual-topbar/design#D4
  * Traceability: change:rework-contextual-topbar/design#D5
  * Traceability: change:rework-contextual-topbar/design#D6
+ * Traceability: change:rework-contextual-topbar/tasks#10.0
  * Traceability: change:rework-spa-shell-and-screens/design#D1
  * Traceability: change:rework-spa-shell-and-screens/design#D3
  * Traceability: adr:docs/adr/0016-contextual-topbar-frame.md
@@ -111,9 +117,21 @@ export function AppLayout() {
 		() => ({ setRegistration: setPageHeaderStable }),
 		[setPageHeaderStable],
 	);
+	// Слот фокусного мобильного хрома (раунд-сверка 10.0): фокусный экран
+	// (активный чат агента) просит скрыть мобильный топбар, чтобы занять
+	// экран собственной шапкой 52 px; на десктопе запрос не влияет на каркас.
+	// Traceability: change:rework-contextual-topbar/tasks#10.0
+	const [mobileFocusActive, setMobileFocusActive] = useState(false);
+	const setMobileFocusActiveStable = useCallback((active: boolean) => {
+		setMobileFocusActive(active);
+	}, []);
+	const mobileFocusApi = useMemo<MobileFocusApi>(
+		() => ({ setActive: setMobileFocusActiveStable }),
+		[setMobileFocusActiveStable],
+	);
 	const outletContext = useMemo<AppOutletContext>(
-		() => ({ contextPanel: contextPanelApi, pageHeader: pageHeaderApi }),
-		[contextPanelApi, pageHeaderApi],
+		() => ({ contextPanel: contextPanelApi, pageHeader: pageHeaderApi, mobileFocus: mobileFocusApi }),
+		[contextPanelApi, pageHeaderApi, mobileFocusApi],
 	);
 
 	const collapsedDesktop = left.collapsed && isMobile == false;
@@ -200,25 +218,53 @@ export function AppLayout() {
 	// Traceability: change:rework-contextual-topbar/design#D1
 	return (
 		<div className="flex h-svh flex-col">
-			<header className="flex h-16 shrink-0 items-stretch border-b border-divider bg-surface">
-				{isMobile ? (
-					/*
-						Мобильный топбар (стадия Mobile отдельная, механика
-						drawer-шторки не меняется): кнопка шторки, бренд и итог.
-					*/
-					<div className="flex flex-1 items-center gap-2.5 px-6">
+			{/* Топбар: на десктопе (lg+) — сегментный, 64 px по мастер-ноде
+			    jGvOM; на мобильном — топбар 52 px мастера iGlhI (раунд-сверка
+			    10.0). Фокусный мобильный экран (активный чат агента) не
+			    получает топбара вовсе: страница запрашивает скрытие через
+			    useMobileFocus, и каркас не рендерит элемент. */}
+			{isMobile && mobileFocusActive == false && (
+				/*
+					Мобильный топбар (раунд-сверка 10.0, мастер iGlhI):
+					высота 52 px, заливка $surface, нижний разделитель
+					$divider, паддинги [0,16], гэп 10; состав слева направо —
+					кнопка drawer-шторки (иконка menu 18×18 $textPrimary,
+					aria-label и механика шторки не меняются), бренд 14/600
+					$textPrimary, flex-спейсер и статус синхронизации справа
+					(иконка refresh-cw 13×13 + «HH:MM» 11 normal, оба
+					$textMuted; источник тот же fetchSyncRuns, инвариант D5:
+					пусто/нет успешных/сбой загрузки — блок скрыт). Итог
+					журнала, крошка, заголовок, чипы страницы и
+					контекст-сегмент на мобильном отсутствуют — сегментная
+					механика топбара только на десктопе (lg+).
+
+					Traceability: openspec:ui/screens#requirement-app-frame-navigation
+					Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+					Traceability: change:rework-contextual-topbar/design#D5
+					Traceability: change:rework-contextual-topbar/tasks#10.0
+				*/
+				<header
+					data-slot="mobile-topbar"
+					data-testid="mobile-topbar"
+					className="flex h-13 shrink-0 items-center gap-2.5 border-b border-divider bg-surface px-4"
+				>
+					<>
 						<Button
 							variant="ghost"
 							size="icon"
 							aria-label={mobileMenuOpen ? "Закрыть меню" : "Открыть меню"}
 							onClick={() => setMobileMenuOpen((value) => !value)}
 						>
-							{mobileMenuOpen ? <X /> : <Menu />}
+							{mobileMenuOpen ? <X className="size-4.5 text-text-primary" /> : <Menu className="size-4.5 text-text-primary" />}
 						</Button>
-						<span className="text-sm font-semibold">Журнал Bybit</span>
-						<JournalTotal />
-					</div>
-				) : (
+						<span className="text-sm font-semibold text-text-primary">Журнал Bybit</span>
+						<span aria-hidden="true" className="flex-1" />
+						<SyncStatus variant="mobile" />
+					</>
+				</header>
+			)}
+			{isMobile == false && (
+				<header className="flex h-16 shrink-0 items-stretch border-b border-divider bg-surface">
 					<>
 						{/*
 							Сегмент навигации (design.md D2): лого-глиф, бренд и
@@ -339,8 +385,8 @@ export function AppLayout() {
 							</div>
 						)}
 					</>
-				)}
-			</header>
+				</header>
+			)}
 			<div className="flex min-h-0 flex-1">
 				{isMobile == false && (
 					<aside
@@ -538,16 +584,18 @@ function PageHeaderSegment({
 }
 
 /**
- * Статус синхронизации в сегменте страницы (design.md D5): «Обновлено
- * HH:MM» по последнему успешному запуску из журнала синхронизаций (записи
- * приходят новыми сверху), время — в часовой зоне браузера. Пустой журнал,
- * отсутствие успешных запусков или сбой загрузки скрывают блок целиком —
- * деградации остальных элементов топбара нет; клик не проектируется.
+ * Статус синхронизации (design.md D5): «Обновлено HH:MM» по последнему
+ * успешному запуску из журнала синхронизаций (записи приходят новыми
+ * сверху), время — в часовой зоне браузера. Пустой журнал, отсутствие
+ * успешных запусков или сбой загрузки скрывают блок целиком — деградации
+ * остальных элементов топбара нет; клик не проектируется. Десктопная
+ * инстанс живёт в сегменте страницы, мобильная (variant «mobile», мастер
+ * iGlhI) — в мобильном топбаре; запрос у инстансов общий.
  *
  * Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
  * Traceability: change:rework-contextual-topbar/design#D5
  */
-function SyncStatus() {
+function SyncStatus({ variant = "desktop" }: { variant?: "desktop" | "mobile" }) {
 	const runsQuery = useQuery({
 		queryKey: ["sync-runs"],
 		queryFn: () => fetchSyncRuns(20),
@@ -558,6 +606,26 @@ function SyncStatus() {
 	const clock = formatClock(lastSucceeded?.finishedAt ?? lastSucceeded?.startedAt);
 	if (clock === null) {
 		return null;
+	}
+
+	/*
+		Мобильная инстанс (раунд-сверка 10.0, мастер iGlhI): иконка
+		refresh-cw 13×13 + «HH:MM» 11 normal, оба $textMuted; источник и
+		условия скрытия те же, что у десктопного статуса.
+	*/
+	// Traceability: change:rework-contextual-topbar/tasks#10.0
+	if (variant === "mobile") {
+		return (
+			<div
+				data-slot="sync-status"
+				data-testid="sync-status"
+				className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-text-muted"
+				title="Последний успешный запуск синхронизации"
+			>
+				<RefreshCw aria-hidden="true" className="size-[13px]" />
+				<span>{clock}</span>
+			</div>
+		);
 	}
 
 	// 11.5px $textMuted по мастеру jGvOM (нода SyncStatus).

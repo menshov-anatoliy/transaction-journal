@@ -1,4 +1,4 @@
-import { ArrowUp, BookOpen, Bot, ChevronDown, Cpu, Globe, LineChart, Link, Plus, Search, type LucideIcon } from "lucide-react";
+import { ArrowUp, BookOpen, Bot, ChevronDown, ChevronLeft, Cpu, Globe, LineChart, Link, MoreHorizontal, Plus, Search, type LucideIcon } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,9 +9,11 @@ import { chatKeys } from "@/chat/chat-queries";
 import { createChat, listChats } from "@/chat/api/chat-api";
 import { useAgentChatRuntime } from "@/chat/runtime/use-agent-chat-runtime";
 import type { ChatDataSource, ChatDto } from "@/chat/types";
+import type { AgentRuleCard } from "@/lib/api/agent-rules";
 import { SessionItem, SourceChip } from "@/components/design";
 import { usePageHeader } from "@/components/layout/page-header";
 import { useContextPanel } from "@/components/layout/context-panel";
+import { useMobileFocus } from "@/components/layout/mobile-focus";
 import { RuleFullCard, RuleBriefPopup, RULE_CHARACTER_LABELS, RULE_CLARITY_LABELS, RULE_SUBJECT_LABELS, ruleCharacterLabel } from "@/components/agent/rule-cards";
 import { Button } from "@/components/ui/button";
 import { listRules, readRule } from "@/lib/api/agent-rules";
@@ -140,6 +142,12 @@ export function AgentPage() {
 		? null
 		: ([...activeChats, ...completedChats].find((chat) => chat.id === selectedChatId) ?? activeChats[0] ?? completedChats[0] ?? null);
 
+	// Фокусный режим активного чата (раунд-сверка 10.0, мастер OvuY9): на
+	// мобильном при выбранном чате экран занимает только чат; пустое
+	// состояние «Чем помочь с журналом?» и режим «+ Новый чат» остаются
+	// в обычной (нефокусной) мобильной компоновке с глобальным топбаром.
+	const chatFocus = isMobile && tab === "chats" && selectedChat !== null;
+
 	// Сегмент «страница» топбара (раунды-сверки 6.0–8.0): крошка раздела
 	// «Журнал / Агент» и бейдж «Входящих» приходят из fallback конфигурации
 	// разделов. Вкладка чатов — динамический заголовок: при выбранном чате
@@ -163,6 +171,11 @@ export function AgentPage() {
 		[tab, hasSelectedChat],
 	);
 	usePageHeader(pageHeaderRegistration);
+
+	// Скрытие глобального мобильного топбара на время фокусного режима
+	// (мастер OvuY9: экран занимает только чат со своей шапкой 52 px).
+	// Traceability: change:rework-contextual-topbar/tasks#10.0
+	useMobileFocus(chatFocus);
 
 	const completeMutation = useCompleteChatMutation();
 	const resumeMutation = useResumeChatMutation();
@@ -312,6 +325,16 @@ export function AgentPage() {
 		setSelectedChatId(chatId);
 	};
 
+	// «Назад» шапки фокусного режима (раунд-сверка 10.0, мастер OvuY9):
+	// снимает выбор и гасит автовыбор чата — страница возвращается
+	// к состоянию «Агент · Чаты»: пустое состояние с карточками-подсказками
+	// и композером, глобальный топбар возвращается.
+	// Traceability: change:rework-contextual-topbar/tasks#10.0
+	const onChatBack = () => {
+		setForceNewChat(true);
+		setSelectedChatId(null);
+	};
+
 	// Клик по карточке-подсказке (раунд-сверка 6.0) вставляет текст примера
 	// в поле композера и возвращает в него фокус.
 	// Traceability: change:rework-contextual-topbar/tasks#6.0
@@ -319,6 +342,37 @@ export function AgentPage() {
 		setFirstMessage(example);
 		composerInputRef.current?.focus();
 	};
+
+	/*
+		Фокусный режим активного чата на мобильном (раунд-сверка 10.0, мастер
+		OvuY9 «Экран/Mobile · Агент · Чат»): при выбранном чате экран занимает
+		только чат — глобальный топбар скрыт запросом useMobileFocus, H1
+		«Агент», табы «Чаты/Правила/Сводки» и кнопка «Список сессий»
+		не выводятся. Пустое состояние и режим «+ Новый чат» остаются в
+		обычной (нефокусной) мобильной компоновке с глобальным топбаром.
+	*/
+	// Traceability: change:rework-contextual-topbar/tasks#10.0
+	if (chatFocus) {
+		return (
+			<section className="flex h-full min-h-0 flex-col">
+				<ChatFocusPane
+					chat={selectedChat}
+					onBack={onChatBack}
+					onComplete={(chatId) => completeMutation.mutate(chatId)}
+					onResume={(chatId) => resumeMutation.mutate(chatId)}
+					onDelete={deleteSelectedChat}
+					completePending={completeMutation.isPending}
+					resumePending={resumeMutation.isPending}
+					deletePending={deleteMutation.isPending}
+					deleteError={deleteMutation.isError ? deleteMutation.error : null}
+					onRuleHover={setHoveredRuleId}
+					onRuleLeave={() => setHoveredRuleId(null)}
+					onRuleOpen={setOpenedRuleId}
+					hoveredRuleCard={hoveredRuleQuery.data}
+				/>
+			</section>
+		);
+	}
 
 	return (
 		<section className="flex min-h-0 flex-col gap-3.5 p-6">
@@ -793,6 +847,164 @@ export function AgentPage() {
 				</section>
 			)}
 		</section>
+	);
+}
+
+/*
+	Шапка и тело фокусного режима активного чата на мобильном (раунд-сверка
+	10.0, мастер OvuY9): шапка 52 px ($surface, border-b 1 $divider,
+	паддинги [0,14], гэп 10) — «Назад» chevron-left 18×18 $textPrimary
+	(гасит выбор и автовыбор чата — возврат к пустому состоянию
+	«Агент · Чаты»), заголовок ChatDto.firstMessagePreview 13/600
+	$textPrimary с truncate, чип модели (заливка $surface2, радиус 999,
+	паддинги [3,8], текст 10 normal $textSecondary) и «More»
+	more-horizontal 16×16 $textSecondary. Меню «More» несёт существующие
+	операции шапки чата раунда 7.0 — «Завершить» (для завершённого —
+	«Продолжить») и «Удалить» (deleteChat с выбором следующего чата либо
+	пустого состояния и инвалидацией списков). Лента сообщений и композер
+	не перевёрстываются.
+*/
+// Traceability: openspec:chats/history#requirement-chat-manual-completion-and-deletion
+// Traceability: change:rework-contextual-topbar/tasks#7.0
+// Traceability: change:rework-contextual-topbar/tasks#10.0
+function ChatFocusPane({
+	chat,
+	onBack,
+	onComplete,
+	onResume,
+	onDelete,
+	completePending,
+	resumePending,
+	deletePending,
+	deleteError,
+	onRuleHover,
+	onRuleLeave,
+	onRuleOpen,
+	hoveredRuleCard,
+}: {
+	chat: ChatDto;
+	onBack: () => void;
+	onComplete: (chatId: string) => void;
+	onResume: (chatId: string) => void;
+	onDelete: () => void;
+	completePending: boolean;
+	resumePending: boolean;
+	deletePending: boolean;
+	deleteError: Error | null;
+	onRuleHover: (ruleId: string) => void;
+	onRuleLeave: () => void;
+	onRuleOpen: (ruleId: string) => void;
+	hoveredRuleCard: AgentRuleCard | undefined;
+}) {
+	const [menuOpen, setMenuOpen] = React.useState(false);
+	const menuRef = React.useRef<HTMLDivElement>(null);
+
+	// Клик вне меню и Escape закрывают меню «More», не выбирая пункт —
+	// тот же паттерн, что у меню «Параметры» карточки конструкции.
+	React.useEffect(() => {
+		if (menuOpen == false) {
+			return;
+		}
+
+		const onPointerDown = (event: PointerEvent) => {
+			if (menuRef.current !== null && menuRef.current.contains(event.target as Node) == false) {
+				setMenuOpen(false);
+			}
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				setMenuOpen(false);
+			}
+		};
+
+		document.addEventListener("pointerdown", onPointerDown);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("pointerdown", onPointerDown);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [menuOpen]);
+
+	return (
+		<div className="flex h-full min-h-0 flex-col">
+			<header data-testid="chat-focus-header" className="flex h-13 shrink-0 items-center gap-2.5 border-b border-divider bg-surface px-3.5">
+				<Button variant="ghost" size="icon" aria-label="Назад к списку чатов" title="Назад к списку чатов" onClick={onBack}>
+					<ChevronLeft className="size-4.5 text-text-primary" />
+				</Button>
+				<h2 className="min-w-0 truncate text-[13px] font-semibold text-text-primary">{chat.firstMessagePreview}</h2>
+				<span data-testid="chat-focus-model" className="shrink-0 rounded-full bg-surface-2 px-2 py-[3px] text-[10px] text-text-secondary">
+					{chat.params.model}
+				</span>
+				<div ref={menuRef} className="relative ms-auto shrink-0">
+					<Button
+						variant="ghost"
+						size="icon"
+						aria-label="Действия чата"
+						aria-haspopup="menu"
+						aria-expanded={menuOpen}
+						onClick={() => setMenuOpen((value) => value == false)}
+					>
+						<MoreHorizontal className="size-4 text-text-secondary" />
+					</Button>
+					{menuOpen && (
+						<div
+							role="menu"
+							aria-label="Действия чата"
+							className="bg-surface absolute top-full right-0 z-20 mt-1 flex min-w-36 flex-col gap-0.5 rounded-md border p-1.5 shadow-sm"
+						>
+							{chat.status === "active" ? (
+								<button
+									type="button"
+									role="menuitem"
+									disabled={completePending}
+									className="hover:bg-surface-2 flex cursor-pointer items-center rounded-sm px-2.5 py-2 text-left text-xs text-text-secondary outline-none"
+									onClick={() => {
+										setMenuOpen(false);
+										onComplete(chat.id);
+									}}
+								>
+									Завершить
+								</button>
+							) : (
+								<button
+									type="button"
+									role="menuitem"
+									disabled={resumePending}
+									className="hover:bg-surface-2 flex cursor-pointer items-center rounded-sm px-2.5 py-2 text-left text-xs text-text-secondary outline-none"
+									onClick={() => {
+										setMenuOpen(false);
+										onResume(chat.id);
+									}}
+								>
+									Продолжить
+								</button>
+							)}
+							<button
+								type="button"
+								role="menuitem"
+								disabled={deletePending}
+								className="hover:bg-neg/15 flex cursor-pointer items-center rounded-sm px-2.5 py-2 text-left text-xs text-neg outline-none"
+								onClick={() => {
+									setMenuOpen(false);
+									onDelete();
+								}}
+							>
+								Удалить
+							</button>
+						</div>
+					)}
+				</div>
+			</header>
+			{deleteError !== null && (
+				<p className="text-destructive shrink-0 px-3.5 pt-2 text-sm" role="alert">
+					Не удалось удалить чат: {deleteError.message}
+				</p>
+			)}
+			<div className="relative min-h-0 flex-1 overflow-hidden">
+				<ChatThreadPane chat={chat} onRuleHover={onRuleHover} onRuleLeave={onRuleLeave} onRuleOpen={onRuleOpen} />
+				{hoveredRuleCard !== undefined && <RuleBriefPopup card={hoveredRuleCard} />}
+			</div>
+		</div>
 	);
 }
 

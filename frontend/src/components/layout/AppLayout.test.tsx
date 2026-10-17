@@ -9,6 +9,7 @@ import { appSections } from "@/config/sections";
 import { AgentPage } from "@/pages/agent-page";
 import { AppLayout } from "./AppLayout";
 import { useContextPanel } from "./context-panel";
+import { useMobileFocus } from "./mobile-focus";
 import { usePageHeader } from "./page-header";
 
 vi.mock("@/lib/api/inbox", async (importOriginal) => ({
@@ -155,7 +156,18 @@ function HeaderRegisteringScreen() {
 	return <div>главная</div>;
 }
 
-function renderLayout(withContext = false, overflowContext = false, headerRegistered = false) {
+/**
+ * Экран-проверка: запрашивает у каркаса скрытие мобильного топбара —
+ * фокусный мобильный экран (активный чат агента) занимает экран своей
+ * шапкой (раунд-сверка 10.0).
+ */
+// Traceability: change:rework-contextual-topbar/tasks#10.0
+function FocusRequestingScreen() {
+	useMobileFocus(true);
+	return <div>фокусный экран</div>;
+}
+
+function renderLayout(withContext = false, overflowContext = false, headerRegistered = false, focusRequested = false) {
 	const queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	});
@@ -165,7 +177,9 @@ function renderLayout(withContext = false, overflowContext = false, headerRegist
 			children: [
 				{
 					index: true,
-					element: overflowContext ? (
+					element: focusRequested ? (
+						<FocusRequestingScreen />
+					) : overflowContext ? (
 						<OverflowContextScreen />
 					) : withContext ? (
 						<ContextRegisteringScreen />
@@ -341,6 +355,124 @@ describe("раскладка каркаса приложения", () => {
 		await user.click(screen.getByRole("link", { name: "Подсказки" }));
 		expect(await screen.findByRole("heading", { name: "Подсказки" })).toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: "Закрыть меню" })).not.toBeInTheDocument();
+	});
+});
+
+/*
+	Мобильный топбар (раунд-сверка 10.0, мастер iGlhI «Экран/Mobile ·
+	Конструкции»): высота 52 px, заливка $surface, нижний разделитель
+	$divider, паддинги [0,16], гэп 10; состав — кнопка drawer-шторки
+	(иконка menu 18×18 $textPrimary, механика шторки не меняется), бренд
+	14/600 $textPrimary, flex-спейсер и статус синхронизации справа
+	(«HH:MM» 11 normal $textMuted, источник тот же fetchSyncRuns —
+	инвариант D5). Итог журнала, крошка, заголовок, чипы страницы и
+	контекст-сегмент на мобильном отсутствуют.
+*/
+// Traceability: openspec:ui/screens#requirement-app-frame-navigation
+// Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+// Traceability: change:rework-contextual-topbar/design#D5
+// Traceability: change:rework-contextual-topbar/tasks#10.0
+describe("мобильный топбар", () => {
+	it("несёт геометрию мастера iGlhI: 52 px, бургер, бренд, статус без итога", async () => {
+		// Arrange: мобильный вьюпорт 390 и журнал с успешным запуском 10:05.
+		setViewport(390);
+		syncApi.fetchSyncRuns.mockResolvedValue([makeSyncRun("succeeded", "2026-10-16T10:05:00")]);
+		renderLayout();
+
+		// Assert: геометрия топбара — высота 52 (h-13), $surface,
+		// $divider, паддинги [0,16], гэп 10.
+		const topbar = screen.getByTestId("mobile-topbar");
+		expect(topbar.className).toContain("h-13");
+		expect(topbar.className).toContain("bg-surface");
+		expect(topbar.className).toContain("border-divider");
+		expect(topbar.className).toContain("px-4");
+		expect(topbar.className).toContain("gap-2.5");
+
+		// Assert: бургер — иконка menu 18×18 $textPrimary.
+		const burger = within(topbar).getByRole("button", { name: "Открыть меню" });
+		const burgerIcon = burger.querySelector("svg");
+		expect(burgerIcon?.getAttribute("class")).toContain("lucide-menu");
+		expect(burgerIcon?.getAttribute("class")).toContain("size-4.5");
+		expect(burgerIcon?.getAttribute("class")).toContain("text-text-primary");
+
+		// Assert: бренд 14/600 $textPrimary.
+		const brand = within(topbar).getByText("Журнал Bybit");
+		expect(brand.className).toContain("text-sm");
+		expect(brand.className).toContain("font-semibold");
+		expect(brand.className).toContain("text-text-primary");
+
+		// Assert: статус справа — только «HH:MM» 11 $textMuted, иконка
+		// refresh-cw 13×13.
+		const status = await within(topbar).findByTestId("sync-status");
+		expect(status).toHaveTextContent(/^10:05$/);
+		expect(status).not.toHaveTextContent("Обновлено");
+		expect(status.className).toContain("text-[11px]");
+		expect(status.className).toContain("text-text-muted");
+		const statusIcon = status.querySelector("svg");
+		expect(statusIcon?.getAttribute("class")).toContain("lucide-refresh-cw");
+		expect(statusIcon?.getAttribute("class")).toContain("size-[13px]");
+
+		// Assert: итог журнала, сегменты страниц и бейдж на мобильном
+		// отсутствуют — сегментная механика только на десктопе (lg+).
+		expect(within(topbar).queryByTestId("journal-total")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("topbar-segment-page")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("topbar-segment-nav")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("topbar-segment-context")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("topbar-badge")).not.toBeInTheDocument();
+	});
+
+	const hiddenStatusCases: ReadonlyArray<[string, SyncRunJournalEntry[]]> = [
+		["пустом журнале", []],
+		[
+			"журнале без успешных запусков",
+			[makeSyncRun("failed", "2026-10-16T12:00:00"), makeSyncRun("running", null)],
+		],
+	];
+	it.each(hiddenStatusCases)("скрывает статус при %s без деградации топбара", async (_case, runs) => {
+		// Arrange: мобильный вьюпорт и журнал без успешных запусков.
+		setViewport(390);
+		syncApi.fetchSyncRuns.mockResolvedValue(runs);
+		renderLayout();
+
+		// Assert: блока статуса нет, бренд и бургер на месте.
+		await screen.findByText("Журнал Bybit");
+		expect(screen.queryByTestId("sync-status")).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Открыть меню" })).toBeInTheDocument();
+	});
+
+	it("скрывает статус при сбое загрузки журнала", async () => {
+		setViewport(390);
+		syncApi.fetchSyncRuns.mockRejectedValue(new Error("API ответил ошибкой 500"));
+		renderLayout();
+
+		// Assert: блока статуса нет, остальные элементы топбара работают.
+		await screen.findByText("Журнал Bybit");
+		expect(screen.queryByTestId("sync-status")).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Открыть меню" })).toBeInTheDocument();
+	});
+
+	it("фокусный мобильный экран скрывает глобальный топбар целиком", () => {
+		// Решение раунд-сверки 10.0 (мастер OvuY9): при выбранном чате
+		// «Агента» экран занимает только чат — страница просит каркас
+		// скрыть мобильный топбар через useMobileFocus.
+		// Traceability: change:rework-contextual-topbar/tasks#10.0
+		setViewport(390);
+		renderLayout(false, false, false, true);
+
+		// Assert: заголовка-баннера нет вовсе; содержимое фокусного
+		// экрана осталось доступным.
+		expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+		expect(screen.getByText("фокусный экран")).toBeInTheDocument();
+	});
+
+	it("на десктопе запрос фокусного режима топбар не скрывает", () => {
+		// Сегментная механика существует только на десктопе (lg+) — запрос
+		// фокусного мобильного хрома там игнорируется.
+		// Traceability: change:rework-contextual-topbar/tasks#10.0
+		renderLayout(false, false, false, true);
+
+		expect(screen.getByRole("banner")).toBeInTheDocument();
+		expect(screen.getByText("фокусный экран")).toBeInTheDocument();
 	});
 });
 
