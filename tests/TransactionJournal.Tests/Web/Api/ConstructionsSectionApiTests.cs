@@ -33,6 +33,15 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 [TestClass]
 public sealed class ConstructionsSectionApiTests
 {
+	/// <summary>Текст предупреждения о незакрытой фьючерсной части.</summary>
+	private const string WarningUncoveredFuture = "BTCUSDT: фьючерс не закрыт опционами (1 из 2 контрактов) — убыток ограничен ценой входа.";
+
+	/// <summary>Текст предупреждения о коротком колле сверх покрытия.</summary>
+	private const string WarningUncoveredShortCall = "ETH-28JUN24-7000-C: короткий колл не закрыт по рискам (1 из 1 контракта) — Риск не ограничен.";
+
+	/// <summary>Текст предупреждения о коротком путе без встречных ног.</summary>
+	private const string WarningUncoveredShortPut = "BTC-27DEC24-50000-P: короткий пут не закрыт по рискам (1 из 1 контракта) — убыток ограничен нулём цены.";
+
 	[TestMethod]
 	[Description("Список конструкций отдаёт сводку журнала и строки таблицы одним ответом")]
 	// Раздел «Конструкции» получает данные через единый версионированный API:
@@ -158,6 +167,35 @@ public sealed class ConstructionsSectionApiTests
 	}
 
 	[TestMethod]
+	[Description("Строки списка несут счётчик предупреждений диагностики для бейджа «⚠ N»")]
+	// Бейдж предупреждений в строке таблицы: счётчик проходит из метрик
+	// аналитики в контракт строки; у конструкции без открытых остатков
+	// (закрытой) счётчик нулевой — бейдж в строке не рисуется.
+	// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+	// Traceability: openspec:analytics/risk-diagnostics#scenario-diagnostics-closed-construction-empty
+	public async Task TryIfOverviewRowsCarryRiskWarningsCount()
+	{
+		// Arrange: открытая конструкция с двумя предупреждениями, закрытая — без.
+		await using var factory = new SectionApiFactory(services => services.ReplaceReadModel(StubListReadModel.WithRiskWarnings()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос обзора раздела.
+		var payload = await (await client.GetAsync("/api/v1/constructions")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: счётчик предупреждений приходит в строке открытой конструкции.
+		var withWarnings = payload!["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.OpenConstructionId)!;
+		Assert.That(withWarnings["riskWarningsCount"]!.GetValue<int>(), Is.EqualTo(2));
+		// Закрытая конструкция без открытых остатков несёт нулевой счётчик.
+		var closed = payload["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.ClosedConstructionId)!;
+		Assert.That(closed!["riskWarningsCount"]!.GetValue<int>(), Is.EqualTo(0));
+		// Существующие поля строки не меняются: реальный риск со статусом
+		// остаётся рядом с новым счётчиком.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		Assert.That(withWarnings["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
+		Assert.That(withWarnings["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
+	}
+
+	[TestMethod]
 	[Description("Превью конструкции отдаёт метрики, период и счётчики записей")]
 	// Правая область при выделенной конструкции показывает read-only превью:
 	// сводку метрик, полный индикатор финрезультата (риск/профит), период и
@@ -224,6 +262,82 @@ public sealed class ConstructionsSectionApiTests
 
 		// Assert: эндпоинт отвечает 404.
 		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+	}
+
+	[TestMethod]
+	[Description("Превью несёт счётчик и полный перечень предупреждений диагностики")]
+	// Краткая карточка контекстной панели показывает предупреждения: счётчик
+	// бейджа и полный перечень текстов приходят из одного набора метрик
+	// чтения; существующие поля превью не меняются.
+	// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+	// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-messages
+	public async Task TryIfPreviewCarriesRiskWarningsCountAndTexts()
+	{
+		// Arrange: чтение деталей с двумя предупреждениями диагностики.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(
+			new StubDetailReadModel().WithRiskWarnings(WarningUncoveredFuture, WarningUncoveredShortCall)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос превью конструкции.
+		var payload = await (await client.GetAsync($"/api/v1/constructions/{StubListReadModel.OpenConstructionId}/preview")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: счётчик и полный перечень предупреждений в ответе превью.
+		Assert.That(payload!["riskWarningsCount"]!.GetValue<int>(), Is.EqualTo(2));
+		var warnings = payload["riskWarnings"]!.AsArray();
+		Assert.That(warnings, Has.Count.EqualTo(2));
+		Assert.That(warnings[0]!["text"]!.GetValue<string>(), Is.EqualTo(WarningUncoveredFuture));
+		Assert.That(warnings[1]!["text"]!.GetValue<string>(), Is.EqualTo(WarningUncoveredShortCall));
+		// Существующие поля превью не меняются: реальный риск со статусом
+		// и счётчики записей остаются рядом с предупреждениями.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		Assert.That(payload["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
+		Assert.That(payload["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
+		Assert.That(payload["counts"]!["positions"]!.GetValue<int>(), Is.EqualTo(2));
+	}
+
+	[TestMethod]
+	[Description("Превью без предупреждений отдаёт нулевой счётчик и пустой перечень")]
+	// Конструкция без открытых остатков имеет пустой набор предупреждений:
+	// контракт отдаёт ноль и явный пустой список, а не отсутствие поля.
+	// Traceability: openspec:analytics/risk-diagnostics#scenario-diagnostics-closed-construction-empty
+	public async Task TryIfPreviewWithoutWarningsServesZeroCountAndEmptyList()
+	{
+		// Arrange: чтение деталей без предупреждений диагностики.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос превью конструкции.
+		var payload = await (await client.GetAsync($"/api/v1/constructions/{StubListReadModel.OpenConstructionId}/preview")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: нулевой счётчик и пустой список предупреждений.
+		Assert.That(payload!["riskWarningsCount"]!.GetValue<int>(), Is.EqualTo(0));
+		Assert.That(payload["riskWarnings"]!.AsArray(), Has.Count.EqualTo(0));
+	}
+
+	[TestMethod]
+	[Description("Повторное чтение превью после изменения остатков отдаёт пересчитанный набор предупреждений")]
+	// Диагностика вычисляется при чтении и не хранится: после изменения
+	// открытых остатков повторный запрос отдаёт новый набор, а не снимок
+	// прошлого чтения.
+	// Traceability: openspec:analytics/risk-diagnostics#scenario-diagnostics-recomputed-on-read
+	public async Task TryIfPreviewReflectsRecomputedWarningsOnEachRead()
+	{
+		// Arrange: первое чтение с двумя предупреждениями диагностики.
+		var stub = new StubDetailReadModel().WithRiskWarnings(WarningUncoveredFuture, WarningUncoveredShortCall);
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(stub));
+		using var client = factory.CreateClient();
+
+		// Act: чтение превью, изменение открытых остатков и повторное чтение.
+		var first = await (await client.GetAsync($"/api/v1/constructions/{StubListReadModel.OpenConstructionId}/preview")).Content.ReadFromJsonAsync<JsonNode>();
+		// Изменение остатков конструкции пересчитало диагностику при чтении:
+		// набор предупреждений стал другим.
+		stub.ChangeOpenResiduals(WarningUncoveredShortPut);
+		var second = await (await client.GetAsync($"/api/v1/constructions/{StubListReadModel.OpenConstructionId}/preview")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: первое чтение отдаёт прежний набор, повторное — новый.
+		Assert.That(first!["riskWarningsCount"]!.GetValue<int>(), Is.EqualTo(2));
+		Assert.That(second!["riskWarningsCount"]!.GetValue<int>(), Is.EqualTo(1));
+		Assert.That(second["riskWarnings"]!.AsArray().Single()!["text"]!.GetValue<string>(), Is.EqualTo(WarningUncoveredShortPut));
 	}
 
 	[TestMethod]
@@ -982,6 +1096,16 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					RealRiskStatus: RealRiskStatus.Finite),
 			]));
 
+	/// <summary>Вариант с предупреждениями диагностики: открытая конструкция с ненулевым счётчиком, закрытая — без предупреждений.</summary>
+	public static StubListReadModel WithRiskWarnings()
+	{
+		var data = CreateDefaultData();
+		// Открытая конструкция несёт счётчик бейджа «⚠ N»; закрытая без открытых
+		// остатков имеет нулевой счётчик — бейдж в строке не рисуется.
+		var open = data.Items[0] with { RiskWarningsCount = 2 };
+		return new StubListReadModel(data with { Items = [open, data.Items[1]] });
+	}
+
 	public Task<ConstructionListData> ReadAsync(CancellationToken cancellationToken = default) => Task.FromResult(_data);
 }
 
@@ -989,6 +1113,9 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 {
 	private readonly RealRiskStatus _realRiskStatus;
+
+	/// <summary>Предупреждения диагностики текущего чтения: меняются вместе с открытыми остатками.</summary>
+	private IReadOnlyList<string> _riskWarnings = [];
 
 	public StubDetailReadModel()
 		: this(RealRiskStatus.Finite)
@@ -1002,6 +1129,16 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 
 	/// <summary>Вариант с заданным состоянием реального риска: число остаётся только у конечного риска.</summary>
 	public static StubDetailReadModel WithRealRiskStatus(RealRiskStatus realRiskStatus) => new(realRiskStatus);
+
+	/// <summary>Вариант с предупреждениями диагностики: счётчик метрик и перечень данных экрана идут одним набором.</summary>
+	public StubDetailReadModel WithRiskWarnings(params string[] warnings)
+	{
+		_riskWarnings = warnings;
+		return this;
+	}
+
+	/// <summary>Имитирует изменение открытых остатков: следующее чтение возвращает пересчитанный набор предупреждений.</summary>
+	public void ChangeOpenResiduals(params string[] warnings) => _riskWarnings = warnings;
 
 	public Task<ConstructionDetailData> ReadAsync(long constructionId, CancellationToken cancellationToken = default)
 	{
@@ -1037,6 +1174,10 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			OpenedAt = openedAt,
 			ClosedAt = null,
 			Duration = TimeSpan.FromHours(53.4),
+			// Счётчик предупреждений вычисляется при чтении из открытых
+			// остатков и в базе не хранится.
+			// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+			RiskWarningsCount = _riskWarnings.Count,
 		};
 		var data = new ConstructionDetailData(
 			ConstructionId: constructionId,
@@ -1102,7 +1243,10 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			Adjustments:
 			[
 				new ConstructionAdjustmentRow(11, new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero), "Пополнение комиссии", PnLAdjustmentSource.Manual, 5m),
-			]);
+			],
+			// Перечень предупреждений идёт из того же набора текущего чтения,
+			// что и счётчик метрик, — расхождение исключено.
+			RiskWarnings: _riskWarnings);
 		return Task.FromResult(data);
 	}
 }

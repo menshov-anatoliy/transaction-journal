@@ -35,6 +35,12 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 [TestClass]
 public sealed class ConstructionCardApiTests
 {
+	/// <summary>Текст предупреждения о незакрытой фьючерсной части.</summary>
+	private const string WarningUncoveredFuture = "BTCUSDT: фьючерс не закрыт опционами (1 из 2 контрактов) — убыток ограничен ценой входа.";
+
+	/// <summary>Текст предупреждения о коротком путе без встречных ног.</summary>
+	private const string WarningUncoveredShortPut = "BTC-27DEC24-50000-P: короткий пут не закрыт по рискам (1 из 1 контракта) — убыток ограничен нулём цены.";
+
 	[TestMethod]
 	[Description("Снимок карточки отдаёт шапку с параметрами, метрики с периодом и четыре таблицы")]
 	// Карточка конструкции — полная информация и всё управление (паритет №3–№9):
@@ -239,6 +245,62 @@ public sealed class ConstructionCardApiTests
 			.AsObject().Select(property => property.Key).ToArray();
 		Assert.That(closeSchemaProperties, Does.Contain("linearExecId"));
 		Assert.That(closeSchemaProperties, Does.Contain("counterOptionExecId"));
+	}
+
+	[TestMethod]
+	[Description("Перечень предупреждений диагностики входит в контракт карточки аддитивно")]
+	// Аддитивность контракта: прежние поля снимка не меняются, список
+	// riskWarnings с текстами появляется рядом — существующие потребители
+	// остаются совместимыми.
+	// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+	// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-messages
+	public async Task TryIfRiskWarningsAreAdditiveToCardContract()
+	{
+		// Arrange: стабильная read-модель деталей конструкции 7 с предупреждениями.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(
+			new StubCardDetailReadModel().WithRiskWarnings(WarningUncoveredFuture, WarningUncoveredShortPut)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var response = await client.GetAsync("/api/v1/constructions/7");
+
+		// Assert: полный перечень предупреждений приходит снимком.
+		Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+		var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
+		var warnings = payload!["riskWarnings"]!.AsArray();
+		Assert.That(warnings, Has.Count.EqualTo(2));
+		Assert.That(warnings[0]!["text"]!.GetValue<string>(), Is.EqualTo(WarningUncoveredFuture));
+		Assert.That(warnings[1]!["text"]!.GetValue<string>(), Is.EqualTo(WarningUncoveredShortPut));
+
+		// Прежние поля снимка не меняются: шапка, метрики с реальным риском
+		// (включая статус), таблицы и связки остаются рядом с предупреждениями.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+		Assert.That(payload["name"]!.GetValue<string>(), Is.EqualTo("ETH-240628-3200C+P"));
+		var metrics = payload["metrics"]!;
+		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
+		Assert.That(metrics["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
+		Assert.That(payload["positions"]!.AsArray(), Has.Count.EqualTo(3));
+		Assert.That(payload["syntheticCloses"]!.AsArray().Single()!["closedLegSymbol"]!.GetValue<string>(), Is.EqualTo("XAUT-30OCT26-4400-P-USDT"));
+		Assert.That(payload["adjustments"]!.AsArray(), Has.Count.EqualTo(1));
+	}
+
+	[TestMethod]
+	[Description("Карточка без предупреждений отдаёт пустой список вместо отсутствия поля")]
+	// Набор без предупреждений (конструкция без открытых остатков) — обычное
+	// состояние: контракт отдаёт явную пустоту, чтобы секция «Предупреждения»
+	// карточки скрывалась без догадок.
+	// Traceability: openspec:analytics/risk-diagnostics#scenario-diagnostics-closed-construction-empty
+	public async Task TryIfCardWithoutWarningsServesEmptyRiskWarningsArray()
+	{
+		// Arrange: стабильная read-модель деталей без предупреждений.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: поле riskWarnings отдаётся пустым списком, а не null.
+		Assert.That(payload!["riskWarnings"]!.AsArray(), Has.Count.EqualTo(0));
 	}
 
 	[TestMethod]
@@ -1435,6 +1497,9 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 
 	private readonly RealRiskStatus _realRiskStatus;
 
+	/// <summary>Предупреждения диагностики конструкции: тексты проходят в контракт карточки.</summary>
+	private IReadOnlyList<string> _riskWarnings = [];
+
 	private StubCardDetailReadModel(bool brokenJournal, RealRiskStatus realRiskStatus)
 	{
 		_brokenJournal = brokenJournal;
@@ -1452,6 +1517,13 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 
 	/// <summary>Вариант с заданным состоянием реального риска: число остаётся только у конечного риска.</summary>
 	public static StubCardDetailReadModel WithRealRiskStatus(RealRiskStatus realRiskStatus) => new(brokenJournal: false, realRiskStatus);
+
+	/// <summary>Вариант с предупреждениями диагностики: перечень идёт рядом с прежними полями снимка.</summary>
+	public StubCardDetailReadModel WithRiskWarnings(params string[] warnings)
+	{
+		_riskWarnings = warnings;
+		return this;
+	}
 
 	public Task<ConstructionDetailData> ReadAsync(long constructionId, CancellationToken cancellationToken = default)
 	{
@@ -1493,6 +1565,10 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			OpenedAt = openedAt,
 			ClosedAt = null,
 			Duration = TimeSpan.FromHours(53.4),
+			// Счётчик предупреждений вычисляется при чтении из открытых
+			// остатков и в базе не хранится.
+			// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+			RiskWarningsCount = _riskWarnings.Count,
 		};
 		var data = new ConstructionDetailData(
 			ConstructionId: constructionId,
@@ -1600,7 +1676,10 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 				new SyntheticCloseRow("XAUT-30OCT26-4400-P-USDT", 0.3m, 35.697m, true, "case-perp", "case-call"),
 			],
 			RiskUnit: TargetUnit.Percent,
-			ProfitUnit: TargetUnit.Usdt);
+			ProfitUnit: TargetUnit.Usdt,
+			// Перечень предупреждений идёт из того же набора текущего чтения,
+			// что и счётчик метрик, — расхождение перечня и счётчика исключено.
+			RiskWarnings: _riskWarnings);
 		return Task.FromResult(data);
 	}
 }
