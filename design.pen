@@ -2202,6 +2202,40 @@
                       ]
                     },
                     {
+                      "type": "frame",
+                      "id": "CH9gv",
+                      "name": "Warnings",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "cPbwP",
+                          "name": "Label",
+                          "fill": "$risk",
+                          "content": "Предупреждения",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "600",
+                          "letterSpacing": 0.3
+                        },
+                        {
+                          "type": "text",
+                          "id": "mLC3d",
+                          "name": "W:1",
+                          "fill": "$risk",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "ETHUSDT · 1 из 2 контрактов · убыток ограничен ценой входа",
+                          "lineHeight": 1.4,
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
                       "type": "text",
                       "id": "hYUmW",
                       "name": "Period",
@@ -5439,7 +5473,12 @@
                   "type": "ref",
                   "ref": "N6abN",
                   "name": "Превью",
-                  "width": "fill_container"
+                  "width": "fill_container",
+                  "descendants": {
+                    "CH9gv": {
+                      "enabled": true
+                    }
+                  }
                 }
               ]
             }
@@ -5455,7 +5494,7 @@
       "name": "Экран/Карточка конструкции",
       "clip": true,
       "width": 1600,
-      "height": 1522,
+      "height": 1656,
       "fill": "$bg",
       "layout": "vertical",
       "children": [
@@ -6479,6 +6518,97 @@
                               "content": "Нереализованный профит +145 USDT достигает 48% плана. Правило: зафиксировать 50%."
                             }
                           }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "O5QaOg",
+                  "name": "Предупреждения",
+                  "clip": true,
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "mFJaz",
+                      "name": "Head",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "padding": [
+                        10,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "s6Zo3D",
+                          "name": "Title",
+                          "fill": "$textPrimary",
+                          "content": "Предупреждения",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "BAAtj",
+                          "name": "Count",
+                          "fill": "$textMuted",
+                          "content": "1 запись",
+                          "fontFamily": "$font",
+                          "fontSize": 11.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Z4RHO",
+                          "name": "Spacer",
+                          "width": "fill_container",
+                          "height": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "bjx9o",
+                      "name": "Row:1",
+                      "width": "fill_container",
+                      "stroke": "$divider",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "a9HkwQ",
+                          "name": "C:Предупреждение",
+                          "width": "fill_container",
+                          "padding": [
+                            7,
+                            14
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "f0bGY6",
+                              "name": "T",
+                              "fill": "$risk",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "ETHUSDT · 1 из 2 контрактов · убыток ограничен ценой входа",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
                         }
                       ]
                     }
@@ -19316,6 +19446,1694 @@
                       "fontFamily": "$font",
                       "fontSize": 12,
                       "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "fkcsH",
+      "x": 9896,
+      "y": 0,
+      "name": "Стенд/Предупреждения конструкции · состояния",
+      "width": 1024,
+      "fill": "$surface",
+      "stroke": "$border",
+      "layout": "vertical",
+      "gap": 18,
+      "padding": 24,
+      "children": [
+        {
+          "type": "text",
+          "id": "dqvGs",
+          "name": "Title",
+          "fill": "$textPrimary",
+          "content": "Предупреждения конструкции · 6 кейсов (превью + секция карточки)",
+          "fontFamily": "$font",
+          "fontSize": 15,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "U51DR",
+          "name": "Cell:1 · Превью · с предупреждениями — полный перечень (контртренд ETH, ⚠ 1)",
+          "width": "fill_container",
+          "fill": "$bg",
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "h5SegW",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "content": "Cell:1 · Превью · с предупреждениями — полный перечень (контртренд ETH, ⚠ 1)",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "id": "sMgKZ",
+              "type": "ref",
+              "ref": "N6abN",
+              "name": "Превью"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "x2eJrJ",
+          "name": "Cell:2 · Превью · без предупреждений — перечень отсутствует",
+          "width": "fill_container",
+          "fill": "$bg",
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "GNeKT",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "content": "Cell:2 · Превью · без предупреждений — перечень отсутствует",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "id": "h12qA",
+              "type": "ref",
+              "ref": "N6abN",
+              "name": "Превью",
+              "descendants": {
+                "CH9gv": {
+                  "enabled": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "EPi35",
+          "name": "Cell:3 · Карточка · секция «Предупреждения» над таблицами (контртренд ETH, ⚠ 1)",
+          "width": "fill_container",
+          "fill": "$bg",
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "FKy3V",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "content": "Cell:3 · Карточка · секция «Предупреждения» над таблицами (контртренд ETH, ⚠ 1)",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "bSxuO",
+              "name": "Предупреждения",
+              "clip": true,
+              "width": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": 12,
+              "stroke": "$border",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "IWcEy",
+                  "name": "Head",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "hQItq",
+                      "name": "Title",
+                      "fill": "$textPrimary",
+                      "content": "Предупреждения",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "OgTpB",
+                      "name": "Count",
+                      "fill": "$textMuted",
+                      "content": "1 запись",
+                      "fontFamily": "$font",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Y4PM40",
+                      "name": "Spacer",
+                      "width": "fill_container",
+                      "height": 1
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Iryyv",
+                  "name": "Row:1",
+                  "width": "fill_container",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "iQVQo",
+                      "name": "C:Предупреждение",
+                      "width": "fill_container",
+                      "padding": [
+                        7,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "VTNW9",
+                          "name": "T",
+                          "fill": "$risk",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "ETHUSDT · 1 из 2 контрактов · убыток ограничен ценой входа",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "zVBXT",
+          "name": "Cell:4 · Карточка · две записи (стреддл BTC, ⚠ 2)",
+          "width": "fill_container",
+          "fill": "$bg",
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "fXxjb",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "content": "Cell:4 · Карточка · две записи (стреддл BTC, ⚠ 2)",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "r6nbEi",
+              "name": "Предупреждения",
+              "clip": true,
+              "width": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": 12,
+              "stroke": "$border",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "DWkL0",
+                  "name": "Head",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "D1kYR",
+                      "name": "Title",
+                      "fill": "$textPrimary",
+                      "content": "Предупреждения",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Zej1v",
+                      "name": "Count",
+                      "fill": "$textMuted",
+                      "content": "2 записи",
+                      "fontFamily": "$font",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "OAJw2",
+                      "name": "Spacer",
+                      "width": "fill_container",
+                      "height": 1
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "noYKY",
+                  "name": "Row:1",
+                  "width": "fill_container",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "qVBTY",
+                      "name": "C:Предупреждение",
+                      "width": "fill_container",
+                      "padding": [
+                        7,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "S3kSS",
+                          "name": "T",
+                          "fill": "$risk",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "BTC-26DEC-100000-C · 1 контракт · убыток не ограничен",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "LdVmD",
+                  "name": "Row:2",
+                  "width": "fill_container",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Wr32t",
+                      "name": "C:Предупреждение",
+                      "width": "fill_container",
+                      "padding": [
+                        7,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pcePR",
+                          "name": "T",
+                          "fill": "$risk",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "BTC-26DEC-100000-P · 1 контракт · убыток ограничен нулём цены",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "qZj22",
+          "name": "Cell:5 · Карточка · предупреждение только по фьючерсу (покрытый кол XRP, ⚠ 1)",
+          "width": "fill_container",
+          "fill": "$bg",
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "cQQY0",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "content": "Cell:5 · Карточка · предупреждение только по фьючерсу (покрытый кол XRP, ⚠ 1)",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "L4gtO4",
+              "name": "Предупреждения",
+              "clip": true,
+              "width": "fill_container",
+              "fill": "$surface",
+              "cornerRadius": 12,
+              "stroke": "$border",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "TKuLS",
+                  "name": "Head",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "JfEmZ",
+                      "name": "Title",
+                      "fill": "$textPrimary",
+                      "content": "Предупреждения",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "GOtuS",
+                      "name": "Count",
+                      "fill": "$textMuted",
+                      "content": "1 запись",
+                      "fontFamily": "$font",
+                      "fontSize": 11.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "aljlt",
+                      "name": "Spacer",
+                      "width": "fill_container",
+                      "height": 1
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "lAN65",
+                  "name": "Row:1",
+                  "width": "fill_container",
+                  "stroke": "$divider",
+                  "strokeWidth": {
+                    "bottom": 1
+                  },
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "WcJo4",
+                      "name": "C:Предупреждение",
+                      "width": "fill_container",
+                      "padding": [
+                        7,
+                        14
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "qBAyL",
+                          "name": "T",
+                          "fill": "$risk",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "XRPUSDT · 1 контракт · убыток ограничен ценой входа",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "r3umP",
+          "name": "Cell:6 · Карточка · без предупреждений — секция скрыта, после подсказок сразу таблицы",
+          "width": "fill_container",
+          "fill": "$bg",
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "tbqE7",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "content": "Cell:6 · Карточка · без предупреждений — секция скрыта, после подсказок сразу таблицы",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "f5SnF",
+              "name": "Стык без секции",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "I2KM9",
+                  "name": "Подсказки конструкции",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Wp0mL",
+                      "name": "Title",
+                      "fill": "$textPrimary",
+                      "content": "Подсказки конструкции",
+                      "fontFamily": "$font",
+                      "fontSize": 13.5,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "QV3qh",
+                      "name": "Row",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "children": [
+                        {
+                          "id": "ItzJC",
+                          "type": "ref",
+                          "ref": "H0y2H",
+                          "name": "H1",
+                          "width": "fill_container",
+                          "descendants": {
+                            "dcQU6": {
+                              "content": "Лимиты риска"
+                            },
+                            "urdBT": {
+                              "content": "Занятость 78% — выше цели 70%. Прикрыть шорт дополнительным путом 1450."
+                            }
+                          }
+                        },
+                        {
+                          "id": "kwJe4",
+                          "type": "ref",
+                          "ref": "H0y2H",
+                          "name": "H2",
+                          "width": "fill_container",
+                          "descendants": {
+                            "dcQU6": {
+                              "content": "Дисциплина закрытия"
+                            },
+                            "nVumb/E3YiR": {
+                              "content": "Применено"
+                            },
+                            "urdBT": {
+                              "content": "Нереализованный профит +145 USDT достигает 48% плана. Правило: зафиксировать 50%."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ZQ8N9",
+                  "name": "Позиции",
+                  "clip": true,
+                  "width": "fill_container",
+                  "fill": "$surface",
+                  "cornerRadius": 12,
+                  "stroke": "$border",
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "MWlba",
+                      "name": "Head",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "padding": [
+                        10,
+                        14
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "LPu7g",
+                          "name": "Title",
+                          "fill": "$textPrimary",
+                          "content": "Позиции",
+                          "fontFamily": "$font",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "UrXq1",
+                          "name": "Count",
+                          "fill": "$textMuted",
+                          "content": "15 колонок · 2",
+                          "fontFamily": "$font",
+                          "fontSize": 11.5,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "jcX5O",
+                          "name": "Spacer",
+                          "width": "fill_container",
+                          "height": 1
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BuRDf",
+                      "name": "HeaderRow",
+                      "width": "fill_container",
+                      "fill": "$surface2",
+                      "stroke": "$divider",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "W98rw",
+                          "name": "HC:Инструмент",
+                          "width": "fill_container",
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "gBoYJ",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Инструмент",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "tVOoK",
+                          "name": "HC:Остаток",
+                          "width": 50,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "EZZJG",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Остаток",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "AaxK3",
+                          "name": "HC:Вх. цена",
+                          "width": 48,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "IQfta",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Вх. цена",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "C4Ze5",
+                          "name": "HC:Закр. цена",
+                          "width": 52,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "AUDXN",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Закр. цена",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Yt4nY",
+                          "name": "HC:Стоимость",
+                          "width": 56,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ww9XB",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Стоимость",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "EEwod",
+                          "name": "HC:Изм., %",
+                          "width": 50,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Wef1S",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Изм., %",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "niA9g",
+                          "name": "HC:Реализ. P&L",
+                          "width": 56,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "D54UN7",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Реализ. P&L",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Cjbca",
+                          "name": "HC:Нереализ. P&L",
+                          "width": 52,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "WSxOK",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Нереализ. P&L",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "uOFjo",
+                          "name": "HC:Общий P&L",
+                          "width": 56,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "nb1HC",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Общий P&L",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "OwB0t",
+                          "name": "HC:Комиссии",
+                          "width": 54,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "XJPWY",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Комиссии",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "B65Hp",
+                          "name": "HC:Открыта",
+                          "width": 72,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "IEfLz",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Открыта",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "JwR4W",
+                          "name": "HC:Закрыта",
+                          "width": 72,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "wI0g2",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Закрыта",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FqaEG",
+                          "name": "HC:Статус",
+                          "width": 54,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "D9Cc2",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Статус",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ze04f",
+                          "name": "HC:Комментарий",
+                          "width": 56,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "AtIqL",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Комментарий",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "uheJR",
+                          "name": "HC:Действия",
+                          "width": 82,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "gTtcL",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Действия",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "u3m4iP",
+                      "name": "Row:1",
+                      "width": "fill_container",
+                      "stroke": "$divider",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "Drg9x",
+                          "name": "C0",
+                          "width": "fill_container",
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ByVHW",
+                              "name": "T",
+                              "fill": "$textPrimary",
+                              "content": "ETH-28MAR-1600-P",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "rf1et",
+                          "name": "C1",
+                          "width": 50,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "n45EA",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "0,5",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "wJJfs",
+                          "name": "C2",
+                          "width": 48,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Y2As5e",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "0,21",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "U7NmH",
+                          "name": "C3",
+                          "width": 52,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "E8SWe",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "—",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "p9OTo",
+                          "name": "C4",
+                          "width": 56,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ApRJe",
+                              "name": "T",
+                              "fill": "$accentStrong",
+                              "content": "+1 240",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "jKiDl",
+                          "name": "C5",
+                          "width": 50,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "N4hUxd",
+                              "name": "T",
+                              "fill": "$accentStrong",
+                              "content": "+61,9%",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "UEu7X",
+                          "name": "C6",
+                          "width": 56,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Muzlh",
+                              "name": "T",
+                              "fill": "$accentStrong",
+                              "content": "+240,20",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "UGJoU",
+                          "name": "C7",
+                          "width": 52,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "y1vlw",
+                              "name": "T",
+                              "fill": "$accentStrong",
+                              "content": "+145,10",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "C5iIRw",
+                          "name": "C8",
+                          "width": 56,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "H7bRf",
+                              "name": "T",
+                              "fill": "$accentStrong",
+                              "content": "+385,30",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "uSbxD",
+                          "name": "C9",
+                          "width": 54,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "d175eW",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "18,40",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ABcEa",
+                          "name": "C10",
+                          "width": 72,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "zQZJE",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "12.08 10:04",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pfE7L",
+                          "name": "C11",
+                          "width": 72,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ipuf4",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "—",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Gql0O",
+                          "name": "C12",
+                          "width": 54,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "PBIEF",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "открыта",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "KuYqz",
+                          "name": "C:Комментарий",
+                          "width": 56,
+                          "gap": 4,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "WMztP",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "хедж",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "viG5f",
+                              "name": "Ico",
+                              "width": 12,
+                              "height": 12,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "o2qAUo",
+                          "name": "C:Действия",
+                          "width": 82,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "S03uD",
+                              "name": "Btn:Пометка",
+                              "cornerRadius": 6,
+                              "stroke": "$border",
+                              "strokeWidth": 1,
+                              "padding": [
+                                3,
+                                7
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "u224Us",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "пометкой…",
+                                  "fontFamily": "$font",
+                                  "fontSize": 9.5,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jS8g6",
+                      "name": "Row:2",
+                      "width": "fill_container",
+                      "stroke": "$divider",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "J3qDQg",
+                          "name": "C0",
+                          "width": "fill_container",
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "V3cI18",
+                              "name": "T",
+                              "fill": "$textPrimary",
+                              "content": "ETHUSDT",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "500"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "jyPL4",
+                          "name": "C1",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Zx5lN",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "0,34",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "EAX4S",
+                              "name": "Split",
+                              "fill": "$textMuted",
+                              "content": "синтетика 0,30 · прочее 0,04",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "vXGqi",
+                          "name": "C2",
+                          "width": 48,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "HuuNa",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "3 105",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "N4WRL",
+                          "name": "C3",
+                          "width": 52,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "iPcwU",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "—",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "cbjmf",
+                          "name": "C4",
+                          "width": 56,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "NUePw",
+                              "name": "T",
+                              "fill": "$accentStrong",
+                              "content": "+1 055",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ajVXK",
+                          "name": "C5",
+                          "width": 50,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "d5rUs",
+                              "name": "T",
+                              "fill": "$neg",
+                              "content": "−0,1%",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "T99MHs",
+                          "name": "C6",
+                          "width": 56,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "j8qWL",
+                              "name": "T",
+                              "fill": "$neg",
+                              "content": "−96,50",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "C8mLf",
+                          "name": "C7",
+                          "width": 52,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "ytSMw",
+                              "name": "T",
+                              "fill": "$neg",
+                              "content": "−0,68",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "P2Vsl",
+                          "name": "C8",
+                          "width": 56,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "qXNxC",
+                              "name": "T",
+                              "fill": "$neg",
+                              "content": "−97,18",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "isGZK",
+                          "name": "C9",
+                          "width": 54,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Zeq24",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "12,80",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "fmXac",
+                          "name": "C10",
+                          "width": 72,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "D9Qw7",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "12.08 10:06",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "cqgXs",
+                          "name": "C11",
+                          "width": 72,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Z9byh",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "—",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "TuU5H",
+                          "name": "C12",
+                          "width": 54,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "PXnxJ",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "открыта",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "YLLHw",
+                          "name": "C:Комментарий",
+                          "width": 56,
+                          "gap": 4,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "kQnRg",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "—",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "icon",
+                              "id": "g8YjRA",
+                              "name": "Ico",
+                              "width": 12,
+                              "height": 12,
+                              "icon": "pencil",
+                              "library": "lucide",
+                              "fill": "$textMuted"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "J9aIIw",
+                          "name": "C14",
+                          "width": 82,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "dXpnv",
+                              "name": "Btn:Пометка",
+                              "cornerRadius": 6,
+                              "stroke": "$border",
+                              "strokeWidth": 1,
+                              "padding": [
+                                3,
+                                7
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "cWLTT",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "пометкой…",
+                                  "fontFamily": "$font",
+                                  "fontSize": 9.5,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 }
