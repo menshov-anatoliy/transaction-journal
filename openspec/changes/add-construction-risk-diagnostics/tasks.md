@@ -8,7 +8,7 @@
 
 ## 2. Метрики и контракты API
 
-- [ ] 2.1 Вызов вычислителя из `ConstructionMetricsCalculator`; счётчик предупреждений в `ConstructionMetrics` и `ConstructionListItem` (список и превью), коллекция записей в `ConstructionDetailData`; без записей в БД. Проверить: `requirement-risk-diagnostics-on-open-residuals` (пустой набор без остатков, пересчёт при чтении).
+- [x] 2.1 Вызов вычислителя из `ConstructionMetricsCalculator`; счётчик предупреждений в `ConstructionMetrics` и `ConstructionListItem` (список и превью), коллекция записей в `ConstructionDetailData`; без записей в БД. Проверить: `requirement-risk-diagnostics-on-open-residuals` (пустой набор без остатков, пересчёт при чтении).
 - [ ] 2.2 API-тесты: счётчик в ответе списка и превью, записи в ответе карточки, неизменность существующих полей (включая `realRiskStatus`). Проверить: `scenario-diagnostics-closed-construction-empty`, `scenario-diagnostics-recomputed-on-read`.
 
 ## 3. Макет design.pen — до реализации frontend

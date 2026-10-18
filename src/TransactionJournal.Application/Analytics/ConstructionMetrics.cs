@@ -93,6 +93,26 @@ public sealed record ConstructionMetrics
 	/// </summary>
 	public decimal? WorstCaseUsdt { get; init; }
 
+	/// <summary>
+	/// Число предупреждений диагностики незакрытых рисков конструкции — счётчик
+	/// бейджа «⚠ N» строки списка и превью. Вычисляется при чтении из текущих
+	/// открытых остатков тем же вызовом вычислителя, что и сами предупреждения,
+	/// в базе не хранится; без открытых остатков счётчик нулевой.
+	// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+	/// </summary>
+	public int RiskWarningsCount { get; init; }
+
+	/// <summary>
+	/// Предупреждения диагностики незакрытых рисков конструкции: инструмент,
+	/// число незакрытых контрактов и причина. Источник один — тот же вызов
+	/// вычислителя, что питает <see cref="RiskWarningsCount"/>, поэтому счётчик
+	/// бейджа и перечень карточки не расходятся; набор не хранится и всегда
+	/// соответствует текущим открытым остаткам, без них он пуст.
+	// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+	// Traceability: openspec:analytics/risk-diagnostics#scenario-diagnostics-closed-construction-empty
+	/// </summary>
+	public IReadOnlyList<ConstructionRiskDiagnostic> RiskWarnings { get; init; } = [];
+
 	/// <summary>Реализованный PnL в процентах от текущего выделенного капитала; null при нулевом капитале.</summary>
 	public required decimal? RealizedPnLPercent { get; init; }
 

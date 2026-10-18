@@ -172,7 +172,10 @@ public class SyntheticCloseInstrumentalMetricsTests
 		// Итог и статус конструкции совпадают со значением без логического слоя.
 		// Реализованный итог включает продажу колла в связке: матч FIFO
 		// −1.83 плюс комиссии 0.95, пут −1.5, линейная −0.64.
-		Assert.That(afterConstruction, Is.EqualTo(baselineConstruction));
+		// Коллекция предупреждений в записи метрик сравнивается по ссылке:
+		// скалярные величины сверяются записью целиком, перечень — по содержанию.
+		Assert.That(afterConstruction with { RiskWarnings = [] }, Is.EqualTo(baselineConstruction with { RiskWarnings = [] }));
+		Assert.That(afterConstruction.RiskWarnings, Is.EqualTo(baselineConstruction.RiskWarnings));
 		Assert.That(afterConstruction.RealizedPnL, Is.EqualTo(-4.92m));
 		Assert.That(afterConstruction.UnrealizedPnL, Is.Null);
 		Assert.That(afterConstruction.TotalPnL, Is.Null);
@@ -217,7 +220,10 @@ public class SyntheticCloseInstrumentalMetricsTests
 		Assert.That(afterEvaluation.Positions, Is.EqualTo(baselineEvaluation.Positions));
 
 		// Итог конструкции с марками совпадает со значением без логического слоя.
-		Assert.That(afterConstruction, Is.EqualTo(baselineConstruction));
+		// Коллекция предупреждений в записи метрик сравнивается по ссылке:
+		// скалярные величины сверяются записью целиком, перечень — по содержанию.
+		Assert.That(afterConstruction with { RiskWarnings = [] }, Is.EqualTo(baselineConstruction with { RiskWarnings = [] }));
+		Assert.That(afterConstruction.RiskWarnings, Is.EqualTo(baselineConstruction.RiskWarnings));
 		Assert.That(afterConstruction.UnrealizedPnL, Is.EqualTo(baselineConstruction.UnrealizedPnL));
 		Assert.That(afterConstruction.TotalPnL, Is.EqualTo(baselineConstruction.TotalPnL));
 	}

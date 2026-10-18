@@ -102,7 +102,11 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				// знак величины и статус состояния переиспользуются без пересчёта.
 				// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 				item.WorstCaseUsdt,
-				item.RealRiskStatus));
+				item.RealRiskStatus,
+				// Счётчик предупреждений проходит из метрик без пересчёта: бейдж
+				// строки и перечень карточки обязаны показывать один набор.
+				// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+				item.RiskWarningsCount));
 		}
 
 		// Счётчик сводки описывает видимые конструкции: сколько в списке и сколько

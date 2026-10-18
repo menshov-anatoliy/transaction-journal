@@ -107,6 +107,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			closing.Warnings,
 			adjustments,
 			synthetic.Rows,
+			// Тексты предупреждений идут из тех же метрик, что и счётчик бейджа:
+			// один вызов вычислителя при чтении исключает расхождение перечня
+			// карточки и бейджа; без открытых остатков список пуст.
+			// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+			RiskWarnings: constructionMetrics.RiskWarnings.Select(warning => warning.Text).ToArray(),
 			// Единица ввода проходит в DTO: форма правки предзаполняет поле
 			// первоисточника, не подменяя введённую единицу вычисленной.
 			RiskUnit: construction.RiskUnit,

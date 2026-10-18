@@ -711,7 +711,12 @@ public static class ConstructionCardEndpoints
 			close.LockedValueUsdt,
 			close.Disputed,
 			close.LinearExecId,
-			close.CounterOptionExecId)).ToArray());
+			close.CounterOptionExecId)).ToArray(),
+		// Предупреждения диагностики входят в контракт карточки аддитивно:
+		// тексты идут из тех же метрик, что и счётчик бейджа списка, —
+		// расхождение перечня и счётчика исключено; пустой список вместо null.
+		// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+		(data.RiskWarnings ?? []).Select(warning => new ConstructionRiskWarningResponse(warning)).ToArray());
 
 	/// <summary>Разбирает строку источника корректировки; null — неизвестное значение.</summary>
 	private static PnLAdjustmentSource? DeserializeAdjustmentSource(string? source) => source switch
@@ -834,10 +839,14 @@ public static class ConstructionCardEndpoints
 /// <param name="ClosingWarnings">Предупреждения об избыточных закрывающих записях.</param>
 /// <param name="Adjustments">Строки таблицы корректировок PnL.</param>
 /// <param name="SyntheticCloses">Строки распознанных синтетических закрытий конструкции; пустой список без связок.</param>
+/// <param name="RiskWarnings">Полный перечень предупреждений диагностики незакрытых рисков; пустой список без предупреждений.</param>
 // Синтетические закрытия входят в контракт карточки аддитивно: новые поля
 // добавлены в конец записей, существующие потребители не ломаются.
 // Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
 // Traceability: change:synthetic-close-logical-layer/design#d5
+// Предупреждения диагностики входят в контракт карточки аддитивно: секция
+// «Предупреждения» над таблицами скрыта при пустом списке.
+// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
 public sealed record ConstructionCardResponse(
 	long ConstructionId,
 	string Name,
@@ -859,7 +868,8 @@ public sealed record ConstructionCardResponse(
 	IReadOnlyList<ConstructionCardClosingEntryResponse> ClosingEntries,
 	IReadOnlyList<ConstructionCardClosingWarningResponse> ClosingWarnings,
 	IReadOnlyList<ConstructionCardAdjustmentResponse> Adjustments,
-	IReadOnlyList<ConstructionCardSyntheticCloseResponse> SyntheticCloses);
+	IReadOnlyList<ConstructionCardSyntheticCloseResponse> SyntheticCloses,
+	IReadOnlyList<ConstructionRiskWarningResponse> RiskWarnings);
 
 /// <summary>Метрики карточки: сводка kstrip с периодом и длительностью.</summary>
 /// <param name="RealizedPnL">Реализованный PnL конструкции.</param>

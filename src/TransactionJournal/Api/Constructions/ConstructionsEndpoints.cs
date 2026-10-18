@@ -97,7 +97,12 @@ public static class ConstructionsEndpoints
 					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt, item.WorstCaseUsdt),
 					item.OpenedAt,
 					item.ClosedAt,
-					liveCounts.GetValueOrDefault(item.ConstructionId)))
+					liveCounts.GetValueOrDefault(item.ConstructionId),
+					// Счётчик предупреждений — бейдж «⚠ N» строки: число проходит
+					// из метрик аналитики без пересчёта и совпадает с перечнем
+					// превью и карточки.
+					// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+					item.RiskWarningsCount))
 				.ToArray();
 			return Results.Json(new ConstructionsOverviewResponse(summary, rows));
 		});
@@ -164,7 +169,16 @@ public static class ConstructionsEndpoints
 					data.Positions.Count,
 					data.Positions.Count(position => position.IsOpen),
 					data.Trades.Count,
-					data.Adjustments.Count)));
+					data.Adjustments.Count),
+				// Счётчик предупреждений превью — тот же, что у бейджа строки:
+				// число проходит из метрик аналитики без пересчёта.
+				// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+				data.Metrics.RiskWarningsCount,
+				// Полный перечень предупреждений краткой карточки: тексты идут
+				// из тех же метрик, что и счётчик, — расхождение исключено;
+				// без предупреждений перечень пуст.
+				// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-messages
+				(data.RiskWarnings ?? []).Select(warning => new ConstructionRiskWarningResponse(warning)).ToArray()));
 		});
 
 		return api;
@@ -226,6 +240,7 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="LiveHintCount">Число живых подсказок конструкции для бейджа строки.</param>
+/// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков для бейджа «⚠ N» строки; ноль — предупреждений нет.</param>
 // Реальный риск входит в контракт строки списка со статусом состояния:
 // SPA рисует насечку только конечного риска и различает неограниченный
 // хвост и неполные данные без догадок по null.
@@ -234,6 +249,9 @@ public sealed record ConstructionsSummaryResponse(
 // Худший исход входит в контракт рядом с реальным риском: насечке индикатора
 // строки нужна знаковая величина со статусом состояния.
 // Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+// Счётчик предупреждений входит в контракт строки аддитивно: бейдж «⚠ N»
+// строится по числу из метрик аналитики, ноль — бейдж скрыт.
+// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
 public sealed record ConstructionRowResponse(
 	long ConstructionId,
 	string Name,
@@ -255,7 +273,8 @@ public sealed record ConstructionRowResponse(
 	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
-	int LiveHintCount);
+	int LiveHintCount,
+	int RiskWarningsCount);
 
 /// <summary>Состояние недоступности журнала: обзор не собран, причина — в тексте.</summary>
 /// <param name="Error">Человекочитаемая причина недоступности.</param>
@@ -285,6 +304,8 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое или без остатков.</param>
 /// <param name="HasMarkFailure">Признак сбоя провайдера котировок.</param>
 /// <param name="Counts">Счётчики записей конструкции для превью.</param>
+/// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков; ноль — предупреждений нет.</param>
+/// <param name="RiskWarnings">Полный перечень текстов предупреждений краткой карточки; пустой список без предупреждений.</param>
 // Реальный риск входит в контракт превью со статусом состояния: правая
 // область строит полный индикатор финрезультата с насечкой только
 // конечного риска.
@@ -293,6 +314,9 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 // Худший исход входит в контракт превью рядом с реальным риском: граница
 // индикатора ставится знаковой величиной худшего исхода.
 // Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+// Предупреждения входят в контракт превью аддитивно: счётчик и полный
+// перечень текстов идут из одного вызова вычислителя с метриками.
+// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
 public sealed record ConstructionPreviewResponse(
 	long ConstructionId,
 	string Name,
@@ -316,7 +340,16 @@ public sealed record ConstructionPreviewResponse(
 	DateTimeOffset? ClosedAt,
 	DateTimeOffset? MarksAsOf,
 	bool HasMarkFailure,
-	ConstructionPreviewCountsResponse Counts);
+	ConstructionPreviewCountsResponse Counts,
+	int RiskWarningsCount,
+	IReadOnlyList<ConstructionRiskWarningResponse> RiskWarnings);
+
+/// <summary>Предупреждение диагностики незакрытых рисков конструкции в контракте API.</summary>
+/// <param name="Text">Готовый текст записи на русском языке: инструмент, число незакрытых контрактов и причина.</param>
+// Запись публикации предупреждений — аддитивный элемент контрактов превью
+// и карточки: текст вычисляется при чтении и в базе не хранится.
+// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-messages
+public sealed record ConstructionRiskWarningResponse(string Text);
 
 /// <summary>Счётчики записей конструкции в превью правой области.</summary>
 /// <param name="Positions">Всего позиций конструкции.</param>

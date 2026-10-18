@@ -15,6 +15,9 @@ namespace TransactionJournal.Application.Analytics;
 public sealed class ConstructionMetricsCalculator
 {
 	private readonly RealRiskCalculator _realRiskCalculator = new();
+
+	private readonly ConstructionRiskDiagnosticsCalculator _riskDiagnosticsCalculator = new();
+
 	/// <summary>
 	/// Вычисляет метрики конструкции из метрик её позиций и внешних корректировок
 	/// PnL. Итог — сумма реализованного и нереализованного PnL позиций и
@@ -34,7 +37,10 @@ public sealed class ConstructionMetricsCalculator
 	/// вместе со статусом, различающим конечный, неограниченный и нерассчитанный
 	/// риск, без изменения расчёта результата конструкции. Рядом публикуется
 	/// худший исход — реализованный результат плюс неклэмпированный минимум
-	/// платежа групп остатков — с тем же статусом, что и реальный риск.
+	/// платежа групп остатков — с тем же статусом, что и реальный риск. Рядом же
+	/// вычисляется диагностика незакрытых рисков из текущих открытых остатков:
+	/// в метрики попадает счётчик предупреждений, записи переносятся в контракты
+	/// превью и карточки; в базу ничего не пишется.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, для которой вычисляются метрики.</param>
 	/// <param name="allocatedCapitalUsdt">Текущий выделенный капитал конструкции в USDT — база процентов; null, когда капитал не задан.</param>
@@ -112,6 +118,13 @@ public sealed class ConstructionMetricsCalculator
 			? null
 			: realizedPnL + realRisk.WorstPayoffUsdt.GetValueOrDefault();
 
+		// Диагностика незакрытых рисков — тот же проход по метрикам позиций,
+		// что и реальный риск: единый вызов вычислителя питает и счётчик бейджа,
+		// и перечень карточки, поэтому они не расходятся. Вычисление на лету без
+		// записи в базу; без открытых остатков набор пуст и счётчик нулевой.
+		// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+		var riskDiagnostics = _riskDiagnosticsCalculator.Calculate(positionList);
+
 		// Проценты — чистые функции текущих данных: базой служит текущее значение
 		// выделенного капитала, поэтому правка капитала меняет только процентные
 		// величины; незаданный или нулевой капитал базы не образует — проценты
@@ -154,6 +167,8 @@ public sealed class ConstructionMetricsCalculator
 			RealRiskUsdt = realRisk.Usdt,
 			RealRiskStatus = realRisk.Status,
 			WorstCaseUsdt = worstCaseUsdt,
+			RiskWarningsCount = riskDiagnostics.Count,
+			RiskWarnings = riskDiagnostics,
 			RealizedPnLPercent = Percent(realizedPnL),
 			UnrealizedPnLPercent = Percent(unrealizedPnL),
 			AdjustmentsPnLPercent = Percent(adjustmentsPnL),

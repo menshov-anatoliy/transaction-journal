@@ -180,6 +180,7 @@ public sealed record SyntheticCloseRow(
 /// <param name="ClosingWarnings">Предупреждения об избыточных закрывающих записях конструкции.</param>
 /// <param name="Adjustments">Строки таблицы корректировок, упорядоченные по дате.</param>
 /// <param name="SyntheticCloses">Строки распознанных синтетических закрытий конструкции; null оставлен совместимости прежних построений — читающий слой всегда передаёт список.</param>
+/// <param name="RiskWarnings">Тексты предупреждений диагностики незакрытых рисков конструкции; null оставлен совместимости прежних построений — читающий слой всегда передаёт список.</param>
 // Капитал передаётся незаданным как есть: скрытие процентов — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
 // Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
@@ -190,6 +191,12 @@ public sealed record SyntheticCloseRow(
 // связок вычисляются при чтении и приходят в контракт без ломки потребителей.
 // Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
 // Traceability: change:synthetic-close-logical-layer/design#d5
+// Перечень предупреждений — аддитивное поле данных экрана: тексты приходят
+// из тех же метрик, что и счётчик бейджа, — один вызов вычислителя исключает
+// расхождение перечня карточки и бейджа; набор не хранится и пересобирается
+// при каждом чтении.
+// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+// Traceability: openspec:analytics/risk-diagnostics#scenario-diagnostics-recomputed-on-read
 public sealed record ConstructionDetailData(
 	long ConstructionId,
 	string Name,
@@ -211,4 +218,5 @@ public sealed record ConstructionDetailData(
 	IReadOnlyList<ConstructionAdjustmentRow> Adjustments,
 	IReadOnlyList<SyntheticCloseRow>? SyntheticCloses = null,
 	TargetUnit? RiskUnit = null,
-	TargetUnit? ProfitUnit = null);
+	TargetUnit? ProfitUnit = null,
+	IReadOnlyList<string>? RiskWarnings = null);
