@@ -18,9 +18,10 @@ import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/for
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-mobile";
 
-// Таблица конструкций раздела по концепции §3: паритет 13 колонок, бейдж
-// живых подсказок в строке, компактный индикатор финрезультата в ячейке
-// итога, клик по строке выделяет (не навигация), сортировка колонками.
+// Таблица конструкций раздела по концепции §3: паритет колонок мастера
+// design.pen, бейджи живых подсказок и предупреждений в строке, компактный
+// индикатор финрезультата в ячейке итога, клик по строке выделяет (не
+// навигация), сортировка колонками.
 // Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
 
 /** Пропсы таблицы конструкций. */
@@ -113,6 +114,32 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 							✦ {row.original.liveHintCount}
 						</span>
 					) : (
+						<span className="text-[color:var(--text-muted)]">{DASH}</span>
+					),
+			},
+			{
+				id: "warnings",
+				// Подпись колонки предупреждений — глиф «⚠» по мастеру списка design.pen.
+				// Traceability: openspec:ui/screens#requirement-construction-warnings-display
+				header: () => <span title="Предупреждения конструкции">⚠</span>,
+				accessorKey: "riskWarningsCount",
+				cell: ({ row }) =>
+					row.original.riskWarningsCount > 0 ? (
+						// Бейдж предупреждений строки: «⚠ N» тоном риска без заливки,
+						// доступное имя несёт число предупреждений; без предупреждений
+						// бейджа нет — прочерк вторичным серым (сверка со скриншотом
+						// design.pen, фрейм списка).
+						// Traceability: openspec:ui/screens#scenario-list-row-warning-badge
+						<span
+							data-slot="warning-badge"
+							className="font-semibold text-[color:var(--risk)]"
+							title={`предупреждений: ${row.original.riskWarningsCount}`}
+						>
+							⚠ {row.original.riskWarningsCount}
+						</span>
+					) : (
+						// Строка без предупреждений: бейдж отсутствует, ячейка — прочерк.
+						// Traceability: openspec:ui/screens#scenario-list-row-no-warning-badge
 						<span className="text-[color:var(--text-muted)]">{DASH}</span>
 					),
 			},

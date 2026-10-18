@@ -53,6 +53,7 @@ const overview: ConstructionsOverview = {
 			openedAt: "2026-06-18T09:05:00",
 			closedAt: null,
 			liveHintCount: 2,
+			riskWarningsCount: 1,
 		},
 		{
 			constructionId: 8,
@@ -76,6 +77,7 @@ const overview: ConstructionsOverview = {
 			openedAt: "2026-05-20T10:00:00",
 			closedAt: "2026-05-31T12:00:00",
 			liveHintCount: 0,
+			riskWarningsCount: 0,
 		},
 		{
 			constructionId: 9,
@@ -99,6 +101,7 @@ const overview: ConstructionsOverview = {
 			openedAt: "2026-04-02T10:00:00",
 			closedAt: "2026-06-07T16:00:00",
 			liveHintCount: 0,
+			riskWarningsCount: 0,
 		},
 	],
 };

@@ -5,9 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConstructionRow } from "@/lib/api/constructions";
 import { ConstructionsTable } from "./constructions-table";
 
-// Проверяется таблица конструкций раздела по концепции §3: паритет 13 колонок,
-// бейдж живых подсказок в строке, компактный индикатор финрезультата, клик по
-// строке выделяет (не навигация), сортировка колонками.
+// Проверяется таблица конструкций раздела по концепции §3: паритет колонок
+// мастера design.pen, бейджи живых подсказок и предупреждений в строке,
+// компактный индикатор финрезультата, клик по строке выделяет (не навигация),
+// сортировка колонками.
 // Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
 
 const openRow: ConstructionRow = {
@@ -32,6 +33,7 @@ const openRow: ConstructionRow = {
 	openedAt: "2026-06-18T09:05:00Z",
 	closedAt: null,
 	liveHintCount: 2,
+	riskWarningsCount: 1,
 };
 
 const closedRow: ConstructionRow = {
@@ -56,6 +58,7 @@ const closedRow: ConstructionRow = {
 	openedAt: "2026-05-20T10:00:00Z",
 	closedAt: "2026-05-31T12:00:00Z",
 	liveHintCount: 0,
+	riskWarningsCount: 0,
 };
 
 describe("таблица конструкций", () => {
@@ -116,12 +119,13 @@ describe("таблица конструкций", () => {
 		// Act: таблица с двумя строками.
 		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
 
-		// Assert: заголовки паритета 13 колонок на месте (подписи по мастеру
-		// design.pen: «Имя» и глиф «✦» для подсказок).
+		// Assert: заголовки паритета колонок на месте (подписи по мастеру
+		// design.pen: «Имя», глифы «✦» подсказок и «⚠» предупреждений).
 		// Traceability: openspec:ui/screens#requirement-construction-list-screen
 		for (const header of [
 			"Имя",
 			"✦",
+			"⚠",
 			"Статус",
 			"Капитал",
 			"Стоимость",
@@ -156,6 +160,21 @@ describe("таблица конструкций", () => {
 		expect(badge).not.toBeNull();
 		expect(badge?.className).toContain("text-[color:var(--risk)]");
 		expect(screen.getByRole("row", { name: /BTC-240531/ }).querySelector('[data-slot="hint-badge"]')).toBeNull();
+	});
+
+	it("показывает бейдж предупреждений только у строк с предупреждениями", () => {
+		// Act: таблица с двумя строками.
+		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
+
+		// Assert: бейдж «⚠ N» тоном риска у строки с предупреждениями, доступное
+		// имя несёт число предупреждений; у строки без предупреждений бейджа нет.
+		// Traceability: openspec:ui/screens#scenario-list-row-warning-badge
+		// Traceability: openspec:ui/screens#scenario-list-row-no-warning-badge
+		const badge = screen.getByTitle("предупреждений: 1");
+		expect(badge).toHaveAttribute("data-slot", "warning-badge");
+		expect(badge).toHaveTextContent("⚠ 1");
+		expect(badge).toHaveClass("text-[color:var(--risk)]", "font-semibold");
+		expect(screen.getByRole("row", { name: /BTC-240531/ }).querySelector('[data-slot="warning-badge"]')).toBeNull();
 	});
 
 	// Ячейка не переопределяет ширину 132px компактного мастера FMghY.

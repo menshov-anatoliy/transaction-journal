@@ -56,6 +56,10 @@ export interface ConstructionRow {
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly liveHintCount: number;
+	// Счётчик предупреждений диагностики незакрытых рисков — данные бейджа
+	// «⚠ N» строки списка: ноль означает отсутствие предупреждений и бейджа.
+	// Traceability: openspec:ui/screens#requirement-construction-warnings-display
+	readonly riskWarningsCount: number;
 }
 
 /** Обзор раздела: сводка шапки и строки таблицы одним ответом. */
