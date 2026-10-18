@@ -3105,6 +3105,25 @@
                             },
                             {
                               "type": "frame",
+                              "id": "B3nsc",
+                              "name": "HC:⚠",
+                              "width": 36,
+                              "padding": 8,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "OmDAZ",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "⚠",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "qHccX",
                               "name": "HC:Статус",
                               "width": 68,
@@ -3365,6 +3384,28 @@
                                   "name": "T",
                                   "fill": "$risk",
                                   "content": "✦ 2",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "f7LW6",
+                              "name": "C:⚠",
+                              "width": 36,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "YAUWW",
+                                  "name": "T",
+                                  "fill": "$risk",
+                                  "content": "⚠ 1",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
@@ -3674,6 +3715,28 @@
                                   "name": "T",
                                   "fill": "$risk",
                                   "content": "✦ 1",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Ihid7",
+                              "name": "C:⚠",
+                              "width": 36,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "LSWPX",
+                                  "name": "T",
+                                  "fill": "$risk",
+                                  "content": "⚠ 2",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
@@ -4013,6 +4076,28 @@
                             },
                             {
                               "type": "frame",
+                              "id": "nv7IX",
+                              "name": "C:⚠",
+                              "width": 36,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "yx242",
+                                  "name": "T",
+                                  "fill": "$textMuted",
+                                  "content": "—",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "i9eb3",
                               "name": "C:Статус",
                               "width": 68,
@@ -4328,6 +4413,28 @@
                                 {
                                   "type": "text",
                                   "id": "AMfHg",
+                                  "name": "T",
+                                  "fill": "$textMuted",
+                                  "content": "—",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ggpje",
+                              "name": "C:⚠",
+                              "width": 36,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "V3c3y",
                                   "name": "T",
                                   "fill": "$textMuted",
                                   "content": "—",
@@ -4667,6 +4774,28 @@
                             },
                             {
                               "type": "frame",
+                              "id": "vfUC7",
+                              "name": "C:⚠",
+                              "width": 36,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Bp1ry",
+                                  "name": "T",
+                                  "fill": "$risk",
+                                  "content": "⚠ 1",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "IIybx",
                               "name": "C:Статус",
                               "width": 68,
@@ -4980,6 +5109,28 @@
                                 {
                                   "type": "text",
                                   "id": "paRjm",
+                                  "name": "T",
+                                  "fill": "$textMuted",
+                                  "content": "—",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "b9LS2",
+                              "name": "C:⚠",
+                              "width": 36,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "lD2At",
                                   "name": "T",
                                   "fill": "$textMuted",
                                   "content": "—",
