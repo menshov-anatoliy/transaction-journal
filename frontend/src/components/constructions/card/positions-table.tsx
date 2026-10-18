@@ -80,9 +80,10 @@ function isExpiryWarning(position: ConstructionCardPosition): boolean {
 	return position.isOpen && position.daysToExpiry !== null && position.daysToExpiry <= EXPIRY_WARNING_DAYS;
 }
 
-// Тултип состава метрик времени жизни нативным title: внутренняя и временная
-// стоимость позиции и динамика распада «вчера → сегодня»; отсутствующие
-// величины выводятся прочерком.
+// Тултип состава метрик времени жизни нативным title на ячейке стоимости
+// открытой опционной ноги: внутренняя и временная стоимость позиции и
+// динамика распада «вчера → сегодня»; отсутствующие величины выводятся
+// прочерком.
 // Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip
 function lifetimeTooltip(position: ConstructionCardPosition): string {
 	const intrinsic = position.intrinsicValueUsdt === null ? DASH : formatSignedAmount(position.intrinsicValueUsdt);
@@ -259,6 +260,11 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 								</TableCell>
 								<TableCell className="tabular-nums">{position.averageEntryPrice === null ? DASH : formatAmount(position.averageEntryPrice)}</TableCell>
 								<TableCell className="tabular-nums">{position.averageClosePrice === null ? DASH : formatAmount(position.averageClosePrice)}</TableCell>
+								{/* Тултип состава открытой опционной ноги живёт на ячейке
+								    стоимости: внутренняя/временная стоимость и динамика
+								    распада «вчера → сегодня»; у сбоя котировок — своё
+								    пояснение, закрытая и фьючерсная ноги без тултипа. */}
+								{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip */}
 								<TableCell>
 									{position.isOpen === false ? (
 										<span className="text-muted-foreground">{DASH}</span>
@@ -267,7 +273,12 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 											сбой котировок
 										</span>
 									) : (
-										<span className={cn("tabular-nums", toneClass(position.markValue))}>{formatSignedAmount(position.markValue)}</span>
+										<span
+											className={cn("tabular-nums", toneClass(position.markValue))}
+											title={position.daysToExpiry === null ? undefined : lifetimeTooltip(position)}
+										>
+											{formatSignedAmount(position.markValue)}
+										</span>
 									)}
 								</TableCell>
 								<TableCell>
@@ -285,18 +296,15 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 								</TableCell>
 								{/* Ячейки времени жизни открытой опционной ноги: сутки
 								    (красные при ≤ 14) и распад со знаком; закрытая позиция
-								    и фьючерсная нога показывают прочерк, тултип раскрывает
-								    состав величин. */}
+								    и фьючерсная нога показывают прочерк. Тултип состава
+								    снят с этих ячеек и живёт на стоимости. */}
 								{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip */}
 								{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-degradation */}
 								<TableCell className="tabular-nums">
 									{position.daysToExpiry === null ? (
 										<span className="text-muted-foreground">{DASH}</span>
 									) : (
-										<span
-											className={cn("tabular-nums", position.daysToExpiry <= EXPIRY_WARNING_DAYS && "text-destructive")}
-											title={lifetimeTooltip(position)}
-										>
+										<span className={cn("tabular-nums", position.daysToExpiry <= EXPIRY_WARNING_DAYS && "text-destructive")}>
 											{position.daysToExpiry}
 										</span>
 									)}
@@ -305,7 +313,7 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 									{position.dailyDecayUsdt === null ? (
 										<span className="text-muted-foreground">{DASH}</span>
 									) : (
-										<span className={cn("tabular-nums", toneClass(position.dailyDecayUsdt))} title={lifetimeTooltip(position)}>
+										<span className={cn("tabular-nums", toneClass(position.dailyDecayUsdt))}>
 											{formatSignedAmount(position.dailyDecayUsdt)}
 										</span>
 									)}
