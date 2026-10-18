@@ -238,6 +238,16 @@ builder.Services.AddSingleton(sp => new SyntheticCloseDisputeService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton<ISyntheticCloseDisputeService>(sp => sp.GetRequiredService<SyntheticCloseDisputeService>());
 
+// Ручные синтетические связки: валидация и хранение ручных данных логического
+// слоя рядом с оспариванием — создание из двух сделок одной конструкции без
+// окна времени, свободное удаление. Эндпоинты и будущие экраны зависят от
+// интерфейса, тесты подменяют его заглушкой.
+// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+// Traceability: change:manual-journal-management/design#d5
+builder.Services.AddSingleton(sp => new SyntheticCloseManualLinkService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
+builder.Services.AddSingleton<ISyntheticCloseManualLinkService>(sp => sp.GetRequiredService<SyntheticCloseManualLinkService>());
+
 // Разрешение символа ручного ввода: сверка со справочником инструментов и пополнение
 // публичным каналом биржи без API-ключей тем же путём, что и синхронизация. Сеть
 // вызывается только для неизвестных справочнику символов, отказ сети или биржи

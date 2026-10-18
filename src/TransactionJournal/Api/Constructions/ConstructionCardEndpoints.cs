@@ -358,6 +358,71 @@ public static class ConstructionCardEndpoints
 				errorPrefix: "Возврат связки не выполнен");
 		});
 
+		// Ручная синтетическая связка: создание из линейной сделки и встречного
+		// опциона одной конструкции — валидация правил связки в use-case сервисе,
+		// окно времени между сделками не проверяется. Ответ несёт идентификатор
+		// связки — по нему UI адресует удаление.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		// Traceability: change:manual-journal-management/design#d5
+		group.MapPost("/{constructionId:long}/synthetic-closes/manual-links", async (
+			long constructionId,
+			CreateSyntheticCloseManualLinkRequest request,
+			ISyntheticCloseManualLinkService links,
+			CancellationToken cancellationToken) =>
+		{
+			if (string.IsNullOrWhiteSpace(request.LinearTradeId) || string.IsNullOrWhiteSpace(request.OptionTradeId))
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+			}
+
+			try
+			{
+				var link = await links.CreateAsync(
+					constructionId,
+					request.LinearTradeId.Trim(),
+					request.OptionTradeId.Trim(),
+					request.Quantity,
+					cancellationToken).ConfigureAwait(false);
+				return Results.Json(new SyntheticCloseManualLinkResponse(link.Id, link.LinearTradeId, link.OptionTradeId, link.Quantity));
+			}
+			catch (SyntheticCloseManualLinkValidationException exception)
+			{
+				// Нарушенные правила связки — отказ запроса с человекочитаемой причиной.
+				// Traceability: openspec:domain/synthetic-close#scenario-manual-link-rejected-on-mismatch
+				return Results.Json(new ConstructionCardErrorResponse(exception.Message), statusCode: StatusCodes.Status400BadRequest);
+			}
+			catch (ConstructionNotFoundException)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Конструкция не найдена — возможно, удалена."), statusCode: StatusCodes.Status404NotFound);
+			}
+			catch (ArgumentException)
+			{
+				return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+			}
+		});
+
+		// Удаление ручной связки: связка исчезает из логического слоя ближайшим
+		// чтением карточки; распознанные связки действие не затрагивает.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		group.MapDelete("/{constructionId:long}/synthetic-closes/manual-links/{linkId:long}", async (
+			long constructionId,
+			long linkId,
+			ISyntheticCloseManualLinkService links,
+			CancellationToken cancellationToken) =>
+		{
+			try
+			{
+				await links.DeleteAsync(constructionId, linkId, cancellationToken).ConfigureAwait(false);
+				return Results.NoContent();
+			}
+			catch (SyntheticCloseManualLinkNotFoundException exception)
+			{
+				// Повторное удаление несуществующей связки — ошибка состояния:
+				// пользователь видит, какой связки нет.
+				return Results.Json(new ConstructionCardErrorResponse(exception.Message), statusCode: StatusCodes.Status404NotFound);
+			}
+		});
+
 		// Цели переноса сделки: активные конструкции без текущей — лёгкий
 		// список для формы «Перенести…» без метрик.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
@@ -1160,3 +1225,16 @@ public sealed record SaveAdjustmentRequest(
 /// <param name="LinearExecId">Биржевой идентификатор линейного исполнения связки.</param>
 /// <param name="CounterOptionExecId">Биржевой идентификатор встречного опционного исполнения связки.</param>
 public sealed record DisputeSyntheticCloseRequest(string LinearExecId, string CounterOptionExecId);
+
+/// <summary>Запрос создания ручной синтетической связки.</summary>
+/// <param name="LinearTradeId">Идентификатор линейной сделки: execId биржевой либо ключ ручной.</param>
+/// <param name="OptionTradeId">Идентификатор встречной опционной сделки — с теми же правилами.</param>
+/// <param name="Quantity">Количество связки: не превышает количество ни одной из сделок.</param>
+public sealed record CreateSyntheticCloseManualLinkRequest(string LinearTradeId, string OptionTradeId, decimal Quantity);
+
+/// <summary>Сохранённая ручная синтетическая связка в контракте API.</summary>
+/// <param name="Id">Идентификатор ручной связки — ключ удаления.</param>
+/// <param name="LinearTradeId">Идентификатор линейной сделки связки.</param>
+/// <param name="OptionTradeId">Идентификатор встречной опционной сделки связки.</param>
+/// <param name="Quantity">Количество связки.</param>
+public sealed record SyntheticCloseManualLinkResponse(long Id, string LinearTradeId, string OptionTradeId, decimal Quantity);

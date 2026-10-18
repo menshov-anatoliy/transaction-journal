@@ -9,6 +9,7 @@ using TransactionJournal.Domain.ConstructionAssembly;
 using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Application.Materialization;
 using TransactionJournal.Application;
+using TransactionJournal.Infrastructure.UseCases;
 
 namespace TransactionJournal.Infrastructure.ReadModels;
 
@@ -70,7 +71,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		// Проценты позиций строятся от текущего капитала конструкции: незаданный
 		// капитал передаётся как есть, без базы процентов величины остаются null.
 		var trades = await ReadTradesAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
-		var synthetic = await ReadSyntheticClosesAsync(db, constructionId, trades.BoundTrades, cancellationToken).ConfigureAwait(false);
+		var synthetic = await ReadSyntheticClosesAsync(db, constructionId, trades.MaterializedTrades, cancellationToken).ConfigureAwait(false);
 		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, constructionMetrics.Lifetime, synthetic.QuantityByLinearSymbol, cancellationToken).ConfigureAwait(false);
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
@@ -262,12 +263,13 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// Строки таблицы сделок: сделки материализуются проекцией журнала из сырья обоих
 	/// источников — сырых исполнений биржи и ручных сделок, затем фильтруются
 	/// по действующей привязке к конструкции; комментарии читаются из пользовательских
-	/// данных биржевых сделок. В поток связки для распознавателя синтетических
-	/// закрытий уходят только биржевые сделки: ручные связки — отдельный слой данных,
-	/// автопара по ручной сделке правилами журнала не предусмотрена.
+	/// данных биржевых сделок. В слой связок уходят все привязанные сделки:
+	/// распознаватель работает по биржевым сделкам, ручные связки подключаются
+	/// поверх прогона отдельными ручными данными и ссылаются на сделки обоих
+	/// источников.
 	/// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
 	/// </summary>
-	private static async Task<(List<ConstructionTradeRow> Rows, List<MaterializedTrade> BoundTrades)> ReadTradesAsync(
+	private static async Task<(List<ConstructionTradeRow> Rows, List<MaterializedTrade> MaterializedTrades)> ReadTradesAsync(
 		JournalDbContext db,
 		long constructionId,
 		CancellationToken cancellationToken)
@@ -326,28 +328,33 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				// комментарий к ней появится вместе с сервисом ручных сделок.
 				trade.Source == TradeSource.Manual ? null : commentsByExecId.GetValueOrDefault(trade.ExecId!)))
 			.ToList(),
-			// Распознаватель синтетических связок работает по биржевым исполнениям:
-			// ручные сделки в поток распознавания не входят, его семантика не меняется.
-			boundTrades
-				.Where(trade => trade.Source == TradeSource.Exchange)
-				.ToList());
+			// В слой связок уходят все привязанные сделки обоих источников: распознаватель
+			// берёт из них биржевые, ручные связки адресуют сделки по единому ключу
+			// «execId» либо «manual:{id}».
+			// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+			boundTrades);
 	}
 
 	/// <summary>
 	/// Строки синтетических закрытий конструкции: распознаватель связок
-	/// вычисляется над потоком привязанных сделок конструкции и не хранится
-	/// в сборке; величина лока каждой связки считается чистым калькулятором
-	/// по записям FIFO закрываемой ноги. Оспоренные связки остаются в списке
-	/// с признаком спора — их лок не входит в логический слой: и величина лока
-	/// строки, и распад остатка ноги строятся только по неоспоренным связкам.
-	/// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-locked-value
+	/// вычисляется над потоком привязанных биржевых сделок конструкции и не
+	/// хранится в сборке; величина лока каждой связки считается чистым
+	/// калькулятором по записям FIFO закрываемой ноги — формула лока ручными
+	/// связками не меняется. Действующие связки логического слоя складываются
+	/// из распознанных без оспоренных и ручных связок: ручная связка вступает
+	/// в силу наравне с распознанными. Оспоренные связки остаются в списке
+	/// с признаком спора — их лок не входит в логический слой; у ручной связки
+	/// спора нет, величина показывается при любом состоянии прогона.
+	/// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	/// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-locked-value
 	/// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
+	/// Traceability: change:manual-journal-management/design#d5
 	/// Traceability: change:synthetic-close-logical-layer/design#d1
 	/// </summary>
 	private static async Task<(List<SyntheticCloseRow> Rows, IReadOnlyDictionary<string, decimal> QuantityByLinearSymbol)> ReadSyntheticClosesAsync(
 		JournalDbContext db,
 		long constructionId,
-		List<MaterializedTrade> boundTrades,
+		List<MaterializedTrade> materializedTrades,
 		CancellationToken cancellationToken)
 	{
 		// Спор — команда пользователя, read-модель только читает перечень споров
@@ -357,10 +364,23 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			.Where(dispute => dispute.ConstructionId == constructionId)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
+		// Ручные связки — ручные данные логического слоя, read-модель читает их
+		// перечень: создание и удаление обслуживает use-case сервис связок.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		var manualLinks = await db.SyntheticCloseManualLinks
+			.AsNoTracking()
+			.Where(link => link.ConstructionId == constructionId)
+			.OrderBy(link => link.Id)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
 
-		// Поток привязанных сделок повторяет вход сборки: материализованная сделка
-		// переносится в запись исполнения теми же полями, время — из DateTimeOffset.
-		var assemblies = boundTrades
+		// Поток распознавания повторяет вход сборки по биржевым сделкам:
+		// материализованная сделка переносится в запись исполнения теми же полями,
+		// время — из DateTimeOffset; ручные сделки автопарой не связываются.
+		var exchangeTrades = materializedTrades
+			.Where(trade => trade.Source == TradeSource.Exchange)
+			.ToList();
+		var assemblies = exchangeTrades
 			.Select(trade => new AssemblyExecution
 			{
 				ExecId = trade.ExecId,
@@ -385,7 +405,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		foreach (var link in links)
 		{
 			var key = (link.LinearExecId, link.CounterOptionExecId);
-			var valuation = SyntheticCloseValuationOf(link, boundTrades);
+			var valuation = SyntheticCloseValuationOf(link, materializedTrades);
 			var lockedValue = SyntheticCloseValuationCalculator.CalculateToExpiry(link, valuation);
 			// Лок спорной связки не выходит из строки: величина показывается
 			// с признаком спора, логический слой ноги спорной связкой не трогается.
@@ -397,40 +417,104 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, disputedKeys.Contains(key), link.LinearExecId, link.CounterOptionExecId));
 			if (logicalKeys.Contains(key))
 			{
-				var linearTrade = LinearTradeOf(link, boundTrades);
+				var linearTrade = TradeOf(link.LinearExecId, materializedTrades);
 				quantityByLinearSymbol[linearTrade.Symbol] =
 					quantityByLinearSymbol.GetValueOrDefault(linearTrade.Symbol) + link.Quantity;
 			}
+		}
+
+		// Ручные связки добавляются к прогону распознавания: каждая действует
+		// в логическом слое наравне с неоспоренными распознанными, строка
+		// показывает величину лока по той же формуле калькулятора. Спор ручной
+		// связки правилами журнала не предусмотрен — признак спора всегда ложный.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-locked-value
+		foreach (var manualLink in manualLinks)
+		{
+			// Осиротевшая связка — сделка или закрываемая нога исчезли после
+			// создания (удаление ручной сделки, снятие привязки): строка не
+			// строится, логический слой осиротевшей связкой не двигается.
+			if (TryBuildManualLink(manualLink, materializedTrades) is not { } link)
+			{
+				continue;
+			}
+
+			var valuation = SyntheticCloseValuationOf(link, materializedTrades);
+			var lockedValue = SyntheticCloseValuationCalculator.CalculateToExpiry(link, valuation);
+			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, Disputed: false, link.LinearExecId, link.CounterOptionExecId));
+			var linearTrade = TradeOf(link.LinearExecId, materializedTrades);
+			quantityByLinearSymbol[linearTrade.Symbol] =
+				quantityByLinearSymbol.GetValueOrDefault(linearTrade.Symbol) + link.Quantity;
 		}
 
 		return (rows, quantityByLinearSymbol);
 	}
 
 	/// <summary>
-	/// Линейная сделка связки по идентификатору исполнения; сделка приходит из
-	/// того же потока, по которому работал распознаватель, и потому присутствует.
+	/// Переводит ручную связку в связку логического слоя: обе сделки находятся
+	/// в конструкции по единому ключу «execId» либо «manual:{id}», закрываемая
+	/// нога выводится из встречного опциона тем же правилом, которым валидирует
+	/// сервис связок. Связка с осиротевшей сделкой или без длинной закрываемой
+	/// ноги не переводится.
 	/// </summary>
-	private static MaterializedTrade LinearTradeOf(SyntheticCloseLink link, List<MaterializedTrade> boundTrades) =>
-		boundTrades.Single(trade => trade.ExecId == link.LinearExecId);
+	private static SyntheticCloseLink? TryBuildManualLink(
+		SyntheticCloseManualLink manualLink,
+		List<MaterializedTrade> materializedTrades)
+	{
+		var linear = SyntheticCloseManualLinkMaterial.FindTrade(materializedTrades, manualLink.LinearTradeId);
+		var counter = SyntheticCloseManualLinkMaterial.FindTrade(materializedTrades, manualLink.OptionTradeId);
+		if (linear is null
+			|| counter is null
+			|| OptionSymbolParser.TryParse(counter.Symbol, out var counterParts) == false
+			|| counterParts is null
+			|| SyntheticCloseManualLinkMaterial.TryResolveClosedLeg(materializedTrades, counterParts, out var closedLegSymbol) == false)
+		{
+			return null;
+		}
+
+		return new SyntheticCloseLink
+		{
+			LinearExecId = manualLink.LinearTradeId,
+			LinearExecTimeMs = linear.ExecutedAt.ToUnixTimeMilliseconds(),
+			CounterOptionExecId = manualLink.OptionTradeId,
+			CounterOptionExecTimeMs = counter.ExecutedAt.ToUnixTimeMilliseconds(),
+			BaseCoin = counterParts.BaseCoin,
+			ClosedLegSymbol = closedLegSymbol!,
+			ClosedLegType = counterParts.Type == OptionType.Call ? OptionType.Put : OptionType.Call,
+			Strike = counterParts.Strike,
+			BoardExpiryDate = counterParts.ExpiryDate,
+			Quantity = manualLink.Quantity,
+		};
+	}
+
+	/// <summary>
+	/// Сделка связки по единому ключу «execId» либо «manual:{id}»; сделка приходит
+	/// из того же потока, по которому работали распознаватель и правило вывода
+	/// закрываемой ноги, и потому присутствует.
+	/// </summary>
+	private static MaterializedTrade TradeOf(string tradeKey, List<MaterializedTrade> materializedTrades) =>
+		SyntheticCloseManualLinkMaterial.FindTrade(materializedTrades, tradeKey)
+		?? throw new InvalidOperationException($"Сделка «{tradeKey}» исчезла из конструкции между шагами чтения.");
 
 	/// <summary>
 	/// Записи FIFO закрываемой ноги связки: сделки ноги из того же потока
-	/// привязанных сделок упорядочены по времени исполнения и идентификатору —
-	/// тот же порядок, что у распознавателя связок.
+	/// привязанных сделок упорядочены по времени исполнения и единому ключу
+	/// «execId» либо «manual:{id}» — тот же порядок, что у распознавателя
+	/// связок и потоков позиций.
 	/// </summary>
-	private static SyntheticCloseValuation SyntheticCloseValuationOf(SyntheticCloseLink link, List<MaterializedTrade> boundTrades)
+	private static SyntheticCloseValuation SyntheticCloseValuationOf(SyntheticCloseLink link, List<MaterializedTrade> materializedTrades)
 	{
-		var linearTrade = LinearTradeOf(link, boundTrades);
-		var counterTrade = boundTrades.Single(trade => trade.ExecId == link.CounterOptionExecId);
-		var legEntries = boundTrades
+		var linearTrade = TradeOf(link.LinearExecId, materializedTrades);
+		var counterTrade = TradeOf(link.CounterOptionExecId, materializedTrades);
+		var legEntries = materializedTrades
 			.Where(trade => trade.Symbol == link.ClosedLegSymbol)
 			.OrderBy(trade => trade.ExecutedAt)
-			.ThenBy(trade => trade.ExecId, StringComparer.Ordinal)
+			.ThenBy(SyntheticCloseManualLinkMaterial.TradeKey, StringComparer.Ordinal)
 			.Select(trade => new PositionFifoEntry
 			{
 				At = trade.ExecutedAt,
 				Kind = PositionFifoEntryKind.Trade,
-				SourceKey = trade.ExecId,
+				SourceKey = SyntheticCloseManualLinkMaterial.TradeKey(trade),
 				Quantity = trade.Quantity,
 				Price = trade.Price,
 				Fee = trade.Fee,
