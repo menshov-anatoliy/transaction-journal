@@ -13,9 +13,10 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 namespace TransactionJournal.Tests.Infrastructure.UseCases;
 
 /// <summary>
-/// Проверки use-case сервиса ручных пометок закрытия: добавление с ценой пользователя
-/// или без неё, свободная правка атрибутов, свободное удаление и чтение списка
-/// пометок конструкции; отказы на неизвестную конструкцию, пустой инструмент
+/// Проверки use-case сервиса ручных пометок закрытия: добавление с ценой
+/// и количеством пользователя или без них, свободная правка атрибутов,
+/// свободное удаление и чтение списка пометок конструкции; отказы на
+/// неизвестную конструкцию, пустой инструмент, неположительное количество
 /// и несуществующую пометку.
 /// </summary>
 [TestClass]
@@ -94,9 +95,9 @@ public class ManualCloseMarkServiceTests
 		var mark = await _markService.AddAsync(
 			construction.Id, "BTCUSDT", new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42100m);
 
-		// Act: свободно правим инструмент, время и цену.
+		// Act: свободно правим инструмент, время, цену и количество.
 		var editedAt = new DateTimeOffset(2023, 12, 31, 9, 30, 0, TimeSpan.Zero);
-		await _markService.EditAsync(mark.Id, "ETHUSDT", editedAt, null);
+		await _markService.EditAsync(mark.Id, "ETHUSDT", editedAt, null, null);
 
 		// Assert: пометка хранит новые атрибуты; правка не ограничена и не требует
 		// синхронных правок производных — позиции пересчитаются при чтении.
@@ -107,6 +108,76 @@ public class ManualCloseMarkServiceTests
 		Assert.That(edited.Symbol, Is.EqualTo("ETHUSDT"));
 		Assert.That(edited.MarkedAt, Is.EqualTo(editedAt));
 		Assert.That(edited.Price, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Пометка хранит заданное количество; незаданное остаётся null")]
+	public async Task TryIfMarkStoresSpecifiedQuantityAndNullByDefault()
+	{
+		// Arrange: конструкция и время пометки.
+		var construction = await _constructionService.CreateAsync("Частичное закрытие", 500m);
+		var markedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
+
+		// Act: добавляем пометку с количеством и пометку без него.
+		var partial = await _markService.AddAsync(construction.Id, "BTCUSDT", markedAt, 42100m, quantity: 0.05m);
+		var whole = await _markService.AddAsync(construction.Id, "ETHUSDT", markedAt.AddDays(1));
+
+		// Assert: заданное количество сохраняется, незаданное хранится null —
+		// производный слой закроет весь остаток на момент пометки.
+		// Требование: пометка имеет опциональное количество.
+		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
+		// Traceability: change:manual-journal-management/design#d6
+		var marks = await _markService.ListAsync(construction.Id);
+		Assert.That(marks.Single(mark => mark.Id == partial.Id).Quantity, Is.EqualTo(0.05m));
+		Assert.That(marks.Single(mark => mark.Id == whole.Id).Quantity, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Правка пометки меняет количество: задание части и возврат к закрытию всего остатка")]
+	public async Task TryIfMarkEditedQuantityChanges()
+	{
+		// Arrange: пометка с частичным количеством.
+		var construction = await _constructionService.CreateAsync("Диапазон BTC", 500m);
+		var mark = await _markService.AddAsync(
+			construction.Id, "BTCUSDT", new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42100m, quantity: 0.05m);
+
+		// Act: правим количество на другую часть, затем возвращаем null.
+		var editedAt = new DateTimeOffset(2023, 12, 31, 9, 30, 0, TimeSpan.Zero);
+		await _markService.EditAsync(mark.Id, "BTCUSDT", editedAt, 42100m, 0.02m);
+		var narrowed = (await _markService.ListAsync(construction.Id)).Single();
+		await _markService.EditAsync(mark.Id, "BTCUSDT", editedAt, 42100m, null);
+		var cleared = (await _markService.ListAsync(construction.Id)).Single();
+
+		// Assert: правка свободна в обе стороны — количество меняется и снимается.
+		// Требование: ручная пометка свободно правится.
+		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
+		Assert.That(narrowed.Quantity, Is.EqualTo(0.02m));
+		Assert.That(cleared.Quantity, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Пометка с нулевым количеством отказывает")]
+	[ExpectedException(typeof(ArgumentException))]
+	public async Task ThrowOnAddWithZeroQuantity()
+	{
+		// Arrange: конструкция существует.
+		var construction = await _constructionService.CreateAsync("Диапазон BTC", 500m);
+
+		// Act: нулевое количество — не часть остатка.
+		await _markService.AddAsync(construction.Id, "BTCUSDT", DateTimeOffset.UtcNow, 42100m, quantity: 0m);
+	}
+
+	[TestMethod]
+	[Description("Правка пометки с отрицательным количеством отказывает")]
+	[ExpectedException(typeof(ArgumentException))]
+	public async Task ThrowOnEditWithNegativeQuantity()
+	{
+		// Arrange: пометка без количества.
+		var construction = await _constructionService.CreateAsync("Диапазон BTC", 500m);
+		var mark = await _markService.AddAsync(construction.Id, "BTCUSDT", DateTimeOffset.UtcNow, 42100m);
+
+		// Act: отрицательное количество не является частью остатка.
+		await _markService.EditAsync(mark.Id, "BTCUSDT", DateTimeOffset.UtcNow, 42100m, -1m);
 	}
 
 	[TestMethod]
@@ -155,7 +226,7 @@ public class ManualCloseMarkServiceTests
 	public async Task ThrowOnEditUnknownMark()
 	{
 		// Arrange — Act: правка пометки, которой нет.
-		await _markService.EditAsync(999, "BTCUSDT", DateTimeOffset.UtcNow, 42100m);
+		await _markService.EditAsync(999, "BTCUSDT", DateTimeOffset.UtcNow, 42100m, null);
 	}
 
 	[TestMethod]

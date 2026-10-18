@@ -131,7 +131,7 @@ public class AnalyticsOnReadTests
 		Assert.That(firstMetrics.Duration, Is.EqualTo(TimeSpan.FromHours(2)));
 
 		// Act — правка пометки: цена закрытия опциона 90 → 2000.
-		await _markService.EditAsync(mark.Id, CallSymbol, At(2023, 12, 28, 12, 0), 2000m);
+		await _markService.EditAsync(mark.Id, CallSymbol, At(2023, 12, 28, 12, 0), 2000m, null);
 		var afterMarkEdit = await ReadMetricsAsync();
 
 		// Assert: опционная позиция пересчиталась — (2000 − 100) × 0.0001 − 0.02 = 0.17;

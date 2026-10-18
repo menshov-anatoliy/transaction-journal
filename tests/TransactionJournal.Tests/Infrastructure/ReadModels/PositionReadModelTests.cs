@@ -423,6 +423,85 @@ public class PositionReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Пометка с количеством, равным остатку, закрывает позицию целиком")]
+	public async Task TryIfManualMarkSpecifiedQuantityClosesWholeResidual()
+	{
+		// Arrange: покупка 0.0002 и пометка с количеством, равным остатку.
+		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
+		await AddLinearTradesAsync(("exec-buy", "Buy", "0.0002", ExecMs(2023, 12, 28, 10, 0)));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		await _markService.AddAsync(
+			construction.Id, LinearSymbol, new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42000m, quantity: 0.0002m);
+
+		// Act: читаем позиции.
+		var readModel = new PositionReadModel(CreateOptions());
+		var result = await readModel.ListAsync();
+
+		// Assert: заданное количество закрыло весь остаток — позиция закрыта,
+		// как и при незаданном количестве.
+		// Требование: заданное количество пометки закрывает указанную часть остатка.
+		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
+		var entry = result.ClosingEntries.Single();
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0002m));
+		var position = result.Positions.Single();
+		Assert.That(position.Residual, Is.EqualTo(0m));
+		Assert.That(position.IsOpen, Is.False);
+	}
+
+	[TestMethod]
+	[Description("Пометка с количеством меньше остатка закрывает часть, позиция остаётся открытой на разницу")]
+	public async Task TryIfManualMarkPartialQuantityKeepsRemainderOpen()
+	{
+		// Arrange: покупка 0.0002 и частичная пометка 0.0001.
+		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
+		await AddLinearTradesAsync(("exec-buy", "Buy", "0.0002", ExecMs(2023, 12, 28, 10, 0)));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		await _markService.AddAsync(
+			construction.Id, LinearSymbol, new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42000m, quantity: 0.0001m);
+
+		// Act: читаем позиции.
+		var readModel = new PositionReadModel(CreateOptions());
+		var result = await readModel.ListAsync();
+
+		// Assert: закрывающая запись получила запрошенную часть, позиция
+		// открыта на разницу — остаток не обнулился и не перевернулся.
+		// Требование: частичная пометка закрывает часть остатка.
+		// Traceability: openspec:domain/constructions#scenario-manual-mark-partial-quantity
+		var entry = result.ClosingEntries.Single();
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0001m));
+		var position = result.Positions.Single();
+		Assert.That(position.Residual, Is.EqualTo(0.0001m));
+		Assert.That(position.IsOpen, Is.True);
+	}
+
+	[TestMethod]
+	[Description("Избыточное количество пометки клэмпится остатком: закрывается весь остаток без переворота позиции")]
+	public async Task TryIfManualMarkExcessQuantityClampedByResidual()
+	{
+		// Arrange: покупка 0.0002 и пометка с количеством больше остатка.
+		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
+		await AddLinearTradesAsync(("exec-buy", "Buy", "0.0002", ExecMs(2023, 12, 28, 10, 0)));
+		await _bindingService.BindAsync(construction.Id, "exec-buy");
+		await _markService.AddAsync(
+			construction.Id, LinearSymbol, new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42000m, quantity: 1m);
+
+		// Act: читаем позиции.
+		var readModel = new PositionReadModel(CreateOptions());
+		var result = await readModel.ListAsync();
+
+		// Assert: закрывающая запись клэмплена остатком — закрыт весь остаток,
+		// позиция закрыта, а не перевёрнута в противоположную сторону.
+		// Требование: заданное количество клэмпится остатком производным слоем.
+		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
+		// Traceability: change:manual-journal-management/design#d6
+		var entry = result.ClosingEntries.Single();
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0002m));
+		var position = result.Positions.Single();
+		Assert.That(position.Residual, Is.EqualTo(0m));
+		Assert.That(position.IsOpen, Is.False);
+	}
+
+	[TestMethod]
 	[Description("Удаление пометки возвращает позицию в открытую с прежним остатком")]
 	public async Task TryIfManualMarkRemovalReopensPosition()
 	{

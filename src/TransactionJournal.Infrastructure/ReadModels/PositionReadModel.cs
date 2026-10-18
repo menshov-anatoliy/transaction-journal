@@ -85,8 +85,8 @@ public sealed class PositionReadModel
 	/// материализуются конвейером синхронизации, закрывающие записи экспираций —
 	/// материализатором экспираций, ручные пометки — записями домена; все три вида
 	/// сливаются в единую хронологию по каждой паре «конструкция × инструмент»,
-	/// где закрывающая запись с количеством, равным остатку на момент применения,
-	/// обнуляет позицию.
+	/// где закрывающая запись обнуляет позицию либо её заданную часть, а пометка
+	/// без количества закрывает весь остаток на момент применения.
 	/// </summary>
 	/// <param name="constructionId">Фильтр по конструкции; null — все конструкции.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
@@ -204,7 +204,7 @@ public sealed class PositionReadModel
 			// Traceability: openspec:domain/constructions#scenario-manual-mark-default-last-mark
 			var price = mark.Price ?? await ResolveLastMarkAsync(mark.Symbol, cancellationToken).ConfigureAwait(false);
 			Append(timelines, mark.ConstructionId, mark.Symbol,
-				new ManualMarkEvent(mark.MarkedAt, ManualSourceKey(mark.Id), price));
+				new ManualMarkEvent(mark.MarkedAt, ManualSourceKey(mark.Id), price, mark.Quantity));
 		}
 
 		var positions = new List<PositionSnapshot>();
@@ -259,11 +259,16 @@ public sealed class PositionReadModel
 							break;
 						}
 
-						// Количество ручной пометки — остаток на момент применения по хронологии:
-						// пометка закрывает ровно то, что накопилось к её времени.
-						// Traceability: change:add-core-domain/design#d3
-						var quantity = -residual;
-						residual = 0m;
+						// Количество пометки: незаданное закрывает весь остаток на момент
+						// применения по хронологии; заданное клэмпится остатком — закрывается
+						// запрошенная часть, позиция остаётся открытой на разницу. Знак
+						// закрывающей записи противоположен остатку.
+						// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
+						// Traceability: change:manual-journal-management/design#d6
+						var quantity = markEvent.Quantity is { } requested
+							? -Math.Sign(residual) * Math.Min(Math.Abs(requested), Math.Abs(residual))
+							: -residual;
+						residual += quantity;
 						closingEntries.Add(new PositionClosingEntry
 						{
 							ConstructionId = key.ConstructionId,
@@ -380,8 +385,8 @@ public sealed class PositionReadModel
 	private sealed record ExpiryEvent(DateTimeOffset At, string SourceKey, PositionClosingKind Kind, decimal Quantity, decimal Price)
 		: TimelineEvent(At, ExpiryRank, SourceKey);
 
-	/// <summary>Ручная пометка закрытия: количество вычисляется применением — остаток на её момент.</summary>
-	private sealed record ManualMarkEvent(DateTimeOffset At, string SourceKey, decimal? Price)
+	/// <summary>Ручная пометка закрытия: незаданное количество закрывает весь остаток на момент применения, заданное клэмпится остатком.</summary>
+	private sealed record ManualMarkEvent(DateTimeOffset At, string SourceKey, decimal? Price, decimal? Quantity)
 		: TimelineEvent(At, ManualMarkRank, SourceKey);
 
 	#endregion

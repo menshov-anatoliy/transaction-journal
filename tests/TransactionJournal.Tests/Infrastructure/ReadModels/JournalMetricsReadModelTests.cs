@@ -207,6 +207,34 @@ public class JournalMetricsReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Частичная пометка закрывает запрошенную часть: FIFO получает заданное количество, остаток остаётся открытым")]
+	public async Task TryIfPartialManualMarkClosesOnlyRequestedQuantity()
+	{
+		// Arrange: покупка 0.1 по 42000 с комиссией 1 и частичная пометка 0.04 по 43000.
+		var construction = await CreateConstructionAsync("Частичное закрытие", 1000m);
+		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await BindAsync(construction, "exec-buy");
+		var marks = new ManualCloseMarkService(CreateOptions());
+		await marks.AddAsync(
+			construction, LinearSymbol, new DateTimeOffset(2023, 12, 29, 10, 0, 0, TimeSpan.Zero), 43000m, quantity: 0.04m);
+
+		// Act
+		var metrics = await _readModel.ReadAsync();
+
+		// Assert: производный слой передал FIFO заданное количество — реализованный
+		// результат только закрытой части ((43000 − 42000) × 0.04 − 1 = 39),
+		// остаток 0.06 остаётся открытым без переворота позиции.
+		// Требование: заданное количество пометки закрывает часть остатка.
+		// Traceability: openspec:domain/constructions#scenario-manual-mark-partial-quantity
+		// Traceability: change:manual-journal-management/design#d6
+		var position = metrics.Positions.Single(item => item.ConstructionId == construction && item.Symbol == LinearSymbol);
+		Assert.That(position.Residual, Is.EqualTo(0.06m));
+		Assert.That(position.RealizedPnL, Is.EqualTo(39m));
+		var constructionMetrics = metrics.Constructions.Single(item => item.ConstructionId == construction);
+		Assert.That(constructionMetrics.RealizedPnL, Is.EqualTo(39m));
+	}
+
+	[TestMethod]
 	[Description("Сбой марок делает итог журнала неполным: реализованные метрики возвращаются как есть")]
 	public async Task TryIfMarkFailureMakesJournalTotalIncomplete()
 	{

@@ -636,9 +636,11 @@ public sealed class ConstructionCardApiTests
 		[Description("Ручная пометка закрытия ставится, правится и удаляется командами")]
 		// Ручные пометки закрытия — из строки открытой позиции, с пикерами даты-времени
 		// и дефолтом последней марки (№7): домен не проверяет остаток, избыточная
-		// пометка станет предупреждением при чтении.
+		// пометка станет предупреждением при чтении. Количество опционально:
+		// незаданное закрывает весь остаток, заданное клэмпится остатком доменом.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
+		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
 		public async Task TryIfManualCloseMarksAreAddedEditedAndDeleted()
 		{
 			// Arrange: записывающий сервис пометок.
@@ -646,12 +648,13 @@ public sealed class ConstructionCardApiTests
 			await using var factory = new SectionApiFactory(services => services.ReplaceCloseMarkService(marks));
 			using var client = factory.CreateClient();
 
-			// Act: постановка пометки с ценой и без, правка и удаление.
+			// Act: постановка пометки с ценой, количеством и без них, правка и удаление.
 			var add = await client.PostAsJsonAsync("/api/v1/constructions/7/close-marks", new
 			{
 				symbol = "ETH-28JUN24-3200-C",
 				markedAt = new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero),
 				price = (decimal?)30.5m,
+				quantity = (decimal?)0.05m,
 			});
 			var addWithoutPrice = await client.PostAsJsonAsync("/api/v1/constructions/7/close-marks", new
 			{
@@ -664,18 +667,21 @@ public sealed class ConstructionCardApiTests
 				symbol = "ETH-28JUN24-3200-C",
 				markedAt = new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero),
 				price = (decimal?)31m,
+				quantity = (decimal?)0.02m,
 			});
 			var delete = await client.DeleteAsync("/api/v1/close-marks/21");
 
-			// Assert: команды приняты и дошли сервису домена.
+			// Assert: команды приняты и дошли сервису домена; запрос без количества
+			// связывается null — контракт количества опционален.
 			Assert.That(add.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 			Assert.That(addWithoutPrice.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 			Assert.That(edit.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 			Assert.That(delete.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 			Assert.That(marks.Added, Has.Count.EqualTo(2));
-			Assert.That(marks.Added[0], Is.EqualTo((7L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero), 30.5m)));
+			Assert.That(marks.Added[0], Is.EqualTo((7L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero), 30.5m, 0.05m)));
 			Assert.That(marks.Added[1].Price, Is.Null);
-			Assert.That(marks.Edited, Is.EqualTo(new[] { (21L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero), 31m) }));
+			Assert.That(marks.Added[1].Quantity, Is.Null);
+			Assert.That(marks.Edited, Is.EqualTo(new[] { (21L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero), 31m, 0.02m) }));
 			Assert.That(marks.DeletedIds, Is.EqualTo(new[] { 21L }));
 		}
 
@@ -1374,30 +1380,30 @@ internal sealed class RecordingAdjustmentService : IPnLAdjustmentService
 /// <summary>Записывающий сервис ручных пометок закрытия: фиксирует команды карточки.</summary>
 internal sealed class RecordingCloseMarkService : IManualCloseMarkService
 {
-	/// <summary>Поставленные пометки: конструкция, инструмент, время и цена.</summary>
-	public IReadOnlyList<(long ConstructionId, string Symbol, DateTimeOffset MarkedAt, decimal? Price)> Added => _added;
+	/// <summary>Поставленные пометки: конструкция, инструмент, время, цена и количество.</summary>
+	public IReadOnlyList<(long ConstructionId, string Symbol, DateTimeOffset MarkedAt, decimal? Price, decimal? Quantity)> Added => _added;
 
-	/// <summary>Правки пометок: ключ, инструмент, время и цена.</summary>
-	public IReadOnlyList<(long MarkId, string Symbol, DateTimeOffset MarkedAt, decimal? Price)> Edited => _edited;
+	/// <summary>Правки пометок: ключ, инструмент, время, цена и количество.</summary>
+	public IReadOnlyList<(long MarkId, string Symbol, DateTimeOffset MarkedAt, decimal? Price, decimal? Quantity)> Edited => _edited;
 
 	/// <summary>Удалённые пометки.</summary>
 	public IReadOnlyList<long> DeletedIds => _deletedIds;
 
-	private readonly List<(long, string, DateTimeOffset, decimal?)> _added = [];
+	private readonly List<(long, string, DateTimeOffset, decimal?, decimal?)> _added = [];
 
-	private readonly List<(long, string, DateTimeOffset, decimal?)> _edited = [];
+	private readonly List<(long, string, DateTimeOffset, decimal?, decimal?)> _edited = [];
 
 	private readonly List<long> _deletedIds = [];
 
-	public Task<ManualCloseMark> AddAsync(long constructionId, string symbol, DateTimeOffset markedAt, decimal? price = null, CancellationToken cancellationToken = default)
+	public Task<ManualCloseMark> AddAsync(long constructionId, string symbol, DateTimeOffset markedAt, decimal? price = null, decimal? quantity = null, CancellationToken cancellationToken = default)
 	{
-		_added.Add((constructionId, symbol, markedAt, price));
-		return Task.FromResult(new ManualCloseMark { ConstructionId = constructionId, Symbol = symbol, Price = price, MarkedAt = markedAt });
+		_added.Add((constructionId, symbol, markedAt, price, quantity));
+		return Task.FromResult(new ManualCloseMark { ConstructionId = constructionId, Symbol = symbol, Price = price, Quantity = quantity, MarkedAt = markedAt });
 	}
 
-	public Task EditAsync(long markId, string symbol, DateTimeOffset markedAt, decimal? price, CancellationToken cancellationToken = default)
+	public Task EditAsync(long markId, string symbol, DateTimeOffset markedAt, decimal? price, decimal? quantity, CancellationToken cancellationToken = default)
 	{
-		_edited.Add((markId, symbol, markedAt, price));
+		_edited.Add((markId, symbol, markedAt, price, quantity));
 		return Task.CompletedTask;
 	}
 

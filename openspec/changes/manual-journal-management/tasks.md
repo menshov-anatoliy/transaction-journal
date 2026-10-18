@@ -25,7 +25,7 @@
 
 ## 5. Частичная ручная пометка
 
-- [ ] 5.1 Применять `Quantity` пометки в производном слое закрывающих записей: null — весь остаток, заданное — клэмп по остатку; тестами проверить полное, частичное и избыточное количество (Traceability: openspec:domain/constructions#requirement-position-close-lifecycle)
+- [x] 5.1 Применять `Quantity` пометки в производном слое закрывающих записей: null — весь остаток, заданное — клэмп по остатку; тестами проверить полное, частичное и избыточное количество (Traceability: openspec:domain/constructions#requirement-position-close-lifecycle)
 
 ## 6. UI
 

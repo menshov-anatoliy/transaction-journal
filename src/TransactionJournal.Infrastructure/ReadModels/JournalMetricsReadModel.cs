@@ -19,7 +19,8 @@ namespace TransactionJournal.Infrastructure.ReadModels;
 /// заново при каждом чтении — без хранимых результатов и промежуточного
 /// состояния. Композиция повторяет правила read-модели позиций: хронология по
 /// моменту, рангу вида и ключу источника, избыточные закрывающие записи в поток
-/// не входят, пометка закрывает остаток на её момент.
+/// не входят, пометка без количества закрывает остаток на её момент, заданное
+/// количество клэмпится остатком.
 // Traceability: openspec:analytics/performance#requirement-analytics-computed-on-read
 // Traceability: change:add-ui-screens/design#d7
 /// </summary>
@@ -158,10 +159,13 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		{
 			// Цена пометки без пользовательского значения подставляется последней известной
 			// маркой инструмента при чтении; без источника марок цена остаётся неизвестной.
+			// Количество пометки передаётся потоку как есть: незаданное закроет весь
+			// остаток, заданное клэмпится остатком при применении.
 			// Traceability: openspec:domain/constructions#scenario-manual-mark-default-last-mark
+			// Traceability: change:manual-journal-management/design#d6
 			var price = mark.Price ?? await ResolveLastMarkAsync(mark.Symbol, cancellationToken).ConfigureAwait(false) ?? 0m;
 			Append(streams, mark.ConstructionId, mark.Symbol, new StreamEvent(
-				mark.MarkedAt, ManualMarkRank, PositionFifoEntryKind.ManualMark, ManualSourceKey(mark.Id), null, price, 0m));
+				mark.MarkedAt, ManualMarkRank, PositionFifoEntryKind.ManualMark, ManualSourceKey(mark.Id), mark.Quantity, price, 0m));
 		}
 
 		var positionCalculator = new PositionMetricsCalculator();
@@ -244,7 +248,8 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 	/// <summary>
 	/// Применяет события потока в хронологии позиции: избыточные закрывающие записи
 	/// (остаток на момент применения уже нулевой) в поток не входят, а ручная пометка
-	/// закрывает ровно тот остаток, что накопился к её моменту.
+	/// без количества закрывает весь остаток, накопленный к её моменту, заданная —
+	/// запрошенную часть остатка.
 	/// </summary>
 	private static List<PositionFifoEntry> Replay((long ConstructionId, string Symbol) key, List<StreamEvent> events)
 	{
@@ -276,14 +281,21 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 					break;
 
 				case PositionFifoEntryKind.ManualMark:
-					// Пометка закрывает ровно тот остаток, что накопился к её моменту.
+					// Незаданное количество пометки закрывает весь остаток на её момент;
+					// заданное клэмпится остатком — закрывается запрошенная часть,
+					// позиция остаётся открытой на разницу.
+					// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
+					// Traceability: change:manual-journal-management/design#d6
 					if (residual == 0m)
 					{
 						continue;
 					}
 
-					entries.Add(ToFifoEntry(streamEvent, -residual));
-					residual = 0m;
+					var markQuantity = streamEvent.Quantity is { } requested
+						? -Math.Sign(residual) * Math.Min(Math.Abs(requested), Math.Abs(residual))
+						: -residual;
+					entries.Add(ToFifoEntry(streamEvent, markQuantity));
+					residual += markQuantity;
 					break;
 
 				default:
@@ -481,7 +493,7 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			.ConfigureAwait(false);
 	}
 
-	/// <summary>Событие единого потока позиции до применения: количество ручной пометки выводится применением потока.</summary>
+	/// <summary>Событие единого потока позиции до применения: у ручной пометки это её собственное количество — незаданное закроет весь остаток, заданное клэмпится остатком.</summary>
 	private sealed record StreamEvent(
 		DateTimeOffset At,
 		int Rank,

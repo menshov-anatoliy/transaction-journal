@@ -219,7 +219,9 @@ public static class ConstructionCardEndpoints
 
 		// Постановка ручной пометки закрытия из строки открытой позиции:
 		// домен не проверяет остаток — избыточная пометка станет
-		// предупреждением при чтении.
+		// предупреждением при чтении. Количество необязательно: незаданное
+		// закрывает весь остаток на момент пометки, заданное клэмпится
+		// остатком производным слоем.
 		// Ручные пометки идут командами через единый версионированный API.
 		// Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
@@ -230,13 +232,14 @@ public static class ConstructionCardEndpoints
 			CancellationToken cancellationToken) =>
 		{
 			return await RunMarkCommand(
-				() => marks.AddAsync(constructionId, request.Symbol, request.MarkedAt, request.Price, cancellationToken),
+				() => marks.AddAsync(constructionId, request.Symbol, request.MarkedAt, request.Price, request.Quantity, cancellationToken),
 				errorPrefix: "Пометка закрытия не поставлена");
 		});
 
 		// Правка ручной пометки из таблицы закрывающих записей: инструмент,
-		// время и цена правятся свободно, пустая цена возвращает пометку
-		// к последней марке при чтении.
+		// время, цена и количество правятся свободно, пустая цена возвращает
+		// пометку к последней марке при чтении, пустое количество — к закрытию
+		// всего остатка.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 		api.MapPut("/close-marks/{markId:long}", async (
 			long markId,
@@ -245,7 +248,7 @@ public static class ConstructionCardEndpoints
 			CancellationToken cancellationToken) =>
 		{
 			return await RunMarkCommand(
-				() => marks.EditAsync(markId, request.Symbol, request.MarkedAt, request.Price, cancellationToken),
+				() => marks.EditAsync(markId, request.Symbol, request.MarkedAt, request.Price, request.Quantity, cancellationToken),
 				errorPrefix: "Правка пометки не выполнена");
 		});
 
@@ -1189,13 +1192,15 @@ public sealed record LastInstrumentMarkResponse(decimal? Mark);
 /// <param name="Symbol">Инструмент закрываемой позиции.</param>
 /// <param name="MarkedAt">Время пометки — место записи в хронологии.</param>
 /// <param name="Price">Цена закрытия; null — последняя марка при чтении.</param>
-public sealed record AddManualCloseMarkRequest(string Symbol, DateTimeOffset MarkedAt, decimal? Price);
+/// <param name="Quantity">Количество закрываемой позиции; null — весь остаток на момент пометки.</param>
+public sealed record AddManualCloseMarkRequest(string Symbol, DateTimeOffset MarkedAt, decimal? Price, decimal? Quantity);
 
 /// <summary>Запрос правки ручной пометки закрытия.</summary>
 /// <param name="Symbol">Инструмент закрываемой позиции.</param>
 /// <param name="MarkedAt">Время пометки — место записи в хронологии.</param>
 /// <param name="Price">Цена закрытия; null — последняя марка при чтении.</param>
-public sealed record EditManualCloseMarkRequest(string Symbol, DateTimeOffset MarkedAt, decimal? Price);
+/// <param name="Quantity">Количество закрываемой позиции; null — весь остаток на момент пометки.</param>
+public sealed record EditManualCloseMarkRequest(string Symbol, DateTimeOffset MarkedAt, decimal? Price, decimal? Quantity);
 
 /// <summary>Цель переноса сделки: активная конструкция без текущей.</summary>
 /// <param name="ConstructionId">Идентификатор целевой конструкции.</param>

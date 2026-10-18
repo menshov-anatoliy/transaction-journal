@@ -10,13 +10,15 @@ namespace TransactionJournal.Infrastructure.UseCases;
 /// Use-case сервис ручных пометок закрытия — пользовательских закрывающих записей
 /// для инструментов без биржевых записей закрытия. Пометка добавляется с ценой
 /// пользователя или без неё (производный слой подставляет последнюю известную
-/// марку при чтении), свободно правится и удаляется — позиции пересчитываются
-/// при чтении, поэтому удаление возвращает позицию в открытое состояние без
-/// синхронных правок производных. Каждый вызов создаёт собственный
-/// короткоживущий контекст, поэтому сервис безопасен в длительных сессиях
-/// Blazor Server.
+/// марку при чтении) и с количеством или без него (незаданное количество
+/// закрывает весь остаток, заданное клэмпится остатком), свободно правится
+/// и удаляется — позиции пересчитываются при чтении, поэтому удаление возвращает
+/// позицию в открытое состояние без синхронных правок производных. Каждый вызов
+/// создаёт собственный короткоживущий контекст, поэтому сервис безопасен
+/// в длительных сессиях Blazor Server.
 // Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
 // Traceability: change:add-core-domain/design#d3
+// Traceability: change:manual-journal-management/design#d6
 /// </summary>
 public sealed class ManualCloseMarkService : IManualCloseMarkService
 {
@@ -35,24 +37,29 @@ public sealed class ManualCloseMarkService : IManualCloseMarkService
 	/// <summary>
 	/// Добавляет ручную пометку закрытия позиции конструкции. Цена необязательна:
 	/// незаданная цена разрешается производным слоем последней известной маркой
-	/// инструмента при чтении.
+	/// инструмента при чтении. Количество необязательно: незаданное закрывает
+	/// весь остаток на момент пометки, заданное клэмпится остатком производным
+	/// слоем.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, внутри которой закрывается позиция.</param>
 	/// <param name="symbol">Инструмент закрываемой позиции.</param>
 	/// <param name="markedAt">Время пометки: задаёт место записи в хронологии закрывающих записей.</param>
 	/// <param name="price">Цена закрытия по выбору пользователя; null — взять последнюю марку при чтении.</param>
+	/// <param name="quantity">Количество закрываемой позиции; null — весь остаток на момент пометки.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Созданная пометка.</returns>
-	/// <exception cref="ArgumentException">Инструмент не задан или состоит из пробелов.</exception>
+	/// <exception cref="ArgumentException">Инструмент не задан или состоит из пробелов; количество не положительно.</exception>
 	/// <exception cref="ConstructionNotFoundException">Конструкция не найдена.</exception>
 	public async Task<ManualCloseMark> AddAsync(
 		long constructionId,
 		string symbol,
 		DateTimeOffset markedAt,
 		decimal? price = null,
+		decimal? quantity = null,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
+		EnsureQuantityIsValid(quantity);
 
 		// Пометка — пользовательская запись домена: остаток не проверяется, избыточная
 		// пометка превращается в предупреждение read-модели, а не в запрет.
@@ -64,6 +71,7 @@ public sealed class ManualCloseMarkService : IManualCloseMarkService
 			ConstructionId = constructionId,
 			Symbol = symbol,
 			Price = price,
+			Quantity = quantity,
 			MarkedAt = markedAt,
 		};
 		db.ManualCloseMarks.Add(mark);
@@ -76,25 +84,28 @@ public sealed class ManualCloseMarkService : IManualCloseMarkService
 	#region Правка
 
 	/// <summary>
-	/// Свободно правит атрибуты ручной пометки: инструмент, время и цену. Перенос
-	/// в другую конструкцию не выполняется — для этого пометка удаляется и заводится
-	/// заново. Новые значения подхватываются ближайшим чтением позиций.
+	/// Свободно правит атрибуты ручной пометки: инструмент, время, цену и количество.
+	/// Перенос в другую конструкцию не выполняется — для этого пометка удаляется
+	/// и заводится заново. Новые значения подхватываются ближайшим чтением позиций.
 	/// </summary>
 	/// <param name="markId">Идентификатор пометки.</param>
 	/// <param name="symbol">Новый инструмент помечки.</param>
 	/// <param name="markedAt">Новое время пометки.</param>
 	/// <param name="price">Новая цена; null — вернуться к последней марке при чтении.</param>
+	/// <param name="quantity">Новое количество; null — вернуться к закрытию всего остатка.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	/// <exception cref="ArgumentException">Инструмент не задан или состоит из пробелов.</exception>
+	/// <exception cref="ArgumentException">Инструмент не задан или состоит из пробелов; количество не положительно.</exception>
 	/// <exception cref="ManualCloseMarkNotFoundException">Пометка не найдена.</exception>
 	public async Task EditAsync(
 		long markId,
 		string symbol,
 		DateTimeOffset markedAt,
 		decimal? price,
+		decimal? quantity,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
+		EnsureQuantityIsValid(quantity);
 
 		// Правка свободна: пометка — пользовательская закрывающая запись, производный
 		// слой пересчитает позиции новыми значениями без ограничений.
@@ -104,6 +115,7 @@ public sealed class ManualCloseMarkService : IManualCloseMarkService
 		mark.Symbol = symbol;
 		mark.MarkedAt = markedAt;
 		mark.Price = price;
+		mark.Quantity = quantity;
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 	}
 
@@ -164,6 +176,24 @@ public sealed class ManualCloseMarkService : IManualCloseMarkService
 	#region Помощники
 
 	private JournalDbContext CreateContext() => new(_options);
+
+	/// <summary>
+	/// Отвергает неположительное количество пометки: заданное количество — это
+	/// часть остатка, поэтому оно обязано быть больше нуля; незаданное (null)
+	/// означает весь остаток и валидации не подлежит.
+	/// </summary>
+	/// <param name="quantity">Проверяемое количество пометки.</param>
+	/// <exception cref="ArgumentException">Количество задано и не больше нуля.</exception>
+	private static void EnsureQuantityIsValid(decimal? quantity)
+	{
+		// Валидация на записи: незаданное количество — весь остаток (легитимно),
+		// заданное — часть остатка и обязано быть положительным.
+		// Traceability: openspec:domain/constructions#scenario-manual-mark-partial-quantity
+		if (quantity is { } requested && requested <= 0m)
+		{
+			throw new ArgumentException($"Количество пометки должно быть больше нуля, получено {requested}.", nameof(quantity));
+		}
+	}
 
 	/// <summary>Проверяет существование конструкции до изменения пометок.</summary>
 	/// <exception cref="ConstructionNotFoundException">Конструкция не найдена.</exception>
