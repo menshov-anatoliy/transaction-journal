@@ -10,6 +10,7 @@ using TransactionJournal.Api.Hints;
 using TransactionJournal.Api.Agent;
 using TransactionJournal.Api.Sync;
 using TransactionJournal.Api.Inbox;
+using TransactionJournal.Api.ManualTrades;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Bybit;
@@ -245,6 +246,17 @@ builder.Services.AddSingleton<ISyntheticCloseDisputeService>(sp => sp.GetRequire
 // Traceability: change:manual-journal-management/specs/sync/bybit-history/spec#scenario-manual-symbol-populates-catalog
 builder.Services.AddTransient<ManualInstrumentResolver>();
 
+// Сервис ручных сделок: внесение во «Входящие» либо сразу в конструкцию, правка
+// и удаление с валидацией значений и охраной неизменяемости биржевых записей.
+// Эндпоинты и будущие экраны ручного ввода зависят от интерфейса, тесты подменяют
+// его заглушкой.
+// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+// Traceability: openspec:domain/manual-trades#requirement-manual-trade-validation
+builder.Services.AddSingleton(sp => new ManualTradeService(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<ManualInstrumentResolver>()));
+builder.Services.AddSingleton<IManualTradeService>(sp => sp.GetRequiredService<ManualTradeService>());
+
 // Read-модель каркаса «Терминала»: счётчик непривязанных сделок для бейджа
 // «Входящих» и заголовок открытой конструкции для транзитной вкладки — тонкая
 // композиция готовых проекций домена без собственных правил.
@@ -464,6 +476,7 @@ api.MapConstructionCardEndpoints();
 api.MapHintsEndpoints();
 api.MapSyncEndpoints();
 api.MapInboxEndpoints();
+api.MapManualTradeEndpoints();
 api.MapAgentEndpoints();
 
 if (spaRootPath != null)
