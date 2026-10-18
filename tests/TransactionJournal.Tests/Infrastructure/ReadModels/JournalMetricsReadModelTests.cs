@@ -320,6 +320,70 @@ public class JournalMetricsReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Свежие снимки истории не становятся опорой прироста — опорой остаётся снимок суточной давности")]
+	// Прирост распада сравнивает тету только со снимком давностью не менее
+	// суток: более свежие строки истории — даже с иной тетой — не влияют на
+	// прирост. Проверка защищает границу давности в SQL-отборе опоры: без неё
+	// опорой стал бы самый последний снимок истории.
+	// Traceability: openspec:analytics/option-lifetime#requirement-leg-decay-acceleration
+	public async Task TryIfFreshHistorySnapshotsDoNotChangeDecayBaseline()
+	{
+		// Arrange: у ноги свежая тета −2.5; в истории двухчасовой снимок с тетой
+		// −9 и суточной давности с тетой −2 — прирост считается по −2.
+		var construction = await CreateConstructionAsync("Свежая история", 1000m);
+		await SeedOptionInstrumentAsync(NearCallSymbol, "Call", ExecMs(2026, 10, 28, 8, 0));
+		await AddOptionTradeAsync("exec-near", NearCallSymbol, "Buy", "1", "3000", ExecMs(2026, 10, 10, 10, 0));
+		await BindAsync(construction, "exec-near");
+		_markSource.FreshOptionMarks[NearCallSymbol] = new InstrumentMarkSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
+		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 3100m, theta: -9m, receivedAt: LifetimeNow.AddHours(-2));
+		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 2900m, theta: -2m, receivedAt: LifetimeNow.AddHours(-25));
+		var readModel = CreateReadModel(new FixedTimeProvider(LifetimeNow));
+
+		// Act: читаем метрики журнала.
+		var metrics = await readModel.ReadAsync();
+
+		// Assert: опорная тета взята из снимка суточной давности, свежий снимок
+		// на прирост не влияет: (−2.5 − (−2)) × 1 = −0.5.
+		var nearLeg = metrics.Constructions
+			.Single(item => item.ConstructionId == construction)
+			.Lifetime!.Legs.Single(leg => leg.Symbol == NearCallSymbol);
+		Assert.That(nearLeg.DecayDayAgoUsdt, Is.EqualTo(-2m));
+		Assert.That(nearLeg.DecayAccelerationUsdt, Is.EqualTo(-0.5m));
+	}
+
+	[TestMethod]
+	[Description("Снимок суточной давности без теты пропускается — опорой становится более старая известная тета")]
+	// Append-only история фиксирует и выборки без теты: SQL-отбор опоры
+	// отбрасывает снимки с неизвестной тетой так же, как клиентский выбор
+	// вычислителя, — опорой остаётся ближайшая известная тета давностью
+	// не менее суток.
+	// Traceability: openspec:analytics/option-lifetime#requirement-leg-decay-acceleration
+	public async Task TryIfSnapshotWithoutThetaIsSkippedForDecayBaseline()
+	{
+		// Arrange: строка суточной давности без теты и более старая строка
+		// с известной тетой −1.8 — опорой становится вторая.
+		var construction = await CreateConstructionAsync("История без теты", 1000m);
+		await SeedOptionInstrumentAsync(NearCallSymbol, "Call", ExecMs(2026, 10, 28, 8, 0));
+		await AddOptionTradeAsync("exec-near", NearCallSymbol, "Buy", "1", "3000", ExecMs(2026, 10, 10, 10, 0));
+		await BindAsync(construction, "exec-near");
+		_markSource.FreshOptionMarks[NearCallSymbol] = new InstrumentMarkSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
+		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 2950m, theta: null, receivedAt: LifetimeNow.AddHours(-25));
+		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 2900m, theta: -1.8m, receivedAt: LifetimeNow.AddHours(-30));
+		var readModel = CreateReadModel(new FixedTimeProvider(LifetimeNow));
+
+		// Act: читаем метрики журнала.
+		var metrics = await readModel.ReadAsync();
+
+		// Assert: опорная тета −1.8 взята из более старого снимка:
+		// (−2.5 − (−1.8)) × 1 = −0.7.
+		var nearLeg = metrics.Constructions
+			.Single(item => item.ConstructionId == construction)
+			.Lifetime!.Legs.Single(leg => leg.Symbol == NearCallSymbol);
+		Assert.That(nearLeg.DecayDayAgoUsdt, Is.EqualTo(-1.8m));
+		Assert.That(nearLeg.DecayAccelerationUsdt, Is.EqualTo(-0.7m));
+	}
+
+	[TestMethod]
 	[Description("Без тикеров опциона саммари деградирует прочерком, а остаток суток сохраняется")]
 	// Недоступность тикеров — деградация прочерком, а не ошибка: слагаемые
 	// саммари без рыночных величин исчезают, остаток суток вычисляется по
@@ -443,8 +507,8 @@ public class JournalMetricsReadModelTests
 		await db.SaveChangesAsync();
 	}
 
-	/// <summary>Пишет строку истории рыночных снимков с тетой и моментом получения — материал прироста распада.</summary>
-	private async Task AddMarketSnapshotAsync(string symbol, decimal markPrice, decimal theta, DateTimeOffset receivedAt)
+	/// <summary>Пишет строку истории рыночных снимков с тетой (или без неё) и моментом получения — материал прироста распада.</summary>
+	private async Task AddMarketSnapshotAsync(string symbol, decimal markPrice, decimal? theta, DateTimeOffset receivedAt)
 	{
 		using var db = new JournalDbContext(CreateOptions());
 		db.InstrumentMarketSnapshots.Add(new InstrumentMarketSnapshot

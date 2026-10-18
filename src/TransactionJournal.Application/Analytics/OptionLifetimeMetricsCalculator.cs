@@ -36,8 +36,8 @@ public sealed class OptionLifetimeMetricsCalculator
 	/// <summary>Порог предупреждения об экспирации: остаток полных суток не более четырнадцати.</summary>
 	public const int ExpiryWarningDaysThreshold = 14;
 
-	/// <summary>Минимальный возраст снимка истории для прироста распада — сутки.</summary>
-	private static readonly TimeSpan SnapshotMinAge = TimeSpan.FromHours(24);
+	/// <summary>Минимальный возраст снимка истории для прироста распада — сутки; общий с read-моделью метрик журнала, чтобы SQL-отбор опорного снимка совпадал с проверкой давности.</summary>
+	public static readonly TimeSpan SnapshotMinAge = TimeSpan.FromHours(24);
 
 	private readonly TimeProvider _timeProvider;
 

@@ -319,10 +319,10 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 	/// <summary>
 	/// Собирает расчётные данные метрик времени жизни по каждой конструкции:
 	/// открытые опционные ноги разрешаются из справочника инструментов (страйк,
-	/// тип, каноническое время доставки), свежие тикеры текущего чтения и история
-	/// рыночных снимков общие для всех конструкций. Символ вне формата опциона
-	/// или неразрешимый справочником ногу исключает — метрика ноги деградирует
-	/// прочерком, чтение метрик конструкции не ломается.
+	/// тип, каноническое время доставки), свежие тикеры текущего чтения и
+	/// опорные снимки суточной давности общие для всех конструкций. Символ вне
+	/// формата опциона или неразрешимый справочником ногу исключает — метрика
+	/// ноги деградирует прочерком, чтение метрик конструкции не ломается.
 	/// Traceability: change:add-option-lifetime-metrics/design#d2
 	/// </summary>
 	private async Task<IReadOnlyDictionary<long, OptionLifetimeInput>> BuildLifetimeInputsAsync(
@@ -349,15 +349,14 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			.Distinct(StringComparer.Ordinal)
 			.ToList();
 
-		// История снимков читается один раз на чтение метрик журнала: вычислитель
-		// сам выбирает снимки нужных символов и проверяет их давность.
+		// Опора прироста читается один раз на чтение метрик журнала: SQL отбирает
+		// по символу единственный снимок суточной давности, вычислитель повторно
+		// проверяет его давность на клиенте. История append-only и не очищается,
+		// поэтому грузить её целиком значило бы дорожать с каждым чтением.
 		// Traceability: openspec:analytics/option-lifetime#requirement-leg-decay-acceleration
 		var snapshotHistory = optionSymbols.Count == 0
 			? []
-			: await db.InstrumentMarketSnapshots
-				.AsNoTracking()
-				.Where(snapshot => optionSymbols.Contains(snapshot.Symbol))
-				.ToListAsync(cancellationToken)
+			: await ReadDecayBaselinesAsync(db, optionSymbols, cancellationToken)
 				.ConfigureAwait(false);
 
 		var inputs = new Dictionary<long, OptionLifetimeInput>();
@@ -401,6 +400,62 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		}
 
 		return inputs;
+	}
+
+	/// <summary>
+	/// Читает по каждому опционному символу единственный опорный снимок прироста
+	/// распада — ближайший к границе суточной давности с известной тетой.
+	/// История снимков append-only и не очищается, поэтому отбор опоры выполняется
+	/// в SQL оконной функцией по индексу «символ + момент получения»: чтение
+	/// метрик не дорожает с ростом истории.
+	/// </summary>
+	/// <param name="db">Контекст журнала текущего чтения метрик.</param>
+	/// <param name="optionSymbols">Символы открытых опционных ног.</param>
+	/// <param name="cancellationToken">Токен отмены.</param>
+	/// <returns>Опорные снимки суточной давности — не более одного на символ.</returns>
+	private async Task<List<InstrumentMarketSnapshot>> ReadDecayBaselinesAsync(
+		JournalDbContext db,
+		IReadOnlyList<string> optionSymbols,
+		CancellationToken cancellationToken)
+	{
+		// Граница давности считается тем же поставщиком времени, что отдан
+		// вычислителю прироста: отбор опоры и её проверка согласованы.
+		var cutoff = _timeProvider.GetUtcNow() - OptionLifetimeMetricsCalculator.SnapshotMinAge;
+
+		var parameters = new List<object> { cutoff };
+		var symbolParameters = new List<string>(optionSymbols.Count);
+		foreach (var symbol in optionSymbols)
+		{
+			parameters.Add(symbol);
+			symbolParameters.Add($"@p{parameters.Count - 1}");
+		}
+
+		// Момент получения хранится текстом, поэтому граница сравнивается в SQL
+		// лексикографически: единственный писатель истории штампует момент
+		// получения текущим UTC, у всех строк смещение «+00:00», и текстовый
+		// порядок совпадает с хронологическим. Снимки без теты отбрасываются
+		// здесь же — как и клиентским выбором вычислителя: опорой остаётся
+		// ближайшая известная тета давностью не менее суток.
+		var sql = $"""
+			SELECT "w"."Id", "w"."Symbol", "w"."MarkPrice", "w"."UnderlyingPrice", "w"."Theta", "w"."ReceivedAt"
+			FROM (
+				SELECT "i"."Id", "i"."Symbol", "i"."MarkPrice", "i"."UnderlyingPrice", "i"."Theta", "i"."ReceivedAt",
+					ROW_NUMBER() OVER (
+						PARTITION BY "i"."Symbol"
+						ORDER BY "i"."ReceivedAt" DESC, "i"."Id" DESC) AS "BaselineRank"
+				FROM "InstrumentMarketSnapshots" AS "i"
+				WHERE "i"."Symbol" IN ({string.Join(", ", symbolParameters)})
+					AND "i"."ReceivedAt" <= @p0
+					AND "i"."Theta" IS NOT NULL
+			) AS "w"
+			WHERE "w"."BaselineRank" = 1
+			ORDER BY "w"."Symbol"
+			""";
+		return await db.InstrumentMarketSnapshots
+			.FromSqlRaw(sql, [.. parameters])
+			.AsNoTracking()
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
 	}
 
 	/// <summary>Событие единого потока позиции до применения: количество ручной пометки выводится применением потока.</summary>
