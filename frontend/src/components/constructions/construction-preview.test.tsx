@@ -35,6 +35,8 @@ const preview: ConstructionPreview = {
 	marksAsOf: "2026-06-20T14:30:00",
 	hasMarkFailure: false,
 	counts: { positions: 2, openPositions: 1, trades: 3, adjustments: 1 },
+	riskWarningsCount: 0,
+	riskWarnings: [],
 };
 
 function renderPreview(overrides: Partial<ConstructionPreview> = {}, liveHintCount?: number) {
@@ -149,6 +151,50 @@ describe("краткая карточка конструкции", () => {
 
 		// Assert: признак сбоя занимает место нереализованной величины.
 		expect(screen.getByText("сбой котировок")).toBeInTheDocument();
+	});
+
+	it("перечисляет все предупреждения полностью тоном риска", () => {
+		// Краткая карточка показывает полный перечень записей диагностики,
+		// а не счётчик: заголовок «Предупреждения» и каждый текст тоном
+		// риска (фрейм Warnings мастера N6abN).
+		// Traceability: openspec:ui/screens#scenario-preview-lists-all-warnings
+		// Act: карточка конструкции с двумя предупреждениями.
+		renderPreview({
+			riskWarningsCount: 2,
+			riskWarnings: [
+				{ text: "ETHUSDT · 1 из 2 контрактов · убыток ограничен ценой входа" },
+				{ text: "ETHUSDT · 1 контракт · убыток не ограничен" },
+			],
+		});
+
+		// Assert: секция присутствует, показаны все записи по порядку,
+		// заголовок и записи несут тон риска.
+		const section = document.querySelector('[data-slot="construction-preview-warnings"]');
+		expect(section).not.toBeNull();
+		expect(screen.getByText("Предупреждения")).toBeInTheDocument();
+		expect(screen.getByText("ETHUSDT · 1 из 2 контрактов · убыток ограничен ценой входа")).toBeInTheDocument();
+		expect(screen.getByText("ETHUSDT · 1 контракт · убыток не ограничен")).toBeInTheDocument();
+		const lines = [...(section?.querySelectorAll("p") ?? [])];
+		expect(lines).toHaveLength(3);
+		// Заголовок — полужирный, записи — обычное начертание, все тоном риска.
+		expect(lines[0]?.className).toContain("font-semibold");
+		expect(lines[1]?.className).not.toContain("font-semibold");
+		expect(lines[2]?.className).not.toContain("font-semibold");
+		for (const line of lines) {
+			expect(line?.className).toContain("text-[color:var(--risk)]");
+		}
+	});
+
+	it("скрывает секцию предупреждений без предупреждений", () => {
+		// Пустой перечень диагностики — секции нет: карточка без
+		// предупреждений не показывает ни заголовок, ни записи.
+		// Traceability: openspec:ui/screens#requirement-construction-warnings-display
+		// Act: карточка конструкции без предупреждений.
+		renderPreview();
+
+		// Assert: секции предупреждений нет.
+		expect(document.querySelector('[data-slot="construction-preview-warnings"]')).toBeNull();
+		expect(screen.queryByText("Предупреждения")).not.toBeInTheDocument();
 	});
 
 	it("содержит единственное действие «Открыть карточку»", () => {

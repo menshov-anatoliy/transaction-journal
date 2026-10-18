@@ -104,6 +104,21 @@ export function ConstructionPreviewCard({ preview, liveHintCount }: Construction
 				</Metric>
 			</div>
 
+			{/* Перечень предупреждений диагностики — полный список записей
+			    тоном риска (фрейм Warnings мастера N6abN): заголовок 11/600,
+			    записи 11 тоном --risk; без предупреждений секции нет.
+			    Traceability: openspec:ui/screens#scenario-preview-lists-all-warnings */}
+			{preview.riskWarnings.length > 0 && (
+				<div data-slot="construction-preview-warnings" className="flex flex-col gap-1">
+					<p className="text-[11px] leading-[normal] font-semibold text-[color:var(--risk)]">Предупреждения</p>
+					{preview.riskWarnings.map((warning, index) => (
+						<p key={index} className="text-[11px] leading-[normal] text-[color:var(--risk)]">
+							{warning.text}
+						</p>
+					))}
+				</div>
+			)}
+
 			{/* Строка периода: открытие, длительность и счётчики записей —
 			    Inter 11 на textMuted (фрейм Period мастера N6abN). */}
 			<p className="text-text-muted text-[11px] leading-[normal]">

@@ -130,6 +130,8 @@ const preview = {
 	marksAsOf: "2026-06-20T14:30:00",
 	hasMarkFailure: false,
 	counts: { positions: 2, openPositions: 1, trades: 3, adjustments: 0 },
+	riskWarningsCount: 0,
+	riskWarnings: [],
 };
 
 vi.mock("@/lib/api/constructions", async (importOriginal) => ({

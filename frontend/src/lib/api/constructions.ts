@@ -76,6 +76,11 @@ export interface ConstructionPreviewCounts {
 	readonly adjustments: number;
 }
 
+/** Запись предупреждения диагностики в перечне превью. */
+export interface ConstructionPreviewWarning {
+	readonly text: string;
+}
+
 /** Read-only превью выделенной конструкции правой области. */
 export interface ConstructionPreview {
 	readonly constructionId: number;
@@ -109,6 +114,14 @@ export interface ConstructionPreview {
 	readonly marksAsOf: string | null;
 	readonly hasMarkFailure: boolean;
 	readonly counts: ConstructionPreviewCounts;
+	// Счётчик предупреждений превью — тот же источник, что у бейджа строки:
+	// число и перечень идут одним вызовом вычислителя, расхождение исключено.
+	// Traceability: openspec:ui/screens#requirement-construction-warnings-display
+	readonly riskWarningsCount: number;
+	// Полный перечень текстов предупреждений краткой карточки: карточка
+	// перечисляет все записи, а не счётчик; пустой список — секции нет.
+	// Traceability: openspec:ui/screens#scenario-preview-lists-all-warnings
+	readonly riskWarnings: readonly ConstructionPreviewWarning[];
 }
 
 /** Читает обзор раздела: сводку шапки и строки таблицы конструкций. */
