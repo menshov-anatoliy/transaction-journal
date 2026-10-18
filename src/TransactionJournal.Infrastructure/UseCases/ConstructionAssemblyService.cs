@@ -504,6 +504,15 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 			.Select(construction => construction.Id)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
+
+		// Соответствие старых конструкций конструкциям плана выводится из общих
+		// данных — текущих привязок биржевых сделок: старые привязки читаются до
+		// вычищения и после применения плана сопоставляются с его привязками.
+		var oldBindings = await db.TradeUserdata
+			.Where(userdata => userdata.ConstructionId != null)
+			.Select(userdata => new { userdata.ExecId, userdata.ConstructionId })
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
 		await using var chatWipe = await _chatStore.BeginRebuildWipeAsync(cancellationToken).ConfigureAwait(false);
 		foreach (var constructionId in oldConstructionIds)
 		{
@@ -521,6 +530,30 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 		await db.PositionComments.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.ManualCloseMarks.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.SyntheticCloseDisputes.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+
+		// Ручные сделки — сырьё журнала: строки переживают пересбор, а их привязки
+		// указывают на конструкции, которые сейчас стираются вместе с ключами.
+		// Идентификаторы привязанных сделок читаются до сброса: он не оставляет
+		// ссылок на несуществующие записи, а сделки с однозначным соответствием
+		// вернутся в конструкции плана после его применения, остальные останутся
+		// во «Входящих» как сырьё, доступное ручной привязке.
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-survives-rebuild
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+		var boundManualTradeIdsByConstructionId = (await db.ManualTrades
+				.Where(trade => trade.ConstructionId != null)
+				.Select(trade => new { trade.Id, trade.ConstructionId })
+				.ToListAsync(cancellationToken)
+				.ConfigureAwait(false))
+			.GroupBy(trade => trade.ConstructionId!.Value)
+			.ToDictionary(
+				group => group.Key,
+				group => group.Select(trade => trade.Id).ToList());
+		await db.ManualTrades
+			.Where(trade => trade.ConstructionId != null)
+			.ExecuteUpdateAsync(
+				updates => updates.SetProperty(trade => trade.ConstructionId, (long?)null),
+				cancellationToken)
+			.ConfigureAwait(false);
 		await db.Constructions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
 		// Конструкции вставляются в порядке плана: порядковый номер плана задаёт
@@ -553,6 +586,52 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 				ConstructionId = databaseIdByPlanId[binding.Value],
 			}));
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+		// Привязки ручных сделок возвращаются по однозначному соответствию:
+		// конструкция прежней сборки соотносится с конструкцией плана, когда все
+		// её биржевые сделки план привязал в одну и ту же новую конструкцию.
+		// Соответствие выводится из общих данных, а не из совпадения ключей базы:
+		// пересбор строит конструкции заново и ключи не наследует. Расщеплённые
+		// планом конструкции и конструкции без биржевых сделок однозначного
+		// соответствия не дают — их ручные сделки остаются во «Входящих».
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-survives-rebuild
+		var newIdByExecId = plan.Bindings.ToDictionary(
+			binding => binding.Key,
+			binding => databaseIdByPlanId[binding.Value],
+			StringComparer.Ordinal);
+		var newIdsByOldId = new Dictionary<long, HashSet<long>>();
+		foreach (var binding in oldBindings)
+		{
+			if (newIdByExecId.TryGetValue(binding.ExecId, out var newId) == false)
+			{
+				continue;
+			}
+
+			var oldId = binding.ConstructionId!.Value;
+			if (newIdsByOldId.TryGetValue(oldId, out var targets) == false)
+			{
+				targets = [];
+				newIdsByOldId.Add(oldId, targets);
+			}
+
+			targets.Add(newId);
+		}
+
+		foreach (var (oldId, targets) in newIdsByOldId.OrderBy(pair => pair.Key))
+		{
+			if (targets.Count != 1
+				|| boundManualTradeIdsByConstructionId.TryGetValue(oldId, out var tradeIds) == false)
+			{
+				continue;
+			}
+
+			await db.ManualTrades
+				.Where(trade => tradeIds.Contains(trade.Id))
+				.ExecuteUpdateAsync(
+					updates => updates.SetProperty(trade => trade.ConstructionId, (long?)targets.Single()),
+					cancellationToken)
+				.ConfigureAwait(false);
+		}
 
 		// Сначала фиксируется план журнала, затем стирание чатов: сбой до этой
 		// строки откатывает и журнал, и стирание чатов, привязанные чаты

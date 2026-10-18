@@ -15,7 +15,7 @@
 - [x] 3.1 Реализовать сервис ручных сделок с валидацией (дата не в будущем, количество > 0, цена > 0, комиссия ≥ 0) и правилом иммутабельности биржевых записей; модульными тестами покрыть все отказы и успех (Traceability: openspec:domain/manual-trades#requirement-manual-trade-validation)
 - [x] 3.2 Добавить endpoints `POST/PUT/DELETE /api/v1/manual-trades` с опциональным constructionId (null → «Входящие»); интеграционными тестами проверить попадание в «Входящие» и сразу в конструкцию, правку с пересчётом, удаление из конструкции, отказ для биржевой записи (Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry)
 - [x] 3.3 Проверить сосуществование с синхронизацией интеграционным тестом: запуск sync не меняет ручные сделки, дубликат исполнения остаётся двумя записями (Traceability: openspec:domain/manual-trades#requirement-manual-sync-coexistence)
-- [ ] 3.4 Проверить тестом, что полный пересбор сохраняет ручные сделки как сырьё и они участвуют в новой сборке (Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member)
+- [x] 3.4 Проверить тестом, что полный пересбор сохраняет ручные сделки как сырьё и они участвуют в новой сборке (Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member)
 
 ## 4. Ручные синтетические связки
 
