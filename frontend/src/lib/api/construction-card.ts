@@ -123,6 +123,11 @@ export interface ConstructionCardClosingWarning {
 	readonly closedAt: string;
 }
 
+/** Запись предупреждения диагностики незакрытых рисков карточки. */
+export interface ConstructionCardRiskWarning {
+	readonly text: string;
+}
+
 /** Строка таблицы корректировок PnL карточки. */
 export interface ConstructionCardAdjustment {
 	readonly adjustmentId: number;
@@ -158,6 +163,12 @@ export interface ConstructionCard {
 	// конструкции без связок, строка «зафиксировано синтетикой» не выводится.
 	// Traceability: openspec:ui/screens#requirement-detail-synthetic-close-line
 	readonly syntheticCloses: readonly ConstructionCardSyntheticClose[];
+	// Полный перечень предупреждений диагностики незакрытых рисков: секция
+	// «Предупреждения» карточки перечисляет все записи, а пустой список
+	// скрывает секцию целиком. Источник тот же вызов вычислителя, что у
+	// счётчика бейджа списка и перечня превью, — расхождение наборов исключено.
+	// Traceability: openspec:ui/screens#requirement-construction-warnings-display
+	readonly riskWarnings: readonly ConstructionCardRiskWarning[];
 }
 
 /** Ручной статус конструкции (реэкспорт контракта раздела). */

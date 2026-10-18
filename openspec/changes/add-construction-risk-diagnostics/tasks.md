@@ -20,7 +20,7 @@
 
 - [x] 4.1 Бейдж «⚠ N» в строке таблицы конструкций по обновлённому макету (образец — бейдж живых подсказок); скрыт при нуле; доступное имя (`title`/`aria-label`) с числом предупреждений. Проверить: `scenario-list-row-warning-badge`, `scenario-list-row-no-warning-badge`.
 - [x] 4.2 Полный перечень предупреждений в краткой карточке контекстной панели по макету. Проверить: `scenario-preview-lists-all-warnings`.
-- [ ] 4.3 Секция «Предупреждения» в основной карточке над таблицами записей по макету, скрытая при пустом наборе; бейдж «∞» индикатора не затрагивается. Проверить: `scenario-detail-warnings-section-above-tables`, `scenario-detail-warnings-section-hidden`, `scenario-unbounded-badge-coexists-with-warnings`.
+- [x] 4.3 Секция «Предупреждения» в основной карточке над таблицами записей по макету, скрытая при пустом наборе; бейдж «∞» индикатора не затрагивается. Проверить: `scenario-detail-warnings-section-above-tables`, `scenario-detail-warnings-section-hidden`, `scenario-unbounded-badge-coexists-with-warnings`.
 
 ## 5. Сверка и приёмка
 

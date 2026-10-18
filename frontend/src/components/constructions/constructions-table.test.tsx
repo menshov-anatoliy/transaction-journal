@@ -177,6 +177,25 @@ describe("таблица конструкций", () => {
 		expect(screen.getByRole("row", { name: /BTC-240531/ }).querySelector('[data-slot="warning-badge"]')).toBeNull();
 	});
 
+	// Строка с неограниченным реальным риском и предупреждениями: бейдж «∞»
+	// компактного индикатора сохраняется, бейдж «⚠ N» показывается независимо.
+	// Traceability: openspec:ui/screens#scenario-unbounded-badge-coexists-with-warnings
+	it("показывает бейдж ∞ и бейдж предупреждений в строке независимо друг от друга", () => {
+		// Act: таблица со строкой, у которой статус риска unbounded и есть предупреждения.
+		render(
+			<ConstructionsTable
+				rows={[{ ...openRow, realRiskUsdt: null, realRiskStatus: "unbounded" as const }]}
+				selectedId={null}
+				onSelect={() => {}}
+			/>,
+		);
+
+		// Assert: в одной строке живут бейдж «∞» поверх полосы и бейдж «⚠ 1».
+		const row = screen.getByRole("row", { name: /ETH-240628/ });
+		expect(row.querySelector('[data-slot="fin-result-compact"] [data-part="risk-state"]')).toHaveTextContent("∞");
+		expect(row.querySelector('[data-slot="warning-badge"]')).toHaveTextContent("⚠ 1");
+	});
+
 	// Ячейка не переопределяет ширину 132px компактного мастера FMghY.
 	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 	it("рендерит компактный индикатор финрезультата в строке", () => {

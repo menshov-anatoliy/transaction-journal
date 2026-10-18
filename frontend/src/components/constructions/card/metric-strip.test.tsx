@@ -78,6 +78,7 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 		closingWarnings: [],
 		adjustments: [],
 		syntheticCloses: [],
+		riskWarnings: [],
 		...overrides,
 	};
 }

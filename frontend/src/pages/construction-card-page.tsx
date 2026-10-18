@@ -21,9 +21,10 @@ import { MarkdownEditDialog } from "@/components/markdown/markdown-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/http";
 import { DASH } from "@/lib/format/degradation";
+import { formatCount } from "@/lib/format/plural";
 import { formatAmount } from "@/lib/format/quantity";
 import { formatMoment } from "@/lib/format/display-time";
-import type { ConstructionCard, TargetUnit } from "@/lib/api/construction-card";
+import type { ConstructionCard, ConstructionCardRiskWarning, TargetUnit } from "@/lib/api/construction-card";
 
 // Карточка конструкции — маршрут /constructions/{id} по концепции §4: полная
 // информация и всё управление (паритет №3–№9). Шапка с именем, статусом и
@@ -221,6 +222,16 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 			<div className="flex min-w-0 flex-col gap-6">
 					<ConstructionHintsArea constructionId={constructionId} />
 
+					{/* Секция «Предупреждения» — полный перечень диагностики над
+					    таблицами записей по фрейму «Предупреждения» экрана
+					    «Карточка конструкции» (QbFRE) design.pen; при пустом наборе
+					    секция скрыта целиком. Бейдж «∞» индикатора финрезультата
+					    про агрегатный статус и от предупреждений не зависит.
+					    Traceability: openspec:ui/screens#scenario-detail-warnings-section-above-tables
+					    Traceability: openspec:ui/screens#scenario-detail-warnings-section-hidden
+					    Traceability: openspec:ui/screens#scenario-unbounded-badge-coexists-with-warnings */}
+					{card.riskWarnings.length > 0 && <RiskWarningsSection warnings={card.riskWarnings} />}
+
 					{/* Заголовки и счётчики сеток живут в головках секций-карточек
 					    (GridSection) по мастеру design.pen; внешние h2 убраны. */}
 					{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
@@ -257,6 +268,32 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 						onDelete={(adjustmentId) => commands.deleteAdjustment.mutate(adjustmentId)}
 					/>
 			</div>
+		</section>
+	);
+}
+
+// Секция «Предупреждения» основной карточки по фрейму «Предупреждения»
+// экрана QbFRE design.pen: секция-карточка с головкой «заголовок + счётчик
+// записей» и строками записей тоном --risk с разделителями; заполнение —
+// только при непустом перечне диагностики.
+// Traceability: openspec:ui/screens#scenario-detail-warnings-section-above-tables
+function RiskWarningsSection({ warnings }: { readonly warnings: readonly ConstructionCardRiskWarning[] }) {
+	return (
+		<section data-slot="construction-card-warnings" className="bg-card flex flex-col overflow-hidden rounded-lg border">
+			{/* Головка секции: паддинг [10,14], зазор 8 — как в GridSection. */}
+			<div className="flex items-center gap-2 px-3.5 py-2.5">
+				<h2 className="text-[13px] font-semibold text-foreground">Предупреждения</h2>
+				<span className="text-[11.5px] text-text-muted">
+					{formatCount(warnings.length, { one: "запись", few: "записи", many: "записей" })}
+				</span>
+			</div>
+			{warnings.map((warning, index) => (
+				// Строка записи: кегль 11 тоном --risk, паддинг [7,14] и
+				// разделитель снизу по мастер-строкам секции.
+				<p key={index} className="border-divider border-b px-3.5 py-[7px] text-[11px] leading-[normal] text-[color:var(--risk)]">
+					{warning.text}
+				</p>
+			))}
 		</section>
 	);
 }

@@ -110,6 +110,7 @@ const card: ConstructionCard = {
 		},
 	],
 	syntheticCloses: [],
+	riskWarnings: [],
 };
 
 const constructionPanel: HintPanel = {
@@ -657,6 +658,66 @@ describe("карточка конструкции", () => {
 		// секции по мастеру design.pen, details унесены в подсказку.
 		// Traceability: change:rework-spa-shell-and-screens/specs/ui/screens/spec#scenario-detail-grids-match-design
 		expect(screen.getByRole("alert")).toHaveTextContent("⚠ 1 избыточная");
+	});
+
+	// Секция «Предупреждения» в карточке с предупреждениями: полный перечень
+	// над таблицами записей — заголовок, счётчик записей и все тексты.
+	// Traceability: openspec:ui/screens#scenario-detail-warnings-section-above-tables
+	it("TryIfCardShowsWarningsSectionAboveRecordTables", async () => {
+		cardApi.fetchConstructionCard.mockResolvedValue({
+			...card,
+			riskWarnings: [
+				{ text: "ETHUSDT · 1 из 2 контрактов · убыток ограничен ценой входа" },
+				{ text: "ETH-28JUN24-3200-P · 2 контракта · убыток не ограничен" },
+			],
+		});
+		renderCardPage();
+
+		await screen.findByRole("heading", { name: "Предупреждения" });
+		const section = document.querySelector('[data-slot="construction-card-warnings"]');
+		expect(section).not.toBeNull();
+		// Счётчик записей в головке секции согласован с числом строк.
+		expect(section).toHaveTextContent("2 записи");
+		expect(section).toHaveTextContent("ETHUSDT · 1 из 2 контрактов · убыток ограничен ценой входа");
+		expect(section).toHaveTextContent("ETH-28JUN24-3200-P · 2 контракта · убыток не ограничен");
+		// Секция стоит раньше таблиц записей: «Позиции» идут ниже по DOM.
+		const positions = document.querySelector('[data-slot="positions-table"]');
+		expect(positions).not.toBeNull();
+		expect(section!.compareDocumentPosition(positions!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		// Записи тоном риска по мастер-секции design.pen.
+		for (const row of section!.querySelectorAll("p")) {
+			expect(row).toHaveClass("text-[color:var(--risk)]");
+		}
+	});
+
+	// Конструкция без предупреждений не показывает секцию вовсе.
+	// Traceability: openspec:ui/screens#scenario-detail-warnings-section-hidden
+	it("TryIfCardHidesWarningsSectionWithoutWarnings", async () => {
+		renderCardPage();
+
+		await screen.findByRole("heading", { name: "Позиции" });
+		expect(document.querySelector('[data-slot="construction-card-warnings"]')).toBeNull();
+	});
+
+	// Неограниченный реальный риск и предупреждения сосуществуют: индикатор
+	// финрезультата сохраняет статус «риск не ограничен», секция предупреждений
+	// показывается независимо от него.
+	// Traceability: openspec:ui/screens#scenario-unbounded-badge-coexists-with-warnings
+	it("TryIfUnboundedRiskStateCoexistsWithWarningsSection", async () => {
+		cardApi.fetchConstructionCard.mockResolvedValue({
+			...card,
+			metrics: { ...card.metrics, realRiskUsdt: null, realRiskStatus: "unbounded" },
+			riskWarnings: [{ text: "ETHUSDT · 2 контракта · убыток не ограничен" }],
+		});
+		renderCardPage();
+
+		await screen.findByRole("heading", { name: "Предупреждения" });
+		const riskState = document.querySelector('[data-slot="fin-result-full"] [data-part="risk-state"]');
+		expect(riskState).not.toBeNull();
+		expect(riskState).toHaveTextContent("риск не ограничен");
+		const section = document.querySelector('[data-slot="construction-card-warnings"]');
+		expect(section).not.toBeNull();
+		expect(section).toHaveTextContent("ETHUSDT · 2 контракта · убыток не ограничен");
 	});
 
 	it("показывает панель подсказок конструкции", async () => {
