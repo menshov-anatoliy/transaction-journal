@@ -2824,7 +2824,7 @@
       "y": 2600,
       "name": "Экран/Конструкции",
       "clip": true,
-      "width": 1760,
+      "width": 1920,
       "height": 1024,
       "fill": "$bg",
       "layout": "vertical",
@@ -3329,6 +3329,44 @@
                             },
                             {
                               "type": "frame",
+                              "id": "ISLS6",
+                              "name": "HC:До экспирации",
+                              "width": 96,
+                              "padding": 8,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "qj2Yd",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "До экспирации",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "OKqmT",
+                              "name": "HC:Распад",
+                              "width": 64,
+                              "padding": 8,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "QmpXL",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "Распад",
+                                  "fontFamily": "$font",
+                                  "fontSize": 11,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "M93yJo",
                               "name": "HC:Открыта",
                               "width": 56,
@@ -3649,6 +3687,50 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "78%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "q6L0I2",
+                              "name": "C:До экспирации",
+                              "width": 96,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "fCyUO",
+                                  "name": "T",
+                                  "fill": "$neg",
+                                  "content": "9",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "OQtZi",
+                              "name": "C:Распад",
+                              "width": 64,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Mia1M",
+                                  "name": "T",
+                                  "fill": "$neg",
+                                  "content": "−6,80",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -4010,6 +4092,50 @@
                             },
                             {
                               "type": "frame",
+                              "id": "djcrl",
+                              "name": "C:До экспирации",
+                              "width": 96,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "XL44x",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "21",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "yGv1l",
+                              "name": "C:Распад",
+                              "width": 64,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "uxj1P",
+                                  "name": "T",
+                                  "fill": "$neg",
+                                  "content": "−14,20",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "jml6o",
                               "name": "C:Открыта",
                               "width": 56,
@@ -4350,6 +4476,50 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "44%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Fhmfo",
+                              "name": "C:До экспирации",
+                              "width": 96,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ZSUy7",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "47",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "VGNzu",
+                              "name": "C:Распад",
+                              "width": 64,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "uMovr",
+                                  "name": "T",
+                                  "fill": "$neg",
+                                  "content": "−9,40",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -4708,6 +4878,50 @@
                             },
                             {
                               "type": "frame",
+                              "id": "wgvrk",
+                              "name": "C:До экспирации",
+                              "width": 96,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "K1foE8",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "—",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "K9GVV",
+                              "name": "C:Распад",
+                              "width": 64,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "lznfL",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "—",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "O1A262",
                               "name": "C:Открыта",
                               "width": 56,
@@ -5049,6 +5263,50 @@
                                   "name": "T",
                                   "fill": "$textSecondary",
                                   "content": "12%",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "uaQko",
+                              "name": "C:До экспирации",
+                              "width": 96,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "zv9zk",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "35",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "uWkhy",
+                              "name": "C:Распад",
+                              "width": 64,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "WXXyN",
+                                  "name": "T",
+                                  "fill": "$neg",
+                                  "content": "−3,10",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
@@ -5404,6 +5662,50 @@
                             },
                             {
                               "type": "frame",
+                              "id": "B0Mr13",
+                              "name": "C:До экспирации",
+                              "width": 96,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "oq4vD",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "—",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "lD3wZ",
+                              "name": "C:Распад",
+                              "width": 64,
+                              "padding": [
+                                9,
+                                8
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "WPnD2",
+                                  "name": "T",
+                                  "fill": "$textSecondary",
+                                  "content": "—",
+                                  "fontFamily": "$font",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
                               "id": "J5VT48",
                               "name": "C:Открыта",
                               "width": 56,
@@ -5493,7 +5795,7 @@
       "y": 2600,
       "name": "Экран/Карточка конструкции",
       "clip": true,
-      "width": 1600,
+      "width": 1760,
       "height": 1656,
       "fill": "$bg",
       "layout": "vertical",
@@ -6014,6 +6316,66 @@
                             },
                             "Q4NLmR": {
                               "content": "12 авг — 07 окт · 56 дн.",
+                              "fill": "$textPrimary",
+                              "fontSize": 14
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Ee94Q",
+                      "name": "Метрики времени жизни",
+                      "width": "fill_container",
+                      "gap": 20,
+                      "children": [
+                        {
+                          "id": "LpRC6",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "ML1",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "До экспирации"
+                            },
+                            "Q4NLmR": {
+                              "content": "9 дн.",
+                              "fill": "$neg",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "IBQsh",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "ML2",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Распад / сутки"
+                            },
+                            "Q4NLmR": {
+                              "content": "−6,80",
+                              "fill": "$neg",
+                              "fontSize": 14
+                            }
+                          }
+                        },
+                        {
+                          "id": "iPIIy",
+                          "type": "ref",
+                          "ref": "jtDmV",
+                          "name": "ML3",
+                          "width": "fit_content",
+                          "descendants": {
+                            "bGGN9": {
+                              "content": "Временная стоимость"
+                            },
+                            "Q4NLmR": {
+                              "content": "+1 060",
                               "fill": "$textPrimary",
                               "fontSize": 14
                             }
@@ -6652,7 +7014,7 @@
                           "id": "if91R",
                           "name": "Count",
                           "fill": "$textMuted",
-                          "content": "15 колонок · 2",
+                          "content": "17 колонок · 2",
                           "fontFamily": "$font",
                           "fontSize": 11.5,
                           "fontWeight": "normal"
@@ -6798,6 +7160,48 @@
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
                               "content": "Изм., %",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "zT30Y",
+                          "name": "HC:До экспирации",
+                          "width": 64,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "vBJ2v",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "До экспирации",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "EPXIu",
+                          "name": "HC:Распад",
+                          "width": 48,
+                          "padding": 6,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "K5ERC",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Распад",
                               "fontFamily": "$font",
                               "fontSize": 9.5,
                               "fontWeight": "600"
@@ -7000,6 +7404,7 @@
                       "id": "J58ykP",
                       "name": "Row:1",
                       "width": "fill_container",
+                      "fill": "$riskSoft",
                       "stroke": "$divider",
                       "strokeWidth": {
                         "bottom": 1
@@ -7132,6 +7537,50 @@
                               "name": "T",
                               "fill": "$accentStrong",
                               "content": "+61,9%",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "l8AlY",
+                          "name": "C:До экспирации",
+                          "width": 64,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "TDIMd",
+                              "name": "T",
+                              "fill": "$neg",
+                              "content": "9",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "qY4r0",
+                          "name": "C:Распад",
+                          "width": 48,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "WGfFf",
+                              "name": "T",
+                              "fill": "$neg",
+                              "content": "−6,80",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -7512,6 +7961,50 @@
                               "name": "T",
                               "fill": "$neg",
                               "content": "−0,1%",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "KjYw3",
+                          "name": "C:До экспирации",
+                          "width": 64,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "mzxsq",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "—",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "D7t3W",
+                          "name": "C:Распад",
+                          "width": 48,
+                          "padding": [
+                            7,
+                            6
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "D4dbCy",
+                              "name": "T",
+                              "fill": "$textSecondary",
+                              "content": "—",
                               "fontFamily": "$font",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -9641,6 +10134,66 @@
                           ]
                         }
                       ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "HpYyH",
+                  "layoutPosition": "absolute",
+                  "x": 388,
+                  "y": 1176,
+                  "name": "Тултип состава",
+                  "width": 300,
+                  "fill": "$surface",
+                  "cornerRadius": 8,
+                  "stroke": "$border",
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#17171E29",
+                    "offset": {
+                      "x": 0,
+                      "y": 6
+                    },
+                    "blur": 18
+                  },
+                  "layout": "vertical",
+                  "gap": 5,
+                  "padding": [
+                    10,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "B8F91",
+                      "name": "Заголовок",
+                      "fill": "$textPrimary",
+                      "content": "ETH-28MAR-1600-P · состав позиции",
+                      "fontFamily": "$font",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "e3qmSn",
+                      "name": "Стоимости",
+                      "fill": "$textSecondary",
+                      "content": "внутренняя +180,40 · временная +1 059,60",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "QlsN2",
+                      "name": "Распад",
+                      "fill": "$textSecondary",
+                      "content": "распад вчера → сегодня: −6,20 → −6,80",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
