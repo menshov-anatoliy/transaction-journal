@@ -21,7 +21,7 @@
 
 - [x] 4.1 Реализовать валидацию и создание/удаление ручных связок (одна конструкция, совпадение страйка/экспирации, согласованность количеств, без окна времени) с endpoints `POST/DELETE /api/v1/constructions/{id}/synthetic-closes/manual-links`; модульными тестами покрыть сценарии принятия и отказов (Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link)
 - [x] 4.2 Включить ручные связки в действующие связки логического слоя (распознанные − оспоренные + ручные) без изменения формулы лока; тестами проверить показ величины при только ручной связке и инвариант неизменности инструментальных метрик (Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-locked-value)
-- [ ] 4.3 Проверить тестами: инкрементная сборка сохраняет ручную связку, полный пересбор стирает (Traceability: openspec:domain/synthetic-close#scenario-manual-link-wiped-by-rebuild)
+- [x] 4.3 Проверить тестами: инкрементная сборка сохраняет ручную связку, полный пересбор стирает (Traceability: openspec:domain/synthetic-close#scenario-manual-link-wiped-by-rebuild)
 
 ## 5. Частичная ручная пометка
 
