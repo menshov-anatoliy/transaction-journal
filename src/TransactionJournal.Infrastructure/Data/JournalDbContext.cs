@@ -42,6 +42,12 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 	/// <summary>Ручные пометки закрытия позиций — пользовательские закрывающие записи.</summary>
 	public DbSet<ManualCloseMark> ManualCloseMarks => Set<ManualCloseMark>();
 
+	/// <summary>Ручные сделки — сырьё журнала, внесённое пользователем без синхронизации.</summary>
+	public DbSet<ManualTrade> ManualTrades => Set<ManualTrade>();
+
+	/// <summary>Ручные синтетические связки — ручные данные логического слоя конструкций.</summary>
+	public DbSet<SyntheticCloseManualLink> SyntheticCloseManualLinks => Set<SyntheticCloseManualLink>();
+
 	/// <summary>Записи оспаривания синтетических связок — ручные данные логического слоя.</summary>
 	public DbSet<SyntheticCloseDispute> SyntheticCloseDisputes => Set<SyntheticCloseDispute>();
 
@@ -170,6 +176,26 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 			.HasOne(mark => mark.Construction)
 			.WithMany()
 			.HasForeignKey(mark => mark.ConstructionId)
+			.OnDelete(DeleteBehavior.Cascade);
+
+		// Ручная сделка — сырьё журнала: ConstructionId = null означает «Входящие»,
+		// привязанная сделка запрещает удаление конструкции — как и биржевые
+		// привязки TradeUserdata, сделка снимается с конструкции заранее.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+		modelBuilder.Entity<ManualTrade>()
+			.HasOne(trade => trade.Construction)
+			.WithMany()
+			.HasForeignKey(trade => trade.ConstructionId)
+			.OnDelete(DeleteBehavior.Restrict);
+
+		// Ручная связка принадлежит конструкции и умирает вместе с ней, как прочие
+		// ручные данные логического слоя: полный пересбор вычищает таблицу целиком,
+		// инкрементная сборка её не трогает — симметрично оспариваниям связок.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		modelBuilder.Entity<SyntheticCloseManualLink>()
+			.HasOne(link => link.Construction)
+			.WithMany()
+			.HasForeignKey(link => link.ConstructionId)
 			.OnDelete(DeleteBehavior.Cascade);
 
 		// Спор принадлежит связке внутри конструкции и, как прочие ручные данные

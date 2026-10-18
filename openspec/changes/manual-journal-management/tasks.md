@@ -2,8 +2,8 @@
 
 ## 1. Домен и хранение сырья
 
-- [ ] 1.1 Добавить сущность `ManualTrade` (ExecutedAt, Symbol, Side, Quantity, Price, FeeUsdt, ConstructionId nullable, CreatedAt/UpdatedAt), таблицу `ManualTrades` в `JournalDbContext` и EF-миграцию; проверить, что миграция применяется и откатывается на чистой базе
-- [ ] 1.2 Добавить nullable `Quantity` к `ManualCloseMark` и сущность `SyntheticCloseManualLinks` (ConstructionId, LinearTradeId, OptionTradeId, Quantity) в ту же миграцию; проверить `dotnet build` и применение миграции
+- [x] 1.1 Добавить сущность `ManualTrade` (ExecutedAt, Symbol, Side, Quantity, Price, FeeUsdt, ConstructionId nullable, CreatedAt/UpdatedAt), таблицу `ManualTrades` в `JournalDbContext` и EF-миграцию; проверить, что миграция применяется и откатывается на чистой базе
+- [x] 1.2 Добавить nullable `Quantity` к `ManualCloseMark` и сущность `SyntheticCloseManualLinks` (ConstructionId, LinearTradeId, OptionTradeId, Quantity) в ту же миграцию; проверить `dotnet build` и применение миграции
 - [ ] 1.3 Включить `ManualTrades` в материализацию журнала наравне с `RawExecutions`: сделки обоих источников попадают в проекцию, у сделки появляется источник «биржа»/«ручной ввод», у ручных отсутствует execId; проверить модульными тестами материализации оба источника в одной конструкции
 
 ## 2. Разрешение символа при ручном вводе

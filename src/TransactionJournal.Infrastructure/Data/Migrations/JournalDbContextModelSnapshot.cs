@@ -139,6 +139,9 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.Property<decimal?>("Price")
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal?>("Quantity")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Symbol")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -148,6 +151,48 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.HasIndex("ConstructionId");
 
                     b.ToTable("ManualCloseMarks");
+                });
+
+            modelBuilder.Entity("TransactionJournal.Domain.Data.ManualTrade", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("ConstructionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ExecutedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("FeeUsdt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConstructionId");
+
+                    b.ToTable("ManualTrades");
                 });
 
             modelBuilder.Entity("TransactionJournal.Domain.Data.PnLAdjustment", b =>
@@ -399,6 +444,33 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.ToTable("SyntheticCloseDisputes");
                 });
 
+            modelBuilder.Entity("TransactionJournal.Domain.Data.SyntheticCloseManualLink", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ConstructionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LinearTradeId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OptionTradeId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConstructionId");
+
+                    b.ToTable("SyntheticCloseManualLinks");
+                });
+
             modelBuilder.Entity("TransactionJournal.Domain.Data.TradeUserdata", b =>
                 {
                     b.Property<long>("Id")
@@ -495,6 +567,16 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.Navigation("Construction");
                 });
 
+            modelBuilder.Entity("TransactionJournal.Domain.Data.ManualTrade", b =>
+                {
+                    b.HasOne("TransactionJournal.Domain.Data.Construction", "Construction")
+                        .WithMany()
+                        .HasForeignKey("ConstructionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Construction");
+                });
+
             modelBuilder.Entity("TransactionJournal.Domain.Data.PnLAdjustment", b =>
                 {
                     b.HasOne("TransactionJournal.Domain.Data.Construction", "Construction")
@@ -518,6 +600,17 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("TransactionJournal.Domain.Data.SyntheticCloseDispute", b =>
+                {
+                    b.HasOne("TransactionJournal.Domain.Data.Construction", "Construction")
+                        .WithMany()
+                        .HasForeignKey("ConstructionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Construction");
+                });
+
+            modelBuilder.Entity("TransactionJournal.Domain.Data.SyntheticCloseManualLink", b =>
                 {
                     b.HasOne("TransactionJournal.Domain.Data.Construction", "Construction")
                         .WithMany()

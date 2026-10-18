@@ -31,4 +31,16 @@ public sealed class ManualCloseMark
 
 	/// <summary>Время пометки: задаёт место записи в хронологии закрывающих записей.</summary>
 	public required DateTimeOffset MarkedAt { get; set; }
+
+	// Количество закрываемой позиции: null — закрывается весь остаток на момент
+	// пометки (прежняя семантика), заданное значение клэмпится остатком производным
+	// слоем; хранение количества делает частичное закрытие воспроизводимым.
+	// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
+	// Дополнительный вход производного слоя без изменения формул расчёта.
+	// Traceability: change:manual-journal-management/design#d6
+	/// <summary>
+	/// Количество закрываемой позиции; null — весь остаток на
+	/// <see cref="MarkedAt"/>, заданное значение производный слой клэмпит остатком.
+	/// </summary>
+	public decimal? Quantity { get; set; }
 }

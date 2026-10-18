@@ -264,11 +264,179 @@ public class JournalDbContextMigrationTests
 		}
 	}
 
+	[TestMethod]
+	[Description("Миграция разворачивает таблицы ручных сделок, ручных связок и nullable количество пометки")]
+	// Сырьё ручных сделок, ручные связки и nullable-колонка количества пометки
+	// разворачиваются штатным Migrate() на пустой базе вместе с остальной схемой.
+	// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+	// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
+	public void TryIfMigrationCreatesManualTradesAndManualLinksTables()
+	{
+		// Act: применяем миграции к пустому файлу базы.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate();
+		}
+
+		// Assert: обе новые таблицы появились в базе.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var tables = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table' ORDER BY name")
+				.ToList();
+			Assert.That(tables, Does.Contain("ManualTrades"));
+			Assert.That(tables, Does.Contain("SyntheticCloseManualLinks"));
+
+			// ConstructionId nullable: null означает «Входящие», значение — привязку к конструкции.
+			// notnull — зарезервированное слово SQLite, в фильтре экранируется кавычками.
+			var manualTradeNullableColumns = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ManualTrades') WHERE \"notnull\" = 0 ORDER BY name")
+				.ToList();
+			Assert.That(manualTradeNullableColumns, Does.Contain("ConstructionId"));
+
+			// Quantity nullable: null — весь остаток, заданное значение — частичное закрытие.
+			var manualCloseMarkNullableColumns = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ManualCloseMarks') WHERE \"notnull\" = 0 ORDER BY name")
+				.ToList();
+			Assert.That(manualCloseMarkNullableColumns, Does.Contain("Quantity"));
+		}
+	}
+
+	[TestMethod]
+	[Description("Откат миграции удаляет ручные таблицы и колонку количества, повторное применение возвращает их")]
+	// Миграция аддитивна и симметрична: Down удаляет новые таблицы и колонку
+	// Quantity, Up разворачивает их снова — откат и накат проходят штатным Migrate().
+	// Traceability: change:manual-journal-management/design#migration-plan
+	public void TryIfMigrationRollbackDropsAndRollforwardRestoresManualTables()
+	{
+		// Arrange: применяем все миграции и пишем одну ручную сделку и одну связку.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate();
+			db.Constructions.Add(new Construction { Name = "XAUT стреддл 30OCT26 4400" });
+			db.SaveChanges();
+			var constructionId = db.Constructions.Single().Id;
+			db.ManualTrades.Add(CreateManualTrade(constructionId));
+			db.SyntheticCloseManualLinks.Add(new SyntheticCloseManualLink
+			{
+				ConstructionId = constructionId,
+				LinearTradeId = "exec-perp",
+				OptionTradeId = "exec-call",
+				Quantity = 2m,
+			});
+			db.SaveChanges();
+		}
+
+		// Act: откатываем миграцию к предыдущей (AddInstrumentMarketSnapshots).
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate("20261018163720_AddInstrumentMarketSnapshots");
+		}
+
+		// Assert: новые таблицы удалены, колонка количества у пометки снята.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var tables = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'table' ORDER BY name")
+				.ToList();
+			Assert.That(tables, Does.Not.Contain("ManualTrades"));
+			Assert.That(tables, Does.Not.Contain("SyntheticCloseManualLinks"));
+
+			var manualCloseMarkColumns = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ManualCloseMarks') ORDER BY name")
+				.ToList();
+			Assert.That(manualCloseMarkColumns, Does.Not.Contain("Quantity"));
+		}
+
+		// Act: повторный накат всех миграций.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.Database.Migrate();
+		}
+
+		// Assert: таблицы развёрнуты снова и пусты — записи не пережили откат.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.ManualTrades, Is.Empty, "Ручная сделка не пережила откат");
+			Assert.That(db.SyntheticCloseManualLinks, Is.Empty, "Ручная связка не пережила откат");
+		}
+	}
+
+	[TestMethod]
+	[Description("Удаление конструкции с привязанной ручной сделкой отклоняется")]
+	// Ручная сделка — сырьё журнала: привязка к конструкции запрещает удаление
+	// конструкции, сделка снимается заранее — инвариант единственной принадлежности
+	// общий для биржевых и ручных сделок.
+	// Traceability: openspec:domain/constructions#requirement-trade-single-binding
+	[ExpectedException(typeof(DbUpdateException))]
+	public void ThrowOnConstructionDeleteWithBoundManualTrade()
+	{
+		// Arrange: создаём конструкцию с привязанной ручной сделкой и закрываем
+		// контекст, чтобы EF не обнулял FK отслеживаемой зависимости — проверяется
+		// именно DDL-ограничение, а не клиентское поведение EF.
+		using (var db = new JournalDbContext(CreateEnforcedOptions()))
+		{
+			db.Database.Migrate();
+			db.Constructions.Add(new Construction { Name = "XAUT стреддл 30OCT26 4400" });
+			db.SaveChanges();
+			db.ManualTrades.Add(CreateManualTrade(db.Constructions.Single().Id));
+			db.SaveChanges();
+		}
+
+		// Act: в новом контексте удаляем конструкцию вместе с привязанной сделкой.
+		using (var db = new JournalDbContext(CreateEnforcedOptions()))
+		{
+			db.Constructions.Remove(db.Constructions.Single());
+			db.SaveChanges();
+		}
+	}
+
+	[TestMethod]
+	[Description("Удаление конструкции стирает её ручные синтетические связки")]
+	// Ручная связка — ручные данные конструкции: умирает вместе с ней, полный
+	// пересбор вычищает таблицу связок целиком, симметрично оспариваниям.
+	// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	public void TryIfConstructionDeleteCascadesManualLinks()
+	{
+		// Arrange: создаём конструкцию со связкой и закрываем контекст, чтобы
+		// каскад сработал на уровне БД, а не клиентским каскадом EF.
+		using (var db = new JournalDbContext(CreateEnforcedOptions()))
+		{
+			db.Database.Migrate();
+			db.Constructions.Add(new Construction { Name = "XAUT стреддл 30OCT26 4400" });
+			db.SaveChanges();
+			db.SyntheticCloseManualLinks.Add(new SyntheticCloseManualLink
+			{
+				ConstructionId = db.Constructions.Single().Id,
+				LinearTradeId = "exec-perp",
+				OptionTradeId = "exec-call",
+				Quantity = 2m,
+			});
+			db.SaveChanges();
+		}
+
+		// Act: в новом контексте удаляем конструкцию.
+		using (var db = new JournalDbContext(CreateEnforcedOptions()))
+		{
+			db.Constructions.Remove(db.Constructions.Single());
+			db.SaveChanges();
+
+			// Assert: связка стёрта вместе с конструкцией.
+			Assert.That(db.SyntheticCloseManualLinks, Is.Empty);
+		}
+	}
+
 	#region Помощники
 
 	private DbContextOptions<JournalDbContext> CreateOptions() =>
 		new DbContextOptionsBuilder<JournalDbContext>()
 			.UseSqlite($"Data Source={_databasePath}")
+			.Options;
+
+	private DbContextOptions<JournalDbContext> CreateEnforcedOptions() =>
+		new DbContextOptionsBuilder<JournalDbContext>()
+			.UseSqlite($"Data Source={_databasePath};Foreign Keys=True")
 			.Options;
 
 	private static RawExecution CreateRawExecution(string execId) => new()
@@ -288,6 +456,19 @@ public class JournalDbContextMigrationTests
 		Category = "option",
 		PayloadJson = """{"symbol":"placeholder"}""",
 		FetchedAt = DateTimeOffset.UtcNow,
+	};
+
+	private static ManualTrade CreateManualTrade(long constructionId) => new()
+	{
+		ExecutedAt = new DateTimeOffset(2026, 10, 18, 12, 0, 0, TimeSpan.Zero),
+		Symbol = "XAUTUSDT",
+		Side = "Buy",
+		Quantity = 2m,
+		Price = 4400m,
+		FeeUsdt = 1.5m,
+		ConstructionId = constructionId,
+		CreatedAt = DateTimeOffset.UtcNow,
+		UpdatedAt = DateTimeOffset.UtcNow,
 	};
 
 	#endregion
