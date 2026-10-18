@@ -93,6 +93,14 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			.OrderBy(mark => mark.Id)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
+		// Ручные сделки — второе сырьё метрик: читаются тем же чтением, что и биржевые
+		// записи, и материализуются в общие потоки позиций наравне с ними.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+		var manualTrades = await db.ManualTrades
+			.AsNoTracking()
+			.OrderBy(trade => trade.Id)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
 		var adjustments = await db.PnLAdjustments
 			.AsNoTracking()
 			.OrderBy(adjustment => adjustment.Id)
@@ -103,7 +111,7 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		// записи экспираций выводятся из одного и того же сырья детерминированно.
 		var resolver = new InstrumentResolver(new InstrumentCatalog(rawInstruments));
 		var tradeMaterializer = new TradeMaterializer(resolver);
-		var trades = tradeMaterializer.Materialize(rawExecutions).Trades;
+		var trades = tradeMaterializer.Materialize(rawExecutions, manualTrades).Trades;
 
 		// Привязки передаются материализатору экспираций в строковой форме его контракта;
 		// непривязанные сделки образуют остаток «Входящих» и в метриках не участвуют.
@@ -114,18 +122,24 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			pair => pair.Key,
 			pair => (string?)pair.Value.ToString(CultureInfo.InvariantCulture));
 		var expiry = new ExpiryMaterializer(tradeMaterializer, resolver)
-			.Materialize(rawExecutions, rawDeliveries, assignments, DateTimeOffset.UtcNow);
+			.Materialize(rawExecutions, rawDeliveries, assignments, DateTimeOffset.UtcNow, manualTrades);
 
 		var streams = new Dictionary<(long ConstructionId, string Symbol), List<StreamEvent>>();
 		foreach (var trade in trades)
 		{
-			if (constructionIdByExecId.TryGetValue(trade.ExecId, out var constructionId) == false)
+			// Привязка ручной сделки живёт в её сырье, биржевой — в пользовательских
+			// данных по execId: обе питают поток метрик одинаковым событием-сделкой.
+			// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+			var constructionId = trade.Source == TradeSource.Manual
+				? trade.ConstructionId
+				: constructionIdByExecId.TryGetValue(trade.ExecId!, out var boundId) ? boundId : null;
+			if (constructionId is null)
 			{
 				continue;
 			}
 
-			Append(streams, constructionId, trade.Symbol, new StreamEvent(
-				trade.ExecutedAt, TradeRank, PositionFifoEntryKind.Trade, trade.ExecId, trade.Quantity, trade.Price, trade.Fee));
+			Append(streams, constructionId.Value, trade.Symbol, new StreamEvent(
+				trade.ExecutedAt, TradeRank, PositionFifoEntryKind.Trade, TradeSourceKey(trade), trade.Quantity, trade.Price, trade.Fee));
 		}
 
 		foreach (var entry in expiry.ClosingEntries)
@@ -309,6 +323,15 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 
 	/// <summary>Строит ключ источника ручной пометки в едином потоке позиции.</summary>
 	private static string ManualSourceKey(long markId) => $"manual:{markId}";
+
+	/// <summary>
+	/// Строит ключ события-сделки в потоке позиции: execId биржевой записи, ключ
+	/// строки сырья у ручной сделки — у неё execId отсутствует.
+	/// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
+	/// </summary>
+	private static string TradeSourceKey(MaterializedTrade trade) => trade.Source == TradeSource.Manual
+		? $"manual:{trade.ManualTradeId?.ToString(CultureInfo.InvariantCulture)}"
+		: trade.ExecId!;
 
 	/// <summary>Запрашивает последнюю известную марку инструмента у источника марок; без источника марка неизвестна.</summary>
 	private async Task<decimal?> ResolveLastMarkAsync(string symbol, CancellationToken cancellationToken)

@@ -259,12 +259,13 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		: decimal.MinValue;
 
 	/// <summary>
-	/// Строки таблицы сделок: сделки материализуются проекцией синхронизации
-	/// из того же сырья, что питает «Входящие» и метрики, затем фильтруются
-	/// по действующей привязке к конструкции; комментарии читаются из
-	/// пользовательских данных сделок. Материализованные сделки возвращаются
-	/// вместе со строками: распознаватель синтетических закрытий читает тот же
-	/// поток привязанных сделок конструкции.
+	/// Строки таблицы сделок: сделки материализуются проекцией журнала из сырья обоих
+	/// источников — сырых исполнений биржи и ручных сделок, затем фильтруются
+	/// по действующей привязке к конструкции; комментарии читаются из пользовательских
+	/// данных биржевых сделок. В поток связки для распознавателя синтетических
+	/// закрытий уходят только биржевые сделки: ручные связки — отдельный слой данных,
+	/// автопара по ручной сделке правилами журнала не предусмотрена.
+	/// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
 	/// </summary>
 	private static async Task<(List<ConstructionTradeRow> Rows, List<MaterializedTrade> BoundTrades)> ReadTradesAsync(
 		JournalDbContext db,
@@ -289,16 +290,27 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			.OrderBy(instrument => instrument.Id)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
+		// Привязанные ручные сделки читаются собственным фильтром сырья: их привязка
+		// живёт в строке ManualTrades, а не в пользовательских данных по execId.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+		var manualTrades = await db.ManualTrades
+			.AsNoTracking()
+			.Where(trade => trade.ConstructionId == constructionId)
+			.OrderBy(trade => trade.Id)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
 
 		var materializer = new TradeMaterializer(new InstrumentResolver(new InstrumentCatalog(rawInstruments)));
-		var boundTrades = materializer.Materialize(rawExecutions).Trades
-			.Where(trade => boundExecIds.Contains(trade.ExecId))
+		var boundTrades = materializer.Materialize(rawExecutions, manualTrades).Trades
+			.Where(trade => trade.Source == TradeSource.Manual
+				? trade.ConstructionId == constructionId
+				: boundExecIds.Contains(trade.ExecId!))
 			.OrderByDescending(trade => trade.ExecutedAt)
-			.ThenByDescending(trade => trade.ExecId, StringComparer.Ordinal)
+			.ThenByDescending(trade => trade.ExecId ?? $"manual:{trade.ManualTradeId?.ToString(CultureInfo.InvariantCulture)}", StringComparer.Ordinal)
 			.ToList();
 		// Порядок строк сделок — по времени исполнения от новых к старым; при равном
-		// времени строки детерминированы тай-брейком execId по убыванию и не меняются
-		// между перечитываниями.
+		// времени строки детерминированы тай-брейком идентификатора по убыванию (execId
+		// биржевой записи либо ключ строки сырья ручной) и не меняются между перечитываниями.
 		// Traceability: openspec:ui/screens#scenario-detail-trades-newest-first
 		return (boundTrades
 			.Select(trade => new ConstructionTradeRow(
@@ -310,8 +322,15 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				trade.Price,
 				Math.Abs(trade.Quantity) * trade.Price,
 				trade.Fee,
-				commentsByExecId.GetValueOrDefault(trade.ExecId)))
-			.ToList(), boundTrades);
+				// Комментарий адресуется execId: у ручной сделки его нет, пользовательский
+				// комментарий к ней появится вместе с сервисом ручных сделок.
+				trade.Source == TradeSource.Manual ? null : commentsByExecId.GetValueOrDefault(trade.ExecId!)))
+			.ToList(),
+			// Распознаватель синтетических связок работает по биржевым исполнениям:
+			// ручные сделки в поток распознавания не входят, его семантика не меняется.
+			boundTrades
+				.Where(trade => trade.Source == TradeSource.Exchange)
+				.ToList());
 	}
 
 	/// <summary>

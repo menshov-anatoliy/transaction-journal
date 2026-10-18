@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using TransactionJournal.Domain.Bybit;
 using TransactionJournal.Application.Bybit;
@@ -50,14 +51,15 @@ public sealed class ExpiryMaterializer
 
 	/// <summary>
 	/// Выводит закрывающие записи экспираций и предупреждения сверки из сырых записей
-	/// журнала. Остатки конструкций считаются по сделкам до экспирации, закрывающие
-	/// записи их обнуляют; состав записей зависит только от сырья и привязок, поэтому
-	/// повторная материализация и перепривязка сделок дают согласованный результат.
+	/// журнала. Остатки конструкций считаются по сделкам обоих источников до экспирации,
+	/// закрывающие записи их обнуляют; состав записей зависит только от сырья и привязок,
+	/// поэтому повторная материализация и перепривязка сделок дают согласованный результат.
 	/// </summary>
 	/// <param name="rawExecutions">Сырые записи исполнения — основа остатков конструкций.</param>
 	/// <param name="rawDeliveries">Сырые delivery-записи — единственный источник данных об ITM-экспирациях.</param>
 	/// <param name="tradeAssignments">Текущие привязки execId к конструкциям; null или отсутствие ключа — сделка во «Входящих».</param>
 	/// <param name="asOf">Момент, на который выполняется материализация: OTM-закрытие выводится только для наступившего deliveryTime.</param>
+	/// <param name="manualTrades">Ручные сделки пользователя — второе сырьё остатков конструкций; null — ручного сырья нет.</param>
 	/// <exception cref="ArgumentNullException">Сырые записи не заданы.</exception>
 	/// <exception cref="ExpiryMaterializationException">Delivery-запись повреждена, неполна или конфликтует с другой записью того же ключа.</exception>
 	/// <exception cref="TradeMaterializationException">Сырая запись исполнения повреждена.</exception>
@@ -66,7 +68,8 @@ public sealed class ExpiryMaterializer
 		IEnumerable<RawExecution> rawExecutions,
 		IEnumerable<RawDelivery> rawDeliveries,
 		IReadOnlyDictionary<string, string?>? tradeAssignments,
-		DateTimeOffset asOf)
+		DateTimeOffset asOf,
+		IEnumerable<ManualTrade>? manualTrades = null)
 	{
 		ArgumentNullException.ThrowIfNull(rawExecutions);
 		ArgumentNullException.ThrowIfNull(rawDeliveries);
@@ -74,7 +77,7 @@ public sealed class ExpiryMaterializer
 		// Записи исполнения без спецификации в справочнике откладываются вместе со
 		// сделками: остатков по таким символам здесь нет, значит закрывающие записи
 		// и OTM-автозакрытие по ним не строятся — деградация едина для всего слоя.
-		var tradeResult = _tradeMaterializer.Materialize(rawExecutions);
+		var tradeResult = _tradeMaterializer.Materialize(rawExecutions, manualTrades);
 		var trades = tradeResult.Trades;
 		var unresolvedSymbols = new SortedSet<string>(StringComparer.Ordinal);
 		foreach (var symbol in tradeResult.UnresolvedSymbols)
@@ -93,7 +96,13 @@ public sealed class ExpiryMaterializer
 		var tradeFlowBySymbol = new Dictionary<string, decimal>(StringComparer.Ordinal);
 		foreach (var trade in trades)
 		{
-			var constructionId = assignments.TryGetValue(trade.ExecId, out var assigned) ? assigned : null;
+			// Привязка ручной сделки живёт в её сырье (ConstructionId строки ManualTrades),
+			// биржевой — в пользовательских данных по execId; остатки конструкций
+			// накапливаются из обоих источников единым потоком.
+			// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+			var constructionId = trade.Source == TradeSource.Manual
+				? trade.ConstructionId?.ToString(CultureInfo.InvariantCulture)
+				: assignments.TryGetValue(trade.ExecId!, out var assigned) ? assigned : null;
 
 			if (residualsBySymbol.TryGetValue(trade.Symbol, out var byConstruction) == false)
 			{

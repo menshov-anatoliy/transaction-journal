@@ -211,6 +211,66 @@ public class JournalMaterializerTests
 	}
 
 	[TestMethod]
+	[Description("Ручная и биржевая сделки одной конструкции дают общую проекцию и общий остаток")]
+	public void TryIfManualAndExchangeTradesFeedOneConstruction()
+	{
+		// Arrange: биржевая покупка колла привязана к конструкции командой пользователя,
+		// ручная покупка того же колла привязана собственным сырьём той же конструкции;
+		// delivery-записей нет, доска экспирируется OTM. Требование: обе сделки
+		// попадают в общую проекцию журнала с признаками источников, а остаток
+		// конструкции и закрывающая запись считаются из всех сделок независимо
+		// от источника.
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-feeds-position-and-fifo
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
+		var materializer = new JournalMaterializer();
+		var rawInstruments = CreateRawInstruments();
+		var exchangeBuy = new[]
+		{
+			Raw(
+				"exec-opt-1", "option", CallSymbol, ExecMs(2023, 12, 28, 10, 0),
+				ExecutionPayload("exec-opt-1", CallSymbol, "Buy", "100", "100", "0.0002", "USDC", ExecMs(2023, 12, 28, 10, 0))),
+		};
+		var manualTrade = new ManualTrade
+		{
+			Id = 11,
+			ExecutedAt = new DateTimeOffset(2023, 12, 28, 11, 0, 0, TimeSpan.Zero),
+			Symbol = CallSymbol,
+			Side = "Buy",
+			Quantity = 50m,
+			Price = 100m,
+			FeeUsdt = 0m,
+			ConstructionId = 7,
+			CreatedAt = FetchedAt,
+			UpdatedAt = FetchedAt,
+		};
+		var assignments = new Dictionary<string, string?> { ["exec-opt-1"] = "7" };
+
+		// Act: переразбор из сырья обоих источников на момент после экспирации.
+		var result = materializer.Materialize(rawInstruments, exchangeBuy, Array.Empty<RawDelivery>(), assignments, AfterDelivery(), new[] { manualTrade });
+
+		// Assert: в проекции обе сделки с корректными источниками; у ручной записи
+		// execId отсутствует, привязка видна из сырья.
+		Assert.That(result.InboxTrades.Count, Is.EqualTo(2));
+		var exchangeTrade = result.InboxTrades.Single(trade => trade.ExecId == "exec-opt-1");
+		Assert.That(exchangeTrade.Source, Is.EqualTo(TradeSource.Exchange));
+		var manualProjection = result.InboxTrades.Single(trade => trade.Source == TradeSource.Manual);
+		Assert.That(manualProjection.ExecId, Is.Null);
+		Assert.That(manualProjection.ManualTradeId, Is.EqualTo(11));
+		Assert.That(manualProjection.ConstructionId, Is.EqualTo(7));
+		Assert.That(manualProjection.Quantity, Is.EqualTo(50m));
+
+		// Остаток конструкции собран из обоих источников: OTM-закрывающая запись
+		// обнуляет сумму биржевой и ручной покупок одним количеством.
+		Assert.That(result.ExpiryClosingEntries.Count, Is.EqualTo(1));
+		var closing = result.ExpiryClosingEntries[0];
+		Assert.That(closing.ConstructionId, Is.EqualTo("7"));
+		Assert.That(closing.Symbol, Is.EqualTo(CallSymbol));
+		Assert.That(closing.Quantity, Is.EqualTo(-150m));
+		Assert.That(closing.EffectivePrice, Is.EqualTo(0m));
+		Assert.That(result.UnresolvedInstruments, Is.Empty);
+	}
+
+	[TestMethod]
 	[Description("Полный переразбор пустого хранилища даёт пустую проекцию")]
 	public void TryIfEmptyRawStoreGivesEmptyProjection()
 	{

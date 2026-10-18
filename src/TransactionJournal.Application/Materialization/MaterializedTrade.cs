@@ -1,17 +1,41 @@
 namespace TransactionJournal.Application.Materialization;
 
 /// <summary>
-/// Сделка «Входящих», выведенная из сырой записи исполнения: атрибуты соответствуют
-/// биржевой записи — время, инструмент, знаковое количество по стороне исполнения,
-/// цена исполнения, комиссия со знаком и её валюта. USDC-величины приведены к USDT
-/// в паритете 1:1, потому что журнал ведёт учёт в одной валюте.
+/// Сделка «Входящих», выведенная из сырья журнала: атрибуты соответствуют
+/// исходной записи — время, инструмент, знаковое количество по стороне,
+/// цена, комиссия со знаком и её валюта. USDC-величины приведены к USDT
+/// в паритете 1:1, потому что журнал ведёт учёт в одной валюте. Сделки обоих
+/// источников — биржевые и ручные — материализуются в одну проекцию и различаются
+/// признаком источника; у ручных сделок execId отсутствует.
 // Traceability: openspec:sync/bybit-history#requirement-new-records-land-in-inbox
+// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
 /// Traceability: adr:docs/adr/0001-usdc-usdt-parity.md#usdc-usdt-parity-1-1
 /// </summary>
 public sealed record MaterializedTrade
 {
-	/// <summary>Биржевой идентификатор исполнения — ключ сделки и залог идемпотентности проекции.</summary>
-	public required string ExecId { get; init; }
+	/// <summary>
+	/// Биржевой идентификатор исполнения — ключ сделки и залог идемпотентности
+	/// проекции; у ручных сделок отсутствует, их идентичность несёт <see cref="ManualTradeId"/>.
+	/// </summary>
+	public string? ExecId { get; init; }
+
+	/// <summary>Источник сделки: биржа или ручной ввод.</summary>
+	// Признак источника берётся из сырья и остаётся в проекции: списки записей
+	// различают биржевые и ручные записи бейджем источника.
+	// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
+	public required TradeSource Source { get; init; }
+
+	/// <summary>
+	/// Идентификатор строки сырья ручной сделки — ключ её идентичности в проекции;
+	/// у биржевых сделок отсутствует.
+	/// </summary>
+	public long? ManualTradeId { get; init; }
+
+	/// <summary>
+	/// Привязка ручной сделки к конструкции из её сырья; null — сделка во «Входящих».
+	/// У биржевых сделок привязка живёт в пользовательских данных и здесь не дублируется.
+	/// </summary>
+	public long? ConstructionId { get; init; }
 
 	/// <summary>Торговая категория записи: linear или option.</summary>
 	public required string Category { get; init; }

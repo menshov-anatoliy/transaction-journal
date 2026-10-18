@@ -53,6 +53,8 @@ public static class InboxEndpoints
 			}
 
 			var items = trades.Select(trade => new InboxTradeResponse(
+				// У ручной сделки execId отсутствует: экран различает источники записей,
+				// пока полный контракт бейджа источника не перенесён задачами UI.
 				trade.ExecId,
 				trade.Symbol,
 				trade.ExecutedAt,
@@ -184,8 +186,8 @@ public sealed record InboxOverviewResponse(
 	IReadOnlyList<InboxTradeResponse> Items,
 	IReadOnlyList<InboxTargetConstructionResponse> Targets);
 
-/// <summary>Строка непривязанной сделки для таблицы раздела.</summary>
-/// <param name="ExecId">Ключ исполнения сделки на бирже.</param>
+/// <summary>Строка непривязанной сделки для таблицы раздела; сделки обоих источников различаются execId.</summary>
+/// <param name="ExecId">Ключ исполнения сделки на бирже; у ручной сделки отсутствует.</param>
 /// <param name="Symbol">Инструмент сделки.</param>
 /// <param name="ExecutedAt">Время исполнения сделки.</param>
 /// <param name="IsBuy">Признак направления: true — покупка, false — продажа.</param>
@@ -195,7 +197,7 @@ public sealed record InboxOverviewResponse(
 /// <param name="Fee">Комиссия со знаком биржевой записи.</param>
 /// <param name="FeeCurrency">Валюта комиссии.</param>
 public sealed record InboxTradeResponse(
-	string ExecId,
+	string? ExecId,
 	string Symbol,
 	DateTimeOffset ExecutedAt,
 	bool IsBuy,

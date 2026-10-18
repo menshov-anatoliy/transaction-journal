@@ -81,20 +81,22 @@ public sealed record ConstructionPositionRow(
 	decimal? DecayDayAgoUsdt = null);
 
 /// <summary>
-/// Строка таблицы сделок деталей конструкции: сделка с атрибутами биржевой
-/// записи и комментарием пользователя, привязанная к этой конструкции.
+/// Строка таблицы сделок деталей конструкции: сделка с атрибутами исходной записи
+/// и комментарием пользователя, привязанная к этой конструкции. Сделки обоих
+/// источников — биржевые и ручные — различаются execId: у ручной записи он отсутствует.
+/// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
 /// </summary>
-/// <param name="ExecId">Биржевой идентификатор исполнения — ключ сделки.</param>
+/// <param name="ExecId">Биржевой идентификатор исполнения — ключ биржевой сделки; у ручной сделки отсутствует.</param>
 /// <param name="Symbol">Инструмент сделки.</param>
 /// <param name="ExecutedAt">Время исполнения сделки.</param>
 /// <param name="IsBuy">true — покупка, false — продажа.</param>
 /// <param name="Quantity">Количество без знака; направление несёт отдельное поле.</param>
-/// <param name="Price">Цена исполнения из биржевой записи.</param>
+/// <param name="Price">Цена исполнения из исходной записи.</param>
 /// <param name="AmountUsdt">Сумма сделки — количество, умноженное на цену, в USDT.</param>
-/// <param name="Fee">Комиссия со знаком биржевой записи: положительная уплачена, отрицательная — rebate.</param>
+/// <param name="Fee">Комиссия со знаком исходной записи: положительная уплачена, отрицательная — rebate.</param>
 /// <param name="Comment">Комментарий сделки; null — комментария нет.</param>
 public sealed record ConstructionTradeRow(
-	string ExecId,
+	string? ExecId,
 	string Symbol,
 	DateTimeOffset ExecutedAt,
 	bool IsBuy,

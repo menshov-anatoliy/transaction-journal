@@ -5,6 +5,7 @@ using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Application;
+using TransactionJournal.Application.Materialization;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
@@ -231,6 +232,70 @@ public class InboxReadModelTests
 		// Traceability: openspec:ui/screens#scenario-inbox-trades-newest-first
 		Assert.That(inboxAfterUnbind.Select(trade => trade.ExecId).ToArray(),
 			Is.EqualTo(new[] { "exec-second", "exec-first" }));
+	}
+
+	[TestMethod]
+	[Description("Ручная сделка попадает во «Входящие» наравне с биржевой, привязанная ручная уходит")]
+	public async Task TryIfManualTradeAppearsInInboxAndBoundManualLeavesIt()
+	{
+		// Arrange: биржевая сделка и две ручных — непривязанная и привязанная к
+		// конструкции собственным сырьём. Требование: сделки обоих источников попадают
+		// в общую проекцию «Входящих», привязка ручной записи выводит её из списка,
+		// а источник различим в строках записей.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
+		// Traceability: openspec:domain/constructions#scenario-binding-removes-from-inbox
+		var constructionService = new ConstructionService(CreateOptions());
+		var construction = await constructionService.CreateAsync("Ручной стреддл", 1000m);
+		var exchangeMs = ExecMs(2023, 12, 28, 10, 0);
+		var manualMs = ExecMs(2023, 12, 28, 11, 0);
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawExecutions.Add(RawOption("exec-exchange", "Buy", exchangeMs));
+			db.ManualTrades.Add(new ManualTrade
+			{
+				Id = 1,
+				ExecutedAt = DateTimeOffset.FromUnixTimeMilliseconds(manualMs),
+				Symbol = "BTCUSDT",
+				Side = "Buy",
+				Quantity = 0.01m,
+				Price = 42000m,
+				FeeUsdt = 0.0042m,
+				ConstructionId = null,
+				CreatedAt = FetchedAt,
+				UpdatedAt = FetchedAt,
+			});
+			db.ManualTrades.Add(new ManualTrade
+			{
+				Id = 2,
+				ExecutedAt = DateTimeOffset.FromUnixTimeMilliseconds(manualMs),
+				Symbol = "BTCUSDT",
+				Side = "Sell",
+				Quantity = 0.01m,
+				Price = 43000m,
+				FeeUsdt = 0m,
+				ConstructionId = construction.Id,
+				CreatedAt = FetchedAt,
+				UpdatedAt = FetchedAt,
+			});
+			await db.SaveChangesAsync();
+		}
+
+		// Act: читаем «Входящие».
+		var inbox = await _readModel.ListAsync();
+
+		// Assert: биржевая и непривязанная ручная сделки в списке; привязанная ручная
+		// ушла в конструкцию; у ручной строки execId отсутствует, источник — ручной ввод.
+		Assert.That(inbox.Count, Is.EqualTo(2));
+		var exchange = inbox.Single(trade => trade.ExecId == "exec-exchange");
+		Assert.That(exchange.Source, Is.EqualTo(TradeSource.Exchange));
+		var manual = inbox.Single(trade => trade.Source == TradeSource.Manual);
+		Assert.That(manual.ExecId, Is.Null);
+		Assert.That(manual.ManualTradeId, Is.EqualTo(1));
+		Assert.That(manual.ConstructionId, Is.Null);
+		Assert.That(manual.Symbol, Is.EqualTo("BTCUSDT"));
+		Assert.That(manual.Quantity, Is.EqualTo(0.01m));
+		Assert.That(manual.FeeCurrency, Is.EqualTo("USDT"));
 	}
 
 	[TestMethod]

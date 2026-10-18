@@ -3,6 +3,7 @@ using TransactionJournal.Domain.Bybit;
 using TransactionJournal.Application.Bybit;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Materialization;
 
 namespace TransactionJournal.Application.Materialization;
 
@@ -29,6 +30,12 @@ public sealed class TradeMaterializer
 	/// <summary>Единственный тип исполнения биржи, из которого выводится сделка «Входящих».</summary>
 	private const string TradeExecType = "Trade";
 
+	/// <summary>Торговая категория линейного инструмента; ручная сделка по символу вне формата опциона — линейная.</summary>
+	private const string LinearCategory = "linear";
+
+	/// <summary>Валюта комиссии ручной сделки: комиссия вводится сразу в USDT, приводить её не нужно.</summary>
+	private const string ManualFeeCurrency = "USDT";
+
 	private readonly InstrumentResolver _instrumentResolver;
 
 	/// <summary>Правило приведения валюты комиссии к валюте журнала; выделено в зависимость, чтобы смена правила разбора не требовала правок конвейера.</summary>
@@ -45,25 +52,30 @@ public sealed class TradeMaterializer
 	}
 
 	/// <summary>
-	/// Выводит сделки «Входящих» из сырых записей исполнения. Результат упорядочен
-	/// по времени исполнения, затем по execId, и не зависит от порядка входных записей.
-	/// Сделкой становится только запись с биржевым типом исполнения Trade (без учёта
-	/// регистра); записи прочих типов пропускаются до торговых проверок — без сделки,
-	/// ошибки и предупреждений, повреждённый payload остаётся ошибкой. Символ опциона,
-	/// отсутствующий в справочнике, откладывает запись: сделка не материализуется,
-	/// символ попадает в перечень неразрешённых результата; прочие причины сверки
-	/// и повреждённые записи остаются ошибками.
+	/// Выводит сделки «Входящих» из сырья журнала — сырых записей исполнения биржи
+	/// и ручных сделок пользователя; оба источника материализуются в одну проекцию
+	/// наравне друг с другом и различаются признаком источника. Результат упорядочен
+	/// по времени исполнения, затем по источнику (биржевые раньше ручных того же
+	/// момента), затем по идентификатору, и не зависит от порядка входных записей.
+	/// Биржевой сделкой становится только сырая запись с биржевым типом исполнения
+	/// Trade (без учёта регистра); записи прочих типов исполнения (фандинг и иные
+	/// не-Trade события) хранятся в сырье, но сделками не становятся. Символ опциона,
+	/// отсутствующий в справочнике, откладывает запись любого источника: сделка не
+	/// материализуется, символ попадает в перечень неразрешённых результата; прочие
+	/// причины сверки и повреждённые записи остаются ошибками.
 	/// </summary>
 	/// <param name="rawExecutions">Сырые записи исполнения из хранилища журнала.</param>
-	/// <exception cref="ArgumentNullException">Записи не заданы.</exception>
-	/// <exception cref="TradeMaterializationException">Запись повреждена или конфликтует с другой записью того же execId.</exception>
+	/// <param name="manualTrades">Ручные сделки пользователя из хранилища журнала; null — ручного сырья нет.</param>
+	/// <exception cref="ArgumentNullException">Записи исполнения не заданы.</exception>
+	/// <exception cref="TradeMaterializationException">Запись повреждена или конфликтует с другой записью того же идентификатора.</exception>
 	/// <exception cref="InstrumentResolveException">Символ опциона расходится со справочником инструментов — не отсутствует, а противоречит ему.</exception>
-	public TradeMaterializationResult Materialize(IEnumerable<RawExecution> rawExecutions)
+	public TradeMaterializationResult Materialize(IEnumerable<RawExecution> rawExecutions, IEnumerable<ManualTrade>? manualTrades = null)
 	{
 		ArgumentNullException.ThrowIfNull(rawExecutions);
 
-		var trades = new Dictionary<string, MaterializedTrade>(StringComparer.Ordinal);
+		var trades = new List<MaterializedTrade>();
 		var unresolvedSymbols = new SortedSet<string>(StringComparer.Ordinal);
+		var tradesByExecId = new Dictionary<string, MaterializedTrade>(StringComparer.Ordinal);
 		foreach (var rawExecution in rawExecutions)
 		{
 			// Разбор payload вынесен до построения сделки: тип исполнения доступен
@@ -107,7 +119,7 @@ public sealed class TradeMaterializer
 			// Один execId — одна сделка «Входящих»: идентичная повторная запись пропускается,
 			// а конфликтующая останавливает материализацию, потому что источник записей
 			// с одним идентификатором обязан быть единственным.
-			if (trades.TryGetValue(trade.ExecId, out var existing))
+			if (tradesByExecId.TryGetValue(trade.ExecId!, out var existing))
 			{
 				if (existing == trade)
 				{
@@ -115,20 +127,69 @@ public sealed class TradeMaterializer
 				}
 
 				throw new TradeMaterializationException(
-					trade.ExecId,
+					trade.ExecId!,
 					$"Сырые записи с execId {trade.ExecId} конфликтуют: повторная запись с тем же идентификатором отличается от уже материализованной.");
 			}
 
-			trades.Add(trade.ExecId, trade);
+			tradesByExecId.Add(trade.ExecId!, trade);
+			trades.Add(trade);
+		}
+
+		// Ручные сделки материализуются в ту же проекцию наравне с биржевыми: сырьё
+		// другого источника меняет только происхождение записи, а не путь расчёта.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+		// Traceability: change:manual-journal-management/design#d1
+		var tradesByManualId = new Dictionary<long, MaterializedTrade>();
+		foreach (var manualTrade in manualTrades ?? Enumerable.Empty<ManualTrade>())
+		{
+			ArgumentNullException.ThrowIfNull(manualTrade);
+
+			MaterializedTrade trade;
+			try
+			{
+				trade = BuildManualTrade(manualTrade);
+			}
+			catch (InstrumentResolveException exception)
+				when (exception.Reason == InstrumentResolveFailureReason.UnknownSymbol)
+			{
+				// Деградация неразрешённого символа едина для обоих источников: ручная
+				// сделка по символу без спецификации справочника откладывается так же,
+				// как биржева, и появится в проекции после пополнения справочника.
+				// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+				unresolvedSymbols.Add(exception.Symbol);
+				continue;
+			}
+
+			// Идентичность ручной записи несёт идентификатор строки сырья: повторная
+			// материализация той же строки не создаёт дубликат, конфликтующая — ошибка,
+			// по той же причине, что и конфликт execId у биржевых записей.
+			if (tradesByManualId.TryGetValue(manualTrade.Id, out var existingManual))
+			{
+				if (existingManual == trade)
+				{
+					continue;
+				}
+
+				throw new TradeMaterializationException(
+					ManualSourceKey(manualTrade.Id),
+					$"Ручные записи с идентификатором {manualTrade.Id} конфликтуют: повторная запись отличается от уже материализованной.");
+			}
+
+			tradesByManualId.Add(manualTrade.Id, trade);
+			trades.Add(trade);
 		}
 
 		// Хронологический порядок «Входящих» стабилен: при равном времени исполнения
-		// записи упорядочиваются по execId, поэтому результат детерминирован.
+		// биржевые записи идут раньше ручных (та же конвенция приоритета, что у
+		// закрывающих записей), внутри источника записи упорядочены идентификатором,
+		// поэтому результат детерминирован.
 		return new TradeMaterializationResult
 		{
-			Trades = trades.Values
+			Trades = trades
 				.OrderBy(trade => trade.ExecutedAt)
+				.ThenBy(trade => trade.Source)
 				.ThenBy(trade => trade.ExecId, StringComparer.Ordinal)
+				.ThenBy(trade => trade.ManualTradeId)
 				.ToList(),
 			UnresolvedSymbols = unresolvedSymbols.ToList(),
 		};
@@ -178,6 +239,7 @@ public sealed class TradeMaterializer
 		return new MaterializedTrade
 		{
 			ExecId = execution.ExecId,
+			Source = TradeSource.Exchange,
 			Category = rawExecution.Category,
 			Symbol = execution.Symbol,
 			ExecutedAt = DateTimeOffset.FromUnixTimeMilliseconds(execution.ExecTimeMs),
@@ -192,6 +254,89 @@ public sealed class TradeMaterializer
 			Option = ResolveOptionAttributes(rawExecution, execution),
 		};
 	}
+
+	/// <summary>
+	/// Строит сделку «Входящих» из ручной сделки сырья: атрибуты пользовательского
+	/// ввода переносятся как есть (количество знакуется стороной, комиссия уже в
+	/// USDT), а категория и атрибуты опциона выводятся сверкой символа со справочником
+	/// — тем же путём, что у биржевых сделок. execId у ручной записи отсутствует,
+	/// её идентичность несёт идентификатор строки сырья.
+	/// </summary>
+	/// <param name="manualTrade">Ручная сделка из хранилища журнала.</param>
+	/// <exception cref="TradeMaterializationException">Сторона ручной сделки не распознана.</exception>
+	/// <exception cref="InstrumentResolveException">Символ опциона не сверён со справочником инструментов.</exception>
+	// Ручная сделка материализуется в общий журнал наравне с биржевой: сырьё —
+	// отдельная таблица ManualTrades, проекция — общая, различие только в источнике.
+	// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+	// Traceability: change:manual-journal-management/design#d1
+	// Traceability: change:manual-journal-management/design#d2
+	private MaterializedTrade BuildManualTrade(ManualTrade manualTrade)
+	{
+		// Знак количества берётся по стороне биржевым значением: покупка увеличивает
+		// остаток, продажа уменьшает — как у записей исполнения биржи.
+		var sideSign = manualTrade.Side switch
+		{
+			BuySide => 1,
+			SellSide => -1,
+			_ => throw new TradeMaterializationException(
+				ManualSourceKey(manualTrade.Id),
+				$"Сторона ручной сделки {ManualSourceKey(manualTrade.Id)} «{manualTrade.Side}» не распознана: ожидается Buy или Sell."),
+		};
+
+		// Категория ручной сделки выводится из формата символа: символ в формате
+		// опциона Bybit сверяется со справочником, символ вне формата — линейный
+		// инструмент без атрибутов опциона.
+		var option = ResolveManualOptionAttributes(manualTrade.Symbol);
+
+		return new MaterializedTrade
+		{
+			ExecId = null,
+			Source = TradeSource.Manual,
+			ManualTradeId = manualTrade.Id,
+			ConstructionId = manualTrade.ConstructionId,
+			Category = option is null ? LinearCategory : InstrumentResolver.OptionsCategory,
+			Symbol = manualTrade.Symbol,
+			ExecutedAt = manualTrade.ExecutedAt,
+			Quantity = sideSign * manualTrade.Quantity,
+			Price = manualTrade.Price,
+			// Комиссия ручной сделки вводится в USDT и неотрицательна: знак и валюта
+			// биржевой записи здесь не нужны, приводить валюту не требуется.
+			Fee = manualTrade.FeeUsdt,
+			FeeCurrency = ManualFeeCurrency,
+			// Мейкерство — биржевое свойство исполнения; у ручного ввода его нет.
+			IsMaker = false,
+			Option = option,
+		};
+	}
+
+	/// <summary>
+	/// Выводит канонические атрибуты опциона ручной сделки: символ в формате опциона
+	/// Bybit сверяется со справочником инструментов, как у биржевых сделок; символ вне
+	/// формата — линейный инструмент, атрибутов опциона у него нет.
+	/// </summary>
+	/// <exception cref="InstrumentResolveException">Символ не сверён со справочником инструментов.</exception>
+	// Сверка символа со справочником едина для обоих источников: ручной разбор
+	// строки символа источником метаданных не является.
+	// Traceability: openspec:domain/manual-trades#requirement-manual-symbol-resolution
+	private TradeOptionAttributes? ResolveManualOptionAttributes(string symbol)
+	{
+		if (OptionSymbolParser.TryParse(symbol, out _) == false)
+		{
+			return null;
+		}
+
+		var resolved = _instrumentResolver.ResolveOption(symbol);
+		return new TradeOptionAttributes
+		{
+			BaseCoin = resolved.BaseCoin,
+			OptionsType = resolved.OptionsType,
+			Strike = resolved.Strike,
+			DeliveryTime = resolved.DeliveryTime,
+		};
+	}
+
+	/// <summary>Строит ключ источника ручной сделки в сообщениях и привязках: идентификатор строки сырья.</summary>
+	private static string ManualSourceKey(long manualTradeId) => $"manual:{manualTradeId}";
 
 	/// <summary>Разбирает JSON сырой записи в типизированную запись исполнения биржи.</summary>
 	/// <exception cref="TradeMaterializationException">JSON некорректен или пуст.</exception>

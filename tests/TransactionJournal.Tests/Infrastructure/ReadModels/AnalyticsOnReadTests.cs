@@ -365,13 +365,17 @@ public class AnalyticsOnReadTests
 		var streams = new Dictionary<(long ConstructionId, string Symbol), List<StreamEvent>>();
 		foreach (var trade in trades)
 		{
-			if (constructionIdByExecId.TryGetValue(trade.ExecId, out var constructionId) == false)
+			// Зеркало read-модели метрик: ручных сделок в фиксах нет, фильтр источника
+			// сохраняет соответствие продакшн-конвейеру, где ключ события у ручной
+			// сделки строится без execId.
+			if (trade.Source == TradeSource.Manual
+				|| constructionIdByExecId.TryGetValue(trade.ExecId!, out var constructionId) == false)
 			{
 				continue;
 			}
 
 			Append(streams, constructionId, trade.Symbol, new StreamEvent(
-				trade.ExecutedAt, PositionFifoEntryKind.Trade, trade.ExecId, trade.Quantity, trade.Price, trade.Fee));
+				trade.ExecutedAt, PositionFifoEntryKind.Trade, trade.ExecId!, trade.Quantity, trade.Price, trade.Fee));
 		}
 
 		foreach (var entry in expiry.ClosingEntries)

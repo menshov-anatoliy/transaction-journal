@@ -133,12 +133,20 @@ public sealed class PositionReadModel
 			.AsNoTracking()
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
+		// Ручные сделки — второе сырьё позиций: читаются тем же чтением, что и
+		// биржевые записи, и материализуются в общий поток наравне с ними.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+		var manualTrades = await db.ManualTrades
+			.AsNoTracking()
+			.OrderBy(trade => trade.Id)
+			.ToListAsync(cancellationToken)
+			.ConfigureAwait(false);
 
 		// Конвейер проекции строится заново при каждом чтении: сделки и закрывающие
 		// записи экспираций выводятся из одного и того же сырья детерминированно.
 		var resolver = new InstrumentResolver(new InstrumentCatalog(rawInstruments));
 		var tradeMaterializer = new TradeMaterializer(resolver);
-		var trades = tradeMaterializer.Materialize(rawExecutions).Trades;
+		var trades = tradeMaterializer.Materialize(rawExecutions, manualTrades).Trades;
 
 		// Привязки передаются материализатору экспираций в строковой форме его контракта;
 		// непривязанные сделки образуют остаток «Входящих» и в позициях не участвуют.
@@ -155,14 +163,20 @@ public sealed class PositionReadModel
 		var timelines = new Dictionary<(long ConstructionId, string Symbol), List<TimelineEvent>>();
 		foreach (var trade in trades)
 		{
-			if (constructionIdByExecId.TryGetValue(trade.ExecId, out var tradeConstructionId) == false
-				|| scopeIds.Contains(tradeConstructionId) == false)
+			// Привязка ручной сделки живёт в её сырье, биржевой — в пользовательских
+			// данных по execId: обе попадают в хронологию позиций одинаковым событием.
+			// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+			var tradeConstructionId = trade.Source == TradeSource.Manual
+				? trade.ConstructionId
+				: constructionIdByExecId.TryGetValue(trade.ExecId!, out var boundId) ? boundId : null;
+			if (tradeConstructionId is null
+				|| scopeIds.Contains(tradeConstructionId.Value) == false)
 			{
 				continue;
 			}
 
-			Append(timelines, tradeConstructionId, trade.Symbol,
-				new TradeEvent(trade.ExecutedAt, trade.ExecId, trade.Quantity));
+			Append(timelines, tradeConstructionId.Value, trade.Symbol,
+				new TradeEvent(trade.ExecutedAt, TradeSourceKey(trade), trade.Quantity));
 		}
 
 		foreach (var entry in expiry.ClosingEntries)
@@ -325,6 +339,15 @@ public sealed class PositionReadModel
 
 	/// <summary>Строит ключ источника ручной пометки в едином потоке закрывающих записей.</summary>
 	private static string ManualSourceKey(long markId) => $"manual:{markId}";
+
+	/// <summary>
+	/// Строит ключ события-сделки в хронологии позиции: execId биржевой записи,
+	/// ключ строки сырья у ручной сделки — у неё execId отсутствует.
+	/// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
+	/// </summary>
+	private static string TradeSourceKey(MaterializedTrade trade) => trade.Source == TradeSource.Manual
+		? $"manual:{trade.ManualTradeId?.ToString(CultureInfo.InvariantCulture)}"
+		: trade.ExecId!;
 
 	/// <summary>Создаёт предупреждение об избыточной закрывающей записи: остаток на момент применения уже нулевой.</summary>
 	private static RedundantClosingEntryWarning CreateWarning(

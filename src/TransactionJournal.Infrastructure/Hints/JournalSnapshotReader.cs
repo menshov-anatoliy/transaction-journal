@@ -84,9 +84,14 @@ public sealed class JournalSnapshotReader : IJournalSnapshotReader
 		var positionsByConstruction = metrics.Positions
 			.GroupBy(position => position.ConstructionId)
 			.ToDictionary(group => group.Key, group => group.ToList());
+		// Хронология сделок снапшота ограничена биржевыми записями: привязка ищется
+		// по execId, которого у ручных сделок нет. Слой подсказок advisory и остаётся
+		// на биржевом сырье, пока ручные сделки не включены в его спецификацию.
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
 		var tradesByConstruction = trades
-			.Where(trade => constructionIdByExecId.ContainsKey(trade.ExecId))
-			.GroupBy(trade => constructionIdByExecId[trade.ExecId])
+			.Where(trade => trade.Source == TradeSource.Exchange
+				&& constructionIdByExecId.ContainsKey(trade.ExecId!))
+			.GroupBy(trade => constructionIdByExecId[trade.ExecId!])
 			.ToDictionary(group => group.Key, group => group.ToList());
 
 		var views = entities
@@ -167,7 +172,7 @@ public sealed class JournalSnapshotReader : IJournalSnapshotReader
 
 	private static TradeView ToTradeView(MaterializedTrade trade) => new()
 	{
-		ExecId = trade.ExecId,
+		ExecId = trade.ExecId!,
 		Symbol = trade.Symbol,
 		Quantity = trade.Quantity,
 		Price = trade.Price,

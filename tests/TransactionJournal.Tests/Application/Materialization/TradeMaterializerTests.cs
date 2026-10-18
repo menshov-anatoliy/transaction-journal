@@ -558,6 +558,178 @@ public class TradeMaterializerTests
 			() => materializer.Materialize(new[] { RawOption("exec-btc", "Buy", ExecMs(2023, 12, 28, 10, 0)) }));
 	}
 
+	[TestMethod]
+	[Description("Ручная сделка материализуется с источником «ручной ввод» и без execId")]
+	public void TryIfManualTradeMaterializedWithSourceAndNoExecId()
+	{
+		// Arrange: ручная сделка сырья — покупка колла и продажа перпа, обе внесены
+		// пользователем. Требование: ручная запись становится сделкой журнала с
+		// признаком источника «ручной ввод», execId у неё отсутствует, атрибуты
+		// повторяют ввод, а атрибуты опциона выведены сверкой со справочником.
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+		var materializer = CreateMaterializer();
+		var executedAt = new DateTimeOffset(2023, 12, 28, 12, 0, 0, TimeSpan.Zero);
+		var manualTrades = new[]
+		{
+			Manual(1, "BTC-29DEC23-45000-C", "Buy", 0.0001m, 44000m, 0.01m, executedAt),
+			Manual(2, "BTCUSDT", "Sell", 0.01m, 42000m, 0.0042m, executedAt.AddMinutes(30)),
+		};
+
+		// Act
+		var trades = materializer.Materialize(Array.Empty<RawExecution>(), manualTrades).Trades;
+
+		// Assert: обе ручные сделки в проекции; атрибуты повторяют ввод пользователя.
+		Assert.That(trades.Count, Is.EqualTo(2));
+		var optionTrade = trades[0];
+		Assert.That(optionTrade.Source, Is.EqualTo(TradeSource.Manual));
+		Assert.That(optionTrade.ExecId, Is.Null);
+		Assert.That(optionTrade.ManualTradeId, Is.EqualTo(1));
+		Assert.That(optionTrade.ConstructionId, Is.Null);
+		Assert.That(optionTrade.Category, Is.EqualTo("option"));
+		Assert.That(optionTrade.Symbol, Is.EqualTo("BTC-29DEC23-45000-C"));
+		Assert.That(optionTrade.ExecutedAt, Is.EqualTo(executedAt));
+		Assert.That(optionTrade.Quantity, Is.EqualTo(0.0001m));
+		Assert.That(optionTrade.Price, Is.EqualTo(44000m));
+		Assert.That(optionTrade.Fee, Is.EqualTo(0.01m));
+		Assert.That(optionTrade.FeeCurrency, Is.EqualTo("USDT"));
+		Assert.That(optionTrade.IsMaker, Is.False);
+		Assert.That(optionTrade.Option, Is.Not.Null);
+		Assert.That(optionTrade.Option!.Strike, Is.EqualTo(45000m));
+		Assert.That(optionTrade.Option.DeliveryTime, Is.EqualTo(OptionDelivery));
+
+		var linearTrade = trades[1];
+		Assert.That(linearTrade.Source, Is.EqualTo(TradeSource.Manual));
+		Assert.That(linearTrade.ExecId, Is.Null);
+		Assert.That(linearTrade.Category, Is.EqualTo("linear"));
+		// Продажа знакует количество минусом, как у биржевой стороны Sell.
+		Assert.That(linearTrade.Quantity, Is.EqualTo(-0.01m));
+		Assert.That(linearTrade.Option, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Сделки обоих источников попадают в одну проекцию наравне друг с другом")]
+	public void TryIfBothSourcesMaterializedInOneProjection()
+	{
+		// Arrange: биржевая запись исполнения и ручная сделка по одному инструменту
+		// поданы одним вызовом. Требование: оба источника материализуются в общую
+		// проекцию — биржевая сохраняет execId и источник «биржа», ручная не имеет
+		// execId и помечена источником «ручной ввод»; при равном времени биржевые
+		// записи идут раньше ручных, ручные упорядочены идентификатором сырья.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-entry
+		// Traceability: change:manual-journal-management/design#d1
+		var materializer = CreateMaterializer();
+		var sameMoment = ExecMs(2023, 12, 28, 10, 0);
+		var rawExecutions = new[] { RawOption("exec-1", "Buy", sameMoment) };
+		var manualTrades = new[]
+		{
+			Manual(2, "BTC-29DEC23-45000-C", "Buy", 0.0001m, 43000m, 0m, new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero)),
+			Manual(1, "BTC-29DEC23-45000-C", "Sell", 0.0001m, 46000m, 0m, new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero)),
+		};
+
+		// Act
+		var trades = materializer.Materialize(rawExecutions, manualTrades).Trades;
+
+		// Assert: обе сделки в одной проекции; порядок детерминирован — биржевая
+		// первой, ручные по возрастанию идентификатора сырья.
+		Assert.That(trades.Count, Is.EqualTo(3));
+		Assert.That(trades[0].Source, Is.EqualTo(TradeSource.Exchange));
+		Assert.That(trades[0].ExecId, Is.EqualTo("exec-1"));
+		Assert.That(trades[1].Source, Is.EqualTo(TradeSource.Manual));
+		Assert.That(trades[1].ManualTradeId, Is.EqualTo(1));
+		Assert.That(trades[2].Source, Is.EqualTo(TradeSource.Manual));
+		Assert.That(trades[2].ManualTradeId, Is.EqualTo(2));
+	}
+
+	[TestMethod]
+	[Description("Ручная сделка по неизвестному символу откладывается единым с биржевой деградацией")]
+	public void TryIfManualUnknownOptionSymbolDefersTrade()
+	{
+		// Arrange: ручная сделка по опциону ETH без спецификации в справочнике при
+		// недоставленной доске и ручная сделка разрешимого инструмента. Требование:
+		// деградация неразрешённого символа едина для обоих источников — запись
+		// откладывается, символ перечислен, остальные сделки строятся.
+		// Traceability: openspec:sync/bybit-history#scenario-unresolved-symbol-degrades-to-warning
+		var materializer = CreateMaterializer(UndeliveredEthBoardClock());
+		var executedAt = new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero);
+		var manualTrades = new[]
+		{
+			Manual(1, "ETH-29DEC23-2000-C", "Buy", 1m, 200m, 0m, executedAt),
+			Manual(2, "BTC-29DEC23-45000-C", "Buy", 0.0001m, 45000m, 0m, executedAt),
+		};
+
+		// Act
+		var result = materializer.Materialize(Array.Empty<RawExecution>(), manualTrades);
+
+		// Assert: отложена только сделка неизвестного символа.
+		Assert.That(result.UnresolvedSymbols, Is.EqualTo(new[] { "ETH-29DEC23-2000-C" }));
+		Assert.That(result.Trades.Select(trade => trade.ManualTradeId).ToList(), Is.EqualTo(new long?[] { 2 }));
+	}
+
+	[TestMethod]
+	[Description("Повторная материализация того же ручного сырья не создаёт дубликатов")]
+	public void TryIfRepeatedManualMaterializationIsIdempotent()
+	{
+		// Arrange: повторный переразбор отдаёт те же строки ручного сырья. Требование:
+		// идентичность ручной записи несёт идентификатор строки сырья, повторная
+		// материализация не задваивает сделку.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+		var materializer = CreateMaterializer();
+		var manualTrade = Manual(7, "BTCUSDT", "Buy", 0.01m, 42000m, 0.0042m, new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero));
+
+		// Act: второй вызов получает ту же строку дважды.
+		var firstPass = materializer.Materialize(Array.Empty<RawExecution>(), new[] { manualTrade }).Trades;
+		var secondPass = materializer.Materialize(Array.Empty<RawExecution>(), new[] { manualTrade, manualTrade }).Trades;
+
+		// Assert: состав и порядок сделок не изменились.
+		Assert.That(firstPass.Count, Is.EqualTo(1));
+		Assert.That(secondPass.ToArray(), Is.EqualTo(firstPass.ToArray()));
+	}
+
+	[TestMethod]
+	[Description("Конфликтующие ручные записи с одним идентификатором сырья останавливают материализацию")]
+	[ExpectedException(typeof(TradeMaterializationException))]
+	public void ThrowOnConflictingManualTradesWithSameId()
+	{
+		// Arrange: две разные строки с одним идентификатором — источник записей
+		// с одним ключом обязан быть единственным, как и у биржевых execId.
+		var materializer = CreateMaterializer();
+		var executedAt = new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero);
+
+		// Act — Assert
+		materializer.Materialize(Array.Empty<RawExecution>(), new[]
+		{
+			Manual(5, "BTCUSDT", "Buy", 0.01m, 42000m, 0m, executedAt),
+			Manual(5, "BTCUSDT", "Sell", 0.01m, 42000m, 0m, executedAt),
+		});
+	}
+
+	[TestMethod]
+	[DataRow("Long")]
+	[DataRow("")]
+	[Description("Неизвестная сторона ручной сделки отклоняется")]
+	[ExpectedException(typeof(TradeMaterializationException))]
+	public void ThrowOnUnknownManualSide(string side)
+	{
+		// Arrange: сторона ручной сделки вне пары Buy/Sell не даёт знака количества.
+		var materializer = CreateMaterializer();
+
+		// Act — Assert
+		materializer.Materialize(Array.Empty<RawExecution>(), new[]
+		{
+			Manual(3, "BTCUSDT", side, 0.01m, 42000m, 0m, new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero)),
+		});
+	}
+
+	[TestMethod]
+	[Description("Null-строка ручного сырья отклоняется")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public void ThrowOnNullManualTradeRow()
+	{
+		// Arrange — Act — Assert
+		CreateMaterializer().Materialize(Array.Empty<RawExecution>(), new ManualTrade?[] { null! });
+	}
+
 	#region Помощники
 
 	private static TradeMaterializer CreateMaterializer() => new(new InstrumentResolver(CreateCatalog()));
@@ -603,6 +775,29 @@ public class TradeMaterializerTests
 		string feeCurrency = "USDC") => Raw(
 		execId, "option", "BTC-29DEC23-45000-C", execTimeMs,
 		ExecutionPayload(execId, "BTC-29DEC23-45000-C", side, "45000", "0.0001", execFee, feeCurrency, execTimeMs));
+
+	/// <summary>Ручная сделка сырья с атрибутами пользовательского ввода; комиссия задаётся в USDT.</summary>
+	private static ManualTrade Manual(
+		long id,
+		string symbol,
+		string side,
+		decimal quantity,
+		decimal price,
+		decimal feeUsdt,
+		DateTimeOffset executedAt,
+		long? constructionId = null) => new()
+	{
+		Id = id,
+		ExecutedAt = executedAt,
+		Symbol = symbol,
+		Side = side,
+		Quantity = quantity,
+		Price = price,
+		FeeUsdt = feeUsdt,
+		ConstructionId = constructionId,
+		CreatedAt = FetchedAt,
+		UpdatedAt = FetchedAt,
+	};
 
 	private static RawExecution Raw(string execId, string category, string symbol, long execTimeMs, string payloadJson) => new()
 	{
