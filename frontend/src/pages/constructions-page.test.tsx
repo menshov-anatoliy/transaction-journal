@@ -9,8 +9,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ConstructionsPage } from "./constructions-page";
 
 // Проверяется компоновка раздела «Конструкции» по концепции §3 и change
-// rework-spa-shell-and-screens: шапка с итогом и счётчиками, тулбар с
-// сегментом области видимости и ручным проходом подсказок, таблица с
+// rework-spa-shell-and-screens: тулбар с титулом, счётчиками конструкций и
+// ручным проходом подсказок, строка итога сводки, таблица с
 // выделением строки по URL, краткая карточка выделенной конструкции в
 // правой контекстной панели каркаса (на мобильном — в drawer). Слой API
 // подменён модулем-заглушкой.
@@ -148,6 +148,7 @@ vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 vi.mock("@/lib/api/sync", async (importOriginal) => ({
 	...(await importOriginal<typeof import("@/lib/api/sync")>()),
 	runSync: vi.fn(),
+	fetchSyncRuns: vi.fn(),
 }));
 
 const api = {
@@ -228,6 +229,9 @@ beforeEach(() => {
 	lastSearch = "";
 	api.constructions.fetchConstructionsOverview.mockResolvedValue(overview);
 	api.constructions.fetchConstructionPreview.mockResolvedValue(preview);
+	// Статус синхронизации топбара без успешных запусков скрыт — к проверкам
+	// страницы отношения не имеет.
+	api.sync.fetchSyncRuns.mockResolvedValue([]);
 	api.hints.runHintsPass.mockResolvedValue({
 		outcome: "completed",
 		asOf: "2026-06-20T14:30:00",
@@ -308,19 +312,19 @@ describe("раздел «Конструкции»", () => {
 		expect(heading.className).not.toContain("text-2xl");
 	});
 
-	it("шапка итога повторяет фрейм «Итог» oYD4G: 18/600 accentStrong, подписи 11, паддинги [14,16]", async () => {
-		// Шапка итога журнала сверена с дизайн-фреймом «Итог» (oYD4G):
-		// акцентное значение 18/600 $accentStrong, подписи разбивки и
-		// счётчиков 11/normal $textSecondary/$textMuted, паддинги [14,16],
-		// межстрочный зазор 3.
+	it("шапка итога повторяет мастер ud07u: 20/600 accentStrong, подписи 12.5/11.5, паддинги [14,16]", async () => {
+		// Шапка итога журнала сверена с мастером ud07u design.pen (после
+		// синхронизации К1): акцентное значение 20/600 $accentStrong (J3jIaE),
+		// разбивка 12.5 $textSecondary (g2EeYx), котировки 11.5 $textMuted
+		// (otg5U), паддинги [14,16], межстрочный зазор 3.
 		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 		// Traceability: change:reconcile-frontend-with-design/design#D2
 		// Act: открытие раздела.
 		renderPage();
 
-		// Assert: значение итога — 18/600 на акцентном токене.
+		// Assert: значение итога — 20/600 на акцентном токене.
 		const value = await screen.findByText("+100.5 USDT");
-		expect(value.className).toContain("text-[18px]");
+		expect(value.className).toContain("text-[20px]");
 		expect(value.className).toContain("font-semibold");
 		expect(value.className).toContain("text-accent-strong");
 
@@ -334,43 +338,62 @@ describe("раздел «Конструкции»", () => {
 		expect(summary?.className).toContain("px-4");
 		expect(summary?.className).toContain("py-3.5");
 
-		// Подписи: разбивка 11/normal textSecondary; котировки и счётчики —
-		// 11/normal textMuted отдельными сегментами той же строки.
+		// Подписи: разбивка 12.5 $textSecondary (g2EeYx); котировки —
+		// 11.5 $textMuted (otg5U) отдельным сегментом той же строки.
 		const breakdown = screen.getByText(/реализов\. \+60\.25 \/ нереализов\. \+40\.25/);
-		expect(breakdown.className).toContain("text-[11px]");
+		expect(breakdown.className).toContain("text-[12.5px]");
 		expect(breakdown.className).toContain("text-text-secondary");
 		const quotes = screen.getByText(/котировки на/i);
-		expect(quotes.className).toContain("text-[11px]");
+		expect(quotes.className).toContain("text-[11.5px]");
 		expect(quotes.className).toContain("text-text-muted");
-		const counters = screen.getByText("3 конструкции (1 открыта)");
-		expect(counters.className).toContain("text-[11px]");
-		expect(counters.className).toContain("text-text-muted");
 	});
 
-	it("в тулбаре — кнопка «Разобрать входящие» варианта Secondary, ведёт в раздел входящих", async () => {
-		// Разбор входящих доступен из тулбара раздела: кнопка в варианте
-		// Secondary дизайн-системы (поверхность + бордер) и ведёт в /inbox.
-		// Traceability: change:reconcile-frontend-with-design/design#D2
+	it("не показывает кнопку «Разобрать входящие» в тулбаре раздела", async () => {
+		// По решению раунд-сверки формы «Конструкции» кнопка «Разобрать
+		// входящие» из тулбара раздела убрана: вход в разбор — через раздел
+		// «Входящие» панели навигации.
+		// Traceability: change:rework-contextual-topbar/tasks#2.0
 		// Act: открытие раздела.
 		renderPage();
 
-		// Assert: Secondary-кнопка тулбара отправляет в раздел «Входящие».
-		const link = await screen.findByRole("link", { name: /разобрать входящие/i });
-		expect(link).toHaveAttribute("href", "/inbox");
-		expect(link.className).toContain("border");
-		expect(link.className).toContain("bg-card");
+		// Assert: таблица открыта, ссылки «Разобрать входящие» в тулбаре нет.
+		expect(await screen.findByRole("row", { name: /ETH-240628/ })).toBeInTheDocument();
+		expect(screen.queryByRole("link", { name: /разобрать входящие/i })).not.toBeInTheDocument();
 	});
 
-	it("показывает шапку с итогом, разбивкой, котировками и счётчиками", async () => {
+	it("показывает счётчики конструкций рядом с титулом в формате макета", async () => {
+		// Счётчики по решению раунд-сверки перенесены из строки итога сводки
+		// к H1 тулбара в формате макета: «конструкций N · открыто N · архив N»,
+		// архив — все минус открытые; 12.5 $textSecondary (мастер NwnY4).
+		// Считаются по полному набору журнала, независимо от области
+		// видимости списка.
+		// Traceability: change:rework-contextual-topbar/tasks#2.0
+		// Traceability: openspec:ui/screens#requirement-construction-list-screen
 		// Act: открытие раздела.
 		renderPage();
 
-		// Assert: шапка несёт итог с разбивкой, отметку котировок и счётчики.
+		// Assert: счётчики следуют сразу за титулом H1 и несут токены макета.
+		const counters = await screen.findByText("конструкций 3 · открыто 1 · архив 2");
+		expect(counters).toHaveAttribute("data-slot", "constructions-counters");
+		expect(counters.className).toContain("text-[12.5px]");
+		expect(counters.className).toContain("text-text-secondary");
+		const heading = screen.getByRole("heading", { name: "Конструкции", level: 1 });
+		expect(heading.nextElementSibling).toBe(counters);
+	});
+
+	it("показывает шапку с итогом, разбивкой и котировками без счётчиков", async () => {
+		// Строка итога сводки после раунд-сверки несёт только итог с
+		// разбивкой и отметку котировок; счётчики переехали к титулу тулбара.
+		// Traceability: change:rework-contextual-topbar/tasks#2.0
+		// Act: открытие раздела.
+		renderPage();
+
+		// Assert: шапка несёт итог с разбивкой и котировки, счётчиков в сводке нет.
 		expect(await screen.findByText("+100.5 USDT")).toBeInTheDocument();
 		expect(screen.getByText("+60.25")).toBeInTheDocument();
 		expect(screen.getByText("+40.25")).toBeInTheDocument();
 		expect(screen.getByText(/котировки на/i)).toBeInTheDocument();
-		expect(screen.getByText("3 конструкции (1 открыта)")).toBeInTheDocument();
+		expect(screen.queryByText(/3 конструкции/)).not.toBeInTheDocument();
 		expect(screen.getByRole("button", { name: /синхронизировать/i })).toBeInTheDocument();
 	});
 
@@ -393,7 +416,7 @@ describe("раздел «Конструкции»", () => {
 		expect(lastSearch).not.toContain("scope");
 
 		// Счётчики — по полному набору из API.
-		expect(screen.getByText("3 конструкции (1 открыта)")).toBeInTheDocument();
+		expect(screen.getByText("конструкций 3 · открыто 1 · архив 2")).toBeInTheDocument();
 	});
 
 	it("переключение на «Все» показывает закрытые и архивные строки, не меняя счётчики", async () => {
@@ -417,7 +440,7 @@ describe("раздел «Конструкции»", () => {
 
 		// Область видимости записана в URL; счётчики не изменились.
 		expect(lastSearch).toContain("scope=all");
-		expect(screen.getByText("3 конструкции (1 открыта)")).toBeInTheDocument();
+		expect(screen.getByText("конструкций 3 · открыто 1 · архив 2")).toBeInTheDocument();
 
 		// Обратное переключение убирает параметр scope из URL.
 		await user.click(screen.getByRole("button", { name: "Открытые" }));
@@ -611,5 +634,45 @@ describe("раздел «Конструкции»", () => {
 		// Закрытие шторки прячет карточку.
 		await user.click(screen.getByRole("button", { name: "Закрыть" }));
 		expect(screen.queryByRole("heading", { name: "Краткая карточка" })).not.toBeInTheDocument();
+	});
+
+	it("мобильный экран показывает блок «Итог» вместо H1-тулбара и шапки сводки", async () => {
+		// Решения раунд-сверки 10.0 (мастер iGlhI «Экран/Mobile ·
+		// Конструкции»): сразу под топбаром прозрачный блок «Итог» — итог
+		// 18/600 $accentStrong, разбивка с котировками 11 $textSecondary,
+		// счётчики «конструкций N · открыто N» 11 $textMuted без «архива»
+		// (источник — сводка обзора, решение 2.0); H1-тулбар с областью
+		// видимости и синхронизацией скрыт, список идёт сразу за блоком.
+		// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
+		// Traceability: change:rework-contextual-topbar/tasks#2.0
+		// Traceability: change:rework-contextual-topbar/tasks#10.0
+		// Arrange: мобильный вьюпорт 390.
+		setViewport(390);
+		renderPage();
+
+		// Assert: блок «Итог» — три строки с токенами мастера iGlhI.
+		const block = await screen.findByTestId("constructions-mobile-summary");
+		const total = within(block).getByText("+100.5 USDT");
+		expect(total.className).toContain("text-[18px]");
+		expect(total.className).toContain("font-semibold");
+		expect(total.className).toContain("text-accent-strong");
+		const breakdown = within(block).getByText(/реализов\. \+60\.25 \/ нереализов\. \+40\.25 · котировки \d{2}:\d{2}/);
+		expect(breakdown.className).toContain("text-[11px]");
+		expect(breakdown.className).toContain("text-text-secondary");
+		const counters = within(block).getByText("конструкций 3 · открыто 1");
+		expect(counters.className).toContain("text-[11px]");
+		expect(counters.className).toContain("text-text-muted");
+
+		// Assert: H1-тулбар скрыт — титул, счётчики-строка, сегмент области,
+		// синхронизация и десктопная шапка сводки отсутствуют.
+		expect(screen.queryByRole("heading", { name: "Конструкции", level: 1 })).not.toBeInTheDocument();
+		expect(screen.queryByText("конструкций 3 · открыто 1 · архив 2")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Открытые" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /синхронизировать/i })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Запустить проход подсказок" })).not.toBeInTheDocument();
+		expect(screen.queryByTestId("constructions-summary")).not.toBeInTheDocument();
+
+		// Assert: список следует сразу за блоком — мобильные карточки строк.
+		expect(screen.getByRole("button", { name: /ETH-240628/ })).toBeInTheDocument();
 	});
 });

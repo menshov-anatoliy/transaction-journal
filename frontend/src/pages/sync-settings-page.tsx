@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OctagonAlert, TriangleAlert } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatMoment } from "@/lib/format/display-time";
 import {
@@ -74,6 +75,17 @@ export function SyncSettingsPage() {
 	const settings = settingsQuery.data;
 	const bybit = settings?.bybit;
 
+	// Последняя запись журнала (новые сверху) — источник и постоянной строки
+	// «последний запуск» в шапке карточки, и постоянного блока «Результат
+	// запуска»: оба показываются по журналу, а не только после ручного запуска.
+	// Traceability: change:rework-contextual-topbar/tasks#9.0
+	const lastRun = runsQuery.data !== undefined ? runsQuery.data[0] : undefined;
+	// Результат ручного запуска богаче записи журнала (несёт projectionError и
+	// предупреждения сверки), поэтому сразу после запуска показывается он;
+	// иначе блок собирается из последней записи журнала. Выполняющийся запуск
+	// результата ещё не имеет — блок скрыт до закрытия запуска.
+	const resultSummary = lastRunResult ?? journalEntryToRunSummary(lastRun);
+
 	return (
 		<section className="flex flex-col gap-3.5 px-7 pt-5 pb-6">
 			<h1 className="page-title">Синхронизация</h1>
@@ -136,14 +148,30 @@ export function SyncSettingsPage() {
 					</Button>
 
 					<label className="flex items-center gap-2 text-xs text-text-secondary">
-						<input
-							type="checkbox"
+						{/* Тумблер вместо чекбокса — решение раунд-сверки 9.0 (мастер uxrZO):
+							примитив Switch с ролью switch, aria-checked и клавиатурой Space. */}
+						{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
+						{/* Traceability: change:rework-contextual-topbar/tasks#9.0 */}
+						<Switch
 							checked={settings?.backupBeforeSyncEnabled ?? true}
 							disabled={settings === undefined || backupMutation.isPending}
-							onChange={(event) => backupMutation.mutate(event.currentTarget.checked)}
+							onCheckedChange={(checked) => backupMutation.mutate(checked)}
 						/>
 						резервная копия перед синхронизацией
 					</label>
+
+					{/* Спейсер до правого края шапки карточки — решение раунд-сверки 9.0. */}
+					<span className="flex-1" aria-hidden="true" />
+
+					{/* Постоянная строка последнего запуска справа шапки карточки: статус
+						словами, время начала в dd.MM HH:mm и длительность finishedAt−startedAt
+						в формате «6,4 с»; без записей журнала строка скрыта. */}
+					{/* Traceability: change:rework-contextual-topbar/tasks#9.0 */}
+					{lastRun !== undefined && (
+						<span className="text-xs text-text-secondary" data-testid="last-run-label">
+							{formatLastRunLabel(lastRun)}
+						</span>
+					)}
 				</div>
 
 				{settings?.backupPolicyError !== null && settings?.backupPolicyError !== undefined && (
@@ -157,8 +185,10 @@ export function SyncSettingsPage() {
 						Синхронизация прервана: {syncMutation.error.message}
 					</p>
 				)}
-				{lastRunResult !== null && (
-					<SyncRunResultNote summary={lastRunResult} />
+				{/* Блок результата постоянный — по последней записи журнала; сразу
+					после ручного запуска показывается его расширенный итог. */}
+				{resultSummary !== null && (
+					<SyncRunResultNote summary={resultSummary} />
 				)}
 
 				{runsQuery.isPending && <p className="text-muted-foreground text-xs">чтение журнала запусков…</p>}
@@ -181,8 +211,8 @@ export function SyncSettingsPage() {
 								<TableRow className="bg-surface-2 hover:bg-surface-2">
 									<TableHead>Время</TableHead>
 									<TableHead>Режим</TableHead>
-									<TableHead>Результат</TableHead>
-									<TableHead>Статус</TableHead>
+									<TableHead>Исполнений</TableHead>
+									<TableHead>Итог</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -195,10 +225,10 @@ export function SyncSettingsPage() {
 											{run.mode === "backfill" ? "первичная загрузка" : "догрузка"}
 										</TableCell>
 										<TableCell className={run.status === "failed" ? "text-neg" : "text-text-secondary"}>
-											{formatRunResult(run)}
+											{run.newExecutions}
 										</TableCell>
 										<TableCell className={run.status === "failed" ? "text-neg" : "text-text-secondary"}>
-											{formatRunStatus(run.status)}
+											{formatRunOutcome(run)}
 										</TableCell>
 									</TableRow>
 								))}
@@ -382,25 +412,96 @@ function SyncRunWarningsList({ run }: { run: SyncRunJournalEntry }) {
 	);
 }
 
-function formatRunResult(run: SyncRunJournalEntry) {
+/*
+	Словесный итог запуска для колонки «Итог» и строки «последний запуск» —
+	решение раунд-сверки 9.0 (мастер uxrZO): успех — «успешно · <длительность>»,
+	выполняющийся запуск — «выполняется…», прерванный — «прервано: <error>».
+	Колонка «Котировок» и термины мастера «полный/инкремент» — variance (в API
+	нет данных), режим остаётся «первичная загрузка/догрузка».
+*/
+// Traceability: change:rework-contextual-topbar/tasks#9.0
+function formatRunOutcome(run: SyncRunJournalEntry): string {
 	if (run.status === "running") {
 		return "выполняется…";
 	}
 
 	if (run.status === "failed") {
-		return `прерван: ${run.error ?? "неизвестная ошибка"}`;
+		return `прервано: ${run.error ?? "неизвестная ошибка"}`;
 	}
 
-	return `исполнений ${run.newExecutions} · delivery ${run.newDeliveries} · инструментов ${run.newInstruments}`;
+	const duration = formatRunDuration(run);
+	return duration === null ? "успешно" : `успешно · ${duration}`;
 }
 
-function formatRunStatus(status: SyncRunJournalEntry["status"]) {
+/** Словесный статус последнего запуска для строки шапки карточки. */
+function formatRunStateWord(status: SyncRunJournalEntry["status"]): string {
 	switch (status) {
 		case "running":
 			return "выполняется";
 		case "failed":
-			return "ошибка";
+			return "прервано";
 		default:
-			return "успех";
+			return "успешно";
 	}
+}
+
+/**
+ * Длительность запуска «6,4 с» (finishedAt−startedAt, запятая в дробной
+ * части); законченного мгновения нет — null, часть строки опускается.
+ */
+function formatRunDuration(run: SyncRunJournalEntry): string | null {
+	if (run.finishedAt === null) {
+		return null;
+	}
+
+	const milliseconds = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
+	if (!Number.isFinite(milliseconds) || milliseconds < 0) {
+		return null;
+	}
+
+	return `${(milliseconds / 1000).toFixed(1).replace(".", ",")} с`;
+}
+
+/** Мгновение «dd.MM HH:mm» в локальной зоне браузера. */
+function formatShortMoment(value: string): string {
+	const moment = new Date(value);
+	const pad = (input: number) => String(input).padStart(2, "0");
+	return `${pad(moment.getDate())}.${pad(moment.getMonth() + 1)} ${pad(moment.getHours())}:${pad(moment.getMinutes())}`;
+}
+
+/** Строка «последний запуск: <статус> · <dd.MM HH:mm> · <длительность>» шапки карточки. */
+function formatLastRunLabel(run: SyncRunJournalEntry): string {
+	const parts = [`последний запуск: ${formatRunStateWord(run.status)}`, formatShortMoment(run.startedAt)];
+	const duration = formatRunDuration(run);
+	if (duration !== null) {
+		parts.push(duration);
+	}
+
+	return parts.join(" · ");
+}
+
+/**
+ * Преобразует запись журнала в итог запуска для постоянного блока «Результат
+ * запуска»: предупреждения сверки и сбой проекции журнал не несёт (они
+ * приходят только из итога ручного запуска), поэтому поля пустые.
+ */
+function journalEntryToRunSummary(run: SyncRunJournalEntry | undefined): SyncRunSummary | null {
+	if (run === undefined || run.status === "running") {
+		return null;
+	}
+
+	return {
+		mode: run.mode,
+		status: run.status,
+		startedAt: run.startedAt,
+		finishedAt: run.finishedAt,
+		newExecutions: run.newExecutions,
+		newDeliveries: run.newDeliveries,
+		newInstruments: run.newInstruments,
+		projectionError: null,
+		reconciliationWarnings: [],
+		skippedAreas: run.skippedAreas,
+		unresolvedInstruments: run.unresolvedInstruments,
+		uncoveredBaseCoins: run.uncoveredBaseCoins,
+	};
 }

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DASH } from "./degradation";
-import { formatDay, formatMoment } from "./display-time";
+import { formatClock, formatDay, formatMoment } from "./display-time";
 
 // Локальное время: моменты показываются в часовой зоне браузера в формате
 // «2026-06-20 14:30» (перенос №17). Тест принудительно ставит зону
@@ -73,5 +73,39 @@ describe("календарный день в локальной зоне бра�
 
 		// Assert: прочерк вместо пустоты.
 		expect(text).toBe(DASH);
+	});
+});
+
+// Часы-минуты для статуса синхронизации топбара «Обновлено HH:MM»: время
+// последнего успешного запуска показывается в часовой зоне браузера; без
+// данных функция даёт null, чтобы блок скрылся целиком.
+// Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+describe("часы-минуты в локальной зоне браузера", () => {
+	it("UTC-мгновение даёт стеновые часы и минуты зоны браузера", () => {
+		// Act: мгновение 09:00 UTC сводится к часам-минутам.
+		const text = formatClock("2026-06-20T09:00:00Z");
+
+		// Assert: в зоне +05:30 — «14:30», а не UTC-время.
+		expect(text).toBe("14:30");
+	});
+
+	it("секунды в формат не попадают", () => {
+		// Act: вход с секундами и миллисекундами.
+		const text = formatClock("2026-06-20T09:05:07.123Z");
+
+		// Assert: формат HH:MM без секунд.
+		expect(text).toBe("14:35");
+	});
+
+	it.each([
+		null,
+		undefined,
+		"не-дата",
+	])("отсутствующий или мусорный вход %p даёт null", (value) => {
+		// Act: без данных блок статуса должен скрыться, а не показать мусор.
+		const text = formatClock(value);
+
+		// Assert: null — сигнал вызывающему коду скрыть блок.
+		expect(text).toBeNull();
 	});
 });

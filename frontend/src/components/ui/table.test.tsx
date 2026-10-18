@@ -40,7 +40,7 @@ function renderTable(density?: TableDensity) {
 describe("общий слой таблиц: варианты плотности по дизайн-системе", () => {
 	it.each([
 		// Плотность → геометрия ячейки из дизайн-нод Body #1/#5/#2/#8.
-		["comfortable", "py-[9px] px-2.5 text-xs"],
+		["comfortable", "py-[9px] px-2 text-xs"],
 		["regular", "py-2 px-2.5 text-xs"],
 		["compact", "py-[7px] px-1.5 text-[11px]"],
 		["dense", "py-1.5 px-3 text-[11.5px]"],
@@ -52,7 +52,7 @@ describe("общий слой таблиц: варианты плотности 
 	it.each([
 		// Заголовки всех плотностей: паддинги своей таблицы; у compact —
 		// самый мелкий кегль 9.5 по мастеру Body #2.
-		["comfortable", "py-2 px-2.5 text-[11px]"],
+		["comfortable", "py-2 px-2 text-[11px]"],
 		["regular", "py-2 px-2.5 text-[11px]"],
 		["compact", "py-1.5 px-1.5 text-[9.5px]"],
 		["dense", "py-1.5 px-3 text-[11px]"],

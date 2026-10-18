@@ -13,6 +13,7 @@ import { ClosingEntriesTable } from "@/components/constructions/card/closing-ent
 import { AdjustmentsTable } from "@/components/constructions/card/adjustments-table";
 import { ConstructionChatsPanel } from "@/components/constructions/card/construction-chats-panel";
 import { useContextPanel } from "@/components/layout/context-panel";
+import { usePageHeader } from "@/components/layout/page-header";
 import { ParamsMenu } from "@/components/constructions/card/params-menu";
 import { HintsPanel } from "@/components/hints/hints-panel";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
@@ -47,6 +48,24 @@ export function ConstructionCardPage() {
 		queryFn: () => fetchConstructionCard(id),
 		enabled: validId,
 	});
+
+	// Шапка сегмента «страница» топбара по решению раунд-сверки 3.0 (макет
+	// QbFRE): крошка трёхуровневая — «Журнал / Конструкции / Карточка» с
+	// зарегистрированным хвостом «Карточка»; после загрузки карточки
+	// заголовок «<имя конструкции> · Карточка», до загрузки и при ошибке —
+	// fallback «Карточка конструкции». Чипов у сегмента страницы на этом
+	// экране нет — в макете оба чипа отключены. Регистрация живёт, пока
+	// смонтирована страница, и вне каркаса превращается в no-op.
+	// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+	// Traceability: change:rework-contextual-topbar/tasks#3.0
+	const pageHeaderRegistration = React.useMemo(
+		() => ({
+			breadcrumbTail: "Карточка",
+			title: cardQuery.data != null ? `${cardQuery.data.name} · Карточка` : "Карточка конструкции",
+		}),
+		[cardQuery.data],
+	);
+	usePageHeader(pageHeaderRegistration);
 
 	// Некорректный маршрут не запускает запрос и не зависает в «чтении».
 	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
@@ -108,9 +127,17 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 	// (design.md D4): у карточки контекст существует всегда, поэтому регистрация
 	// постоянна и панель развёрнута по умолчанию; ширину и свёрнутость задаёт
 	// каркас, панель свою геометрию не хранит. Выбор чата остаётся в URL (?chat=).
+	// Короткое название «Чаты конструкции» идёт в чип сегмента контекста
+	// топбара (решение раунд-сверки 3.0 — уточнение макета QbFRE вместо
+	// прежнего «Чаты»).
 	// Traceability: openspec:ui/screens#scenario-ui-chats-panel-in-context-panel
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+	// Traceability: change:rework-contextual-topbar/tasks#3.0
 	const chatsPanelRegistration = React.useMemo(
-		() => ({ content: <ConstructionChatsPanel constructionId={constructionId} isClosed={isClosed} constructionName={card.name} /> }),
+		() => ({
+			chipLabel: "Чаты конструкции",
+			content: <ConstructionChatsPanel constructionId={constructionId} isClosed={isClosed} constructionName={card.name} />,
+		}),
 		[constructionId, isClosed, card.name],
 	);
 	useContextPanel(chatsPanelRegistration);
@@ -156,22 +183,31 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 				onRevert={(key) => commands.revertSynthetic.mutate(key)}
 			/>
 
-			{/* Комментарий конструкции: MD-рендер по политике §10; иконка-карандаш
-			    открывает модальный split-редактор. */}
-			<div className="flex items-start gap-2">
-				<span className="text-muted-foreground text-sm">комментарий</span>
-				<div className="min-w-0 flex-1">
-					{card.comment === null ? (
-						<span className="text-muted-foreground text-sm">—</span>
-					) : (
-						<MarkdownViewer text={card.comment} />
-					)}
+			{/* Комментарий конструкции — карточка по фрейму «Комментарий» мастера
+			    QbFRE design.pen: белая поверхность $surface с каймой $border,
+			    радиус 12, паддинги [14,18], в головке заголовок Inter 13.5 и
+			    кнопка «изменить» (паддинг [6,10]); MD-рендер по политике §10. */}
+			{/* Traceability: openspec:ui/screens#requirement-construction-detail-screen */}
+			<section data-slot="construction-comment" className="flex flex-col gap-2.5 rounded-lg border bg-card px-[18px] py-3.5">
+				<div className="flex items-center gap-2">
+					<h2 className="text-[13.5px] font-semibold text-foreground">Комментарий конструкции</h2>
+					<Button
+						variant="outline"
+						size="sm"
+						className="ml-auto h-auto px-2.5 py-1.5"
+						onClick={() => setCommentOpen(true)}
+						aria-label="изменить комментарий конструкции"
+					>
+						<Pencil aria-hidden />
+						изменить
+					</Button>
 				</div>
-				<Button variant="outline" size="sm" onClick={() => setCommentOpen(true)} aria-label="изменить комментарий конструкции">
-					<Pencil aria-hidden />
-					изменить
-				</Button>
-			</div>
+				{card.comment === null ? (
+					<p className="text-muted-foreground text-sm">—</p>
+				) : (
+					<MarkdownViewer text={card.comment} />
+				)}
+			</section>
 
 			<MarkdownEditDialog
 				open={commentOpen}

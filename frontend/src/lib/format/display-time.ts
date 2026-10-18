@@ -53,3 +53,19 @@ export function formatDay(value: MomentInput | null | undefined): string {
 		pad(moment.getDate(), 2),
 	].join("-");
 }
+
+/**
+ * Часы-минуты момента: «14:30» в часовой зоне браузера; неразборный или
+ * отсутствующий вход даёт null — вызывающий код скрывает блок целиком.
+ * Служит статусу синхронизации топбара «Обновлено HH:MM».
+ *
+ * Traceability: openspec:ui/screens#scenario-frame-sync-status-last-successful-run
+ */
+export function formatClock(value: MomentInput | null | undefined): string | null {
+	const moment = parseMoment(value);
+	if (moment === null) {
+		return null;
+	}
+
+	return [pad(moment.getHours(), 2), pad(moment.getMinutes(), 2)].join(":");
+}

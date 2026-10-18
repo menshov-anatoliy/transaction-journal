@@ -13,6 +13,13 @@ import { useCallback, useMemo, useState } from "react";
 /** Панели каркаса с сохраняемой геометрией. */
 export type LayoutPanel = "left" | "right";
 
+// Свёрнутая панель занимает только рейку миниатюр шириной 44 px; та же
+// константа сжимает сегмент топбара над панелью, чтобы колонка не
+// разъезжалась (design.md D1).
+// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
+// Traceability: openspec:ui/screens#scenario-frame-topbar-segments-align-to-columns
+export const COLLAPSED_PANEL_WIDTH_REM = 2.75;
+
 /** Допустимый диапазон ширины панели в rem: левая 4.25–20, правая 20–40. */
 export const PANEL_WIDTH_RANGE_REM: Readonly<Record<LayoutPanel, { min: number; max: number }>> = {
 	left: { min: 4.25, max: 20 },
@@ -38,7 +45,7 @@ const STORAGE_KEYS: Readonly<Record<LayoutPanel, string>> = {
 export interface PanelGeometry {
 	/** Ширина панели в rem (внутри диапазона PANEL_WIDTH_RANGE_REM). */
 	width: number;
-	/** Панель схлопнута до иконочной колонки. */
+	/** Панель схлопнута до рейки миниатюр. */
 	collapsed: boolean;
 }
 

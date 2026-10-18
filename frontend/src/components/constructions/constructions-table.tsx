@@ -344,12 +344,14 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 		);
 	}
 
-	// Плотность Body #1 (X2ic2p) мастера: ячейки 9/10 при шрифте 12, имя —
-	// 12.5/500, шапка — 8/10 и 11/600.
+	// Плотность Body #1 (X2ic2p) мастера: ячейки 9/8 при шрифте 12, имя —
+	// 12.5/500, шапка — 8/8 и 11/600. Шапка строки — заливка $surface-2 с
+	// линией $divider, разделители строк — $divider по мастеру ud07u.
 	// Traceability: change:reconcile-frontend-with-design/design#D6
+	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
 	return (
 		<Table density="comfortable">
-			<TableHeader>
+			<TableHeader className="bg-surface-2 [&_tr]:border-divider">
 				{table.getHeaderGroups().map((headerGroup) => (
 					<TableRow key={headerGroup.id}>
 						{headerGroup.headers.map((header) => (
@@ -379,7 +381,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 						<TableRow
 							key={row.original.constructionId}
 							aria-selected={row.original.constructionId === selectedId}
-							className={cn("cursor-pointer", row.original.constructionId === selectedId && "bg-accent")}
+							className={cn("cursor-pointer border-divider", row.original.constructionId === selectedId && "bg-accent")}
 							onClick={() => onSelect(row.original.constructionId)}
 							// Двойной клик — навигация в карточку в новом окне,
 							// отдельная от выделения строк команде.

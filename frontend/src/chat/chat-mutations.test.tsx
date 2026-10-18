@@ -2,18 +2,22 @@ import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-quer
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useCompleteChatMutation, useResumeChatMutation } from "./chat-mutations";
+import { useCompleteChatMutation, useDeleteChatMutation, useResumeChatMutation } from "./chat-mutations";
 import { chatKeys } from "./chat-queries";
 import { listChats } from "@/chat/api/chat-api";
 
-// Мутации жизненного цикла чата: завершение и продолжение — ручные
-// действия владельца; после мутации списки активных и завершённых чатов
-// перечитываются, чтобы чат переехал между ними без ручного обновления.
+// Мутации жизненного цикла чата: завершение, продолжение и удаление —
+// ручные действия владельца; после мутации списки активных и завершённых
+// чатов перечитываются, чтобы чат переехал между ними или исчез без
+// ручного обновления.
 // Traceability: change:add-agent-chat/proposal#what-changes
+// Traceability: openspec:chats/history#requirement-chat-manual-completion-and-deletion
+// Traceability: change:rework-contextual-topbar/tasks#7.0
 
 function LifecycleHarness({ chatId }: { chatId: string }) {
 	const complete = useCompleteChatMutation();
 	const resume = useResumeChatMutation();
+	const remove = useDeleteChatMutation();
 	const active = useQuery({
 		queryKey: chatKeys.list("active"),
 		queryFn: () => listChats("active"),
@@ -27,6 +31,9 @@ function LifecycleHarness({ chatId }: { chatId: string }) {
 			</button>
 			<button type="button" onClick={() => resume.mutate(chatId)}>
 				Продолжить
+			</button>
+			<button type="button" onClick={() => remove.mutate(chatId)}>
+				Удалить
 			</button>
 		</div>
 	);
@@ -47,7 +54,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe("мутации завершения и продолжения чата", () => {
+describe("мутации завершения, продолжения и удаления чата", () => {
 	it("завершение уходит в эндпоинт метки и обновляет списки чатов", async () => {
 		// Arrange: активный список читается; мутация завершает чат и после
 		// неё список активных перечитывается (уже без чата).
@@ -114,6 +121,47 @@ describe("мутации завершения и продолжения чата
 		});
 		const completion = calls.find((call) => call.url.includes("/completion"));
 		expect(completion?.init?.method).toBe("DELETE");
+	});
+
+	/*
+		Удаление — явное действие владельца (раунд-сверка 7.0): чат стирается
+		целиком DELETE-запросом /api/v1/chats/{id} без тела ответа, списки
+		активных и завершённых перечитываются — выбор следующего чата или
+		пустого состояния остаётся за страницей.
+	*/
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("удаление стирает чат целиком и обновляет списки чатов", async () => {
+		// Arrange: активный список читается; DELETE /chats/{id} отвечает 204.
+		const calls: { url: string; init?: RequestInit }[] = [];
+		let activeListReads = 0;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (url: string | URL, init?: RequestInit) => {
+				const href = typeof url === "string" ? url : url.href;
+				calls.push({ url: href, init });
+				if (href.includes("/chats/chat-3"))
+					return new Response(null, { status: 204 });
+				if (href.includes("status=active")) {
+					activeListReads += 1;
+					return jsonResponse(activeListReads === 1 ? [{ id: "chat-3" }] : []);
+				}
+				return jsonResponse([]);
+			}),
+		);
+		const user = userEvent.setup();
+		renderLifecycle("chat-3");
+
+		// Act: владелец удаляет чат кнопкой шапки (команда deleteChat).
+		await user.click(await screen.findByRole("button", { name: "Удалить" }));
+
+		// Assert: чат стёрт DELETE-запросом, список активных перечитан —
+		// счётчик обнулился.
+		await waitFor(() => {
+			expect(screen.getByTestId("active-count")).toHaveTextContent("0");
+		});
+		const removed = calls.find((call) => call.url.includes("/chats/chat-3"));
+		expect(removed?.init?.method).toBe("DELETE");
 	});
 });
 

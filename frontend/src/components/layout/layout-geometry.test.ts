@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+	COLLAPSED_PANEL_WIDTH_REM,
 	PANEL_WIDTH_RANGE_REM,
 	clampPanelWidth,
 	readPanelGeometry,
@@ -10,12 +11,24 @@ import {
 
 // Геометрия панелей каркаса: границы ширин (левая 4.25–20 rem, правая
 // 20–40 rem), persistence в localStorage («tj.layout.*») и восстановление
-// на монтировании.
+// на монтировании. Та же геометрия задаёт ширины сегментов топбара —
+// колонки каркаса и шапки совпадают.
 // Traceability: openspec:ui/screens#scenario-frame-panel-geometry-persists
+// Traceability: openspec:ui/screens#scenario-frame-topbar-segments-align-to-columns
 // Traceability: change:rework-spa-shell-and-screens/design#D1
+// Traceability: change:rework-contextual-topbar/design#D1
 
 beforeEach(() => {
 	localStorage.clear();
+});
+
+// Ширина свёрнутой панели равна рейке 44 px; та же константа сжимает
+// сегмент топбара над панелью и не меняет сохраняемый диапазон.
+// Traceability: openspec:ui/screens#scenario-frame-collapsed-panel-miniature-rail
+// Traceability: openspec:ui/screens#scenario-frame-topbar-segments-align-to-columns
+it("свёрнутая панель занимает только ширину рейки миниатюр", () => {
+	expect(COLLAPSED_PANEL_WIDTH_REM).toBe(2.75);
+	expect(PANEL_WIDTH_RANGE_REM.left.min).toBe(4.25);
 });
 
 describe("clampPanelWidth", () => {

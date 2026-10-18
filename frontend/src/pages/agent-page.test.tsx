@@ -1,8 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { useMemo, useState } from "react";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ContextPanelRegistration } from "@/components/layout/context-panel";
+import type { PageHeaderRegistration } from "@/components/layout/page-header";
+import type { AppOutletContext } from "@/components/layout/outlet-context";
 import { AgentPage } from "./agent-page";
 
 // Раздел «Агент» по концепции §7: форма нового чата, списки active/completed,
@@ -15,6 +19,7 @@ const chatsApi = vi.hoisted(() => ({
 	createChat: vi.fn(),
 	completeChat: vi.fn(),
 	resumeChat: vi.fn(),
+	deleteChat: vi.fn(),
 	listChatMessages: vi.fn(),
 	streamChatReply: vi.fn(),
 }));
@@ -35,6 +40,7 @@ vi.mock("@/chat/api/chat-api", async (importOriginal) => ({
 	createChat: chatsApi.createChat,
 	completeChat: chatsApi.completeChat,
 	resumeChat: chatsApi.resumeChat,
+	deleteChat: chatsApi.deleteChat,
 	listChatMessages: chatsApi.listChatMessages,
 	streamChatReply: chatsApi.streamChatReply,
 }));
@@ -48,6 +54,47 @@ vi.mock("@/lib/api/constructions", () => ({
 	fetchConstructionsOverview: constructionsApi.fetchConstructionsOverview,
 }));
 
+/*
+	Стенд регистраций сегментов каркаса: вне AppLayout хуки usePageHeader и
+	useContextPanel превращаются в no-op, поэтому стенд подменяет
+	Outlet-контекст каркаса и рендерит зарегистрированные шапку страницы и
+	контекст-панель — так страница проверяет состав регистраций без каркаса.
+*/
+// Traceability: openspec:ui/screens#scenario-frame-page-header-registration
+// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+// Traceability: change:rework-contextual-topbar/tasks#8.0
+function TopbarRegistrationOutlet() {
+	const [header, setHeader] = useState<PageHeaderRegistration | null>(null);
+	const [context, setContext] = useState<ContextPanelRegistration | null>(null);
+	const [mobileFocus, setMobileFocus] = useState(false);
+	const outletContext = useMemo<AppOutletContext>(
+		() => ({
+			pageHeader: { setRegistration: setHeader },
+			contextPanel: { setRegistration: setContext },
+			mobileFocus: { setActive: setMobileFocus },
+		}),
+		[],
+	);
+	return (
+		<>
+			<div data-testid="page-header-registration">
+				{header?.title != null && <span data-testid="registered-page-title">{header.title}</span>}
+				{header?.breadcrumbTail != null && <span data-testid="registered-crumb-tail">{header.breadcrumbTail}</span>}
+			</div>
+			{/* Индикатор запроса фокусного мобильного хрома: страница просит
+			    каркас скрыть мобильный топбар (раунд-сверка 10.0). */}
+			{/* Traceability: change:rework-contextual-topbar/tasks#10.0 */}
+			<div data-testid="registered-mobile-focus" data-active={mobileFocus} />
+			<Outlet context={outletContext} />
+			{context !== null && (
+				<div data-testid="registered-context-panel" data-chip-label={context.chipLabel}>
+					{context.content}
+				</div>
+			)}
+		</>
+	);
+}
+
 function renderPage(path = "/agent") {
 	const queryClient = new QueryClient({
 		defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -55,7 +102,11 @@ function renderPage(path = "/agent") {
 	return render(
 		<QueryClientProvider client={queryClient}>
 			<MemoryRouter initialEntries={[path]}>
-				<AgentPage />
+				<Routes>
+					<Route path="/" element={<TopbarRegistrationOutlet />}>
+						<Route path="agent" element={<AgentPage />} />
+					</Route>
+				</Routes>
 			</MemoryRouter>
 		</QueryClientProvider>,
 	);
@@ -65,6 +116,21 @@ function renderPage(path = "/agent") {
 // проверяется перечень пунктов именно этой подгруппы.
 function subgroupContainer(section: HTMLElement, name: RegExp): HTMLElement {
 	return within(section).getByRole("heading", { name }).closest("div") as HTMLElement;
+}
+
+/** Мобильный вьюпорт 390 (мастера iGlhI/OvuY9): matchMedia подменяется до рендера. */
+function setViewport(width: number) {
+	Object.defineProperty(window, "innerWidth", { value: width, writable: true, configurable: true });
+	window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+		matches: query.includes("max-width") ? width <= 1023 : false,
+		media: query,
+		onchange: null,
+		addEventListener: vi.fn(),
+		removeEventListener: vi.fn(),
+		addListener: vi.fn(),
+		removeListener: vi.fn(),
+		dispatchEvent: vi.fn(),
+	})) as typeof window.matchMedia;
 }
 
 beforeEach(() => {
@@ -81,6 +147,7 @@ beforeEach(() => {
 						params: { model: "GLM-5.3", constructionId: null, sources: ["journal", "rules-corpus", "market"] },
 						createdAt: "2026-10-08T09:00:00Z",
 						lastMessageAt: "2026-10-08T09:01:00Z",
+						firstMessagePreview: "Оцени риск стреддла",
 					},
 				]
 			: [],
@@ -95,6 +162,7 @@ beforeEach(() => {
 	});
 	chatsApi.completeChat.mockResolvedValue({ id: "chat-1", status: "completed" });
 	chatsApi.resumeChat.mockResolvedValue({ id: "chat-1", status: "active" });
+	chatsApi.deleteChat.mockResolvedValue(undefined);
 
 	rulesApi.listRules.mockResolvedValue({
 		items: [
@@ -128,25 +196,88 @@ beforeEach(() => {
 });
 
 describe("страница агента", () => {
-	// Переход из источника ответа в новом окне раскрывает именно выбранное правило.
+	// Переход из источника в новом окне раскрывает именно выбранное правило:
+	// полная карточка открывается в контекст-панели каркаса с чипом
+	// «Правило · <код правила>» (раунд-сверка 8.0, мастер ZUmpr).
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
 	// Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
 	it("TryIfRuleLinkOpensCatalogWithFullCard", async () => {
 		renderPage("/agent?rule=ac-01");
-		expect(await screen.findByText("Триггер:")).toBeInTheDocument();
-		expect(screen.getByText("лимит недели")).toBeInTheDocument();
+		const panel = await screen.findByTestId("registered-context-panel");
+		expect(panel).toHaveAttribute("data-chip-label", "Правило · ac-01");
+		expect(await within(panel).findByText("Триггер:")).toBeInTheDocument();
+		expect(within(panel).getByText("лимит недели")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Правила" })).toHaveAttribute("aria-pressed", "true");
 		expect(rulesApi.readRule).toHaveBeenCalledWith("ac-01", expect.any(AbortSignal));
 	});
 
-	// Недоступность источника по прямой ссылке не маскируется приглашением выбрать правило.
-	// Traceability: doc:.wf-research/ui-concept/concept.md#7-раздел-агент-маршрут-agent
+	// Недоступность источника по прямой ссылке не маскируется приглашением
+	// выбрать правило: сбой чтения показывается состоянием ошибки внутри
+	// контекст-панели, чип кода при этом сохраняется.
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
 	it("ThrowOnRuleLinkReadFailure", async () => {
 		rulesApi.readRule.mockRejectedValue(new Error("HTTP 404"));
 		renderPage("/agent?rule=missing");
-		expect(await screen.findByRole("alert")).toHaveTextContent("Правило недоступно: HTTP 404");
-		expect(screen.queryByText("Выберите карточку правила в списке.")).not.toBeInTheDocument();
+		const panel = await screen.findByTestId("registered-context-panel");
+		expect(panel).toHaveAttribute("data-chip-label", "Правило · missing");
+		expect(await within(panel).findByRole("alert")).toHaveTextContent("Правило недоступно: HTTP 404");
 	});
-	it("показывает форму нового чата, историю и каталог правил", async () => {
+
+	// Шапка вкладки «Правила» (мастер ZUmpr, текст cbGOV): страница
+	// регистрирует заголовок «Правила» и хвост трёхуровневой крошки —
+	// сегмент страницы показывает «Журнал / Агент / Правила».
+	// Traceability: openspec:ui/screens#scenario-frame-page-header-breadcrumb-tail
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
+	it("TryIfRulesTabRegistersTitleAndBreadcrumbTail", async () => {
+		const user = userEvent.setup();
+		renderPage();
+
+		// Act: переход на вкладку «Правила».
+		await user.click(await screen.findByRole("button", { name: /правила/i }));
+
+		// Assert: регистрация шапки — заголовок и хвост крошки «Правила».
+		expect(await screen.findByTestId("registered-page-title")).toHaveTextContent("Правила");
+		expect(screen.getByTestId("registered-crumb-tail")).toHaveTextContent("Правила");
+	});
+
+	// Контекст-панель вкладки правил (мастер ZUmpr, сегмент ot9ii disabled
+	// без выбора): без выбора панель не регистрируется; клик по заголовку
+	// карточки каталога открывает правило в панели с чипом кода; уход на
+	// вкладку чатов снимает регистрацию — панель скрывается.
+	// Traceability: openspec:ui/screens#scenario-frame-context-panel-collapsed-without-context
+	// Traceability: openspec:ui/screens#scenario-frame-context-chip-shows-registered-content
+	// Traceability: change:rework-contextual-topbar/tasks#8.0
+	it("TryIfRulesContextRegistersOnlyWithSelectionAndClearsOnChatsTab", async () => {
+		const user = userEvent.setup();
+		renderPage();
+		await user.click(await screen.findByRole("button", { name: /правила/i }));
+
+		// Assert: без выбора контекст не зарегистрирован.
+		expect(screen.queryByTestId("registered-context-panel")).not.toBeInTheDocument();
+
+		// Act: клик по заголовку карточки каталога — выбор правила.
+		await user.click(await screen.findByText(/Лимиты риска на период/i, { selector: "button" }));
+
+		// Assert: панель зарегистрирована с чипом кода и полной карточкой.
+		const panel = await screen.findByTestId("registered-context-panel");
+		expect(panel).toHaveAttribute("data-chip-label", "Правило · ac-01");
+		expect(await within(panel).findByText("Триггер:")).toBeInTheDocument();
+
+		// Act: возврат на вкладку чатов.
+		await user.click(screen.getByRole("button", { name: "Чаты" }));
+
+		// Assert: регистрация снята — панель скрыта.
+		expect(screen.queryByTestId("registered-context-panel")).not.toBeInTheDocument();
+	});
+	/*
+		Таб «Чаты» перенесён на мастера D811M (раунд-сверка 6.0): слева
+		«Список сессий» с «+ Новый чат» и капсами, в центре пустое состояние
+		с композером; вкладка правил сохраняет каталог Body #7.
+	*/
+	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("показывает список сессий, композер и каталог правил", async () => {
 		const user = userEvent.setup();
 		renderPage();
 
@@ -155,8 +286,10 @@ describe("страница агента", () => {
 		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 		expect(screen.getByRole("heading", { name: "Агент", level: 1 }).className).toContain("page-title");
 		expect(screen.getByLabelText(/модель/i)).toBeInTheDocument();
-		// Источники данных — группа чипов вместо чекбокс-филдсета (§3.4:2).
+		// Источники данных — группа чипов в тулбаре композера.
 		expect(screen.getByRole("group", { name: /источники данных/i })).toBeInTheDocument();
+		// Кнопка «+ Новый чат» — primary левой колонки «Список сессий».
+		expect(screen.getByRole("button", { name: "+ Новый чат" })).toBeInTheDocument();
 		expect(await screen.findByRole("heading", { name: /активные/i })).toBeInTheDocument();
 		expect(screen.getAllByRole("button", { name: /завершить чат/i }).length).toBeGreaterThan(0);
 		await user.click(screen.getByRole("button", { name: /правила/i }));
@@ -531,21 +664,26 @@ describe("страница агента", () => {
 	});
 
 	/*
-		Форма нового чата оформлена по мастеру Body #3 — композеру Z14sH
-		(§3.4:2 аудита): модель — чип aF5vM (surface2, радиус 8, [5,10],
-		12/500, шеврон), привязка конструкции — чип bCLlQ (infoSoft, пилюля
-		999, иконка link $info), сообщение — 13.5/normal c плейсхолдером
-		мастера; источники — чипы «Чип/Источник» с переключением выбора.
+		Композер нового чата оформлен по мастеру Z14sH «Композер/Агент»
+		(перенос D811M, раунд-сверка 6.0): модель — чип aF5vM (surface2,
+		радиус 8, [5,10], 12/500, шеврон), привязка конструкции — чип bCLlQ
+		(infoSoft, пилюля 999, иконка link $info), сообщение — многострочное
+		поле 13.5/normal с плейсхолдером мастера; источники — чипы
+		«Чип/Источник» с переключением выбора.
 	*/
 	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
-	// Traceability: change:reconcile-frontend-with-design/design#D2
-	it("оформляет поля формы нового чата по дизайн-нодам композера Body #3", async () => {
-		// Act: рендер вкладки «Чаты» с формой по умолчанию.
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("оформляет композер по дизайн-нодам мастера Z14sH", async () => {
+		// Act: рендер вкладки «Чаты»; композер доступен в режиме нового чата.
+		const user = userEvent.setup();
 		renderPage();
+		await screen.findByRole("heading", { name: "Оцени риск стреддла" });
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+		await screen.findByText("Чем помочь с журналом?");
 
 		// Assert: модель — чип aF5vM: surface2, радиус 8, паддинги [5,10], 12/500.
-		const modelSelect = await screen.findByLabelText(/модель/i);
+		const modelSelect = screen.getByLabelText(/модель/i);
 		expect(modelSelect.className).toContain("bg-secondary");
 		expect(modelSelect.className).toContain("rounded-sm");
 		expect(modelSelect.className).toContain("px-2.5");
@@ -568,12 +706,16 @@ describe("страница агента", () => {
 	});
 
 	it("переключает выбор источников чипами вместо чекбоксов (§3.4:2)", async () => {
-		// Arrange: чат-источники по умолчанию выбраны (инвариант справочника).
+		// Arrange: чат-источники по умолчанию выбраны (инвариант справочника);
+		// композер доступен в режиме нового чата — автовыбор чата гасим.
 		const user = userEvent.setup();
 		renderPage();
+		await screen.findByRole("heading", { name: "Оцени риск стреддла" });
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+		await screen.findByText("Чем помочь с журналом?");
 
 		// Assert: все три чипа — toggle-кнопки в выбранном состоянии мастера.
-		const journalChip = await screen.findByRole("button", { name: "журнал" });
+		const journalChip = screen.getByRole("button", { name: "журнал" });
 		const rulesChip = screen.getByRole("button", { name: "корпус правил" });
 		const marketChip = screen.getByRole("button", { name: "рынок Bybit" });
 		for (const chip of [journalChip, rulesChip, marketChip]) {
@@ -594,14 +736,306 @@ describe("страница агента", () => {
 		expect(marketChip.getAttribute("aria-pressed")).toBe("true");
 	});
 
+	/*
+		Пустое состояние мастера D811M (раунд-сверка 6.0): титул «Чем помочь
+		с журналом?», подпись и три карточки-подсказки с примерами мастера;
+		клик по карточке вставляет текст примера в поле композера (без
+		кавычек-ёлочек) и возвращает в него фокус.
+	*/
+	// Traceability: openspec:ui/design-system#requirement-design-composer-multiline
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("TryIfHintCardInsertsExampleIntoComposerAndFocuses", async () => {
+		// Arrange: автовыбор чата закрывает центр лентой; переход в режим
+		// нового чата открывает пустое состояние с композером.
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByRole("heading", { name: "Оцени риск стреддла" });
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+
+		// Assert: пустое состояние мастера видно, пока чат не выбран.
+		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.getByText("Новый чат создаётся первым сообщением — параметры можно задать сразу.")).toBeInTheDocument();
+		expect(screen.getByText("«Какой риск у железной бабочки ETH?»")).toBeInTheDocument();
+		expect(screen.getByText("«Что говорит корпус про голый стреддл?»")).toBeInTheDocument();
+		expect(screen.getByText("«Покажи премии опционов BTC на неделю»")).toBeInTheDocument();
+
+		// Act: клик по карточке-подсказке «Спросите о конструкции».
+		await user.click(screen.getByRole("button", { name: /Спросите о конструкции/ }));
+
+		// Assert: пример вставлен в поле композера, поле в фокусе.
+		const messageField = screen.getByLabelText(/первое сообщение/i);
+		expect(messageField).toHaveValue("Какой риск у железной бабочки ETH?");
+		expect(messageField).toHaveFocus();
+	});
+
+	/*
+		«+ Новый чат» (раунд-сверка 6.0): сбрасывает выбранный чат — центр
+		показывает пустое состояние даже при наличии чатов — и очищает
+		композер: поле, привязку к конструкции, источники к дефолту.
+	*/
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("TryIfNewChatButtonResetsSelectionAndComposerToEmptyState", async () => {
+		const user = userEvent.setup();
+		renderPage();
+
+		// Arrange: активный чат автовыбран (в центре его шапка); переходим
+		// в режим нового чата и заполняем композер, рынок снят из источников.
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+		await screen.findByText("Чем помочь с журналом?");
+		await user.type(screen.getByLabelText(/первое сообщение/i), "Черновик сообщения");
+		await user.type(screen.getByLabelText(/опциональная конструкция/i), "7");
+		await user.click(screen.getByRole("button", { name: "рынок Bybit" }));
+		expect(screen.getByRole("button", { name: "рынок Bybit" }).getAttribute("aria-pressed")).toBe("false");
+
+		// Act: сброс кнопкой «+ Новый чат» левой колонки.
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+
+		// Assert: пустое состояние вместо шапки чата, композер очищен,
+		// источники вернулись к дефолту.
+		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "Оцени риск стреддла" })).not.toBeInTheDocument();
+		expect(screen.getByLabelText(/первое сообщение/i)).toHaveValue("");
+		expect(screen.getByLabelText(/опциональная конструкция/i)).toHaveValue("");
+		expect(screen.getByRole("button", { name: "рынок Bybit" }).getAttribute("aria-pressed")).toBe("true");
+	});
+
+	/*
+		Шапка активного чата — мастер qhGhn «ChatHead» (QP9Co, раунд-сверка
+		7.0): колонка «Чат» прозрачна — карточная рамка секции убрана;
+		заголовок — превью первого сообщения владельца
+		(ChatDto.firstMessagePreview) 16/600 $textPrimary с truncate; рядом
+		чип модели — инстанс «Чип/Источник» fYadZ (высота 25, заливка
+		$surface, радиус 999, кайма $border, иконка cpu 12 $textSecondary,
+		подпись 12/normal $textPrimary); строки «последнее сообщение» нет.
+		Кнопки — ghost r8 12/500: «Завершить» ($textSecondary) и «Удалить»
+		(текст $neg #D14B41).
+	*/
+	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("оформляет шапку активного чата по мастеру ChatHead qhGhn", async () => {
+		renderPage();
+
+		// Assert: заголовок шапки — превью первого сообщения владельца,
+		// 16/600 $textPrimary с truncate; прежняя строка «последнее
+		// сообщение» удалена, карточной рамки у колонки «Чат» нет.
+		const title = await screen.findByRole("heading", { name: "Оцени риск стреддла" });
+		expect(title.className).toContain("text-[16px]");
+		expect(title.className).toContain("font-semibold");
+		expect(title.className).toContain("text-text-primary");
+		expect(title.className).toContain("truncate");
+		expect(screen.queryByText(/последнее сообщение:/i)).not.toBeInTheDocument();
+		const chatColumn = title.closest("section") as HTMLElement;
+		expect(chatColumn.className).not.toContain("border");
+		expect(chatColumn.className).not.toContain("rounded-lg");
+
+		// Assert: чип модели — инстанс fYadZ: высота 25, заливка $surface,
+		// радиус 999, кайма $border, подпись 12/normal $textPrimary.
+		const chip = screen.getByText("GLM-5.3", { selector: "[data-slot='source-chip']" });
+		expect(chip.className).toContain("h-[25px]");
+		expect(chip.className).toContain("rounded-full");
+		expect(chip.className).toContain("border");
+		expect(chip.className).toContain("bg-card");
+		expect(chip.className).toContain("text-[12px]");
+		expect(chip.className).toContain("text-text-primary");
+
+		// Assert: иконка чипа — cpu 12 $textSecondary.
+		const icon = chip.querySelector("svg");
+		expect(icon?.getAttribute("class")).toContain("lucide-cpu");
+		expect(icon?.getAttribute("class")).toContain("text-text-secondary");
+
+		// Assert: кнопки ghost r8 12/500 — «Завершить» ($textSecondary)
+		// и «Удалить» (текст $neg #D14B41); у активного чата «Продолжить» нет.
+		const finish = screen.getByRole("button", { name: "Завершить" });
+		expect(finish.className).toContain("rounded-[8px]");
+		expect(finish.className).toContain("text-[12px]");
+		expect(finish.className).toContain("font-medium");
+		expect(finish.className).toContain("text-text-secondary");
+		const remove = screen.getByRole("button", { name: "Удалить" });
+		expect(remove.className).toContain("rounded-[8px]");
+		expect(remove.className).toContain("text-[12px]");
+		expect(remove.className).toContain("text-neg");
+		expect(screen.queryByRole("button", { name: "Продолжить" })).not.toBeInTheDocument();
+	});
+
+	/*
+		Удаление выбранного чата (раунд-сверка 7.0): кнопка «Удалить» шапки
+		вызывает существующий chat-api deleteChat; после успеха списки
+		перечитываются, а выбор переходит на следующий чат.
+	*/
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("TryIfDeleteButtonRemovesChatAndSelectsNextSession", async () => {
+		// Arrange: два активных чата; автовыбор — свежий chat-1; после
+		// удаления список активных перечитывается уже без chat-1.
+		const chat1 = {
+			id: "chat-1",
+			status: "active",
+			params: { model: "GLM-5.3", constructionId: null, sources: ["journal"] },
+			createdAt: "2026-10-08T09:00:00Z",
+			lastMessageAt: "2026-10-08T10:00:00Z",
+			firstMessagePreview: "Оцени риск стреддла",
+		};
+		const chat2 = {
+			id: "chat-2",
+			status: "active",
+			params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+			createdAt: "2026-10-08T08:00:00Z",
+			lastMessageAt: "2026-10-08T09:00:00Z",
+			firstMessagePreview: "Разбери сделку",
+		};
+		const active: Array<typeof chat1> = [chat1, chat2];
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active" ? active : [],
+		);
+		chatsApi.deleteChat.mockImplementation(async () => {
+			active.splice(active.indexOf(chat1), 1);
+			return undefined;
+		});
+		const user = userEvent.setup();
+		renderPage();
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+
+		// Act: кнопка «Удалить» шапки выбранного чата.
+		await user.click(screen.getByRole("button", { name: "Удалить" }));
+
+		// Assert: вызвался deleteChat существующего chat-api; после
+		// перечитывания списков выбран следующий чат.
+		await waitFor(() => {
+			expect(chatsApi.deleteChat).toHaveBeenCalledWith("chat-1");
+		});
+		expect(await screen.findByRole("heading", { name: "Разбери сделку" })).toBeInTheDocument();
+	});
+
+	/*
+		Удаление последнего чата оставляет пустое состояние (раунд-сверка
+		7.0): если после удаления чатов не осталось, центр показывает
+		«Чем помочь с журналом?» вместо шапки удалённого чата.
+	*/
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("TryIfDeletingLastChatShowsEmptyState", async () => {
+		// Arrange: один активный чат; после удаления список активных пуст.
+		const chat1 = {
+			id: "chat-1",
+			status: "active",
+			params: { model: "GLM-5.3", constructionId: null, sources: ["journal"] },
+			createdAt: "2026-10-08T09:00:00Z",
+			lastMessageAt: "2026-10-08T10:00:00Z",
+			firstMessagePreview: "Оцени риск стреддла",
+		};
+		const active: Array<typeof chat1> = [chat1];
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active" ? active : [],
+		);
+		chatsApi.deleteChat.mockImplementation(async () => {
+			active.length = 0;
+			return undefined;
+		});
+		const user = userEvent.setup();
+		renderPage();
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+
+		// Act: удаление единственного чата кнопкой шапки.
+		await user.click(screen.getByRole("button", { name: "Удалить" }));
+
+		// Assert: вместо шапки удалённого чата — пустое состояние.
+		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "Оцени риск стреддла" })).not.toBeInTheDocument();
+	});
+
+	/*
+		Сбой удаления не теряет выбранный чат: ошибка команды показывается
+		баннером под шапкой, чат остаётся выбранным до успеха команды.
+	*/
+	// Traceability: openspec:chats/history#scenario-chat-hard-delete
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("ThrowOnDeleteChatFailureKeepsChatSelectedWithAlert", async () => {
+		// Arrange: команда удаления отклоняется.
+		chatsApi.deleteChat.mockRejectedValue(new Error("HTTP 500"));
+		const user = userEvent.setup();
+		renderPage();
+		expect(await screen.findByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+
+		// Act: попытка удаления выбранного чата.
+		await user.click(screen.getByRole("button", { name: "Удалить" }));
+
+		// Assert: баннер сбоя с человекочитаемой причиной; чат остался выбран.
+		expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось удалить чат: HTTP 500");
+		expect(screen.getByRole("heading", { name: "Оцени риск стреддла" })).toBeInTheDocument();
+	});
+
+	/*
+		Шапка завершённого чата (раунд-сверка 7.0): вместо «Завершить» —
+		«Продолжить», кнопка «Удалить» сохраняется; продолжение вызывает
+		существующую команду resumeChat.
+	*/
+	// Traceability: openspec:chats/history#scenario-chat-resume-returns-to-active
+	// Traceability: change:rework-contextual-topbar/tasks#7.0
+	it("TryIfCompletedChatHeaderShowsResumeAndDelete", async () => {
+		// Arrange: активных чатов нет — автовыбор берёт первый завершённый.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? []
+				: [
+						{
+							id: "chat-done",
+							status: "completed",
+							params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-07T08:00:00Z",
+							lastMessageAt: "2026-10-07T09:00:00Z",
+							firstMessagePreview: "Итоги недели",
+						},
+					],
+		);
+		const user = userEvent.setup();
+		renderPage();
+
+		// Assert: в шапке завершённого чата «Продолжить» и «Удалить»,
+		// кнопки «Завершить» нет.
+		expect(await screen.findByRole("heading", { name: "Итоги недели" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Продолжить" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Удалить" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Завершить" })).not.toBeInTheDocument();
+
+		// Act: продолжение завершённого чата кнопкой шапки.
+		await user.click(screen.getByRole("button", { name: "Продолжить" }));
+
+		// Assert: команда продолжения ушла выбранному чату.
+		await waitFor(() => {
+			expect(chatsApi.resumeChat).toHaveBeenCalledWith("chat-done");
+		});
+	});
+
+	/*
+		Таб «Сводки · soon» — disabled-заглушка мастера D811M (TabSummaries,
+		12.5/normal $textMuted): раздел сводок не реализован, клик невозможен.
+	*/
+	// Traceability: change:rework-contextual-topbar/tasks#6.0
+	it("TryIfSummariesTabIsDisabledPlaceholder", () => {
+		renderPage();
+
+		// Assert: таб недоступен и стилизован цветом заглушки мастера.
+		const summariesTab = screen.getByRole("button", { name: "Сводки · soon" });
+		expect(summariesTab).toBeDisabled();
+		expect(summariesTab.className).toContain("text-text-muted");
+		expect(summariesTab.className).toContain("cursor-not-allowed");
+	});
+
 	it("создаёт чат первым сообщением с выбранными источниками", async () => {
 		const user = userEvent.setup();
 		renderPage();
 
-		// Act: снимаем рынок Bybit, вводим сообщение и создаём чат.
-		await user.click(await screen.findByRole("button", { name: "рынок Bybit" }));
+		// Arrange: композер пустого состояния после «+ Новый чат».
+		await screen.findByRole("heading", { name: "Оцени риск стреддла" });
+		await user.click(screen.getByRole("button", { name: "+ Новый чат" }));
+		await screen.findByText("Чем помочь с журналом?");
+
+		// Act: снимаем рынок Bybit, вводим сообщение и отправляем композер
+		// кнопкой-стрелкой мастера Z14sH.
+		await user.click(screen.getByRole("button", { name: "рынок Bybit" }));
 		await user.type(screen.getByLabelText(/первое сообщение/i), "Собери сводку по лимитам");
-		await user.click(screen.getByRole("button", { name: /создать чат/i }));
+		await user.click(screen.getByRole("button", { name: "Отправить" }));
 
 		// Assert: в создании чата остались только выбранные источники.
 		await waitFor(() =>
@@ -798,5 +1232,175 @@ describe("страница агента", () => {
 		const gist = screen.getByText(/Остановить наращивание риска/i);
 		expect(gist.closest("div")?.className).toContain("text-xs");
 		expect(gist.closest("div")?.className).toContain("leading-[1.45]");
+	});
+});
+
+/*
+	Мобильный фокусный режим активного чата (раунд-сверка 10.0, мастер
+	OvuY9 «Экран/Mobile · Агент · Чат»): при выбранном чате экран занимает
+	только чат — страница запрашивает у каркаса скрытие глобального
+	мобильного топбара (useMobileFocus), шапка фокусного режима 52 px несёт
+	«Назад» (гасит автовыбор — возврат к пустому состоянию «Агент · Чаты»),
+	превью первого сообщения 13/600, чип модели и меню «More» с операциями
+	шапки чата раунда 7.0 («Завершить»/«Продолжить», «Удалить»).
+*/
+// Traceability: openspec:chats/history#requirement-chat-manual-completion-and-deletion
+// Traceability: change:rework-contextual-topbar/tasks#7.0
+// Traceability: change:rework-contextual-topbar/tasks#10.0
+describe("мобильный фокусный режим чата", () => {
+	it("показывает шапку мастера OvuY9 и запрашивает скрытие глобального топбара", async () => {
+		setViewport(390);
+		renderPage();
+
+		// Assert: активный чат автовыбран — страница запросила у каркаса
+		// скрытие мобильного топбара и показывает только чат.
+		const header = await screen.findByTestId("chat-focus-header");
+		expect(screen.getByTestId("registered-mobile-focus")).toHaveAttribute("data-active", "true");
+		expect(screen.queryByRole("heading", { name: "Агент", level: 1 })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Правила" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Список сессий" })).not.toBeInTheDocument();
+
+		// Assert: шапка 52 px ($surface, border-b 1 $divider, [0,14], гэп 10).
+		expect(header.className).toContain("h-13");
+		expect(header.className).toContain("bg-surface");
+		expect(header.className).toContain("border-divider");
+		expect(header.className).toContain("px-3.5");
+		expect(header.className).toContain("gap-2.5");
+
+		// Assert: «Назад» — chevron-left 18×18 $textPrimary.
+		const back = within(header).getByRole("button", { name: "Назад к списку чатов" });
+		const backIcon = back.querySelector("svg");
+		expect(backIcon?.getAttribute("class")).toContain("lucide-chevron-left");
+		expect(backIcon?.getAttribute("class")).toContain("size-4.5");
+		expect(backIcon?.getAttribute("class")).toContain("text-text-primary");
+
+		// Assert: заголовок — превью первого сообщения 13/600 $textPrimary
+		// с truncate.
+		const title = within(header).getByRole("heading", { name: "Оцени риск стреддла" });
+		expect(title.className).toContain("text-[13px]");
+		expect(title.className).toContain("font-semibold");
+		expect(title.className).toContain("text-text-primary");
+		expect(title.className).toContain("truncate");
+
+		// Assert: чип модели — $surface2, радиус 999, паддинги [3,8],
+		// 10 normal $textSecondary.
+		const chip = within(header).getByText("GLM-5.3");
+		expect(chip.className).toContain("bg-surface-2");
+		expect(chip.className).toContain("rounded-full");
+		expect(chip.className).toContain("px-2");
+		expect(chip.className).toContain("py-[3px]");
+		expect(chip.className).toContain("text-[10px]");
+		expect(chip.className).toContain("text-text-secondary");
+
+		// Assert: «More» — more-horizontal 16×16 $textSecondary.
+		const more = within(header).getByRole("button", { name: "Действия чата" });
+		const moreIcon = more.querySelector("svg");
+		expect(moreIcon?.getAttribute("class")).toContain("lucide-more-horizontal");
+		expect(moreIcon?.getAttribute("class")).toContain("size-4");
+		expect(moreIcon?.getAttribute("class")).toContain("text-text-secondary");
+	});
+
+	it("«Назад» гасит автовыбор и возвращает пустое состояние с глобальным топбаром", async () => {
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByTestId("chat-focus-header");
+
+		// Act: «Назад» в шапке фокусного режима.
+		await user.click(screen.getByRole("button", { name: "Назад к списку чатов" }));
+
+		// Assert: фокус снят — запрос каркасу погашен, страница вернулась
+		// к состоянию «Агент · Чаты»: пустое состояние с композером,
+		// автовыбор чата не сработал (шапки чата больше нет).
+		expect(screen.queryByTestId("chat-focus-header")).not.toBeInTheDocument();
+		expect(screen.getByTestId("registered-mobile-focus")).toHaveAttribute("data-active", "false");
+		expect(screen.getByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.getByLabelText(/первое сообщение/i)).toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "Оцени риск стреддла" })).not.toBeInTheDocument();
+		expect(screen.getByRole("heading", { name: "Агент", level: 1 })).toBeInTheDocument();
+	});
+
+	it("меню «More» завершает выбранный чат операцией шапки раунда 7.0", async () => {
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByTestId("chat-focus-header");
+
+		// Act: открытие меню «More» и выбор «Завершить».
+		await user.click(screen.getByRole("button", { name: "Действия чата" }));
+		const menu = screen.getByRole("menu", { name: "Действия чата" });
+		await user.click(within(menu).getByRole("menuitem", { name: "Завершить" }));
+
+		// Assert: команда завершения ушла выбранному чату.
+		await waitFor(() => {
+			expect(chatsApi.completeChat).toHaveBeenCalledWith("chat-1");
+		});
+	});
+
+	it("«Удалить» из меню «More» удаляет последний чат в пустое состояние", async () => {
+		// Arrange: единственный активный чат; после удаления список пуст.
+		const chat1 = {
+			id: "chat-1",
+			status: "active",
+			params: { model: "GLM-5.3", constructionId: null, sources: ["journal"] },
+			createdAt: "2026-10-08T09:00:00Z",
+			lastMessageAt: "2026-10-08T10:00:00Z",
+			firstMessagePreview: "Оцени риск стреддла",
+		};
+		const active: Array<typeof chat1> = [chat1];
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active" ? active : [],
+		);
+		chatsApi.deleteChat.mockImplementation(async () => {
+			active.length = 0;
+			return undefined;
+		});
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByTestId("chat-focus-header");
+
+		// Act: «Удалить» из меню «More».
+		await user.click(screen.getByRole("button", { name: "Действия чата" }));
+		await user.click(within(screen.getByRole("menu", { name: "Действия чата" })).getByRole("menuitem", { name: "Удалить" }));
+
+		// Assert: deleteChat вызван, чатов не осталось — пустое состояние,
+		// шапки фокусного режима больше нет.
+		await waitFor(() => {
+			expect(chatsApi.deleteChat).toHaveBeenCalledWith("chat-1");
+		});
+		expect(await screen.findByText("Чем помочь с журналом?")).toBeInTheDocument();
+		expect(screen.queryByTestId("chat-focus-header")).not.toBeInTheDocument();
+	});
+
+	it("меню «More» завершённого чата предлагает «Продолжить» вместо «Завершить»", async () => {
+		// Arrange: активных чатов нет — автовыбор берёт завершённый.
+		chatsApi.listChats.mockImplementation(async (status: "active" | "completed") =>
+			status === "active"
+				? []
+				: [
+						{
+							id: "chat-done",
+							status: "completed",
+							params: { model: "glm-5.3-flash", constructionId: null, sources: ["journal"] },
+							createdAt: "2026-10-07T08:00:00Z",
+							lastMessageAt: "2026-10-07T09:00:00Z",
+							firstMessagePreview: "Итоги недели",
+						},
+					],
+		);
+		setViewport(390);
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByTestId("chat-focus-header");
+
+		// Act: открытие меню «More».
+		await user.click(screen.getByRole("button", { name: "Действия чата" }));
+
+		// Assert: в меню «Продолжить» вместо «Завершить», «Удалить» на месте.
+		const menu = screen.getByRole("menu", { name: "Действия чата" });
+		expect(within(menu).getByRole("menuitem", { name: "Продолжить" })).toBeInTheDocument();
+		expect(within(menu).queryByRole("menuitem", { name: "Завершить" })).not.toBeInTheDocument();
+		expect(within(menu).getByRole("menuitem", { name: "Удалить" })).toBeInTheDocument();
 	});
 });
