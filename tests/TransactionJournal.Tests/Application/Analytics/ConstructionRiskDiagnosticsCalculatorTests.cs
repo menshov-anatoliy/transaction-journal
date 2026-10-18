@@ -14,7 +14,10 @@ namespace TransactionJournal.Tests.Analytics;
 /// покрытия фьючерсом предупреждаются своим остатком, короткий пут без
 /// встречных ног ограничен нулём цены, короткий фьючерс закрывает короткий
 /// пут снизу, covered call предупреждает только по фьючерсу, голый длинный
-/// опцион не предупреждается, а null-набор позиций отклоняется.
+/// опцион не предупреждается, null-набор позиций отклоняется, а тексты
+/// записей называют инструмент, число незакрытых контрактов и причину
+/// каноническим термином «Риск не ограничен»; неразборчивый символ
+/// предупреждается непроверенным покрытием рядом с остальным диагнозом.
 /// </summary>
 [TestClass]
 public class ConstructionRiskDiagnosticsCalculatorTests
@@ -262,6 +265,113 @@ public class ConstructionRiskDiagnosticsCalculatorTests
 
 		// Assert: набор предупреждений пуст на обоих хвостах.
 		Assert.That(warnings, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Текст предупреждения о частичном покрытии называет символ, число контрактов и причину")]
+	public void TryIfPartialCoverageMessageNamesSymbolCountAndReason()
+	{
+		// Arrange: два длинных фьючерса при одном покрывающем длинном путе.
+		// Требование: текст записи на русском языке называет инструмент,
+		// число незакрытых контрактов «1 из 2 контрактов» и причину —
+		// ограниченность убытка ценой входа.
+		// Traceability: openspec:analytics/risk-diagnostics#scenario-warning-message-count-and-reason
+		var positions = new[]
+		{
+			OpenResidual("BTCUSDT", 2m),
+			OpenResidual("BTC-27DEC24-50000-P", 1m),
+		};
+
+		// Act
+		var warnings = _calculator.Calculate(positions);
+
+		// Assert: текст называет символ фьючерса, «1 из 2 контрактов» и
+		// причину «убыток ограничен ценой входа».
+		Assert.That(warnings, Has.Count.EqualTo(1));
+		var text = warnings.Single().Text;
+		Assert.That(text, Does.Contain("BTCUSDT"));
+		Assert.That(text, Does.Contain("1 из 2 контрактов"));
+		Assert.That(text, Does.Contain("убыток ограничен ценой входа"));
+	}
+
+	[TestMethod]
+	[Description("Текст неограниченного предупреждения называет термин «Риск не ограничен»")]
+	public void TryIfUnboundedFutureMessageUsesCanonicalUnboundedTerm()
+	{
+		// Arrange: один открытый остаток — короткий вечный фьючерс без опционов.
+		// Требование: неограниченный вкус в текстах называется каноническим
+		// термином «Риск не ограничен»; отдельные термины по типу ноги
+		// не вводятся.
+		// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-messages
+		var positions = new[] { OpenResidual("BTCUSDT", -1m) };
+
+		// Act
+		var warnings = _calculator.Calculate(positions);
+
+		// Assert: текст называет символ, формулировку незакрытой фьючерсной
+		// части и термин «Риск не ограничен».
+		Assert.That(warnings, Has.Count.EqualTo(1));
+		var text = warnings.Single().Text;
+		Assert.That(text, Does.Contain("BTCUSDT"));
+		Assert.That(text, Does.Contain("фьючерс не закрыт опционами"));
+		Assert.That(text, Does.Contain("Риск не ограничен"));
+	}
+
+	[TestMethod]
+	[Description("Текст предупреждения о коротком путе называет число контрактов и ноль цены")]
+	public void TryIfShortPutMessageNamesCountAndZeroPriceReason()
+	{
+		// Arrange: один открытый остаток — короткий пут без встречных ног.
+		// Требование: текст записи называет инструмент, число незакрытых
+		// контрактов «1 из 1 контракта» и причину «убыток ограничен нулём
+		// цены».
+		// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-messages
+		var positions = new[] { OpenResidual("BTC-27DEC24-50000-P", -1m) };
+
+		// Act
+		var warnings = _calculator.Calculate(positions);
+
+		// Assert: текст называет символ, незакрытую короткую путовую ногу,
+		// «1 из 1 контракта» и ноль цены.
+		Assert.That(warnings, Has.Count.EqualTo(1));
+		var text = warnings.Single().Text;
+		Assert.That(text, Does.Contain("BTC-27DEC24-50000-P"));
+		Assert.That(text, Does.Contain("короткий пут не закрыт по рискам"));
+		Assert.That(text, Does.Contain("1 из 1 контракта"));
+		Assert.That(text, Does.Contain("убыток ограничен нулём цены"));
+	}
+
+	[TestMethod]
+	[Description("Неразборчивый символ предупреждает непроверенным покрытием, не маскируя незакрытый фьючерс")]
+	public void TryIfUnparseableSymbolWarnsUncheckedCoverageAlongsideUncoveredFuture()
+	{
+		// Arrange: открытый остаток с символом вне форматов опциона и перпа
+		// плюс незакрытый длинный фьючерс того же актива.
+		// Требование: неразборчивый символ даёт отдельное предупреждение о
+		// непроверенном покрытии, остальные остатки диагностируются
+		// независимо от него.
+		// Traceability: openspec:analytics/risk-diagnostics#scenario-unparseable-symbol-warns-unchecked
+		var positions = new[]
+		{
+			OpenResidual("BTCUSD", 1m),
+			OpenResidual("BTCUSDT", 1m),
+		};
+
+		// Act
+		var warnings = _calculator.Calculate(positions);
+
+		// Assert: выданы оба предупреждения — непроверенное покрытие символа
+		// без числа контрактов и полный диагноз незакрытого фьючерса.
+		Assert.That(warnings, Has.Count.EqualTo(2));
+		var unverified = warnings.Single(warning => warning.Symbol == "BTCUSD");
+		Assert.That(unverified.Reason, Is.EqualTo(ConstructionRiskReason.UnverifiedCoverage));
+		Assert.That(unverified.UncoveredContracts, Is.Null);
+		Assert.That(unverified.TotalContracts, Is.Null);
+		Assert.That(unverified.Text, Does.Contain("покрытие не проверено"));
+		var future = warnings.Single(warning => warning.Symbol == "BTCUSDT");
+		Assert.That(future.Reason, Is.EqualTo(ConstructionRiskReason.BoundedByEntryPrice));
+		Assert.That(future.UncoveredContracts, Is.EqualTo(1m));
+		Assert.That(future.Text, Does.Contain("фьючерс не закрыт опционами"));
 	}
 
 	[TestMethod]
