@@ -129,22 +129,29 @@ describe("PositionsTable: колонки времени жизни опцион�
 		});
 	}
 
-	// Колонки времени жизни строки позиции с тултипом состава: сутки и распад
-	// выводятся величинами, тултип раскрывает внутреннюю/временную стоимость
-	// и динамику распада «вчера → сегодня» нативным title.
+	// Колонки времени жизни строки позиции: сутки и распад выводятся
+	// величинами, тултип состава живёт на ячейке стоимости и раскрывает
+	// внутреннюю/временную стоимость и динамику распада «вчера → сегодня»
+	// нативным title.
 	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip
-	it("выводит сутки и распад ноги с тултипом состава", () => {
+	it("выводит сутки и распад ноги с тултипом состава на стоимости", () => {
 		// Arrange: открытая опционная нога на 9 сутках с распадом и составом.
 		// Act: рендер таблицы позиций.
 		renderTable([makeOptionLeg()]);
 
-		// Assert: значения суток и распада на месте, тултип обеих ячеек несёт
-		// заголовок состава, стоимости и динамику «вчера → сегодня» (пробельные
-		// переносы title матчер нормализует).
-		const tooltipText =
-			"ETH-28MAR-1600-P · состав позиции внутренняя +180.4 · временная +1059.6 распад вчера → сегодня: -6.2 → -6.8";
-		expect(screen.getAllByTitle(tooltipText).length).toBe(2);
-		expect(screen.getByText("-6.8")).toBeTruthy();
+		// Assert: значения суток и распада на месте; тултип один — на ячейке
+		// стоимости, ячейки суток и распада без title (строковый матчер сверяет
+		// нормализованный title, toHaveAttribute — сырую строку с переносами).
+		const tooltipLines = [
+			"ETH-28MAR-1600-P · состав позиции",
+			"внутренняя +180.4 · временная +1059.6",
+			"распад вчера → сегодня: -6.2 → -6.8",
+		];
+		const row = screen.getByRole("row", { name: /ETH-28MAR-1600-P/ });
+		expect(within(row).getAllByTitle(tooltipLines.join(" ")).length).toBe(1);
+		expect(within(row).getByText("+1055")).toHaveAttribute("title", tooltipLines.join("\n"));
+		expect(within(row).getByText("9")).not.toHaveAttribute("title");
+		expect(within(row).getByText("-6.8")).not.toHaveAttribute("title");
 	});
 
 	// Строка открытой опционной ноги с остатком суток не более 14
@@ -165,7 +172,7 @@ describe("PositionsTable: колонки времени жизни опцион�
 		const farRow = screen.getByRole("row", { name: /ETH-28JUN-1900-C/ });
 		expect(farRow).not.toHaveClass("bg-risk-soft");
 		expect(within(farRow).getByText("21")).not.toHaveClass("text-destructive");
-		expect(within(farRow).getAllByTitle(/распад вчера → сегодня: — → -1.2/).length).toBe(2);
+		expect(within(farRow).getAllByTitle(/распад вчера → сегодня: — → -1.2/).length).toBe(1);
 	});
 
 	// Закрытая позиция и фьючерсная нога показывают в колонках времени жизни
