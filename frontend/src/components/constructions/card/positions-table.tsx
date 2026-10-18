@@ -9,6 +9,7 @@ import { MarkdownEditDialog } from "@/components/markdown/markdown-edit-dialog";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { DASH } from "@/lib/format/degradation";
 import { formatMoment } from "@/lib/format/display-time";
+import { EXPIRY_WARNING_DAYS } from "@/lib/lifetime";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -71,6 +72,30 @@ export function toLocalInputValue(iso: string): string {
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// Подсветка зоны предупреждения: открытая опционная нога с остатком суток
+// не более 14 подсвечивается фоном внимания; закрытые позиции и фьючерсные
+// ноги (сутки null) подсветки не получают.
+// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-expiry-row-highlight
+function isExpiryWarning(position: ConstructionCardPosition): boolean {
+	return position.isOpen && position.daysToExpiry !== null && position.daysToExpiry <= EXPIRY_WARNING_DAYS;
+}
+
+// Тултип состава метрик времени жизни нативным title: внутренняя и временная
+// стоимость позиции и динамика распада «вчера → сегодня»; отсутствующие
+// величины выводятся прочерком.
+// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip
+function lifetimeTooltip(position: ConstructionCardPosition): string {
+	const intrinsic = position.intrinsicValueUsdt === null ? DASH : formatSignedAmount(position.intrinsicValueUsdt);
+	const timeValue = position.timeValueUsdt === null ? DASH : formatSignedAmount(position.timeValueUsdt);
+	const decayDayAgo = position.decayDayAgoUsdt === null ? DASH : formatSignedAmount(position.decayDayAgoUsdt);
+	const decayNow = position.dailyDecayUsdt === null ? DASH : formatSignedAmount(position.dailyDecayUsdt);
+	return [
+		`${position.symbol} · состав позиции`,
+		`внутренняя ${intrinsic} · временная ${timeValue}`,
+		`распад вчера → сегодня: ${decayDayAgo} → ${decayNow}`,
+	].join("\n");
+}
+
 export function PositionsTable({ constructionId, positions, markPending, onAddCloseMark, onSaveComment }: PositionsTableProps) {
 	const isMobile = useIsMobile();
 	const [markSymbol, setMarkSymbol] = React.useState<string | null>(null);
@@ -123,9 +148,9 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 
 	return (
 		// Секция-карточка сетки позиций по мастеру design.pen: головка с
-		// заголовком и счётчиком «15 колонок · N».
+		// заголовком и счётчиком «17 колонок · N».
 		// Traceability: change:rework-spa-shell-and-screens/design#D7
-		<GridSection dataSlot="positions-table" title="Позиции" columnCount={15} rowCount={positions.length}>
+		<GridSection dataSlot="positions-table" title="Позиции" columnCount={17} rowCount={positions.length}>
 			{isMobile === false && markSymbol !== null && (
 				// Форма ручной пометки закрытия: цена — последняя марка или пусто
 				// (марка подставится при чтении), время — пикер даты-времени.
@@ -179,6 +204,12 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 						<TableHead>Закр. цена</TableHead>
 						<TableHead>Стоимость</TableHead>
 						<TableHead>Изм., %</TableHead>
+						{/* Колонки времени жизни опционной ноги по мастеру таблицы
+						    позиций design.pen: сутки и распад между изменением цены
+						    и реализованной частью P&L. */}
+						{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip */}
+						<TableHead>До экспирации</TableHead>
+						<TableHead>Распад</TableHead>
 						<TableHead>Реализ. P&L</TableHead>
 						<TableHead>Нереализ. P&L</TableHead>
 						<TableHead>Общий P&L</TableHead>
@@ -193,14 +224,17 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 				<TableBody>
 					{positions.length === 0 ? (
 						<TableRow>
-							<TableCell colSpan={15} className="text-muted-foreground py-6 text-center">
+								<TableCell colSpan={17} className="text-muted-foreground py-6 text-center">
 								позиций нет
 							</TableCell>
 						</TableRow>
 					) : (
 						positions.map((position) => (
-							// Разделитель строк — токен divider #EBEBE5 по мастеру Body #2.
-							<TableRow key={position.symbol} className="border-divider">
+								// Разделитель строк — токен divider #EBEBE5 по мастеру Body #2;
+								// строка открытой опционной ноги в зоне предупреждения
+								// экспирации подсвечивается фоном внимания.
+								// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-expiry-row-highlight
+								<TableRow key={position.symbol} className={cn("border-divider", isExpiryWarning(position) && "bg-risk-soft")}>
 								<TableCell className="font-medium text-foreground">{position.symbol}</TableCell>
 								<TableCell className="tabular-nums">
 									{position.syntheticResidual === null ? (
@@ -246,6 +280,33 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 									) : (
 										<span className={cn("tabular-nums", toneClass(position.priceChangePercent))}>
 											{formatSignedPercent(position.priceChangePercent)}
+										</span>
+									)}
+								</TableCell>
+								{/* Ячейки времени жизни открытой опционной ноги: сутки
+								    (красные при ≤ 14) и распад со знаком; закрытая позиция
+								    и фьючерсная нога показывают прочерк, тултип раскрывает
+								    состав величин. */}
+								{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip */}
+								{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-degradation */}
+								<TableCell className="tabular-nums">
+									{position.daysToExpiry === null ? (
+										<span className="text-muted-foreground">{DASH}</span>
+									) : (
+										<span
+											className={cn("tabular-nums", position.daysToExpiry <= EXPIRY_WARNING_DAYS && "text-destructive")}
+											title={lifetimeTooltip(position)}
+										>
+											{position.daysToExpiry}
+										</span>
+									)}
+								</TableCell>
+								<TableCell className="tabular-nums">
+									{position.dailyDecayUsdt === null ? (
+										<span className="text-muted-foreground">{DASH}</span>
+									) : (
+										<span className={cn("tabular-nums", toneClass(position.dailyDecayUsdt))} title={lifetimeTooltip(position)}>
+											{formatSignedAmount(position.dailyDecayUsdt)}
 										</span>
 									)}
 								</TableCell>

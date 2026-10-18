@@ -42,6 +42,14 @@ export interface ConstructionCardMetrics {
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly durationSeconds: number | null;
+	// Саммари времени жизни открытых опционных ног конструкции: остаток суток
+	// до ближайшей экспирации, нетто-дневной распад и суммарная временная
+	// стоимость; null без опционных ног или без тикеров — клиент рендерит
+	// прочерком, красные сутки при ≤ 14 выводит сам.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	readonly daysToNearestExpiry: number | null;
+	readonly netDailyDecayUsdt: number | null;
+	readonly totalTimeValueUsdt: number | null;
 }
 
 /** Строка таблицы позиций карточки. */
@@ -69,6 +77,16 @@ export interface ConstructionCardPosition {
 	// Traceability: openspec:ui/screens#scenario-detail-linear-leg-splits-synthetic-and-scalps
 	readonly syntheticResidual: number | null;
 	readonly otherResidual: number | null;
+	// Величины времени жизни открытой опционной ноги: остаток суток до
+	// экспирации, дневной распад и состав тултипа (внутренняя/временная
+	// стоимость, вчерашний распад); null у закрытой позиции, фьючерсной
+	// ноги и без тикеров — клиент рендерит прочерком.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+	readonly daysToExpiry: number | null;
+	readonly dailyDecayUsdt: number | null;
+	readonly intrinsicValueUsdt: number | null;
+	readonly timeValueUsdt: number | null;
+	readonly decayDayAgoUsdt: number | null;
 }
 
 /** Строка распознанного синтетического закрытия карточки. */

@@ -14,6 +14,7 @@ import { CompactFinResultIndicator } from "@/components/finresult/fin-result-ind
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DASH, degrade } from "@/lib/format/degradation";
 import { formatDay } from "@/lib/format/display-time";
+import { EXPIRY_WARNING_DAYS } from "@/lib/lifetime";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -77,6 +78,15 @@ function DegradedValue<T>({ value, format, tone }: { value: T | null; format: (v
 		<span className="text-muted-foreground" title={degraded.reason}>
 			{DASH}
 		</span>
+	);
+}
+
+// Остаток суток в списке — вторичным текстом по мастеру; в зоне
+// предупреждения экспирации (≤ 14) значение выводится красным.
+// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-expiry-days-red
+function ExpiryDaysValue({ days }: { days: number }) {
+	return (
+		<span className={cn("text-text-secondary tabular-nums", days <= EXPIRY_WARNING_DAYS && "text-destructive")}>{days}</span>
 	);
 }
 
@@ -293,6 +303,43 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				),
 			},
 			{
+				id: "daysToNearestExpiry",
+				header: "До экспирации",
+				accessorKey: "daysToNearestExpiry",
+				sortingFn: "basic",
+				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				sortDescFirst: true,
+				// Колонки времени жизни строки: остаток суток до ближайшей экспирации
+				// открытых опционных ног и нетто-дневной распад; без опционных ног —
+				// прочерк в обеих колонках.
+				// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
+				cell: ({ row }) =>
+					row.original.daysToNearestExpiry === null ? (
+						<span className="text-muted-foreground">{DASH}</span>
+					) : (
+						<ExpiryDaysValue days={row.original.daysToNearestExpiry} />
+					),
+			},
+			{
+				id: "netDailyDecayUsdt",
+				header: "Распад",
+				accessorKey: "netDailyDecayUsdt",
+				sortingFn: "basic",
+				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				sortDescFirst: true,
+				// Распад деградирует без тикеров прочерком, остаток суток остаётся
+				// доступным и без рыночных данных.
+				// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-decay-degradation-days-stay
+				cell: ({ row }) =>
+					row.original.netDailyDecayUsdt === null ? (
+						<span className="text-muted-foreground">{DASH}</span>
+					) : (
+						<span className={cn("tabular-nums", partToneClass(row.original.netDailyDecayUsdt))}>
+							{formatSignedAmount(row.original.netDailyDecayUsdt)}
+						</span>
+					),
+			},
+			{
 				id: "openedAt",
 				header: "Открыта",
 				accessorKey: "openedAt",
@@ -363,6 +410,25 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 							<p className="text-muted-foreground mt-1 text-xs">
 								занято {row.capitalUsagePercent === null ? DASH : formatSignedPercent(row.capitalUsagePercent)} · открыта{" "}
 								{row.openedAt === null ? DASH : formatDay(row.openedAt)}
+							</p>
+							{/* Узкая сетка сохраняет колонки времени жизни: сутки до
+							    ближайшей экспирации (красные при ≤ 14) и распад. */}
+							{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns */}
+							<p className="text-muted-foreground mt-1 text-xs">
+								до экспирации{" "}
+								{row.daysToNearestExpiry === null ? (
+									DASH
+								) : (
+									<span className={cn("tabular-nums", row.daysToNearestExpiry <= EXPIRY_WARNING_DAYS && "text-destructive")}>
+										{row.daysToNearestExpiry} дн
+									</span>
+								)}{" "}
+								· распад{" "}
+								{row.netDailyDecayUsdt === null ? DASH : (
+									<span className={cn("tabular-nums", partToneClass(row.netDailyDecayUsdt))}>
+										{formatSignedAmount(row.netDailyDecayUsdt)}
+									</span>
+								)}
 							</p>
 						</button>
 					))

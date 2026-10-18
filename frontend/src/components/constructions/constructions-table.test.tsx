@@ -34,6 +34,8 @@ const openRow: ConstructionRow = {
 	closedAt: null,
 	liveHintCount: 2,
 	riskWarningsCount: 1,
+	daysToNearestExpiry: 9,
+	netDailyDecayUsdt: -6.8,
 };
 
 const closedRow: ConstructionRow = {
@@ -59,6 +61,8 @@ const closedRow: ConstructionRow = {
 	closedAt: "2026-05-31T12:00:00Z",
 	liveHintCount: 0,
 	riskWarningsCount: 0,
+	daysToNearestExpiry: null,
+	netDailyDecayUsdt: null,
 };
 
 describe("таблица конструкций", () => {
@@ -135,6 +139,8 @@ describe("таблица конструкций", () => {
 			"Итог",
 			"% капитала",
 			"Занято %",
+			"До экспирации",
+			"Распад",
 			"Открыта",
 			"Закрыта",
 		]) {
@@ -148,6 +154,41 @@ describe("таблица конструкций", () => {
 		expect(screen.getByText("+100.5")).toBeInTheDocument();
 		// Незаданный капитал — прочерк, а не ноль.
 		expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+	});
+
+	// Колонки времени жизни списка: сутки до ближайшей экспирации открытых
+	// опционных ног и нетто-дневной распад; конструкция без опционных ног
+	// показывает прочерк, сутки в зоне предупреждения (≤ 14) — красные.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-expiry-days-red
+	it("выводит колонки времени жизни: сутки, распад, красные сутки и прочерки", () => {
+		// Arrange: открытая строка на 9 сутках (зона предупреждения), строка
+		// дальше зоны на 21 сутках и строка без опционных ног.
+		render(
+			<ConstructionsTable
+				rows={[
+					openRow,
+					{ ...closedRow, constructionId: 9, name: "Календарь SOL", status: "open", closedAt: null, daysToNearestExpiry: 21, netDailyDecayUsdt: -1.5 },
+					closedRow,
+				]}
+				selectedId={null}
+				onSelect={() => {}}
+			/>,
+		);
+
+		// Act: читаем ячейки колонок времени жизни (12 — сутки, 13 — распад).
+		const warningCells = within(screen.getByRole("row", { name: /ETH-240628/ })).getAllByRole("cell");
+		const farCells = within(screen.getByRole("row", { name: /Календарь SOL/ })).getAllByRole("cell");
+		const closedCells = within(screen.getByRole("row", { name: /BTC-240531/ })).getAllByRole("cell");
+
+		// Assert: сутки открытой строки красные в зоне предупреждения, распад
+		// со знаком; дальняя строка нейтральна; строка без опционных ног —
+		// прочерк в обеих колонках.
+		expect(within(warningCells[12]).getByText("9")).toHaveClass("text-destructive");
+		expect(warningCells[13]).toHaveTextContent("-6.8");
+		expect(within(farCells[12]).getByText("21")).not.toHaveClass("text-destructive");
+		expect(closedCells[12]).toHaveTextContent("—");
+		expect(closedCells[13]).toHaveTextContent("—");
 	});
 
 	it("показывает бейдж живых подсказок только у строк с подсказками", () => {

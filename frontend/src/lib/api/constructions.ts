@@ -60,6 +60,13 @@ export interface ConstructionRow {
 	// «⚠ N» строки списка: ноль означает отсутствие предупреждений и бейджа.
 	// Traceability: openspec:ui/screens#requirement-construction-warnings-display
 	readonly riskWarningsCount: number;
+	// Величины времени жизни открытых опционных ног строки: остаток суток до
+	// ближайшей экспирации и нетто-дневной распад; null — опционных ног нет,
+	// распад null и без тикеров. Клиент рендерит прочерк, красные сутки
+	// при ≤ 14 выводит сам.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
+	readonly daysToNearestExpiry: number | null;
+	readonly netDailyDecayUsdt: number | null;
 }
 
 /** Обзор раздела: сводка шапки и строки таблицы одним ответом. */

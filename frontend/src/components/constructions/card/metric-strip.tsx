@@ -7,6 +7,7 @@ import { FullFinResultIndicator, MediumFinResultIndicator } from "@/components/f
 import { useIsMobile } from "@/lib/use-mobile";
 import { DASH } from "@/lib/format/degradation";
 import { formatDay, formatMoment } from "@/lib/format/display-time";
+import { EXPIRY_WARNING_DAYS } from "@/lib/lifetime";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
 import { cn } from "@/lib/utils";
 
@@ -235,6 +236,44 @@ export function ConstructionMetricStrip({ card, onDispute, onRevert }: Construct
 									({metrics.durationSeconds === null ? "" : formatDuration(metrics.durationSeconds)})
 								</span>
 							</span>
+						)}
+					</Metric>
+					{/* Саммари времени жизни открытых опционных ног: остаток суток до
+					    ближайшей экспирации (красный при ≤ 14), нетто-распад в сутки
+					    и суммарная временная стоимость; без опционных ног — прочерк. */}
+					{/* Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary */}
+					{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen */}
+					<Metric
+						label="до экспирации"
+						valueClassName={`tabular-nums ${VALUE_PART} ${metrics.daysToNearestExpiry !== null && metrics.daysToNearestExpiry <= EXPIRY_WARNING_DAYS ? "text-destructive" : ""}`}
+					>
+						{metrics.daysToNearestExpiry === null ? (
+							<span className="text-text-muted" title="Открытых опционных ног нет — времени жизни нет">
+								{DASH}
+							</span>
+						) : (
+							<span title="Остаток суток до ближайшей экспирации открытых опционных ног">{metrics.daysToNearestExpiry} дн.</span>
+						)}
+					</Metric>
+					<Metric
+						label="распад / сутки"
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.netDailyDecayUsdt ?? 0)}`}
+					>
+						{metrics.netDailyDecayUsdt === null ? (
+							<span className="text-text-muted" title="Тикеры опционных ног недоступны — распад не оценён">
+								{DASH}
+							</span>
+						) : (
+							formatSignedAmount(metrics.netDailyDecayUsdt)
+						)}
+					</Metric>
+					<Metric label="временная стоимость" valueClassName={`tabular-nums ${VALUE_PART}`}>
+						{metrics.totalTimeValueUsdt === null ? (
+							<span className="text-text-muted" title="Тикеры опционных ног недоступны — временная стоимость не оценена">
+								{DASH}
+							</span>
+						) : (
+							formatSignedAmount(metrics.totalTimeValueUsdt)
 						)}
 					</Metric>
 				</div>

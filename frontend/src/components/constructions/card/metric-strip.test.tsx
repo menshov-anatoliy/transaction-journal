@@ -49,6 +49,9 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 			openedAt: "2026-10-01T09:05:00+00:00",
 			closedAt: null,
 			durationSeconds: 3600,
+			daysToNearestExpiry: 9,
+			netDailyDecayUsdt: -6.8,
+			totalTimeValueUsdt: 1240,
 		},
 		positions: [
 			{
@@ -71,6 +74,11 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 				priceChangePercent: 5,
 				syntheticResidual: null,
 				otherResidual: null,
+				daysToExpiry: 9,
+				dailyDecayUsdt: -6.8,
+				intrinsicValueUsdt: 180.4,
+				timeValueUsdt: 1059.6,
+				decayDayAgoUsdt: -6.2,
 			},
 		],
 		trades: [],
@@ -387,5 +395,73 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 		// Assert: «Реализованный результат» остаётся инструментальным —
 		// его величина совпадает с metrics.realizedPnL, лок в него не вмешался.
 		expect(screen.getByText("+60.25")).toBeTruthy();
+	});
+});
+
+describe("ConstructionMetricStrip: саммари времени жизни", () => {
+	// Саммари времени жизни в сводке карточки: остаток суток до ближайшей
+	// экспирации открытых опционных ног, нетто-дневной распад и суммарная
+	// временная стоимость; сутки в зоне предупреждения (≤ 14) — красные.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+	it("выводит саммари времени жизни с красными сутками в зоне предупреждения", () => {
+		// Arrange: карточка с опционными ногами на 9 сутках.
+		// Act: рендер сводки карточки.
+		renderStrip(makeCard());
+
+		// Assert: три метрики саммари — сутки со знаком зоны предупреждения,
+		// распад красным по минусу и суммарная временная стоимость.
+		const metrics = document.querySelectorAll('[data-slot="construction-metrics-card"] [data-slot="metric"]');
+		const labels = [...metrics].map((metric) => metric.querySelector("span")?.textContent);
+		expect(labels).toContain("до экспирации");
+		expect(labels).toContain("распад / сутки");
+		expect(labels).toContain("временная стоимость");
+		const expiryMetric = metrics[metrics.length - 3];
+		expect(expiryMetric).toHaveTextContent("9 дн.");
+		expect(expiryMetric.querySelector('[data-slot="metric-value"]')).toHaveClass("text-destructive");
+		const decayMetric = metrics[metrics.length - 2];
+		expect(decayMetric).toHaveTextContent("-6.8");
+		expect(decayMetric.querySelector('[data-slot="metric-value"]')).toHaveClass("text-[color:var(--fin-negative)]");
+		expect(metrics[metrics.length - 1]).toHaveTextContent("+1240");
+	});
+
+	// Сутки дальше зоны предупреждения остаются нейтральными: красный —
+	// признак зоны ≤ 14, а не постоянный стиль значения.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+	it("не красит сутки дальше зоны предупреждения", () => {
+		// Arrange: ближайшая экспирация на 21 сутках.
+		const card = makeCard();
+		const metrics = { ...card.metrics, daysToNearestExpiry: 21, netDailyDecayUsdt: 2.5 };
+
+		// Act: рендер сводки карточки.
+		renderStrip({ ...card, metrics });
+
+		// Assert: значение суток без красного тона, положительный распад —
+		// в акцентно-зелёном тоне знака.
+		const metricNodes = document.querySelectorAll('[data-slot="construction-metrics-card"] [data-slot="metric"]');
+		const expiryMetric = metricNodes[metricNodes.length - 3];
+		expect(expiryMetric).toHaveTextContent("21 дн.");
+		expect(expiryMetric.querySelector('[data-slot="metric-value"]')).not.toHaveClass("text-destructive");
+		expect(metricNodes[metricNodes.length - 2].querySelector('[data-slot="metric-value"]')).toHaveClass(
+			"text-[color:var(--fin-positive-strong)]",
+		);
+	});
+
+	// Без открытых опционных ног или без тикеров саммари времени жизни
+	// деградирует прочерками во всех трёх метриках.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+	it("показывает прочерки саммари без опционных ног и тикеров", () => {
+		// Arrange: карточка без метрик времени жизни (нет опционных ног).
+		const card = makeCard();
+		const metrics = { ...card.metrics, daysToNearestExpiry: null, netDailyDecayUsdt: null, totalTimeValueUsdt: null };
+
+		// Act: рендер сводки карточки.
+		renderStrip({ ...card, metrics });
+
+		// Assert: три метрики саммари — прочерки.
+		const metricNodes = document.querySelectorAll('[data-slot="construction-metrics-card"] [data-slot="metric"]');
+		for (const metric of [...metricNodes].slice(-3)) {
+			expect(metric).toHaveTextContent("—");
+		}
 	});
 });

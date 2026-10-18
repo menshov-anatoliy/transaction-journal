@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConstructionCardPosition } from "@/lib/api/construction-card";
 import { PositionsTable } from "./positions-table";
@@ -32,6 +32,11 @@ function makePosition(overrides: Partial<ConstructionCardPosition> = {}): Constr
 		priceChangePercent: -0.1,
 		syntheticResidual: null,
 		otherResidual: null,
+		daysToExpiry: null,
+		dailyDecayUsdt: null,
+		intrinsicValueUsdt: null,
+		timeValueUsdt: null,
+		decayDayAgoUsdt: null,
 		...overrides,
 	};
 }
@@ -107,5 +112,79 @@ describe("PositionsTable: распад остатка линейной ноги"
 
 		// Assert: узел распада в таблице не появился.
 		expect(document.querySelector('[data-slot="linear-leg-residual-split"]')).toBeNull();
+	});
+});
+
+describe("PositionsTable: колонки времени жизни опционной ноги", () => {
+	// Опционная нога на 9 сутках: состав величин как в макете design.pen.
+	function makeOptionLeg(overrides: Partial<ConstructionCardPosition> = {}): ConstructionCardPosition {
+		return makePosition({
+			symbol: "ETH-28MAR-1600-P",
+			daysToExpiry: 9,
+			dailyDecayUsdt: -6.8,
+			intrinsicValueUsdt: 180.4,
+			timeValueUsdt: 1059.6,
+			decayDayAgoUsdt: -6.2,
+			...overrides,
+		});
+	}
+
+	// Колонки времени жизни строки позиции с тултипом состава: сутки и распад
+	// выводятся величинами, тултип раскрывает внутреннюю/временную стоимость
+	// и динамику распада «вчера → сегодня» нативным title.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip
+	it("выводит сутки и распад ноги с тултипом состава", () => {
+		// Arrange: открытая опционная нога на 9 сутках с распадом и составом.
+		// Act: рендер таблицы позиций.
+		renderTable([makeOptionLeg()]);
+
+		// Assert: значения суток и распада на месте, тултип обеих ячеек несёт
+		// заголовок состава, стоимости и динамику «вчера → сегодня» (пробельные
+		// переносы title матчер нормализует).
+		const tooltipText =
+			"ETH-28MAR-1600-P · состав позиции внутренняя +180.4 · временная +1059.6 распад вчера → сегодня: -6.2 → -6.8";
+		expect(screen.getAllByTitle(tooltipText).length).toBe(2);
+		expect(screen.getByText("-6.8")).toBeTruthy();
+	});
+
+	// Строка открытой опционной ноги с остатком суток не более 14
+	// подсвечивается фоном внимания, а значение суток выводится красным;
+	// дальше зоны подсветки нет.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-expiry-row-highlight
+	it("подсвечивает строку ноги в зоне предупреждения и красит сутки", () => {
+		// Arrange: две открытые ноги — на 9 и на 21 сутках.
+		// Act: рендер таблицы позиций.
+		renderTable([makeOptionLeg(), makeOptionLeg({ symbol: "ETH-28JUN-1900-C", daysToExpiry: 21, dailyDecayUsdt: -1.2, decayDayAgoUsdt: null })]);
+
+		// Assert: строка на 9 сутках несёт фон внимания и красные сутки,
+		// строка на 21 сутках — без фона и без красного; вчерашний распад
+		// без снимка истории даёт прочерк в тултипе.
+		const warningRow = screen.getByRole("row", { name: /ETH-28MAR-1600-P/ });
+		expect(warningRow).toHaveClass("bg-risk-soft");
+		expect(within(warningRow).getByText("9")).toHaveClass("text-destructive");
+		const farRow = screen.getByRole("row", { name: /ETH-28JUN-1900-C/ });
+		expect(farRow).not.toHaveClass("bg-risk-soft");
+		expect(within(farRow).getByText("21")).not.toHaveClass("text-destructive");
+		expect(within(farRow).getAllByTitle(/распад вчера → сегодня: — → -1.2/).length).toBe(2);
+	});
+
+	// Закрытая позиция и фьючерсная нога показывают в колонках времени жизни
+	// прочерк без признака ошибки и без подсветки строки.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-degradation
+	it("показывает прочерки времени жизни у закрытой позиции и фьючерсной ноги", () => {
+		// Arrange: фьючерсная нога (null величин) и закрытая опционная позиция.
+		// Act: рендер таблицы позиций.
+		renderTable([makePosition({ symbol: "ETHUSDT" }), makeOptionLeg({ isOpen: false, daysToExpiry: null, dailyDecayUsdt: null })]);
+
+		// Assert: обе строки без подсветки, в колонках суток и распада —
+		// прочерки; ячейки дней не несут тултипа состава.
+		for (const rowName of [/ETHUSDT/, /ETH-28MAR-1600-P/]) {
+			const row = screen.getByRole("row", { name: rowName });
+			expect(row).not.toHaveClass("bg-risk-soft");
+			const cells = within(row).getAllByRole("cell");
+			expect(cells[6]).toHaveTextContent("—");
+			expect(cells[7]).toHaveTextContent("—");
+		}
+		expect(screen.queryByTitle(/состав позиции/)).toBeNull();
 	});
 });

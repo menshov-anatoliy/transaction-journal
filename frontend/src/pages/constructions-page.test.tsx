@@ -54,6 +54,8 @@ const overview: ConstructionsOverview = {
 			closedAt: null,
 			liveHintCount: 2,
 			riskWarningsCount: 1,
+			daysToNearestExpiry: 9,
+			netDailyDecayUsdt: -6.8,
 		},
 		{
 			constructionId: 8,
@@ -78,6 +80,8 @@ const overview: ConstructionsOverview = {
 			closedAt: "2026-05-31T12:00:00",
 			liveHintCount: 0,
 			riskWarningsCount: 0,
+			daysToNearestExpiry: null,
+			netDailyDecayUsdt: null,
 		},
 		{
 			constructionId: 9,
@@ -102,6 +106,8 @@ const overview: ConstructionsOverview = {
 			closedAt: "2026-06-07T16:00:00",
 			liveHintCount: 0,
 			riskWarningsCount: 0,
+			daysToNearestExpiry: null,
+			netDailyDecayUsdt: null,
 		},
 	],
 };

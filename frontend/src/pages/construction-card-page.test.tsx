@@ -49,6 +49,9 @@ const card: ConstructionCard = {
 		openedAt: "2026-06-18T09:05:00+00:00",
 		closedAt: null,
 		durationSeconds: 53.4 * 3600,
+		daysToNearestExpiry: 9,
+		netDailyDecayUsdt: -6.8,
+		totalTimeValueUsdt: 1240,
 	},
 	positions: [
 		{
@@ -71,6 +74,11 @@ const card: ConstructionCard = {
 			priceChangePercent: 5,
 			syntheticResidual: null,
 			otherResidual: null,
+			daysToExpiry: 9,
+			dailyDecayUsdt: -6.8,
+			intrinsicValueUsdt: 180.4,
+			timeValueUsdt: 1059.6,
+			decayDayAgoUsdt: -6.2,
 		},
 	],
 	trades: [
@@ -750,14 +758,15 @@ describe("карточка конструкции", () => {
 // Traceability: change:reconcile-frontend-with-design/design#D2
 
 describe("карточка конструкции: примитивы дизайн-системы", () => {
-	it("рендерит все 9 показателей сводки примитивом Metric в карточке мастера h69OG", async () => {
+	it("рендерит все 12 показателей сводки примитивом Metric в карточке мастера h69OG", async () => {
 		// Act: карточка открытой конструкции с оценёнными марками.
 		renderCardPage();
 
-		// Assert: 9 инстансов Метрики — как M1–M9 мастера «Сводка метрик» (h69OG).
+		// Assert: 12 инстансов Метрики — M1–M9 мастера «Сводка метрик» (h69OG)
+		// и три метрики саммари времени жизни (ML1–ML3 макета).
 		expect(await screen.findByText("общий P&L")).toBeInTheDocument();
 		const metrics = document.querySelectorAll('[data-slot="metric"]');
-		expect(metrics).toHaveLength(9);
+		expect(metrics).toHaveLength(12);
 
 		// Контейнер сводки — surface-карточка радиуса 12 с каймой, паддинги
 		// [14,18]: колонка с зазором 12 (нода h69OG после 5.1 change
@@ -778,7 +787,8 @@ describe("карточка конструкции: примитивы дизай
 		expect(first?.className).toContain("text-[16px]");
 		expect(first?.className).toContain("tabular-nums");
 
-		// Остальные показатели (M2–M9) — значение 14/600 поверх примитива.
+		// Остальные показатели (M2–M9 и саммари времени жизни) — значение
+		// 14/600 поверх примитива.
 		const second = metrics[1]?.querySelector('[data-slot="metric-value"]');
 		expect(second?.className).toContain("text-[14px]");
 		expect(second?.className).not.toContain("text-[16px]");
