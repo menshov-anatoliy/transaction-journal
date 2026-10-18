@@ -4,6 +4,7 @@ using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.Analytics;
+using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Materialization;
@@ -39,19 +40,25 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 
 	private readonly IInstrumentMarkSource? _lastMarkSource;
 
+	/// <summary>Поставщик времени чтения: граница длительности конструкций и возраст снимков истории.</summary>
+	private readonly TimeProvider _timeProvider;
+
 	/// <summary>Создаёт read-модель над опциями контекста журнала; база развёрнута миграциями.</summary>
 	/// <param name="options">Опции EF-контекста журнала.</param>
 	/// <param name="freshMarkSource">Источник свежих марок для оценки нереализованного PnL открытых остатков.</param>
 	/// <param name="lastMarkSource">Источник последних марок для ручных пометок без цены; null — цена остаётся неизвестной.</param>
+	/// <param name="timeProvider">Поставщик времени чтения; по умолчанию системный.</param>
 	/// <exception cref="ArgumentNullException">Опции или источник свежих марок не заданы.</exception>
 	public JournalMetricsReadModel(
 		DbContextOptions<JournalDbContext> options,
 		IFreshInstrumentMarkSource freshMarkSource,
-		IInstrumentMarkSource? lastMarkSource = null)
+		IInstrumentMarkSource? lastMarkSource = null,
+		TimeProvider? timeProvider = null)
 	{
 		_options = options ?? throw new ArgumentNullException(nameof(options));
 		_freshMarkSource = freshMarkSource ?? throw new ArgumentNullException(nameof(freshMarkSource));
 		_lastMarkSource = lastMarkSource;
+		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
 	/// <inheritdoc cref="IJournalMetricsReadModel.ReadAsync" />
@@ -165,7 +172,8 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			.EvaluateAsync(positionMetrics, cancellationToken)
 			.ConfigureAwait(false);
 
-		var constructionCalculator = new ConstructionMetricsCalculator();
+		var constructionCalculator = new ConstructionMetricsCalculator(_timeProvider);
+		var lifetimeByConstruction = await BuildLifetimeInputsAsync(db, constructions, evaluation, resolver, cancellationToken).ConfigureAwait(false);
 		var constructionMetrics = constructions
 			.Select(construction => constructionCalculator.Calculate(
 				construction.Id,
@@ -180,7 +188,13 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 						Date = adjustment.Date,
 						AmountUsdt = adjustment.AmountUsdt,
 					}),
-				DateTimeOffset.UtcNow))
+				_timeProvider.GetUtcNow(),
+				// Метрики времени жизни строятся тем же чтением: ноги конструкции
+				// разрешены из справочника, свежие тикеры и история снимков общие —
+				// саммари и предупреждение об экспирации попадают в метрики одним
+				// проходом, без второго обхода тикеров.
+				// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+				lifetimeByConstruction.GetValueOrDefault(construction.Id)))
 			.ToList();
 
 		// Итог по журналу — сумма итогов конструкций: сбой марок хотя бы одной конструкции
@@ -300,6 +314,93 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 	private async Task<decimal?> ResolveLastMarkAsync(string symbol, CancellationToken cancellationToken)
 	{
 		return _lastMarkSource == null ? null : await _lastMarkSource.GetLastMarkAsync(symbol, cancellationToken).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	/// Собирает расчётные данные метрик времени жизни по каждой конструкции:
+	/// открытые опционные ноги разрешаются из справочника инструментов (страйк,
+	/// тип, каноническое время доставки), свежие тикеры текущего чтения и история
+	/// рыночных снимков общие для всех конструкций. Символ вне формата опциона
+	/// или неразрешимый справочником ногу исключает — метрика ноги деградирует
+	/// прочерком, чтение метрик конструкции не ломается.
+	/// Traceability: change:add-option-lifetime-metrics/design#d2
+	/// </summary>
+	private async Task<IReadOnlyDictionary<long, OptionLifetimeInput>> BuildLifetimeInputsAsync(
+		JournalDbContext db,
+		IReadOnlyList<Construction> constructions,
+		UnrealizedPnlEvaluation evaluation,
+		InstrumentResolver resolver,
+		CancellationToken cancellationToken)
+	{
+		ArgumentNullException.ThrowIfNull(db);
+		ArgumentNullException.ThrowIfNull(constructions);
+		ArgumentNullException.ThrowIfNull(evaluation);
+		ArgumentNullException.ThrowIfNull(resolver);
+
+		// Опционные ноги ищутся только среди открытых остатков: закрытая позиция
+		// в метриках времени жизни не участвует вовсе.
+		// Traceability: openspec:analytics/option-lifetime#requirement-leg-intrinsic-time-value
+		var openPositions = evaluation.Positions
+			.Where(position => position.Residual != 0m)
+			.ToList();
+		var optionSymbols = openPositions
+			.Select(position => position.Symbol)
+			.Where(symbol => OptionSymbolParser.TryParse(symbol, out _))
+			.Distinct(StringComparer.Ordinal)
+			.ToList();
+
+		// История снимков читается один раз на чтение метрик журнала: вычислитель
+		// сам выбирает снимки нужных символов и проверяет их давность.
+		// Traceability: openspec:analytics/option-lifetime#requirement-leg-decay-acceleration
+		var snapshotHistory = optionSymbols.Count == 0
+			? []
+			: await db.InstrumentMarketSnapshots
+				.AsNoTracking()
+				.Where(snapshot => optionSymbols.Contains(snapshot.Symbol))
+				.ToListAsync(cancellationToken)
+				.ConfigureAwait(false);
+
+		var inputs = new Dictionary<long, OptionLifetimeInput>();
+		foreach (var construction in constructions)
+		{
+			var legs = new List<OptionLegLifetimeInput>();
+			foreach (var position in openPositions.Where(position => position.ConstructionId == construction.Id))
+			{
+				if (OptionSymbolParser.TryParse(position.Symbol, out _) == false)
+				{
+					continue;
+				}
+
+				try
+				{
+					var resolved = resolver.ResolveOption(position.Symbol);
+					legs.Add(new OptionLegLifetimeInput
+					{
+						Symbol = position.Symbol,
+						Strike = resolved.Strike,
+						Type = resolved.OptionsType,
+						DeliveryTime = resolved.DeliveryTime,
+						Residual = position.Residual,
+					});
+				}
+				catch (InstrumentResolveException)
+				{
+					// Неразрешимый справочником опцион деградирует прочерком:
+					// без страйка и времени доставки метрики времени жизни
+					// для ноги не строятся, остальные метрики не затронуты.
+					// Traceability: openspec:analytics/option-lifetime#scenario-leg-value-degradation-no-tickers
+				}
+			}
+
+			inputs.Add(construction.Id, new OptionLifetimeInput
+			{
+				Legs = legs,
+				Marks = evaluation.Marks,
+				SnapshotHistory = snapshotHistory,
+			});
+		}
+
+		return inputs;
 	}
 
 	/// <summary>Событие единого потока позиции до применения: количество ручной пометки выводится применением потока.</summary>

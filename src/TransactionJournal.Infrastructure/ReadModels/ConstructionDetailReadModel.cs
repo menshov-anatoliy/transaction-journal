@@ -71,7 +71,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		// капитал передаётся как есть, без базы процентов величины остаются null.
 		var trades = await ReadTradesAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 		var synthetic = await ReadSyntheticClosesAsync(db, constructionId, trades.BoundTrades, cancellationToken).ConfigureAwait(false);
-		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, synthetic.QuantityByLinearSymbol, cancellationToken).ConfigureAwait(false);
+		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, constructionMetrics.Lifetime, synthetic.QuantityByLinearSymbol, cancellationToken).ConfigureAwait(false);
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 
@@ -128,14 +128,18 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// стоимость позиции уже выведена здесь же. Незаданный или нулевой капитал
 	/// базы процентов от капитала не образует, неположительная стоимость — базы
 	/// процентов от стоимости. Остаток линейной ноги распадается на синтетическую
-	/// и прочую части по количествам неоспоренных связок.
+	/// и прочую части по количествам неоспоренных связок. Открытым опционным
+	/// ногам величины времени жизни проходят из вычислителя аналитики по символу:
+	/// закрытая позиция и фьючерсная нога остаётся прочерком.
 	/// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
+	/// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
 	/// </summary>
 	private static async Task<List<ConstructionPositionRow>> ReadPositionsAsync(
 		JournalDbContext db,
 		long constructionId,
 		decimal? allocatedCapitalUsdt,
 		JournalMetrics metrics,
+		OptionLifetimeEvaluation? lifetime,
 		IReadOnlyDictionary<string, decimal> syntheticQuantityByLinearSymbol,
 		CancellationToken cancellationToken)
 	{
@@ -159,6 +163,13 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		// страйке CALL раньше PUT; фьючерсы и прочие неопционные инструменты — в
 		// конце группы. Тикер по кодам символов — детерминирующий тай-брейк.
 		// Traceability: openspec:ui/screens#scenario-detail-positions-ordered-by-status-and-type
+		// Величины времени жизни открытых опционных ног идут в строки по символу:
+		// закрытая позиция и фьючерсная нога в вычислителе не участвуют и несут
+		// прочерк, деградация без тикеров решена в аналитике.
+		// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+		var lifetimeBySymbol = (lifetime?.Legs ?? [])
+			.GroupBy(leg => leg.Symbol, StringComparer.Ordinal)
+			.ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 		return metrics.Positions
 			.Where(position => position.ConstructionId == constructionId)
 			.OrderBy(position => position.Residual == 0m)
@@ -204,7 +215,19 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 					MarkValue: position.MarkValue,
 					PriceChangePercent: position.PriceChangePercent,
 					SyntheticResidual: syntheticResidual,
-					OtherResidual: otherResidual);
+					OtherResidual: otherResidual,
+					// Величины времени жизни открытой опционной ноги проходят из
+					// вычислителя аналитики по символу: сутки, распад и состав
+					// тултипа «внутренняя/временная стоимость, вчера → сегодня»;
+					// у закрытой и фьючерсной ног значения нет — прочерк.
+					// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+					DaysToExpiry: lifetimeBySymbol.TryGetValue(position.Symbol, out var lifetimeLeg)
+						? lifetimeLeg.DaysToExpiry
+						: null,
+					DailyDecayUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.DailyDecayUsdt,
+					IntrinsicValueUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.IntrinsicValueUsdt,
+					TimeValueUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.TimeValueUsdt,
+					DecayDayAgoUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.DecayDayAgoUsdt);
 			})
 			.ToList();
 	}

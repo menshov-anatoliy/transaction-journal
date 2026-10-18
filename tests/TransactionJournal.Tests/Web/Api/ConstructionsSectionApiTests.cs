@@ -143,6 +143,32 @@ public sealed class ConstructionsSectionApiTests
 	}
 
 	[TestMethod]
+	[Description("Строки списка несут колонки времени жизни со значениями и прочерком")]
+	// Колонки времени жизни входят в контракт строки списка аддитивно:
+	// daysToNearestExpiry и netDailyDecayUsdt со значениями у конструкции
+	// с открытыми опционными ногами и явный null у конструкции без них —
+	// клиент рендерит прочерк, красные сутки при ≤ 14 выводит сам.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
+	public async Task TryIfOverviewRowsCarryLifetimeColumns()
+	{
+		// Arrange: открытая конструкция с саммари времени жизни и закрытая без него.
+		await using var factory = new SectionApiFactory(services => services.ReplaceReadModel(StubListReadModel.WithLifetimeColumns()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос обзора раздела.
+		var payload = await (await client.GetAsync("/api/v1/constructions")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: строка с опционными ногами несёт остаток суток и нетто-распад,
+		// строка без опционных ног — явный null в обеих колонках.
+		var optionRow = payload!["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.OpenConstructionId);
+		Assert.That(optionRow!["daysToNearestExpiry"]!.GetValue<int>(), Is.EqualTo(10));
+		Assert.That(optionRow["netDailyDecayUsdt"]!.GetValue<decimal>(), Is.EqualTo(-2.5m));
+		var linearRow = payload["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.ClosedConstructionId);
+		Assert.That(linearRow!["daysToNearestExpiry"], Is.Null);
+		Assert.That(linearRow["netDailyDecayUsdt"], Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Строки списка несут счётчик живых подсказок для бейджа строки")]
 	// Бейдж живых подсказок в строке таблицы: список конструкций соединяется
 	// со счётчиками живых записей подсказок — у конструкции без живых
@@ -1103,6 +1129,17 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 		// Открытая конструкция несёт счётчик бейджа «⚠ N»; закрытая без открытых
 		// остатков имеет нулевой счётчик — бейдж в строке не рисуется.
 		var open = data.Items[0] with { RiskWarningsCount = 2 };
+		return new StubListReadModel(data with { Items = [open, data.Items[1]] });
+	}
+
+	/// <summary>Вариант с колонками времени жизни: открытая строка несёт сутки и нетто-распад, закрытая — прочерк.</summary>
+	public static StubListReadModel WithLifetimeColumns()
+	{
+		var data = CreateDefaultData();
+		// Открытая конструкция с опционными ногами: минимум суток до ближайшей
+		// экспирации и нетто-распад со знаком; закрытая без опционных ног несёт
+		// прочерки в обеих колонках.
+		var open = data.Items[0] with { DaysToNearestExpiry = 10, NetDailyDecayUsdt = -2.5m };
 		return new StubListReadModel(data with { Items = [open, data.Items[1]] });
 	}
 

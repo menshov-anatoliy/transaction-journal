@@ -29,6 +29,8 @@ namespace TransactionJournal.Application;
 /// <param name="WorstCaseUsdt">Худший исход конструкции в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: конечный (`finite`), неограниченный (`unbounded`) или нерассчитанный (`unavailable`); незаданный читается как «не рассчитан», а не как конечный.</param>
 /// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков — счётчик бейджа «⚠ N» строки; ноль — предупреждений нет.</param>
+/// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
+/// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
 // Капитал передаётся незаданным как есть: прочерк вместо значения — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
 // Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
@@ -55,6 +57,10 @@ namespace TransactionJournal.Application;
 // открытым остаткам остаётся в аналитике, строка списка и превью показывают
 // число бейджем; ноль означает отсутствие бейджа.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+// Колонки времени жизни проходят из саммари аналитики как есть: конструкция
+// без открытых опционных ног несёт прочерки, деградация без тикеров решена
+// в аналитике и список её не повторяет.
+// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
 public sealed record ConstructionListItem(
 	long ConstructionId,
 	string Name,
@@ -76,7 +82,9 @@ public sealed record ConstructionListItem(
 	decimal? RealRiskUsdt = null,
 	decimal? WorstCaseUsdt = null,
 	RealRiskStatus RealRiskStatus = RealRiskStatus.Unavailable,
-	int RiskWarningsCount = 0);
+	int RiskWarningsCount = 0,
+	int? DaysToNearestExpiry = null,
+	decimal? NetDailyDecayUsdt = null);
 
 /// <summary>
 /// Данные экрана «Конструкции»: сводка журнала — итог с разбивкой на

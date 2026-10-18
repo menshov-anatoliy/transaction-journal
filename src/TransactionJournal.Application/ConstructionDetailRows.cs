@@ -30,6 +30,11 @@ namespace TransactionJournal.Application;
 /// <param name="PriceChangePercent">Процент изменения цены открытого остатка — движение марки от средней цены остатка, приведённое к направлению позиции: плюс — движение «в прибыль»; null у закрытой позиции и при сбое марок.</param>
 /// <param name="SyntheticResidual">Часть остатка линейной ноги, уведённая неоспоренными синтетическими связками — знаковая сумма их линейных сделок; null, когда неоспоренного синтетического содержимого у ноги нет.</param>
 /// <param name="OtherResidual">Прочий остаток линейной ноги — остаток минус синтетическая часть; null вместе с синтетической частью.</param>
+/// <param name="DaysToExpiry">Остаток полных суток до экспирации открытой опционной ноги; null у закрытой позиции, фьючерсной ноги и ног с неразобранным символом.</param>
+/// <param name="DailyDecayUsdt">Дневной распад открытой опционной ноги, USDT/день со знаком остатка; null без тикеров, у закрытой и фьючерсной ног.</param>
+/// <param name="IntrinsicValueUsdt">Внутренняя стоимость открытой опционной ноги на чистый остаток, USDT; материал тултипа состава, null без индексной цены.</param>
+/// <param name="TimeValueUsdt">Временная стоимость открытой опционной ноги на чистый остаток, USDT; материал тултипа состава, null без индексной цены или марки.</param>
+/// <param name="DecayDayAgoUsdt">Распад ноги на снимке суточной давности, приведённый к текущему остатку; материал динамики «вчера → сегодня», null без снимка истории.</param>
 // Строка показывает картину позиции её записями: вход, выход,
 // раздельные части реализованного и нереализованного результата
 // с процентом от капитала, общий P&L с процентом, комиссии и времена.
@@ -45,6 +50,10 @@ namespace TransactionJournal.Application;
 // неоспоренным связкам: 0.30 синтетического хеджа и 0.04 скальпов видны
 // раздельно при остатке 0.34.
 // Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
+// Величины времени жизни проходят только открытым опционным ногам: закрытая
+// позиция и фьючерсная нога показывают прочерк, тултип состава читает
+// внутреннюю/временную стоимость и динамику распада «вчера → сегодня».
+// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
 public sealed record ConstructionPositionRow(
 	string Symbol,
 	decimal Residual,
@@ -64,7 +73,12 @@ public sealed record ConstructionPositionRow(
 	decimal? MarkValue = null,
 	decimal? PriceChangePercent = null,
 	decimal? SyntheticResidual = null,
-	decimal? OtherResidual = null);
+	decimal? OtherResidual = null,
+	int? DaysToExpiry = null,
+	decimal? DailyDecayUsdt = null,
+	decimal? IntrinsicValueUsdt = null,
+	decimal? TimeValueUsdt = null,
+	decimal? DecayDayAgoUsdt = null);
 
 /// <summary>
 /// Строка таблицы сделок деталей конструкции: сделка с атрибутами биржевой

@@ -341,6 +341,49 @@ public class ConstructionListReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Колонки времени жизни строки проходят из саммари метрик, без опционных ног — прочерк")]
+	// Строка списка переносит остаток суток до ближайшей экспирации и нетто-распад
+	// из саммари аналитики как есть; конструкция без открытых опционных ног несёт
+	// прочерки в обеих колонках.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
+	public async Task TryIfRowCarriesLifetimeColumnsFromMetrics()
+	{
+		// Arrange: открытая конструкция с саммари времени жизни (10 суток,
+		// нетто-распад −2.5) и закрытая без опционных ног — саммари отсутствует.
+		await SeedAsync(
+			Header("Стреддл с ближним коллом", ConstructionStatus.Open, 3000m),
+			Header("Закрытый скальп", ConstructionStatus.Closed, 2000m));
+		var withLifetime = MetricsOf(1, 200m, 43.52m) with
+		{
+			Lifetime = new OptionLifetimeEvaluation
+			{
+				Legs = [],
+				Summary = new ConstructionLifetimeSummary
+				{
+					DaysToNearestExpiry = 10,
+					NetDailyDecayUsdt = -2.5m,
+					TotalTimeValueUsdt = 120m,
+				},
+				ExpiryWarnings = [],
+			},
+		};
+		SetupMetrics(243.52m, withLifetime, MetricsOf(2, 43.52m, 0m));
+
+		// Act: читаем данные экрана «Конструкции».
+		var data = await _readModel.ReadAsync();
+
+		// Assert: строка с опционными ногами несёт сутки и нетто-распад со знаком,
+		// строка без опционных ног — прочерки; величины проходят без пересчёта.
+		Assert.That(data.Items, Has.Count.EqualTo(2));
+		var optionRow = data.Items.Single(item => item.ConstructionId == 1);
+		Assert.That(optionRow.DaysToNearestExpiry, Is.EqualTo(10));
+		Assert.That(optionRow.NetDailyDecayUsdt, Is.EqualTo(-2.5m));
+		var linearRow = data.Items.Single(item => item.ConstructionId == 2);
+		Assert.That(linearRow.DaysToNearestExpiry, Is.Null);
+		Assert.That(linearRow.NetDailyDecayUsdt, Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Сбой марок на заглушке провайдера доходит до данных экрана: нереализованная оценка и итог деградируют")]
 	public async Task TryIfMarkFailurePassesFromProviderStubToScreenData()
 	{

@@ -304,6 +304,66 @@ public sealed class ConstructionCardApiTests
 	}
 
 	[TestMethod]
+	[Description("Карточка сериализует величины времени жизни позиции и саммари метрик со значениями")]
+	// Величины времени жизни входят в контракт карточки аддитивно: строка
+	// позиции несёт сутки, распад и состав тултипа (внутренняя/временная
+	// стоимость, вчерашний распад), метрики — саммари конструкции.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	public async Task TryIfCardCarriesLifetimeValues()
+	{
+		// Arrange: read-модель с опционной строкой на девяти сутках и распадом.
+		await using var factory = new SectionApiFactory(services => services
+			.ReplaceDetailReadModel(new StubCardDetailReadModel().WithLifetimeMetrics(9, -2.5m, -2.0m)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: опционная строка несёт сутки, распад и состав тултипа.
+		var optionPosition = payload!["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "ETH-28JUN24-3200-C");
+		Assert.That(optionPosition!["daysToExpiry"]!.GetValue<int>(), Is.EqualTo(9));
+		Assert.That(optionPosition["dailyDecayUsdt"]!.GetValue<decimal>(), Is.EqualTo(-2.5m));
+		Assert.That(optionPosition["intrinsicValueUsdt"]!.GetValue<decimal>(), Is.EqualTo(40m));
+		Assert.That(optionPosition["timeValueUsdt"]!.GetValue<decimal>(), Is.EqualTo(260m));
+		Assert.That(optionPosition["decayDayAgoUsdt"]!.GetValue<decimal>(), Is.EqualTo(-2.0m));
+
+		// Assert: саммари конструкции проходит в метрики карточки.
+		var metrics = payload["metrics"]!;
+		Assert.That(metrics["daysToNearestExpiry"]!.GetValue<int>(), Is.EqualTo(9));
+		Assert.That(metrics["netDailyDecayUsdt"]!.GetValue<decimal>(), Is.EqualTo(-2.5m));
+		Assert.That(metrics["totalTimeValueUsdt"]!.GetValue<decimal>(), Is.EqualTo(300m));
+	}
+
+	[TestMethod]
+	[Description("Карточка без опционных ног сериализует величины времени жизни явным null")]
+	// Null вместо величин — контракт прочерка: клиент рендерит прочерк,
+	// красный остаток суток и подсветку строки выводит сам из daysToExpiry.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+	public async Task TryIfCardSerializesLifetimeFieldsAsNullWithoutLifetime()
+	{
+		// Arrange: стабильная read-модель без метрик времени жизни.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: опционная строка без вычислителя несёт явный null во всех пяти
+		// величинах, метрики — null во всех трёх слагаемых саммари.
+		var optionPosition = payload!["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "ETH-28JUN24-3200-C");
+		Assert.That(optionPosition!["daysToExpiry"], Is.Null);
+		Assert.That(optionPosition["dailyDecayUsdt"], Is.Null);
+		Assert.That(optionPosition["intrinsicValueUsdt"], Is.Null);
+		Assert.That(optionPosition["timeValueUsdt"], Is.Null);
+		Assert.That(optionPosition["decayDayAgoUsdt"], Is.Null);
+		var metrics = payload["metrics"]!;
+		Assert.That(metrics["daysToNearestExpiry"], Is.Null);
+		Assert.That(metrics["netDailyDecayUsdt"], Is.Null);
+		Assert.That(metrics["totalTimeValueUsdt"], Is.Null);
+	}
+
+	[TestMethod]
 	[Description("OpenAPI-описание остаётся опубликованным и не ломается от аддитивных полей")]
 	// Обновление описания контракта: документ пересобирается из записей ответа
 	// автоматически, транспортные требования не меняются — маршрут карточки и
@@ -1500,6 +1560,12 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	/// <summary>Предупреждения диагностики конструкции: тексты проходят в контракт карточки.</summary>
 	private IReadOnlyList<string> _riskWarnings = [];
 
+	/// <summary>Метрики времени жизни конструкции: саммари проходит в контракт метрик карточки.</summary>
+	private OptionLifetimeEvaluation? _lifetime;
+
+	/// <summary>Метрики времени жизни открытой опционной строки: сутки, распад и состав тултипа.</summary>
+	private OptionLegLifetimeMetrics? _optionLeg;
+
 	private StubCardDetailReadModel(bool brokenJournal, RealRiskStatus realRiskStatus)
 	{
 		_brokenJournal = brokenJournal;
@@ -1522,6 +1588,36 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	public StubCardDetailReadModel WithRiskWarnings(params string[] warnings)
 	{
 		_riskWarnings = warnings;
+		return this;
+	}
+
+	/// <summary>
+	/// Вариант с метриками времени жизни: открытая опционная строка несёт сутки,
+	/// распад и состав тултипа, метрики карточки — саммари конструкции.
+	/// </summary>
+	public StubCardDetailReadModel WithLifetimeMetrics(int daysToExpiry, decimal dailyDecayUsdt, decimal decayDayAgoUsdt)
+	{
+		_optionLeg = new OptionLegLifetimeMetrics
+		{
+			Symbol = "ETH-28JUN24-3200-C",
+			DaysToExpiry = daysToExpiry,
+			IntrinsicValueUsdt = 40m,
+			TimeValueUsdt = 260m,
+			DailyDecayUsdt = dailyDecayUsdt,
+			DecayDayAgoUsdt = decayDayAgoUsdt,
+			DecayAccelerationUsdt = dailyDecayUsdt - decayDayAgoUsdt,
+		};
+		_lifetime = new OptionLifetimeEvaluation
+		{
+			Legs = [_optionLeg],
+			Summary = new ConstructionLifetimeSummary
+			{
+				DaysToNearestExpiry = daysToExpiry,
+				NetDailyDecayUsdt = dailyDecayUsdt,
+				TotalTimeValueUsdt = 300m,
+			},
+			ExpiryWarnings = [],
+		};
 		return this;
 	}
 
@@ -1569,6 +1665,10 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			// остатков и в базе не хранится.
 			// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
 			RiskWarningsCount = _riskWarnings.Count,
+			// Саммари времени жизни проходит в метрики карточки рядом с прежними
+			// величинами; null у карточки без открытых опционных ног.
+			// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+			Lifetime = _lifetime,
 		};
 		var data = new ConstructionDetailData(
 			ConstructionId: constructionId,
@@ -1603,7 +1703,15 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					IsOpen: true,
 					Comment: "ножка **входа**",
 					MarkValue: 300m,
-					PriceChangePercent: 5m),
+					PriceChangePercent: 5m,
+					// Величины времени жизни открытой опционной строки: сутки,
+					// распад и состав тултипа проходят рядом с прежними колонками.
+					// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+					DaysToExpiry: _optionLeg?.DaysToExpiry,
+					DailyDecayUsdt: _optionLeg?.DailyDecayUsdt,
+					IntrinsicValueUsdt: _optionLeg?.IntrinsicValueUsdt,
+					TimeValueUsdt: _optionLeg?.TimeValueUsdt,
+					DecayDayAgoUsdt: _optionLeg?.DecayDayAgoUsdt),
 				new ConstructionPositionRow(
 					Symbol: "ETHUSDT",
 					Residual: 0m,

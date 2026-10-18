@@ -28,4 +28,14 @@ public sealed record UnrealizedPnlEvaluation
 	// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-unrealized-only
 	/// </summary>
 	public required bool HasMarkFailure { get; init; }
+
+	/// <summary>
+	/// Свежие тикеры текущего чтения по символам открытых остатков: марка,
+	/// индексная цена и тета. Метрики времени жизни опционных ног строятся
+	/// поверх этих же запросов — второй обход публичных тикеров не вводится,
+	/// тета и индексная цена остаются nullable: биржа отдаёт их только опционам.
+	// Traceability: change:add-option-lifetime-metrics/design#d1
+	/// </summary>
+	public IReadOnlyDictionary<string, InstrumentMarkSnapshot> Marks { get; init; } =
+		new Dictionary<string, InstrumentMarkSnapshot>(StringComparer.Ordinal);
 }

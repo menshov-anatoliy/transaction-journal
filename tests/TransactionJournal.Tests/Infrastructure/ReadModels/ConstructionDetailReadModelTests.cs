@@ -34,6 +34,12 @@ public class ConstructionDetailReadModelTests
 	private const string CallSymbol = "BTC-29DEC23-45000-C";
 	private const string LinearSymbol = "BTCUSDT";
 
+	/// <summary>Живая опционная нога сценария времени жизни: доска 25JUN27 08:00 UTC.</summary>
+	private const string FutureCallSymbol = "BTC-25JUN27-106000-C";
+
+	/// <summary>Фиксированный момент чтения метрик времени жизни.</summary>
+	private static readonly DateTimeOffset LifetimeNow = new(2026, 10, 18, 12, 0, 0, TimeSpan.Zero);
+
 	// Открытые ноги сценария сортировки — дальняя доска 2030 года: её экспирация
 	// ещё не наступила на любых часах, поэтому статус ног определяется сделками.
 	private const string OpenCallHigh = "ETH-01JAN30-2500-C";
@@ -181,6 +187,65 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Строка открытой опционной ноги несёт величины времени жизни, фьючерсная нога — прочерк")]
+	// Колонки времени жизни таблицы позиций выводятся только открытым опционным
+	// ногам: сутки, распад и состав тултипа проходят из вычислителя аналитики
+	// по символу; фьючерсная нога остаётся прочерком по всем пяти величинам.
+	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+	public async Task TryIfOptionRowCarriesLifetimeMetricsAndFutureRowShowsDash()
+	{
+		// Arrange: конструкция с открытой опционной ногой (покупка 1 колла 106000)
+		// и открытым фьючерсным остатком; тикер опциона несёт индексную цену и
+		// тету, история снимков держит тету суточной давности; часы зафиксированы.
+		await SeedFutureCallInstrumentAsync();
+		var construction = await _constructionService.CreateAsync("Долгий колл", 1000m);
+		await AddRawExecutionAsync("opt-buy", FutureCallSymbol, "option", "Buy", "1", "15000", ExecMs(2026, 10, 10, 10, 0), "USDT");
+		await AddLinearTradeAsync("perp-buy", "Buy", "0.1", "42000", "1", ExecMs(2026, 10, 10, 11, 0));
+		await _bindingService.BindBatchAsync(construction.Id, ["opt-buy", "perp-buy"]);
+		await AddMarketSnapshotAsync(FutureCallSymbol, markPrice: 15000m, theta: -1.0m, receivedAt: LifetimeNow.AddHours(-25));
+		var markSource = new StubFreshMarkSource(15000m, LifetimeNow.AddHours(-1), underlyingPrice: 110000m, theta: -2.5m);
+		var readModel = CreateDetailReadModel(markSource, new FixedTimeProvider(LifetimeNow));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: строка опциона несёт остаток 249 полных суток (249 сут 20 ч до
+		// доставки), распад тетой на остаток, разложение марки на внутреннюю
+		// (110000 − 106000) и временную (15000 − 4000) стоимость и вчерашний
+		// распад по снимку суточной давности.
+		// Требование: метрики времени жизни открытой опционной ноги в строке.
+		// Traceability: openspec:analytics/option-lifetime#requirement-leg-decay-and-days-to-expiry
+		// Traceability: openspec:analytics/option-lifetime#requirement-leg-intrinsic-time-value
+		// Traceability: openspec:analytics/option-lifetime#requirement-leg-decay-acceleration
+		var optionRow = data.Positions.Single(position => position.Symbol == FutureCallSymbol);
+		Assert.That(optionRow.DaysToExpiry, Is.EqualTo(249));
+		Assert.That(optionRow.DailyDecayUsdt, Is.EqualTo(-2.5m));
+		Assert.That(optionRow.IntrinsicValueUsdt, Is.EqualTo(4000m));
+		Assert.That(optionRow.TimeValueUsdt, Is.EqualTo(11000m));
+		Assert.That(optionRow.DecayDayAgoUsdt, Is.EqualTo(-1.0m));
+
+		// Assert: фьючерсная нога не участвует в метриках времени жизни —
+		// все пять величин прочерком, остальные колонки не затронуты.
+		// Требование: фьючерсная нога без величин времени жизни.
+		// Traceability: openspec:analytics/option-lifetime#requirement-leg-decay-and-days-to-expiry
+		var futureRow = data.Positions.Single(position => position.Symbol == LinearSymbol);
+		Assert.That(futureRow.DaysToExpiry, Is.Null);
+		Assert.That(futureRow.DailyDecayUsdt, Is.Null);
+		Assert.That(futureRow.IntrinsicValueUsdt, Is.Null);
+		Assert.That(futureRow.TimeValueUsdt, Is.Null);
+		Assert.That(futureRow.DecayDayAgoUsdt, Is.Null);
+
+		// Assert: саммари конструкции построено по открытой опционной ноге,
+		// дальняя экспирация далека от порога предупреждения.
+		// Требование: саммари времени жизни в сводке деталей.
+		// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+		Assert.That(data.Metrics.Lifetime, Is.Not.Null);
+		Assert.That(data.Metrics.Lifetime!.Summary!.DaysToNearestExpiry, Is.EqualTo(249));
+		Assert.That(data.Metrics.Lifetime.Summary.NetDailyDecayUsdt, Is.EqualTo(-2.5m));
+		Assert.That(data.Metrics.RiskWarnings.Count(warning => warning.Reason == ConstructionRiskReason.ExpiryApproaching), Is.EqualTo(0));
+	}
+
+	[TestMethod]
 	[Description("Детали без капитала дают абсолютные величины без процентов и введённые единицы риск/профит")]
 	public async Task TryIfDetailsWithoutCapitalHidePercentsAndCarryEnteredTargetUnit()
 	{
@@ -316,11 +381,13 @@ public class ConstructionDetailReadModelTests
 		// служебных величин оценки открытого остатка (средняя остатка, марка как
 		// цена) из строки убраны вместе с их колонками; стоимость и процент
 		// изменения цены открытого остатка добавлены выводимыми столбцами; распад
-		// остатка линейной ноги на синтетическую и прочую части — двумя колонками.
+		// остатка линейной ноги на синтетическую и прочую части — двумя колонками;
+		// величины времени жизни открытой опционной ноги — пятью колонками.
 		// Требование: строка позиции показывает вход, выход и итог,
 		// колонки «Средняя», «Марка» и «Нереализов.» отсутствуют.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
 		// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
+		// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
 		var columns = typeof(ConstructionPositionRow).GetProperties().Select(property => property.Name).ToArray();
 		Assert.That(columns, Is.EqualTo(new[]
 		{
@@ -343,6 +410,11 @@ public class ConstructionDetailReadModelTests
 			nameof(ConstructionPositionRow.PriceChangePercent),
 			nameof(ConstructionPositionRow.SyntheticResidual),
 			nameof(ConstructionPositionRow.OtherResidual),
+			nameof(ConstructionPositionRow.DaysToExpiry),
+			nameof(ConstructionPositionRow.DailyDecayUsdt),
+			nameof(ConstructionPositionRow.IntrinsicValueUsdt),
+			nameof(ConstructionPositionRow.TimeValueUsdt),
+			nameof(ConstructionPositionRow.DecayDayAgoUsdt),
 		}));
 	}
 
@@ -918,6 +990,39 @@ public class ConstructionDetailReadModelTests
 		new JournalMetricsReadModel(CreateOptions(), freshMarkSource),
 		new PositionReadModel(CreateOptions()));
 
+	/// <summary>
+	/// Собирает read-модель деталей над фиксированными часами: остаток суток до
+	/// экспирации и давность снимков истории проверяются без привязки к системному
+	/// времени.
+	/// </summary>
+	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentMarkSource freshMarkSource, TimeProvider timeProvider) => new(
+		CreateOptions(),
+		new JournalMetricsReadModel(CreateOptions(), freshMarkSource, timeProvider: timeProvider),
+		new PositionReadModel(CreateOptions()));
+
+	/// <summary>Добавляет живой опцион сценария времени жизни в справочник инструментов: доска 25JUN27 08:00 UTC.</summary>
+	private async Task SeedFutureCallInstrumentAsync()
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawInstruments.Add(OptionInstrument(FutureCallSymbol, "Call", ExecMs(2027, 6, 25, 8, 0)));
+		await db.SaveChangesAsync();
+	}
+
+	/// <summary>Пишет строку истории рыночных снимков инструмента с индексной ценой, тетой и моментом получения.</summary>
+	private async Task AddMarketSnapshotAsync(string symbol, decimal markPrice, decimal theta, DateTimeOffset receivedAt)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.InstrumentMarketSnapshots.Add(new InstrumentMarketSnapshot
+		{
+			Symbol = symbol,
+			MarkPrice = markPrice,
+			UnderlyingPrice = 110000m,
+			Theta = theta,
+			ReceivedAt = receivedAt,
+		});
+		await db.SaveChangesAsync();
+	}
+
 	/// <summary>Справочник инструментов: опцион BTC с delivery 29DEC23 08:00 UTC и линейный перп BTCUSDT.</summary>
 	private static void SeedInstrumentCatalog(JournalDbContext db)
 	{
@@ -1147,11 +1252,15 @@ public class ConstructionDetailReadModelTests
 		public override DateTimeOffset GetUtcNow() => utcNow;
 	}
 
-	/// <summary>Заглушка источника свежих марок: фиксированная марка со временем получения.</summary>
-	private sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt) : IFreshInstrumentMarkSource
+	/// <summary>
+	/// Заглушка источника свежих марок: фиксированная марка со временем получения;
+	/// nullable-поля индексной цены и теты имитируют расширенный снимок тикера
+	/// опциона — биржа отдаёт их только опционам.
+	/// </summary>
+	private sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt, decimal? underlyingPrice = null, decimal? theta = null) : IFreshInstrumentMarkSource
 	{
 		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-			Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, markPrice, receivedAt));
+			Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, markPrice, receivedAt, underlyingPrice, theta));
 	}
 
 	/// <summary>

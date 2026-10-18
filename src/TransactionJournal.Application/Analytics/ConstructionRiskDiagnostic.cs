@@ -17,6 +17,9 @@ public enum ConstructionRiskReason
 
 	/// <summary>Покрытие не проверено: символ открытого остатка не распознан.</summary>
 	UnverifiedCoverage,
+
+	/// <summary>Приближается экспирация: у открытой опционной ноги остаток не более двух недель.</summary>
+	ExpiryApproaching,
 }
 
 /// <summary>
@@ -88,6 +91,16 @@ public sealed record ConstructionRiskDiagnostic
 	/// <summary>Предупреждение о неразборчивом символе открытого остатка.</summary>
 	internal static ConstructionRiskDiagnostic UnverifiedCoverage(string symbol) =>
 		new(symbol, null, null, ConstructionRiskReason.UnverifiedCoverage, $"{symbol}: символ не распознан — покрытие не проверено.");
+
+	/// <summary>
+	/// Предупреждение о приближающейся экспирации опционной ноги входит в единый
+	/// канал предупреждений конструкции: текст уже собран вычислителем времени
+	/// жизни — инструмент, остаток суток и дневной распад; причина лишь
+	/// помечает запись временнОй, без категории «ошибка».
+	/// Traceability: openspec:analytics/option-lifetime#requirement-expiry-warning-two-weeks
+	/// </summary>
+	internal static ConstructionRiskDiagnostic FromExpiryWarning(OptionExpiryWarning warning) =>
+		new(warning.Symbol, null, null, ConstructionRiskReason.ExpiryApproaching, warning.Text);
 
 	#region Вспомогательные методы
 

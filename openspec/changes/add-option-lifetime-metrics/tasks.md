@@ -14,8 +14,8 @@
 
 ## 3. Контракты и read-модели
 
-- [ ] 3.1 Встроить вычислитель в `ConstructionMetricsCalculator`: саммари и предупреждение об экспирации попадают в контракты списка, превью и карточки; записи предупреждения входят в существующий `RiskWarnings` (счётчик бейджа растёт автоматически). Проверка: тесты read-моделей на состав метрик и предупреждений списка/карточки зелёные.
-- [ ] 3.2 Расширить HTTP-контракты (`ConstructionsEndpoints`, `ConstructionCardEndpoints`) nullable-полями: строка списка `daysToNearestExpiry`, `netDailyDecayUsdt`; строка позиции `daysToExpiry`, `dailyDecayUsdt`, `intrinsicValueUsdt`, `timeValueUsdt`, `decayDayAgoUsdt`. Проверка: контрактные тесты сериализации с null и значениями зелёные.
+- [x] 3.1 Встроить вычислитель в `ConstructionMetricsCalculator`: саммари и предупреждение об экспирации попадают в контракты списка, превью и карточки; записи предупреждения входят в существующий `RiskWarnings` (счётчик бейджа растёт автоматически). Проверка: тесты read-моделей на состав метрик и предупреждений списка/карточки зелёные.
+- [x] 3.2 Расширить HTTP-контракты (`ConstructionsEndpoints`, `ConstructionCardEndpoints`) nullable-полями: строка списка `daysToNearestExpiry`, `netDailyDecayUsdt`; строка позиции `daysToExpiry`, `dailyDecayUsdt`, `intrinsicValueUsdt`, `timeValueUsdt`, `decayDayAgoUsdt`. Проверка: контрактные тесты сериализации с null и значениями зелёные.
 
 ## 4. UI
 

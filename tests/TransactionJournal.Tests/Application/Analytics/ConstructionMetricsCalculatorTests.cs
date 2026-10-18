@@ -2,6 +2,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NUnit.Framework;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application;
+using TransactionJournal.Domain.Data;
+using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
 using Assert = NUnit.Framework.Assert;
@@ -538,6 +540,79 @@ public class ConstructionMetricsCalculatorTests
 		// Act — Assert
 		_calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
 	}
+
+	[TestMethod]
+	[Description("Предупреждения об экспирации входят в единый канал предупреждений и растят счётчик бейджа")]
+	// Метрики времени жизни встраиваются тем же вызовом калькулятора: саммари
+	// публикуется рядом с метриками конструкции, записи предупреждения об
+	// экспирации сливаются с диагностикой незакрытых рисков, счётчик бейджа
+	// «⚠ N» равен их сумме, перечень и счётчик не расходятся.
+	// Traceability: openspec:analytics/option-lifetime#requirement-expiry-warning-two-weeks
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	public void TryIfLifetimeWarningsMergeIntoRiskWarningsAndBadge()
+	{
+		// Arrange: открытый фьючерсный остаток даёт одну диагностику незакрытых
+		// рисков, опционная нога с остатком девять полных суток — предупреждение
+		// об экспирации; фальшивые часы фиксируют остаток суток.
+		var calculator = new ConstructionMetricsCalculator(new FixedTimeProvider(Now));
+		var positions = new[] { OpenPosition("BTCUSDT", 0, 0m, residual: 2m) };
+		var lifetime = new OptionLifetimeInput
+		{
+			Legs = new[] { NearExpiryLeg("BTC-28OCT26-90000-C") },
+			Marks = new Dictionary<string, InstrumentMarkSnapshot>(StringComparer.Ordinal),
+			SnapshotHistory = Array.Empty<InstrumentMarketSnapshot>(),
+		};
+
+		// Act
+		var metrics = calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now, lifetime);
+
+		// Assert: саммари времени жизни опубликовано рядом, в канале предупреждений
+		// две записи — диагностика и экспирация, счётчик бейджа равен их сумме.
+		Assert.That(metrics.Lifetime, Is.Not.Null);
+		Assert.That(metrics.Lifetime!.Summary, Is.Not.Null);
+		Assert.That(metrics.Lifetime.Summary!.DaysToNearestExpiry, Is.EqualTo(9));
+		Assert.That(metrics.Lifetime.Summary.NetDailyDecayUsdt, Is.Null);
+		Assert.That(metrics.RiskWarnings, Has.Count.EqualTo(2));
+		Assert.That(metrics.RiskWarnings.Count(warning => warning.Reason == ConstructionRiskReason.ExpiryApproaching), Is.EqualTo(1));
+		Assert.That(metrics.RiskWarnings.Single(warning => warning.Reason == ConstructionRiskReason.ExpiryApproaching).Text, Does.Contain("BTC-28OCT26-90000-C"));
+		Assert.That(metrics.RiskWarningsCount, Is.EqualTo(2));
+	}
+
+	[TestMethod]
+	[Description("Без опционных ног метрики времени жизни отсутствуют и канал предупреждений не меняется")]
+	// Негативная сторона встраивания: без расчётных данных времени жизни
+	// саммари отсутствует, предупреждений об экспирации нет, счётчик бейджа
+	// остаётся равным диагностике незакрытых рисков.
+	// Traceability: openspec:analytics/option-lifetime#scenario-summary-no-option-legs
+	public void TryIfMetricsWithoutLifetimeKeepDiagnosticsOnly()
+	{
+		// Arrange: тот же открытый фьючерсный остаток, но без опционных ног.
+		var positions = new[] { OpenPosition("BTCUSDT", 0, 0m, residual: 2m) };
+
+		// Act
+		var withLifetime = _calculator.Calculate(
+			ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
+		var withoutLifetime = _calculator.Calculate(
+			ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now, lifetime: null);
+
+		// Assert: в обоих чтениях саммари нет, канал состоит из одной диагностики,
+		// счётчик бейджа не вырос от отсутствия опционных ног.
+		Assert.That(withLifetime.Lifetime, Is.Null);
+		Assert.That(withoutLifetime.Lifetime, Is.Null);
+		Assert.That(withLifetime.RiskWarnings, Has.Count.EqualTo(1));
+		Assert.That(withoutLifetime.RiskWarnings, Is.EquivalentTo(withLifetime.RiskWarnings));
+		Assert.That(withoutLifetime.RiskWarningsCount, Is.EqualTo(1));
+	}
+
+	/// <summary>Открытая опционная нога с остатком девять полных суток на момент фальшивых часов.</summary>
+	private static OptionLegLifetimeInput NearExpiryLeg(string symbol) => new()
+	{
+		Symbol = symbol,
+		Strike = 90000m,
+		Type = OptionType.Call,
+		DeliveryTime = Now.AddDays(9.5),
+		Residual = 1m,
+	};
 
 	#region Помощники
 

@@ -653,7 +653,15 @@ public static class ConstructionCardEndpoints
 			RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt, data.Metrics.WorstCaseUsdt),
 			data.Metrics.OpenedAt,
 			data.Metrics.ClosedAt,
-			data.Metrics.Duration is { } duration ? (long?)Math.Round(duration.TotalSeconds) : null),
+			data.Metrics.Duration is { } duration ? (long?)Math.Round(duration.TotalSeconds) : null,
+			// Саммари времени жизни проходит в метрики карточки из аналитики
+			// без пересчёта: минимум суток до ближайшей экспирации, нетто-распад
+			// и суммарная временная стоимость открытых опционных остатков;
+			// null — открытых опционных ног нет или тикеры недоступны.
+			// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+			data.Metrics.Lifetime?.Summary?.DaysToNearestExpiry,
+			data.Metrics.Lifetime?.Summary?.NetDailyDecayUsdt,
+			data.Metrics.Lifetime?.Summary?.TotalTimeValueUsdt),
 		data.Positions.Select(position => new ConstructionCardPositionResponse(
 			position.Symbol,
 			position.Residual,
@@ -673,7 +681,16 @@ public static class ConstructionCardEndpoints
 			position.MarkValue,
 			position.PriceChangePercent,
 			position.SyntheticResidual,
-			position.OtherResidual)).ToArray(),
+			position.OtherResidual,
+			// Величины времени жизни открытой опционной ноги проходят в контракт
+			// позиции как есть: сутки, распад и состав тултипа; null у закрытой
+			// позиции, фьючерсной ноги и без тикеров клиент рендерит прочерком.
+			// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+			position.DaysToExpiry,
+			position.DailyDecayUsdt,
+			position.IntrinsicValueUsdt,
+			position.TimeValueUsdt,
+			position.DecayDayAgoUsdt)).ToArray(),
 		data.Trades.Select(trade => new ConstructionCardTradeResponse(
 			trade.ExecId,
 			trade.Symbol,
@@ -888,6 +905,9 @@ public sealed record ConstructionCardResponse(
 /// <param name="OpenedAt">Дата открытия — время первой сделки; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой.</param>
 /// <param name="DurationSeconds">Длительность конструкции в секундах; null без сделок.</param>
+/// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
+/// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
+/// <param name="TotalTimeValueUsdt">Суммарная временная стоимость открытых опционных остатков; null без опционных ног или без тикеров.</param>
 // Реальный риск входит в контракт метрик карточки со статусом состояния:
 // полный индикатор карточки строится с насечкой только конечного риска.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
@@ -895,6 +915,9 @@ public sealed record ConstructionCardResponse(
 // Худший исход входит в контракт рядом с реальным риском: граница индикатора
 // карточки ставится знаковой величиной худшего исхода.
 // Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+// Саммари времени жизни входит в контракт метрик аддитивно: metric-strip
+// карточки строит сводку времени жизни, null рендерится прочерком.
+// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
 public sealed record ConstructionCardMetricsResponse(
 	decimal RealizedPnL,
 	decimal? UnrealizedPnL,
@@ -911,7 +934,10 @@ public sealed record ConstructionCardMetricsResponse(
 	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
-	long? DurationSeconds);
+	long? DurationSeconds,
+	int? DaysToNearestExpiry,
+	decimal? NetDailyDecayUsdt,
+	decimal? TotalTimeValueUsdt);
 
 /// <summary>Строка таблицы позиций карточки.</summary>
 /// <param name="Symbol">Инструмент позиции.</param>
@@ -933,10 +959,18 @@ public sealed record ConstructionCardMetricsResponse(
 /// <param name="PriceChangePercent">Изменение цены остатка в процентах; null у закрытой и при сбое.</param>
 /// <param name="SyntheticResidual">Часть остатка, уведённая неоспоренными синтетическими связками; null без неоспоренного синтетического содержимого.</param>
 /// <param name="OtherResidual">Прочий остаток линейной ноги — остаток минус синтетическая часть; null вместе с синтетической частью.</param>
+/// <param name="DaysToExpiry">Остаток полных суток до экспирации открытой опционной ноги; null у закрытой позиции и фьючерсной ноги.</param>
+/// <param name="DailyDecayUsdt">Дневной распад ноги, USDT/день со знаком остатка; null без тикеров, у закрытой и фьючерсной ног.</param>
+/// <param name="IntrinsicValueUsdt">Внутренняя стоимость ноги на чистый остаток; материал тултипа состава, null без индексной цены.</param>
+/// <param name="TimeValueUsdt">Временная стоимость ноги на чистый остаток; материал тултипа состава, null без индексной цены или марки.</param>
+/// <param name="DecayDayAgoUsdt">Распад ноги на снимке суточной давности; материал динамики «вчера → сегодня», null без снимка истории.</param>
 // Распад остатка линейной ноги входит в контракт позиции аддитивно: null
 // при отсутствии неоспоренной синтетики отличим от нуля остатка.
 // Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
 // Traceability: change:synthetic-close-logical-layer/design#d5
+// Величины времени жизни входят в контракт позиции аддитивно: колонки «до
+// экспирации» и «распад» с тултипом состава; null клиент рендерит прочерком.
+// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
 public sealed record ConstructionCardPositionResponse(
 	string Symbol,
 	decimal Residual,
@@ -956,7 +990,12 @@ public sealed record ConstructionCardPositionResponse(
 	decimal? MarkValue,
 	decimal? PriceChangePercent,
 	decimal? SyntheticResidual,
-	decimal? OtherResidual);
+	decimal? OtherResidual,
+	int? DaysToExpiry,
+	decimal? DailyDecayUsdt,
+	decimal? IntrinsicValueUsdt,
+	decimal? TimeValueUsdt,
+	decimal? DecayDayAgoUsdt);
 
 /// <summary>Строка списка синтетических закрытий карточки.</summary>
 /// <param name="ClosedLegSymbol">Символ закрываемой опционной ноги связки.</param>

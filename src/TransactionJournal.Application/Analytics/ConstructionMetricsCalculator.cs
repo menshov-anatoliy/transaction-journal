@@ -18,6 +18,16 @@ public sealed class ConstructionMetricsCalculator
 
 	private readonly ConstructionRiskDiagnosticsCalculator _riskDiagnosticsCalculator = new();
 
+	/// <summary>Вычислитель метрик времени жизни опционных ног — время берёт у того же поставщика, что и длительность конструкции.</summary>
+	private readonly OptionLifetimeMetricsCalculator _lifetimeMetricsCalculator;
+
+	/// <summary>Создаёт калькулятор над поставщиком времени; по умолчанию системные часы.</summary>
+	/// <param name="timeProvider">Поставщик времени для длительности конструкции и остатка суток до экспирации; по умолчанию системный.</param>
+	public ConstructionMetricsCalculator(TimeProvider? timeProvider = null)
+	{
+		_lifetimeMetricsCalculator = new OptionLifetimeMetricsCalculator(timeProvider);
+	}
+
 	/// <summary>
 	/// Вычисляет метрики конструкции из метрик её позиций и внешних корректировок
 	/// PnL. Итог — сумма реализованного и нереализованного PnL позиций и
@@ -40,13 +50,18 @@ public sealed class ConstructionMetricsCalculator
 	/// платежа групп остатков — с тем же статусом, что и реальный риск. Рядом же
 	/// вычисляется диагностика незакрытых рисков из текущих открытых остатков:
 	/// в метрики попадает счётчик предупреждений, записи переносятся в контракты
-	/// превью и карточки; в базу ничего не пишется.
+	/// превью и карточки; в базу ничего не пишется. Тем же проходом встраиваются
+	/// метрики времени жизни открытых опционных ног: саммари конструкции
+	/// (минимум суток, нетто-распад, суммарная временная стоимость) публикуется
+	/// рядом, а предупреждения об экспирации входят в тот же канал предупреждений
+	/// со своими записями — счётчик бейджа растёт автоматически.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, для которой вычисляются метрики.</param>
 	/// <param name="allocatedCapitalUsdt">Текущий выделенный капитал конструкции в USDT — база процентов; null, когда капитал не задан.</param>
 	/// <param name="positions">Метрики позиций конструкции.</param>
 	/// <param name="adjustments">Внешние корректировки PnL конструкции.</param>
 	/// <param name="now">Текущий момент — граница длительности открытой конструкции.</param>
+	/// <param name="lifetime">Расчётные данные метрик времени жизни открытых опционных ног: ноги, свежие тикеры и история снимков; null — опционных ног нет и метрики не строятся.</param>
 	/// <returns>Метрики конструкции.</returns>
 	/// <exception cref="ArgumentNullException">Позиции или корректировки не заданы.</exception>
 	/// <exception cref="ArgumentException">Среди позиций есть позиция другой конструкции.</exception>
@@ -55,7 +70,8 @@ public sealed class ConstructionMetricsCalculator
 		decimal? allocatedCapitalUsdt,
 		IEnumerable<PositionMetrics> positions,
 		IEnumerable<ConstructionPnLAdjustment> adjustments,
-		DateTimeOffset now)
+		DateTimeOffset now,
+		OptionLifetimeInput? lifetime = null)
 	{
 		ArgumentNullException.ThrowIfNull(positions);
 		ArgumentNullException.ThrowIfNull(adjustments);
@@ -125,6 +141,28 @@ public sealed class ConstructionMetricsCalculator
 		// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
 		var riskDiagnostics = _riskDiagnosticsCalculator.Calculate(positionList);
 
+		// Метрики времени жизни опционных ног встраиваются тем же проходом:
+		// вычислитель питается свежими тикерами текущего чтения и историей
+		// снимков, саммари публикуется рядом с метриками конструкции, а записи
+		// предупреждения об экспирации сливаются в единый канал предупреждений —
+		// счётчик бейджа «⚠ N» и перечень карточки растут вместе с ними, без
+		// отдельных потребителей. Без опционных ног набора нет и канал не меняется.
+		// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+		// Traceability: openspec:analytics/option-lifetime#requirement-expiry-warning-two-weeks
+		var lifetimeEvaluation = lifetime == null
+			? null
+			: _lifetimeMetricsCalculator.Calculate(lifetime.Legs, lifetime.Marks, lifetime.SnapshotHistory);
+		var expiryDiagnostics = (lifetimeEvaluation?.ExpiryWarnings ?? [])
+			.Select(ConstructionRiskDiagnostic.FromExpiryWarning)
+			.ToList();
+
+		// Без предупреждений об экспирации перечень возвращается как есть:
+		// у конструкции без открытых остатков это общий пустой набор калькулятора
+		// диагностики, и его ссылочная стабильность опирают повторные чтения.
+		var warnings = expiryDiagnostics.Count == 0
+			? riskDiagnostics
+			: riskDiagnostics.Concat(expiryDiagnostics).ToList();
+
 		// Проценты — чистые функции текущих данных: базой служит текущее значение
 		// выделенного капитала, поэтому правка капитала меняет только процентные
 		// величины; незаданный или нулевой капитал базы не образует — проценты
@@ -167,8 +205,9 @@ public sealed class ConstructionMetricsCalculator
 			RealRiskUsdt = realRisk.Usdt,
 			RealRiskStatus = realRisk.Status,
 			WorstCaseUsdt = worstCaseUsdt,
-			RiskWarningsCount = riskDiagnostics.Count,
-			RiskWarnings = riskDiagnostics,
+			RiskWarningsCount = riskDiagnostics.Count + expiryDiagnostics.Count,
+			RiskWarnings = warnings,
+			Lifetime = lifetimeEvaluation,
 			RealizedPnLPercent = Percent(realizedPnL),
 			UnrealizedPnLPercent = Percent(unrealizedPnL),
 			AdjustmentsPnLPercent = Percent(adjustmentsPnL),

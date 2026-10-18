@@ -113,6 +113,17 @@ public sealed record ConstructionMetrics
 	/// </summary>
 	public IReadOnlyList<ConstructionRiskDiagnostic> RiskWarnings { get; init; } = [];
 
+	/// <summary>
+	/// Метрики времени жизни открытых опционных ног конструкции: ноги с
+	/// внутренним/временным разложением и распадом, саммари конструкции и
+	/// предупреждения об экспирации. null у конструкции без открытых
+	/// опционных ног — саммари по фьючерсным остаткам не строится. Записи
+	/// предупреждений из этого же вычисления слиты в <see cref="RiskWarnings"/>,
+	/// поэтому счётчик бейджа и перечень карточки с ними согласованы.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	/// </summary>
+	public OptionLifetimeEvaluation? Lifetime { get; init; }
+
 	/// <summary>Реализованный PnL в процентах от текущего выделенного капитала; null при нулевом капитале.</summary>
 	public required decimal? RealizedPnLPercent { get; init; }
 

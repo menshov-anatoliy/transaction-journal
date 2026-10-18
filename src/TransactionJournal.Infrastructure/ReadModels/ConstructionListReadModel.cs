@@ -106,7 +106,14 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				// Счётчик предупреждений проходит из метрик без пересчёта: бейдж
 				// строки и перечень карточки обязаны показывать один набор.
 				// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
-				item.RiskWarningsCount));
+				item.RiskWarningsCount,
+				// Колонки времени жизни проходят из саммари аналитики как есть:
+				// минимум суток до ближайшей экспирации и нетто-распад со знаком;
+				// без открытых опционных ног саммари отсутствует и строка несёт
+				// прочерки, деградация без тикеров решена в аналитике.
+				// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
+				item.Lifetime?.Summary?.DaysToNearestExpiry,
+				item.Lifetime?.Summary?.NetDailyDecayUsdt));
 		}
 
 		// Счётчик сводки описывает видимые конструкции: сколько в списке и сколько

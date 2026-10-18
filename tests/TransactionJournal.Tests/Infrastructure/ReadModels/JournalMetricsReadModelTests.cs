@@ -29,7 +29,16 @@ public class JournalMetricsReadModelTests
 {
 	private const string LinearSymbol = "BTCUSDT";
 
-	private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+		/// <summary>Ближняя опционная нога сценария: доска 28OCT26 08:00 UTC — девять полных суток до экспирации.</summary>
+		private const string NearCallSymbol = "BTC-28OCT26-90000-C";
+
+		/// <summary>Дальняя опционная нога сценария: доска 25JUN27 08:00 UTC — вне порога предупреждения.</summary>
+		private const string FarCallSymbol = "BTC-25JUN27-106000-C";
+
+		private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+		/// <summary>Фиксированный момент чтения метрик времени жизни.</summary>
+		private static readonly DateTimeOffset LifetimeNow = new(2026, 10, 18, 12, 0, 0, TimeSpan.Zero);
 
 	private string _databasePath = null!;
 	private JournalMetricsReadModel _readModel = null!;
@@ -249,6 +258,103 @@ public class JournalMetricsReadModelTests
 		Assert.That(metrics.RealizedPnL, Is.EqualTo(-2m));
 	}
 
+	[TestMethod]
+	[Description("Саммари времени жизни и предупреждение об экспирации доходят до метрик конструкции")]
+	// Метрики времени жизни строятся тем же чтением поверх свежих тикеров и
+	// истории снимков: саммари сводит открытые опционные ноги (минимум суток,
+	// нетто-распад со знаком, суммарная временная стоимость), а открытая нога
+	// с остатком девяти полных суток порождает предупреждение об экспирации
+	// в едином канале предупреждений.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	// Traceability: openspec:analytics/option-lifetime#requirement-expiry-warning-two-weeks
+	public async Task TryIfOptionLegsReachLifetimeSummaryAndExpiryWarning()
+	{
+		// Arrange: конструкция с двумя открытыми коллами — ближний (9 полных суток
+		// до экспирации, тета −2.5) и дальний (249 суток, тета −1, остаток +2);
+		// история снимков ближнего символа держит тету суточной давности −2.
+		var construction = await CreateConstructionAsync("Стреддл-календарь", 1000m);
+		await SeedOptionInstrumentAsync(NearCallSymbol, "Call", ExecMs(2026, 10, 28, 8, 0));
+		await SeedOptionInstrumentAsync(FarCallSymbol, "Call", ExecMs(2027, 6, 25, 8, 0));
+		await AddOptionTradeAsync("exec-near", NearCallSymbol, "Buy", "1", "3000", ExecMs(2026, 10, 10, 10, 0));
+		await AddOptionTradeAsync("exec-far", FarCallSymbol, "Buy", "2", "15000", ExecMs(2026, 10, 10, 11, 0));
+		await BindAsync(construction, "exec-near", "exec-far");
+		_markSource.FreshOptionMarks[NearCallSymbol] = new InstrumentMarkSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
+		_markSource.FreshOptionMarks[FarCallSymbol] = new InstrumentMarkSnapshot(FarCallSymbol, 15000m, LifetimeNow, 110000m, -1.0m);
+		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 2900m, theta: -2.0m, receivedAt: LifetimeNow.AddHours(-25));
+		var readModel = CreateReadModel(new FixedTimeProvider(LifetimeNow));
+
+		// Act: читаем метрики журнала.
+		var metrics = await readModel.ReadAsync();
+
+		// Assert: саммари берёт минимум суток (9), суммирует распады со знаком
+		// (−2.5 − 2 = −4.5) и временные стоимости (3000 + 11000 × 2 = 25000).
+		var constructionMetrics = metrics.Constructions.Single(item => item.ConstructionId == construction);
+		Assert.That(constructionMetrics.Lifetime, Is.Not.Null);
+		var summary = constructionMetrics.Lifetime!.Summary;
+		Assert.That(summary, Is.Not.Null);
+		Assert.That(summary!.DaysToNearestExpiry, Is.EqualTo(9));
+		Assert.That(summary.NetDailyDecayUsdt, Is.EqualTo(-4.5m));
+		Assert.That(summary.TotalTimeValueUsdt, Is.EqualTo(25000m));
+
+		// Assert: прирост распада ближней ноги — фактическая разность тет со
+		// снимком суточной давности, приведённая к текущему остатку.
+		// Требование: прирост распада по истории снимков.
+		// Traceability: openspec:analytics/option-lifetime#requirement-leg-decay-acceleration
+		var nearLeg = constructionMetrics.Lifetime.Legs.Single(leg => leg.Symbol == NearCallSymbol);
+		Assert.That(nearLeg.DaysToExpiry, Is.EqualTo(9));
+		Assert.That(nearLeg.DailyDecayUsdt, Is.EqualTo(-2.5m));
+		Assert.That(nearLeg.DecayDayAgoUsdt, Is.EqualTo(-2.0m));
+		Assert.That(nearLeg.DecayAccelerationUsdt, Is.EqualTo(-0.5m));
+		Assert.That(nearLeg.IntrinsicValueUsdt, Is.EqualTo(0m));
+		Assert.That(nearLeg.TimeValueUsdt, Is.EqualTo(3000m));
+
+		// Assert: предупреждение об экспирации одно — по ближнему инструменту,
+		// с готовым текстом об остатке суток и распаде; счётчик бейджа вырос.
+		// Требование: предупреждение об экспирации в канале предупреждений.
+		// Traceability: openspec:analytics/option-lifetime#scenario-expiry-warning-one-per-instrument
+		Assert.That(constructionMetrics.RiskWarningsCount, Is.EqualTo(1));
+		var warning = constructionMetrics.RiskWarnings.Single(item => item.Reason == ConstructionRiskReason.ExpiryApproaching);
+		Assert.That(warning.Symbol, Is.EqualTo(NearCallSymbol));
+		Assert.That(warning.Text, Does.Contain("до экспирации 9 полных сут"));
+		Assert.That(warning.Text, Does.Contain("-2.5"));
+	}
+
+	[TestMethod]
+	[Description("Без тикеров опциона саммари деградирует прочерком, а остаток суток сохраняется")]
+	// Недоступность тикеров — деградация прочерком, а не ошибка: слагаемые
+	// саммари без рыночных величин исчезают, остаток суток вычисляется по
+	// времени доставки, предупреждение называет распад неизвестным.
+	// Traceability: openspec:analytics/option-lifetime#scenario-leg-days-no-market-data
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	public async Task TryIfOptionLegWithoutTickersKeepsDaysAndDashDecay()
+	{
+		// Arrange: тот же ближний колл, но свежий тикер символа недоступен.
+		var construction = await CreateConstructionAsync("Одинокий колл", 1000m);
+		await SeedOptionInstrumentAsync(NearCallSymbol, "Call", ExecMs(2026, 10, 28, 8, 0));
+		await AddOptionTradeAsync("exec-near", NearCallSymbol, "Buy", "1", "3000", ExecMs(2026, 10, 10, 10, 0));
+		await BindAsync(construction, "exec-near");
+		var readModel = CreateReadModel(new FixedTimeProvider(LifetimeNow));
+
+		// Act: читаем метрики журнала.
+		var metrics = await readModel.ReadAsync();
+
+		// Assert: остаток суток вычислен без рыночных данных, слагаемые саммари
+		// от тикеров отсутствуют, сбой марок признан, предупреждение называет
+		// распад неизвестным.
+		var constructionMetrics = metrics.Constructions.Single(item => item.ConstructionId == construction);
+		Assert.That(constructionMetrics.Lifetime, Is.Not.Null);
+		var summary = constructionMetrics.Lifetime!.Summary;
+		Assert.That(summary, Is.Not.Null);
+		Assert.That(summary!.DaysToNearestExpiry, Is.EqualTo(9));
+		Assert.That(summary.NetDailyDecayUsdt, Is.Null);
+		Assert.That(summary.TotalTimeValueUsdt, Is.Null);
+		Assert.That(metrics.HasMarkFailure, Is.True);
+		Assert.That(constructionMetrics.RiskWarningsCount, Is.EqualTo(1));
+		Assert.That(
+			constructionMetrics.RiskWarnings.Single(item => item.Reason == ConstructionRiskReason.ExpiryApproaching).Text,
+			Does.Contain("распад неизвестен"));
+	}
+
 	#region Помощники
 
 	private DbContextOptions<JournalDbContext> CreateOptions() =>
@@ -302,6 +408,56 @@ public class JournalMetricsReadModelTests
 		await binding.BindBatchAsync(constructionId, execIds);
 	}
 
+	/// <summary>Собирает read-модель метрик журнала над фиксированными часами чтения.</summary>
+	private JournalMetricsReadModel CreateReadModel(TimeProvider timeProvider) =>
+		new(CreateOptions(), _markSource, _markSource, timeProvider);
+
+	/// <summary>Сохраняет спецификацию опциона в справочнике сырых записей синхронизации с каноническим временем доставки.</summary>
+	private async Task SeedOptionInstrumentAsync(string symbol, string optionsType, long deliveryTimeMs)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawInstruments.Add(new RawInstrument
+		{
+			Symbol = symbol,
+			Category = "option",
+			PayloadJson =
+				$$"""{"symbol":"{{symbol}}","baseCoin":"{{symbol.Split('-')[0]}}","quoteCoin":"USDT","settleCoin":"USDT","status":"Trading","optionsType":"{{optionsType}}","deliveryTime":"{{deliveryTimeMs}}","deliveryFeeRate":"0.00015"}""",
+			FetchedAt = FetchedAt,
+		});
+		await db.SaveChangesAsync();
+	}
+
+	/// <summary>Добавляет сырую запись исполнения опциона; числа биржа шлёт строками.</summary>
+	private async Task AddOptionTradeAsync(string execId, string symbol, string side, string execQty, string execPrice, long execTimeMs)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.RawExecutions.Add(new RawExecution
+		{
+			ExecId = execId,
+			Category = "option",
+			Symbol = symbol,
+			ExecTimeMs = execTimeMs,
+			PayloadJson = ExecutionPayload(execId, symbol, side, execPrice, execQty, "0", "USDT", execTimeMs),
+			FetchedAt = FetchedAt,
+		});
+		await db.SaveChangesAsync();
+	}
+
+	/// <summary>Пишет строку истории рыночных снимков с тетой и моментом получения — материал прироста распада.</summary>
+	private async Task AddMarketSnapshotAsync(string symbol, decimal markPrice, decimal theta, DateTimeOffset receivedAt)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.InstrumentMarketSnapshots.Add(new InstrumentMarketSnapshot
+		{
+			Symbol = symbol,
+			MarkPrice = markPrice,
+			UnderlyingPrice = 80000m,
+			Theta = theta,
+			ReceivedAt = receivedAt,
+		});
+		await db.SaveChangesAsync();
+	}
+
 	private async Task AddAdjustmentAsync(long constructionId, decimal amount)
 	{
 		var adjustments = new PnLAdjustmentService(CreateOptions());
@@ -329,12 +485,17 @@ public class JournalMetricsReadModelTests
 		new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
 	/// <summary>
-	/// Сценарный источник марок: свежие и последние марки выдаются из словаря,
+	/// Сценарный источник марок: свежие и последние марки выдаются из словарей,
 	/// режим сбоя имитирует недоступность публичных тикеров ошибкой сети.
+	/// Опционные тикеры идут отдельным словарём с индексной ценой и тетой —
+	/// расширенный снимок <see cref="IFreshInstrumentMarkSource"/>.
 	/// </summary>
 	private sealed class ScriptedMarkSource : IFreshInstrumentMarkSource, IInstrumentMarkSource
 	{
 		public Dictionary<string, (decimal Price, DateTimeOffset ReceivedAt)> FreshMarks { get; } = new();
+
+		/// <summary>Свежие тикеры опционов с индексной ценой и тетой — материал метрик времени жизни.</summary>
+		public Dictionary<string, InstrumentMarkSnapshot> FreshOptionMarks { get; } = new(StringComparer.Ordinal);
 
 		public bool FailFresh { get; set; }
 
@@ -343,6 +504,11 @@ public class JournalMetricsReadModelTests
 			if (FailFresh)
 			{
 				throw new HttpRequestException("публичные тикеры недоступны");
+			}
+
+			if (FreshOptionMarks.TryGetValue(symbol, out var optionMark))
+			{
+				return Task.FromResult<InstrumentMarkSnapshot?>(optionMark);
 			}
 
 			return FreshMarks.TryGetValue(symbol, out var mark)

@@ -102,7 +102,13 @@ public static class ConstructionsEndpoints
 					// из метрик аналитики без пересчёта и совпадает с перечнем
 					// превью и карточки.
 					// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
-					item.RiskWarningsCount))
+					item.RiskWarningsCount,
+					// Колонки времени жизни строки списка: минимум суток до ближайшей
+					// экспирации открытых опционных ног и нетто-распад со знаком;
+					// null — конструкция без опционных ног или без тикеров.
+					// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
+					item.DaysToNearestExpiry,
+					item.NetDailyDecayUsdt))
 				.ToArray();
 			return Results.Json(new ConstructionsOverviewResponse(summary, rows));
 		});
@@ -241,6 +247,8 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="LiveHintCount">Число живых подсказок конструкции для бейджа строки.</param>
 /// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков для бейджа «⚠ N» строки; ноль — предупреждений нет.</param>
+/// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
+/// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
 // Реальный риск входит в контракт строки списка со статусом состояния:
 // SPA рисует насечку только конечного риска и различает неограниченный
 // хвост и неполные данные без догадок по null.
@@ -252,6 +260,9 @@ public sealed record ConstructionsSummaryResponse(
 // Счётчик предупреждений входит в контракт строки аддитивно: бейдж «⚠ N»
 // строится по числу из метрик аналитики, ноль — бейдж скрыт.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
+// Колонки времени жизни входят в контракт строки аддитивно: null клиент
+// рендерит прочерком, красный остаток суток при ≤ 14 выводится на клиенте.
+// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
 public sealed record ConstructionRowResponse(
 	long ConstructionId,
 	string Name,
@@ -274,7 +285,9 @@ public sealed record ConstructionRowResponse(
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	int LiveHintCount,
-	int RiskWarningsCount);
+	int RiskWarningsCount,
+	int? DaysToNearestExpiry,
+	decimal? NetDailyDecayUsdt);
 
 /// <summary>Состояние недоступности журнала: обзор не собран, причина — в тексте.</summary>
 /// <param name="Error">Человекочитаемая причина недоступности.</param>

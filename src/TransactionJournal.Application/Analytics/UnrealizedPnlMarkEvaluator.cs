@@ -121,6 +121,11 @@ public sealed class UnrealizedPnlMarkEvaluator
 				.ToList(),
 			MarksAsOf = marksAsOf,
 			HasMarkFailure = hasMarkFailure,
+			// Свежие тикеры проходят наружу рядом с оценкой: метрики времени
+			// жизни опционных ног читают тету и индексную цену из тех же
+			// запросов, что и нереализованная оценка, без второго обхода.
+			// Traceability: change:add-option-lifetime-metrics/design#d1
+			Marks = marks,
 		};
 	}
 
