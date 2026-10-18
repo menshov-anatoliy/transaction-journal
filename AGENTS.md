@@ -33,6 +33,9 @@ MCP-инструменты используются как источник ак
 
 - **Оформление кода:** при изменении кода соблюдай
   `.github/prompts/formatting.prompt.md`.
+- **UI-изменения:** визуальные изменения сначала вносятся в `design.pen`
+  (строго через MCP Pen), затем переносятся во frontend; порядок и приёмка —
+  `.github/instructions/design-first.instructions.md`.
 - **Тесты:** при создании или изменении тестов соблюдай
   `.github/prompts/unittests.prompt.md`.
 - **Traceability:** при смысловом изменении поведения, API/UI-контракта,
