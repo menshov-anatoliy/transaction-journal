@@ -14,6 +14,7 @@ using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Bybit;
 using TransactionJournal.Application.Materialization;
+using TransactionJournal.Application.ManualTrades;
 using TransactionJournal.Application.Ops;
 using TransactionJournal.Application.Sync;
 using TransactionJournal.Infrastructure.Analytics;
@@ -235,6 +236,14 @@ builder.Services.AddSingleton<IPnLAdjustmentService>(sp => sp.GetRequiredService
 builder.Services.AddSingleton(sp => new SyntheticCloseDisputeService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 builder.Services.AddSingleton<ISyntheticCloseDisputeService>(sp => sp.GetRequiredService<SyntheticCloseDisputeService>());
+
+// Разрешение символа ручного ввода: сверка со справочником инструментов и пополнение
+// публичным каналом биржи без API-ключей тем же путём, что и синхронизация. Сеть
+// вызывается только для неизвестных справочнику символов, отказ сети или биржи
+// возвращает человекочитаемую ошибку будущему сервису ручных сделок.
+// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
+// Traceability: change:manual-journal-management/specs/sync/bybit-history/spec#scenario-manual-symbol-populates-catalog
+builder.Services.AddTransient<ManualInstrumentResolver>();
 
 // Read-модель каркаса «Терминала»: счётчик непривязанных сделок для бейджа
 // «Входящих» и заголовок открытой конструкции для транзитной вкладки — тонкая

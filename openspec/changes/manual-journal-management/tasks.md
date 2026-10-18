@@ -8,7 +8,7 @@
 
 ## 2. Разрешение символа при ручном вводе
 
-- [ ] 2.1 Реализовать сверку символа с `InstrumentCatalog` и пополнение справочника через `IBybitInstrumentSource`/`IInstrumentReferenceStore` без API-ключей; модульными тестами: известный символ не зовёт сеть, неизвестный запрашивается и сохраняется, отказ сети возвращает человекочитаемую ошибку (Traceability: openspec:sync/bybit-history#requirement-instrument-reference)
+- [x] 2.1 Реализовать сверку символа с `InstrumentCatalog` и пополнение справочника через `IBybitInstrumentSource`/`IInstrumentReferenceStore` без API-ключей; модульными тестами: известный символ не зовёт сеть, неизвестный запрашивается и сохраняется, отказ сети возвращает человекочитаемую ошибку (Traceability: openspec:sync/bybit-history#requirement-instrument-reference)
 
 ## 3. CRUD ручных сделок
 
