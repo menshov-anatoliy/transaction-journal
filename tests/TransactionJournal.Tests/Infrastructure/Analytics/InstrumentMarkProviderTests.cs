@@ -30,6 +30,7 @@ public class InstrumentMarkProviderTests
 {
 	private const string TestBaseUrl = "http://bybit-test.local";
 	private const string LinearSymbol = "BTCUSDT";
+	private const string OptionSymbol = "BTC-25JUN27-106000-P-USDT";
 
 	private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
@@ -122,6 +123,111 @@ public class InstrumentMarkProviderTests
 			Assert.That(cached.MarkPrice, Is.EqualTo(28000.10m));
 			Assert.That(cached.ReceivedAt, Is.EqualTo(second.ReceivedAt));
 		}
+	}
+
+	[TestMethod]
+	[Description("Свежий тикер опциона дописывает строку истории снимков: марка, индекс, тета, момент получения")]
+	public async Task TryIfFreshOptionTickerAppendsMarketSnapshotHistoryRow()
+	{
+		// Arrange: справочник знает опционный символ; биржа отдаёт марку, индексную
+		// цену и тету, виртуальные часы стоят на старте.
+		var start = _clock.GetUtcNow();
+		_handler.EnqueueJson(OptionTickersBody("472.10", "103850.55", "-19.40"));
+
+		// Act: запрашиваем свежую марку опциона.
+		var fresh = await _provider.GetFreshMarkAsync(OptionSymbol);
+
+		// Assert: возвращённый снимок несёт nullable-поля теты и индекса, а история
+		// рыночных снимков пополнилась строкой со всеми величинами и штампом
+		// момента получения — сценарий «свежие тикеры создают снимок истории».
+		// Traceability: openspec:analytics/option-lifetime#scenario-snapshot-written-on-fresh-tickers
+		Assert.That(fresh, Is.Not.Null);
+		Assert.That(fresh!.Symbol, Is.EqualTo(OptionSymbol));
+		Assert.That(fresh.MarkPrice, Is.EqualTo(472.10m));
+		Assert.That(fresh.UnderlyingPrice, Is.EqualTo(103850.55m));
+		Assert.That(fresh.Theta, Is.EqualTo(-19.40m));
+		Assert.That(fresh.ReceivedAt, Is.EqualTo(start));
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var snapshot = await db.InstrumentMarketSnapshots.SingleAsync();
+			Assert.That(snapshot.Symbol, Is.EqualTo(OptionSymbol));
+			Assert.That(snapshot.MarkPrice, Is.EqualTo(472.10m));
+			Assert.That(snapshot.UnderlyingPrice, Is.EqualTo(103850.55m));
+			Assert.That(snapshot.Theta, Is.EqualTo(-19.40m));
+			Assert.That(snapshot.ReceivedAt, Is.EqualTo(start));
+		}
+
+		// Act: время идёт, биржа отвечает новыми значениями — история append-only:
+		// вторая строка дописывается, прежняя остаётся доступной для сравнения.
+		_clock.Advance(TimeSpan.FromHours(6));
+		var later = _clock.GetUtcNow();
+		_handler.EnqueueJson(OptionTickersBody("470.00", "103900.00", "-20.15"));
+		await _provider.GetFreshMarkAsync(OptionSymbol);
+
+		// Assert: в истории две строки с разными моментами получения, первая не
+		// перезаписана — сценарий «история накапливается без очистки».
+		// Traceability: openspec:analytics/option-lifetime#scenario-snapshot-history-append-only
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			// SQLite не сортирует DateTimeOffset на стороне базы — упорядочиваем на клиенте.
+			var history = (await db.InstrumentMarketSnapshots.ToListAsync())
+				.OrderBy(snapshot => snapshot.ReceivedAt)
+				.ToList();
+			Assert.That(history, Has.Count.EqualTo(2));
+			Assert.That(history[0].MarkPrice, Is.EqualTo(472.10m));
+			Assert.That(history[1].MarkPrice, Is.EqualTo(470.00m));
+			Assert.That(history[1].Theta, Is.EqualTo(-20.15m));
+			Assert.That(history[1].ReceivedAt, Is.EqualTo(later));
+		}
+	}
+
+	[TestMethod]
+	[Description("Свежая марка линейного перпа тоже дописывает историю снимков: индекс и тета пусты")]
+	public async Task TryIfFreshLinearMarkAppendsSnapshotWithoutOptionFields()
+	{
+		// Arrange: биржа отдаёт только марку линейного перпа — поля опциона пустые.
+		_handler.EnqueueJson(TickersBody("27739.74"));
+
+		// Act: запрашиваем свежую марку.
+		var fresh = await _provider.GetFreshMarkAsync(LinearSymbol);
+
+		// Assert: снимок в истории дописан с пустыми nullable-полями индекса и
+		// теты: строка фиксирует сам факт выборки любого инструмента провайдера,
+		// а опционные поля остаются прочерком.
+		// Traceability: openspec:analytics/option-lifetime#requirement-market-snapshot-history
+		Assert.That(fresh, Is.Not.Null);
+		Assert.That(fresh!.UnderlyingPrice, Is.Null);
+		Assert.That(fresh.Theta, Is.Null);
+		using var db = new JournalDbContext(CreateOptions());
+		var snapshot = await db.InstrumentMarketSnapshots.SingleAsync();
+		Assert.That(snapshot.Symbol, Is.EqualTo(LinearSymbol));
+		Assert.That(snapshot.MarkPrice, Is.EqualTo(27739.74m));
+		Assert.That(snapshot.UnderlyingPrice, Is.Null);
+		Assert.That(snapshot.Theta, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Пустой ответ биржи не пополняет историю снимков и сохраняет кэш последней марки")]
+	public async Task TryIfMissingExchangeMarkLeavesHistoryAndCacheIntact()
+	{
+		// Arrange: одна успешная выборка уже создала строку истории и штамп кэша;
+		// следующий ответ биржи — пустая марка опционного инструмента.
+		_handler.EnqueueJson(OptionTickersBody("472.10", "103850.55", "-19.40"));
+		await _provider.GetFreshMarkAsync(OptionSymbol);
+		_handler.EnqueueJson(OptionMissingMarkBody());
+
+		// Act: запрашиваем свежую марку — биржа значения не отдала.
+		var fresh = await _provider.GetFreshMarkAsync(OptionSymbol);
+
+		// Assert: свежей марки нет, история не пополнилась, а кэш хранит последнюю
+		// известную марку — сценарий «сбой тикеров не пополняет историю».
+		// Traceability: openspec:analytics/option-lifetime#scenario-snapshot-not-written-on-failure
+		Assert.That(fresh, Is.Null);
+		Assert.That(await _provider.GetLastMarkAsync(OptionSymbol), Is.EqualTo(472.10m));
+		using var db = new JournalDbContext(CreateOptions());
+		var history = await db.InstrumentMarketSnapshots.ToListAsync();
+		Assert.That(history, Has.Count.EqualTo(1));
+		Assert.That(history.Single().MarkPrice, Is.EqualTo(472.10m));
 	}
 
 	[TestMethod]
@@ -312,7 +418,7 @@ public class InstrumentMarkProviderTests
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
 
-	/// <summary>Справочник инструментов: линейный перп BTCUSDT, которого достаточно провайдеру.</summary>
+	/// <summary>Справочник инструментов: линейный перп BTCUSDT и опцион доски BTC.</summary>
 	private static void SeedInstrumentCatalog(JournalDbContext db)
 	{
 		db.RawInstruments.Add(new RawInstrument
@@ -320,6 +426,13 @@ public class InstrumentMarkProviderTests
 			Symbol = LinearSymbol,
 			Category = "linear",
 			PayloadJson = """{"symbol":"BTCUSDT","contractType":"LinearPerpetual","status":"Trading","baseCoin":"BTC","quoteCoin":"USDT","settleCoin":"USDT","deliveryTime":"0","optionsType":""}""",
+			FetchedAt = FetchedAt,
+		});
+		db.RawInstruments.Add(new RawInstrument
+		{
+			Symbol = OptionSymbol,
+			Category = "option",
+			PayloadJson = """{"symbol":"BTC-25JUN27-106000-P-USDT","optionsType":"Put","baseCoin":"BTC","quoteCoin":"USDT","settleCoin":"USDT","deliveryTime":"1811481600000"}""",
 			FetchedAt = FetchedAt,
 		});
 		db.SaveChanges();
@@ -346,9 +459,18 @@ public class InstrumentMarkProviderTests
 	private static string TickersBody(string markPrice) =>
 		"{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"category\":\"linear\",\"list\":[{\"symbol\":\"BTCUSDT\",\"markPrice\":\"" + markPrice + "\"}]}}";
 
+	/// <summary>Успешный ответ тикеров опциона: марка, индексная цена и тета; пустая строка — значения нет.</summary>
+	private static string OptionTickersBody(string markPrice, string underlyingPrice, string theta) =>
+		"{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"category\":\"option\",\"list\":[{\"symbol\":\"" + OptionSymbol
+		+ "\",\"markPrice\":\"" + markPrice + "\",\"underlyingPrice\":\"" + underlyingPrice + "\",\"theta\":\"" + theta + "\"}]}}";
+
 	/// <summary>Успешный ответ тикеров с пустой маркой инструмента: биржа значения не отдала.</summary>
 	private static string MissingMarkBody() =>
 		"""{"retCode":0,"retMsg":"OK","result":{"category":"linear","list":[{"symbol":"BTCUSDT","markPrice":""}]}}""";
+
+	/// <summary>Успешный ответ тикеров опциона с пустой маркой: биржа значения не отдала.</summary>
+	private static string OptionMissingMarkBody() =>
+		"""{"retCode":0,"retMsg":"OK","result":{"category":"option","list":[{"symbol":"BTC-25JUN27-106000-P-USDT","markPrice":""}]}}""";
 
 	#endregion
 }

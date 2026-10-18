@@ -95,6 +95,35 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.ToTable("InstrumentMarks");
                 });
 
+            modelBuilder.Entity("TransactionJournal.Domain.Data.InstrumentMarketSnapshot", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("MarkPrice")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("Theta")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("UnderlyingPrice")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Symbol", "ReceivedAt");
+
+                    b.ToTable("InstrumentMarketSnapshots");
+                });
+
             modelBuilder.Entity("TransactionJournal.Domain.Data.ManualCloseMark", b =>
                 {
                     b.Property<long>("Id")

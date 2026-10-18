@@ -10,12 +10,15 @@ namespace TransactionJournal.Infrastructure.Analytics;
 /// <summary>
 /// Провайдер марок инструментов: публичный эндпоинт тикеров без аутентификации
 /// и кэш последней известной марки в хранилище журнала. Свежая марка запрашивается
-/// у биржи по символу и тут же штампуется временем получения; читающие слои берут
-/// последнюю известную марку из кэша без сетевого запроса — так ручная пометка
-/// закрытия без цены получает дефолт, а оценка нереализованного PnL — марку на
-/// момент запроса. Каждый вызов создаёт собственный короткоживущий контекст,
-/// поэтому провайдер безопасен в длительных сессиях Blazor Server.
+/// у биржи по символу и тут же штампуется временем получения; каждая успешная
+/// выборка дополнительно дописывает append-only строку истории рыночных снимков
+/// с индексной ценой и тетой ответа — материал прироста распада. Читающие слои
+/// берут последнюю известную марку из кэша без сетевого запроса — так ручная
+/// пометка закрытия без цены получает дефолт, а оценка нереализованного PnL —
+/// марку на момент запроса. Каждый вызов создаёт собственный короткоживущий
+/// контекст, поэтому провайдер безопасен в длительных сессиях Blazor Server.
 // Traceability: openspec:analytics/performance#requirement-mark-provider
+// Traceability: openspec:analytics/option-lifetime#requirement-market-snapshot-history
 // Traceability: change:add-analytics/design#d2
 /// </summary>
 public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstrumentMarkSource
@@ -45,12 +48,15 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 	/// Запрашивает свежую марку инструмента у публичного эндпоинта тикеров и
 	/// штампует ею кэш: в хранилище сохраняются и цена, и время её получения,
 	/// поэтому строка кэша всегда несёт последнюю известную марку с моментом
-	/// её получения. Категория запроса выводится из справочника инструментов
+	/// её получения. Каждая успешная выборка дополнительно дописывает строку
+	/// в append-only историю рыночных снимков — с индексной ценой и тетой
+	/// ответа тикера; у не-опционов биржа поля не отдаёт и в снимок пишется
+	/// null. Категория запроса выводится из справочника инструментов
 	/// синхронизации; неизвестный справочнику символ не запрашивается вовсе.
 	/// </summary>
 	/// <param name="symbol">Символ инструмента, например BTCUSDT или BTC-29DEC23-25000-C.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	/// <returns>Свежая марка со временем получения; null — инструмент неизвестен справочнику или биржа не отдала марку.</returns>
+	/// <returns>Свежая марка со временем получения и nullable-полями теты и индексной цены; null — инструмент неизвестен справочнику или биржа не отдала марку.</returns>
 	/// <exception cref="ArgumentException">Инструмент не задан или состоит из пробелов.</exception>
 	/// <exception cref="BybitApiException">Биржа ответила ошибкой после всех повторов; решение о деградации остаётся за вызывающим слоем.</exception>
 	public async Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default)
@@ -83,8 +89,8 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 			Category = category,
 			Symbol = symbol,
 		}, cancellationToken).ConfigureAwait(false);
-		var markPrice = tickers
-			.FirstOrDefault(ticker => string.Equals(ticker.Symbol, symbol, StringComparison.Ordinal))?.MarkPrice;
+		var ticker = tickers.FirstOrDefault(ticker => string.Equals(ticker.Symbol, symbol, StringComparison.Ordinal));
+		var markPrice = ticker?.MarkPrice;
 		if (markPrice == null)
 		{
 			// Биржа не отдала марку инструмента — кэш не трогаем, последняя известная
@@ -115,10 +121,25 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 				cached.ReceivedAt = receivedAt;
 			}
 
+			// Каждая успешная выборка тикеров дописывает append-only строку истории
+			// рыночных снимков: марку, индексную цену и тету ответа с моментом
+			// получения — той же записью, что и штамп кэша. Пустой ответ биржи и
+			// сбой тикеров историю не пополняют: материал прироста распада
+			// появляется только из фактических ответов биржи.
+			// Traceability: openspec:analytics/option-lifetime#requirement-market-snapshot-history
+			db.InstrumentMarketSnapshots.Add(new InstrumentMarketSnapshot
+			{
+				Symbol = symbol,
+				MarkPrice = markPrice.Value,
+				UnderlyingPrice = ticker!.UnderlyingPrice,
+				Theta = ticker!.Theta,
+				ReceivedAt = receivedAt,
+			});
+
 			await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 		}
 
-		return new InstrumentMarkSnapshot(symbol, markPrice.Value, receivedAt);
+		return new InstrumentMarkSnapshot(symbol, markPrice.Value, receivedAt, ticker!.UnderlyingPrice, ticker!.Theta);
 	}
 
 	#endregion

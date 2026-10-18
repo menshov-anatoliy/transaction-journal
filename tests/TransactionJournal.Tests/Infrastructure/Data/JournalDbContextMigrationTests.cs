@@ -74,6 +74,20 @@ public class JournalDbContextMigrationTests
 			// Traceability: openspec:analytics/performance#requirement-mark-provider
 			Assert.That(tables, Does.Contain("InstrumentMarks"));
 
+			// История рыночных снимков разворачивается штатным Migrate() на пустой
+			// базе: провайдер марок дописывает строки с первой же успешной выборки,
+			// историю невозможно восстановить задним числом.
+			// Traceability: openspec:analytics/option-lifetime#requirement-market-snapshot-history
+			Assert.That(tables, Does.Contain("InstrumentMarketSnapshots"));
+
+			var snapshotIndexes = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM sqlite_master WHERE type = 'index' AND tbl_name = 'InstrumentMarketSnapshots' ORDER BY name")
+				.ToList();
+
+			// Индекс «символ + момент получения» развёрнут: поиск ближайшего снимка
+			// суточной давности прироста распада остаётся точечным запросом.
+			Assert.That(snapshotIndexes, Does.Contain("IX_InstrumentMarketSnapshots_Symbol_ReceivedAt"));
+
 			// Таблица настроек приложения уровня рантайма разворачивается штатным
 			// Migrate() на чистой базе — переключатель бэкапа синхронизации получает
 			// своё хранилище при старте без ручных шагов установки.

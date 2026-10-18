@@ -80,6 +80,23 @@ public sealed class BybitTicker
 	public decimal? Vega { get; init; }
 
 	/// <summary>Тета опциона; у не-опционов отсутствует.</summary>
+	/// <remarks>
+	/// Сверка живым ответом GET /v5/market/tickers?category=option&amp;baseCoin=BTC
+	/// (2026-10-18): тета отрицательная у всех 672 тикеров (доски 21OCT26 — около
+	/// 2.6 суток до экспирации и 25JUN27 — около 250 суток), единицы — котируемая
+	/// монета (USDT) на контракт в сутки, тот же масштаб цен, что у markPrice.
+	/// Контрольный тикер BTC-21OCT26-79500-C-USDT: markPrice 2091.86150741,
+	/// underlyingPrice 81154.40530188, страйк 79500 — временная стоимость
+	/// markPrice − (underlyingPrice − strike) = 437.45620553, тета −164.32019599:
+	/// |тета| × 2.66 оставшихся суток ≈ 437 ≈ временной стоимости. У дальних досок
+	/// |тета| на два порядка меньше временной стоимости (BTC-25JUN27-150000-C-USDT:
+	/// временная 688.2548849, тета −7.0701304) — распад растягивается на весь
+	/// остаток жизни. Знак и порядок величины сходятся с временнОй стоимостью,
+	/// поэтому маппинг decimal? правки не требует: это суточная тета на контракт
+	/// в котируемой монете, отрицательная для длинной позиции.
+	/// Traceability: change:add-option-lifetime-metrics/design#d1
+	/// Traceability: adr:docs/adr/0017-option-lifetime-metrics.md#considered-options
+	/// </remarks>
 	[JsonPropertyName("theta")]
 	public decimal? Theta { get; init; }
 

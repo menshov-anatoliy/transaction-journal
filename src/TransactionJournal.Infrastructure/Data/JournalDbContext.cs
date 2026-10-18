@@ -48,6 +48,9 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 	/// <summary>Кэш последних известных марок инструментов — провайдер марок аналитики.</summary>
 	public DbSet<InstrumentMark> InstrumentMarks => Set<InstrumentMark>();
 
+	/// <summary>Append-only история рыночных снимков инструментов — материал прироста распада.</summary>
+	public DbSet<InstrumentMarketSnapshot> InstrumentMarketSnapshots => Set<InstrumentMarketSnapshot>();
+
 	/// <summary>Настройки приложения уровня рантайма: пользовательские переключатели.</summary>
 	public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
@@ -201,6 +204,18 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 		modelBuilder.Entity<InstrumentMark>()
 			.HasIndex(mark => mark.Symbol)
 			.IsUnique();
+
+		#endregion
+
+		#region История рыночных снимков
+
+		// История append-only: по строке на каждую успешную выборку тикеров, без
+		// уникальности и без очистки. Индекс «символ + момент получения» делает
+		// точечным самый частый запрос прироста распада — поиск ближайшего снимка
+		// суточной давности инструмента.
+		// Traceability: openspec:analytics/option-lifetime#requirement-market-snapshot-history
+		modelBuilder.Entity<InstrumentMarketSnapshot>()
+			.HasIndex(snapshot => new { snapshot.Symbol, snapshot.ReceivedAt });
 
 		#endregion
 

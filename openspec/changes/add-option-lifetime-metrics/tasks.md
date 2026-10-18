@@ -2,9 +2,9 @@
 
 ## 1. Снимки рыночных данных
 
-- [ ] 1.1 Сверить живым ответом `GET /v5/market/tickers` (category=option) единицы и знак `theta` против временной стоимости реального тикера; зафиксировать вывод комментарием в маппинге `BybitTicker`. Проверка: вывод записан, порядок величины сходится.
-- [ ] 1.2 Добавить доменную сущность `InstrumentMarketSnapshot` (`Symbol, MarkPrice, UnderlyingPrice, Theta, ReceivedAt`) с конфигурацией и индексом `(Symbol, ReceivedAt)` в `JournalDbContext`, EF-миграцию. Проверка: `dotnet build` чист, миграция применяется к пустой базе.
-- [ ] 1.3 Расширить `InstrumentMarkProvider.GetFreshMarkAsync`: снимок ответа дополняется `UnderlyingPrice`/`Theta`, каждая успешная выборка дописывает строку истории, возвращаемый снимок (`IFreshInstrumentMarkSource`) несёт nullable-поля теты и индекса; кэш `InstrumentMarks` не меняется. Проверка: тесты провайдера на запись истории, отсутствие записи при пустом ответе биржи и сохранность кэша последней марки.
+- [x] 1.1 Сверить живым ответом `GET /v5/market/tickers` (category=option) единицы и знак `theta` против временной стоимости реального тикера; зафиксировать вывод комментарием в маппинге `BybitTicker`. Проверка: вывод записан, порядок величины сходится.
+- [x] 1.2 Добавить доменную сущность `InstrumentMarketSnapshot` (`Symbol, MarkPrice, UnderlyingPrice, Theta, ReceivedAt`) с конфигурацией и индексом `(Symbol, ReceivedAt)` в `JournalDbContext`, EF-миграцию. Проверка: `dotnet build` чист, миграция применяется к пустой базе.
+- [x] 1.3 Расширить `InstrumentMarkProvider.GetFreshMarkAsync`: снимок ответа дополняется `UnderlyingPrice`/`Theta`, каждая успешная выборка дописывает строку истории, возвращаемый снимок (`IFreshInstrumentMarkSource`) несёт nullable-поля теты и индекса; кэш `InstrumentMarks` не меняется. Проверка: тесты провайдера на запись истории, отсутствие записи при пустом ответе биржи и сохранность кэша последней марки.
 
 ## 2. Вычислитель метрик времени жизни
 

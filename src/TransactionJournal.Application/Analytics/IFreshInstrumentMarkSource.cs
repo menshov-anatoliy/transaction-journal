@@ -3,8 +3,12 @@ namespace TransactionJournal.Application.Analytics;
 /// <summary>
 /// Источник свежих марок инструментов — контракт провайдера марок с оценкой
 /// нереализованного PnL. Свежая марка запрашивается у публичных тикеров на
-/// момент вызова и штампует кэш последней известной марки временем получения.
+/// момент вызова, штампует кэш последней известной марки временем получения
+/// и дописывает append-only историю рыночных снимков. Возвращаемый снимок
+/// несёт nullable-поля теты и индексной цены: биржа отдаёт их только опционам,
+/// поэтому вычислитель метрик времени жизни читает их как «есть или прочерк».
 // Traceability: openspec:analytics/performance#requirement-mark-provider
+// Traceability: openspec:analytics/option-lifetime#requirement-market-snapshot-history
 // Traceability: change:add-analytics/design#d2
 /// </summary>
 public interface IFreshInstrumentMarkSource
