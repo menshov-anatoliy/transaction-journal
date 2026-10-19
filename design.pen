@@ -10277,7 +10277,7 @@
                   "type": "frame",
                   "id": "HpYyH",
                   "layoutPosition": "absolute",
-                  "x": 360,
+                  "x": 388,
                   "y": 1176,
                   "name": "Тултип состава",
                   "width": 300,
@@ -25292,6 +25292,114 @@
       "width": 100,
       "height": 40,
       "fill": "#FF0000"
+    },
+    {
+      "type": "rectangle",
+      "id": "d2jij",
+      "x": 10960,
+      "y": 0,
+      "name": "Журнал Bybit",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 572,
+      "height": 883
+    },
+    {
+      "type": "rectangle",
+      "id": "pni02",
+      "x": 11572,
+      "y": 0,
+      "name": "Журнал Bybit",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost-1.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 572,
+      "height": 883
+    },
+    {
+      "type": "rectangle",
+      "id": "fB8Ez",
+      "x": 12184,
+      "y": 0,
+      "name": "Журнал Bybit",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost-2.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 572,
+      "height": 883
+    },
+    {
+      "type": "rectangle",
+      "id": "oVj7o",
+      "x": 12796,
+      "y": 0,
+      "name": "Журнал Bybit",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost-3.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 572,
+      "height": 883
+    },
+    {
+      "type": "rectangle",
+      "id": "G3Kgd",
+      "x": 13408,
+      "y": 0,
+      "name": "Журнал Bybit",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost-4.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 572,
+      "height": 883
+    },
+    {
+      "type": "rectangle",
+      "id": "rJBvI",
+      "x": 14020,
+      "y": 0,
+      "name": "Журнал Bybit",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost-5.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 572,
+      "height": 883
     }
   ],
   "variables": {
