@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Pencil } from "lucide-react";
+import { Info, Pencil } from "lucide-react";
 import type { ConstructionCardPosition } from "@/lib/api/construction-card";
 import { fetchLastInstrumentMark } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ export interface PositionsTableProps {
 	/** Состояние команды добавления пометки (для блокировки кнопок). */
 	readonly markPending: boolean;
 	/** Постановка ручной пометки закрытия позиции. */
-	readonly onAddCloseMark: (mark: { symbol: string; markedAt: string; price: number | null }) => void;
+	readonly onAddCloseMark: (mark: { symbol: string; markedAt: string; price: number | null; quantity: number | null }) => void;
 	/** Сохранение комментария позиции. */
 	readonly onSaveComment: (input: { symbol: string; text: string | null }) => void;
 }
@@ -72,6 +72,63 @@ export function toLocalInputValue(iso: string): string {
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/** Части опционного символа, нужные подсказке внутренней стоимости. */
+interface MarkOptionParts {
+	/** Страйк опциона из строки символа. */
+	readonly strike: number;
+	/** Признак колла: сторона ноги определяет знак восстановления расчётной цены. */
+	readonly isCall: boolean;
+}
+
+/** Разбор символа опциона {BASE}-{dMMMyy}-{СТРАЙК}-{C|P}[-{QUOTE}]; null — символ не опцион. */
+function parseMarkOptionParts(symbol: string): MarkOptionParts | null {
+	const segments = symbol.split("-");
+	if (segments.length !== 4 && segments.length !== 5) {
+		return null;
+	}
+
+	const strike = Number(segments[2]);
+	if (Number.isFinite(strike) === false) {
+		return null;
+	}
+
+	if (segments[3] === "C") {
+		return { strike, isCall: true };
+	}
+
+	return segments[3] === "P" ? { strike, isCall: false } : null;
+}
+
+// Текст подсказки внутренней стоимости на расчётной цене экспирации —
+// «|расчётная цена − страйк| = величина USDT» из мастера формы пометки.
+// Расчётная цена (индекс) и страйк не приходят на клиент отдельными
+// величинами: внутреннюю стоимость контракта read-модель считает из индекса
+// существующего канала котировок и страйка, поэтому клиент восстанавливает
+// компоненты подсказки из пары «внутренняя стоимость позиции ÷ остаток» и
+// символа ноги. У OTM-ноги (нулевая внутренняя стоимость) и ног без рыночных
+// данных (null) подсказка скрыта — она не блокирует ввод цены.
+// Traceability: openspec:ui/screens#scenario-mark-form-intrinsic-hint
+function intrinsicValueHint(position: ConstructionCardPosition): string | null {
+	if (position.intrinsicValueUsdt === null || position.residual === 0) {
+		return null;
+	}
+
+	const parts = parseMarkOptionParts(position.symbol);
+	if (parts === null) {
+		return null;
+	}
+
+	// Внутренняя стоимость позиции — контрактная, масштабированная знаковым
+	// остатком: делением на модуль остатка возвращается контрактная величина.
+	const intrinsic = Math.abs(position.intrinsicValueUsdt) / Math.abs(position.residual);
+	if (intrinsic === 0) {
+		return null;
+	}
+
+	const settlementPrice = parts.isCall ? parts.strike + intrinsic : parts.strike - intrinsic;
+	return `|${formatAmount(settlementPrice)} − ${formatAmount(parts.strike)}| = ${formatAmount(intrinsic)} USDT`;
+}
+
 // Подсветка зоны предупреждения: открытая опционная нога с остатком суток
 // не более 14 подсвечивается фоном внимания; закрытые позиции и фьючерсные
 // ноги (сутки null) подсветки не получают.
@@ -101,10 +158,21 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 	const isMobile = useIsMobile();
 	const [markSymbol, setMarkSymbol] = React.useState<string | null>(null);
 	const [markPrice, setMarkPrice] = React.useState("");
+	const [markQuantity, setMarkQuantity] = React.useState("");
 	const [markTime, setMarkTime] = React.useState("");
 	const [commentTarget, setCommentTarget] = React.useState<ConstructionCardPosition | null>(null);
 	const [markError, setMarkError] = React.useState<string | null>(null);
 	const markRequest = React.useRef(0);
+
+	// Цель формы пометки и производные подсказки: остаток и внутренняя
+	// стоимость берутся из строки позиции, открытой в форме.
+	const markTarget = markSymbol === null ? null : positions.find((position) => position.symbol === markSymbol) ?? null;
+	const markRemainder = markTarget === null ? 0 : Math.abs(markTarget.residual);
+	const intrinsicHintText = markTarget === null ? null : intrinsicValueHint(markTarget);
+	const parsedMarkQuantity = markQuantity.trim() === "" ? null : Number(markQuantity.trim().replace(",", "."));
+	const quantityHintText = parsedMarkQuantity !== null && Number.isFinite(parsedMarkQuantity)
+		? `частичное закрытие — останется ${formatAmount(Math.max(markRemainder - parsedMarkQuantity, 0))}`
+		: "незаданное количество закрывает весь остаток";
 
 	// Открытие формы пометки: цена предзаполняется последней известной маркой
 	// инструмента, время — текущим моментом; сбой марки виден у формы,
@@ -115,6 +183,7 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 		setMarkSymbol(symbol);
 		setMarkTime(toLocalInputValue(new Date().toISOString()));
 		setMarkPrice("");
+		setMarkQuantity("");
 		setMarkError(null);
 		try {
 			const lastMark = await fetchLastInstrumentMark(constructionId, symbol);
@@ -134,15 +203,18 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 		}
 
 		const price = markPrice.trim() === "" ? null : Number(markPrice.replace(",", "."));
+		const quantity = parsedMarkQuantity;
 		const time = new Date(markTime);
 		// Ошибочное число не превращается в запрос последней марки;
-		// некорректное время не отправляется и не обрушает форму.
+		// некорректные время и количество не отправляются и не обрушают форму.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-		if ((price !== null && Number.isFinite(price) === false) || Number.isFinite(time.getTime()) === false) {
-			setMarkError("Введите корректную цену и время пометки.");
+		if ((price !== null && Number.isFinite(price) === false)
+			|| (quantity !== null && Number.isFinite(quantity) === false)
+			|| Number.isFinite(time.getTime()) === false) {
+			setMarkError("Введите корректную цену, время и количество пометки.");
 			return;
 		}
-		onAddCloseMark({ symbol: markSymbol, markedAt: time.toISOString(), price });
+		onAddCloseMark({ symbol: markSymbol, markedAt: time.toISOString(), price, quantity });
 		++markRequest.current;
 		setMarkSymbol(null);
 	};
@@ -153,10 +225,20 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 		// Traceability: change:rework-spa-shell-and-screens/design#D7
 		<GridSection dataSlot="positions-table" title="Позиции" columnCount={17} rowCount={positions.length}>
 			{isMobile === false && markSymbol !== null && (
-				// Форма ручной пометки закрытия: цена — последняя марка или пусто
-				// (марка подставится при чтении), время — пикер даты-времени.
+				// Форма ручной пометки закрытия по мастеру «Мастер/Пометка закрытия ·
+				// форма»: время и цена (марка подставится при чтении), подсказка
+				// внутренней стоимости и опциональное количество.
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
 					<span className="text-sm font-medium">закрыть позицию «{markSymbol}» пометкой</span>
+					<label className="flex flex-col gap-1 text-sm">
+						время пометки
+						<input
+							type="datetime-local"
+							className="border-input bg-background h-9 rounded-md border px-2 text-sm"
+							value={markTime}
+							onChange={(event) => setMarkTime(event.target.value)}
+						/>
+					</label>
 					<label className="flex flex-col gap-1 text-sm">
 						цена закрытия
 						<input
@@ -169,14 +251,41 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 							}}
 						/>
 					</label>
+					{intrinsicHintText !== null && (
+						// Подсказка внутренней стоимости на расчётной цене экспирации
+						// для опционной ноги в деньгах — блок $infoSoft из мастера
+						// «Мастер/Пометка закрытия · форма»: ряд с info-иконкой и
+						// подписью 11.5, под ним значение 13/600. Клиент восстанавливает
+						// компоненты «|расчётная цена − страйк|» из внутренней стоимости
+						// позиции — её read-модель считает из индекса существующего канала
+						// котировок и страйка — и остатка; у OTM-ноги и без рыночных
+						// данных подсказка скрыта и ввод цены не блокирует.
+						// Traceability: openspec:ui/screens#scenario-mark-form-intrinsic-hint
+						<div data-slot="mark-intrinsic-hint" className="bg-info-soft flex w-full flex-col gap-[3px] rounded-sm px-2.5 py-2">
+							<span className="flex items-center gap-1 text-[11.5px] font-medium text-info">
+								<Info aria-hidden className="size-3 shrink-0" />
+								внутренняя стоимость на расчётной цене
+							</span>
+							<span className="text-[13px] font-semibold text-foreground">{intrinsicHintText}</span>
+						</div>
+					)}
 					<label className="flex flex-col gap-1 text-sm">
-						время пометки
+						{/* Поле опционального количества из мастера: незаданное закрывает
+						    весь остаток на момент пометки, заданное клэмпится остатком
+						    производным слоем; подсказка показывает, сколько останется
+						    после частичного закрытия. */}
+						{/* Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity */}
+						количество
 						<input
-							type="datetime-local"
-							className="border-input bg-background h-9 rounded-md border px-2 text-sm"
-							value={markTime}
-							onChange={(event) => setMarkTime(event.target.value)}
+							data-slot="mark-quantity-input"
+							aria-label="количество пометки"
+							className="border-input bg-background h-9 w-28 rounded-md border px-2 text-sm"
+							inputMode="decimal"
+							placeholder={`весь остаток — ${formatAmount(markRemainder)}`}
+							value={markQuantity}
+							onChange={(event) => setMarkQuantity(event.target.value)}
 						/>
+						<span className="text-[10.5px] font-normal text-text-muted">{quantityHintText}</span>
 					</label>
 					<Button size="sm" disabled={markPending || markTime === ""} onClick={submitMark}>
 						Поставить пометку

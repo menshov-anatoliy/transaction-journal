@@ -208,11 +208,15 @@ export interface ConstructionMoveTarget {
 	readonly name: string;
 }
 
-/** Атрибуты ручной пометки закрытия: инструмент, время и цена. */
+/** Атрибуты ручной пометки закрытия: инструмент, время, цена и опциональное количество. */
 export interface ManualCloseMarkInput {
 	readonly symbol: string;
 	readonly markedAt: string;
 	readonly price: number | null;
+	// Количество пометки: незаданное (null) закрывает весь остаток на момент
+	// применения, заданное клэмпится остатком производным слоем.
+	// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+	readonly quantity: number | null;
 }
 
 /** Атрибуты внешней корректировки PnL. */

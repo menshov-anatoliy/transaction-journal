@@ -25,7 +25,7 @@ export interface ClosingEntriesTableProps {
 	/** Состояние команд пометки (для блокировки кнопок). */
 	readonly actionsPending: boolean;
 	/** Правка ручной пометки закрытия. */
-	readonly onEditMark: (input: { markId: number; mark: { symbol: string; markedAt: string; price: number | null } }) => void;
+	readonly onEditMark: (input: { markId: number; mark: { symbol: string; markedAt: string; price: number | null; quantity: number | null } }) => void;
 	/** Удаление ручной пометки закрытия. */
 	readonly onDeleteMark: (markId: number) => void;
 }
@@ -101,7 +101,9 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 		}
 		onEditMark({
 			markId: editMark.manualMarkId,
-			mark: { symbol: editMark.symbol, markedAt: time.toISOString(), price },
+			// Форма правки меняет цену и время; количество в неё не входит, поэтому
+			// правка возвращает пометку к закрытию всего остатка — контракт PUT.
+			mark: { symbol: editMark.symbol, markedAt: time.toISOString(), price, quantity: null },
 		});
 		setEditMark(null);
 	};

@@ -527,6 +527,40 @@ describe("карточка конструкции: действия и ввод"
 		await waitFor(() => expect(screen.getByLabelText("цена закрытия")).toHaveValue("17"));
 	});
 
+	// Сценарий «Форма пометки подсказывает внутреннюю стоимость»: у опционной
+	// ноги в деньгах форма показывает подсказку |расчётная цена − страйк| на
+	// расчётной цене экспирации; компоненты клиент восстанавливает из
+	// внутренней стоимости позиции (180.4 на остатке 2 → 90.2 на контракт)
+	// и страйка символа.
+	// Traceability: openspec:ui/screens#scenario-mark-form-intrinsic-hint
+	it("TryIfCloseMarkFormShowsIntrinsicHintForItmLeg", async () => {
+		const user = userEvent.setup();
+		renderCardPage();
+		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
+		const hint = await screen.findByText("внутренняя стоимость на расчётной цене");
+		expect(hint.closest('[data-slot="mark-intrinsic-hint"]')?.textContent).toContain("|3290.2 − 3200| = 90.2 USDT");
+	});
+
+	// Сценарий «Частичная пометка оставляет остаток» на стороне формы:
+	// заданное количество уходит в команду постановки пометки, подсказка
+	// ведёт остаток после частичного закрытия; незаданное количество остаётся
+	// null — весь остаток.
+	// Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity
+	it("TryIfCloseMarkFormSendsPartialQuantity", async () => {
+		cardApi.fetchLastInstrumentMark.mockResolvedValue(30);
+		cardApi.addManualCloseMark.mockResolvedValue(undefined);
+		const user = userEvent.setup();
+		renderCardPage();
+		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
+		const quantity = screen.getByLabelText("количество пометки");
+		expect(quantity.getAttribute("placeholder")).toBe("весь остаток — 2");
+		await user.type(quantity, "0.5");
+		expect(screen.getByText("частичное закрытие — останется 1.5")).toBeTruthy();
+		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
+		await waitFor(() => expect(cardApi.addManualCloseMark).toHaveBeenCalledWith(7,
+			expect.objectContaining({ symbol: "ETH-28JUN24-3200-C", price: 30, quantity: 0.5 })));
+	});
+
 	// Правка пометки не округляет цену; неверный ввод не заменяет её пустым.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 	it("ThrowOnInvalidEditedClosePrice", async () => {

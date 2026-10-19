@@ -1,7 +1,14 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConstructionCardPosition } from "@/lib/api/construction-card";
 import { PositionsTable } from "./positions-table";
+
+// Канал котировок подменён: форма пометки спрашивает последнюю марку
+// инструмента при открытии, сетевых запросов в тестах быть не должно.
+vi.mock("@/lib/api/construction-card", () => ({
+	fetchLastInstrumentMark: vi.fn().mockResolvedValue(null),
+}));
 
 // Проверяется распад остатка линейной ноги в таблице позиций карточки
 // (мастер design.pen aU7Nx/LFEkd): при неоспоренной синтетике позиция
@@ -60,13 +67,13 @@ beforeEach(() => {
 	setViewport(1280);
 });
 
-function renderTable(positions: readonly ConstructionCardPosition[]) {
+function renderTable(positions: readonly ConstructionCardPosition[], onAddCloseMark: () => void = vi.fn()) {
 	return render(
 		<PositionsTable
 			constructionId={7}
 			positions={positions}
 			markPending={false}
-			onAddCloseMark={vi.fn()}
+			onAddCloseMark={onAddCloseMark}
 			onSaveComment={vi.fn()}
 		/>,
 	);
@@ -193,5 +200,95 @@ describe("PositionsTable: колонки времени жизни опцион�
 			expect(cells[7]).toHaveTextContent("—");
 		}
 		expect(screen.queryByTitle(/состав позиции/)).toBeNull();
+	});
+});
+
+// Форма пометки закрытия по мастеру «Мастер/Пометка закрытия · форма»:
+// поле опционального количества с подсказкой остатка и подсказка внутренней
+// стоимости |расчётная цена − страйк| для опционной ноги в деньгах.
+// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+describe("PositionsTable: форма пометки — количество и подсказка ВС", () => {
+	// Путовая нога в деньгах: страйк 1600, внутренняя стоимость контракта
+	// 240 (120 на остатке 0.5) — расчётная цена восстанавливается как 1360.
+	function makeItmPut(overrides: Partial<ConstructionCardPosition> = {}): ConstructionCardPosition {
+		return makePosition({
+			symbol: "ETH-28MAR-1600-P",
+			residual: 0.5,
+			intrinsicValueUsdt: 120,
+			timeValueUsdt: 30,
+			...overrides,
+		});
+	}
+
+	async function openMarkForm(position: ConstructionCardPosition, onAddCloseMark = vi.fn()) {
+		renderTable([position], onAddCloseMark);
+		const user = userEvent.setup();
+		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
+		return { user, onAddCloseMark };
+	}
+
+	// Сценарий «Форма пометки подсказывает внутреннюю стоимость»: для ноги
+	// в деньгах подсказка показывает |расчётная цена − страйк| в USDT.
+	// Traceability: openspec:ui/screens#scenario-mark-form-intrinsic-hint
+	it("показывает подсказку внутренней стоимости у ноги в деньгах", async () => {
+		// Arrange/Act: открыта форма пометки путовой ноги в деньгах.
+		await openMarkForm(makeItmPut());
+
+		// Assert: подсказка видна с восстановленными компонентами величины.
+		const hint = document.querySelector('[data-slot="mark-intrinsic-hint"]');
+		expect(hint).toBeTruthy();
+		expect(hint?.textContent).toContain("|1360 − 1600| = 240 USDT");
+	});
+
+	// Подсказка скрыта, когда данных нет: OTM-нога (нулевая внутренняя
+	// стоимость), нога без рыночных данных (null) и линейная нога — форма
+	// ввод цены не блокирует.
+	// Traceability: openspec:ui/screens#scenario-mark-form-intrinsic-hint
+	it("скрывает подсказку у OTM-ноги, без рыночных данных и у линейной ноги", async () => {
+		// Arrange/Act: три формы по очереди — OTM, без тикера, линейная нога;
+		// перед каждым следующим открытием форма размонтируется.
+		await openMarkForm(makeItmPut({ intrinsicValueUsdt: 0 }));
+		expect(document.querySelector('[data-slot="mark-intrinsic-hint"]')).toBeNull();
+		cleanup();
+
+		await openMarkForm(makeItmPut({ intrinsicValueUsdt: null }));
+		expect(document.querySelector('[data-slot="mark-intrinsic-hint"]')).toBeNull();
+		cleanup();
+
+		await openMarkForm(makePosition({ symbol: "ETHUSDT" }));
+		expect(document.querySelector('[data-slot="mark-intrinsic-hint"]')).toBeNull();
+	});
+
+	// Сценарий «Частичная пометка оставляет остаток» на стороне формы:
+	// placeholder ведёт остатком, подсказка считает остаток после частичного
+	// закрытия, заданное количество уходит в команду постановки пометки.
+	// Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity
+	it("отправляет частичное количество и ведёт остаток подсказкой", async () => {
+		// Arrange: открытая форма с командой-двойником.
+		const { user, onAddCloseMark } = await openMarkForm(makeItmPut());
+		const quantity = await screen.findByLabelText("количество пометки");
+		expect(quantity.getAttribute("placeholder")).toBe("весь остаток — 0.5");
+
+		// Act: задано частичное количество 0.2 из остатка 0.5.
+		await user.type(quantity, "0.2");
+
+		// Assert: подсказка показывает остаток после частичного закрытия,
+		// команда несёт заданное количество.
+		expect(screen.getByText("частичное закрытие — останется 0.3")).toBeTruthy();
+		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
+		expect(onAddCloseMark).toHaveBeenCalledWith({ symbol: "ETH-28MAR-1600-P", markedAt: expect.any(String), price: null, quantity: 0.2 });
+	});
+
+	// Незаданное количество уходит в команду как null — весь остаток.
+	// Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity
+	it("отправляет null при незаданном количестве", async () => {
+		// Arrange: форма с командой-двойником.
+		const { user, onAddCloseMark } = await openMarkForm(makeItmPut());
+
+		// Act: количество не тронуто, пометка ставится сразу.
+		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
+
+		// Assert: в команде quantity null — закроется весь остаток.
+		expect(onAddCloseMark).toHaveBeenCalledWith({ symbol: "ETH-28MAR-1600-P", markedAt: expect.any(String), price: null, quantity: null });
 	});
 });
