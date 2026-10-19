@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -595,5 +595,90 @@ describe("ConstructionMetricStrip: ручная синтетическая св�
 		expect(onDeleteManualLink).toHaveBeenCalledTimes(1);
 		expect(screen.getByRole("button", { name: "Оспорить" })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "Вернуть" })).toBeNull();
+	});
+});
+
+describe("ConstructionMetricStrip: подсказка чтения индикатора", () => {
+	// Подсказка чтения индикатора карточки: «?» справа от полосы открывает
+	// попап с пояснением чтения шкалы; подсказка живёт в полном и среднем
+	// виде индикатора карточки. Компактный вид таблиц и краткая карточка
+	// контекстной панели подсказку не получают — это покрыто их собственными
+	// тестами и не затрагивается здесь.
+	// Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-card-only
+	it("«?» справа от полосы открывает попап с заголовком и текстами зон", async () => {
+		// Сценарий «Открытие подсказки триггером»: клик по «?» у индикатора
+		// карточки открывает попап чтения с заголовком и пояснением зон.
+		// Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-opens
+		// Arrange: сводка карточки в полном виде; замер клика по триггеру.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+
+		// Act: клик по кнопке «Как читать индикатор» справа от полосы.
+		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
+
+		// Assert: попап открыт с заголовком и дословными строками зон
+		// планового риска и сверхприбыли из макета.
+		expect(screen.getByRole("dialog")).toBeInTheDocument();
+		expect(screen.getByText("Как читать индикатор")).toBeTruthy();
+		expect(screen.getByText(/плановый риск — красная зона от −Риск до 0/)).toBeTruthy();
+		expect(screen.getByText(/сверхприбыль — золотая зона за \+Профит/)).toBeTruthy();
+	});
+
+	it("поясняет насечку худшего исхода и маркер без устаревших формулировок", async () => {
+		// Сценарий «Пояснение отражает актуальную модель чтения»: подсказка
+		// объясняет насечку как худший исход конструкции и маркер как оценку
+		// «заберу при ликвидации сейчас»; формулировки устаревшей модели
+		// («реальный риск минус реализованная прибыль», «граница строится
+		// от нуля») в попапе отсутствуют.
+		// Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model
+		// Arrange: открытая подсказка чтения.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
+		const popup = screen.getByRole("dialog");
+
+		// Assert: насечка объяснена худшим исходом конструкции с подписью
+		// от плановой границы зоны, маркер — оценкой итога при ликвидации;
+		// устаревших формулировок во всём попапе нет.
+		expect(within(popup).getByText(/насечка — худший исход конструкции/)).toBeTruthy();
+		expect(within(popup).getByText(/маркер — оценка итога «заберу при ликвидации сейчас»/)).toBeTruthy();
+		expect(within(popup).queryByText(/реальный риск минус реализованная прибыль/)).toBeNull();
+		expect(within(popup).queryByText(/граница строится от нуля/)).toBeNull();
+	});
+
+	it("закрывается по Esc", async () => {
+		// Сценарий «Закрытие подсказки»: Esc — один из обязательных
+		// способов убрать подсказку чтения.
+		// Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-closes
+		// Arrange: открытая подсказка чтения.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
+		expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+		// Act: нажатие Esc.
+		await user.keyboard("{Escape}");
+
+		// Assert: попап убран из портала.
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	});
+
+	it("показывает триггер и открывает попап в среднем виде на мобильной ширине", async () => {
+		// Сценарий «Открытие подсказки триггером»: на узком экране карточка
+		// рендерит средний вид индикатора, и триггер «?» там тоже открывает
+		// попап чтения — подсказка охватывает оба вида.
+		// Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-opens
+		// Arrange: мобильная ширина 375 — индикатор среднего вида.
+		setViewport(375);
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+		expect(document.querySelector('[data-slot="fin-result-medium"]')).not.toBeNull();
+
+		// Act: клик по триггеру «?» у среднего индикатора.
+		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
+
+		// Assert: попап открыт с заголовком чтения шкалы.
+		expect(screen.getByRole("dialog")).toBeInTheDocument();
+		expect(screen.getByText("Как читать индикатор")).toBeTruthy();
 	});
 });

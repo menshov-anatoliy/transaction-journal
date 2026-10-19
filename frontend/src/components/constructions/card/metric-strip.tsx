@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, CircleHelp } from "lucide-react";
 import type {
 	ConstructionCard,
 	SyntheticCloseDisputeInput,
@@ -7,6 +7,7 @@ import type {
 } from "@/lib/api/construction-card";
 import { Metric } from "@/components/design";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FullFinResultIndicator, MediumFinResultIndicator } from "@/components/finresult/fin-result-indicator";
 import { useIsMobile } from "@/lib/use-mobile";
 import { DASH } from "@/lib/format/degradation";
@@ -471,28 +472,95 @@ export function ConstructionMetricStrip({
 			</div>
 
 			{/* Полный индикатор финансового результата: зоны планового риска и
-			    профита, граница реального риска, маркер итога (§9). */}
-			<Indicator
-				input={{
-					plannedRisk: card.riskUsdt,
-					plannedProfit: card.profitUsdt,
-					realized: metrics.realizedPnL,
-					unrealized: metrics.unrealizedPnL,
-					quotesDegraded: card.hasMarkFailure,
-					// Открытые остатки карточки из read-модели: без них сбой
-					// марок не делает индикатор неполным.
-					// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
-					hasOpenResidual: card.hasOpenResidual,
-					// Пара «число + статус» из контракта API: конечный риск
-					// даёт насечку, unbounded/unavailable — состояние
-					// без насечки. Худший исход ставит позицию границы.
-					// Traceability: openspec:ui/screens#requirement-risk-profit-hint
-					// Traceability: change:show-unbounded-finresult-risk/design#d1
-					realRisk: metrics.realRiskUsdt,
-					worstCase: metrics.worstCaseUsdt,
-					realRiskStatus: metrics.realRiskStatus,
-				}}
-			/>
+			    профита, насечка худшего исхода конструкции, маркер итога (§9);
+			    граница шкалы именуется худшим исходом по ADR-0015, а не
+			    величиной реального риска. */}
+			{/* Подсказка чтения индикатора карточки: «?» справа от полосы по
+			    клику открывает попап с пояснением чтения шкалы — зоны планового
+			    риска, профита и сверхприбыли, насечка худшего исхода
+			    конструкции, маркер итога и состояния вне шкалы; закрывается
+			    кликом вне, Esc и повторным кликом по триггеру. Подсказка живёт
+			    только в карточке: компактный вид таблиц и краткая карточка
+			    контекстной панели её не получают и сохраняют доступные
+			    названия состояний риска (aria-label/title компактного вида). */}
+			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-opens */}
+			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model */}
+			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-closes */}
+			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-card-only */}
+			<div className="relative">
+				<Indicator
+					input={{
+						plannedRisk: card.riskUsdt,
+						plannedProfit: card.profitUsdt,
+						realized: metrics.realizedPnL,
+						unrealized: metrics.unrealizedPnL,
+						quotesDegraded: card.hasMarkFailure,
+						// Открытые остатки карточки из read-модели: без них сбой
+						// марок не делает индикатор неполным.
+						// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+						hasOpenResidual: card.hasOpenResidual,
+						// Пара «число + статус» из контракта API: конечный риск
+						// даёт насечку, unbounded/unavailable — состояние
+						// без насечки. Худший исход ставит позицию границы.
+						// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+						// Traceability: change:show-unbounded-finresult-risk/design#d1
+						realRisk: metrics.realRiskUsdt,
+						worstCase: metrics.worstCaseUsdt,
+						realRiskStatus: metrics.realRiskStatus,
+					}}
+				/>
+				{/* Триггер прижат к правому краю полосы на её вертикальном
+				    уровне: деления шкалы над полосой занимают одну строку
+				    (14px полного пресета) плюс зазор секций 10px, полоса 14px —
+				    центр полосы на 31px от верха индикатора, поэтому триггер
+				    20px ставится с top 21px; средний вид геометрически близок
+				    (13px + 8px, центр полосы 28px). Попап открывается справа
+				    от триггера, на узком экране Radix разворачивает его
+				    столкновениями с границей вьюпорта. */}
+				<Popover>
+					<PopoverTrigger
+						aria-label="Как читать индикатор"
+						className="absolute top-[21px] right-0 flex size-5 items-center justify-center rounded-full border bg-surface-2 text-text-secondary"
+					>
+						<CircleHelp className="size-3.5" aria-hidden="true" />
+					</PopoverTrigger>
+					{/* Состав пояснения дословно повторяет мастер design.pen
+					    «Подсказка/Чтение индикатора»: заголовок, свотчи зон,
+					    насечка худшего исхода, маркер итога и примечание про
+					    состояния вне шкалы. */}
+					<PopoverContent
+						side="right"
+						align="start"
+						sideOffset={12}
+						className="flex w-[340px] max-w-[calc(100vw-1.5rem)] flex-col gap-2"
+					>
+						<p className="text-[12.5px] font-semibold text-text-primary">Как читать индикатор</p>
+						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
+							<span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] bg-risk-zone" />
+							<span>плановый риск — красная зона от −Риск до 0</span>
+						</div>
+						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
+							<span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] bg-profit-zone" />
+							<span>плановый профит — зелёная зона от 0 до +Профит</span>
+						</div>
+						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
+							<span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] bg-super-zone" />
+							<span>сверхприбыль — золотая зона за +Профит</span>
+						</div>
+						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
+							<span aria-hidden="true" className="h-[14px] w-[3px] shrink-0 bg-text-primary" />
+							<span>насечка — худший исход конструкции, подпись «худший исход · X USDT · N%» от плановой границы зоны (насечка может стоять правее реализованного результата)</span>
+						</div>
+						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
+							<span aria-hidden="true" className="size-[11px] shrink-0 rounded-full bg-primary" />
+							<span>маркер — оценка итога «заберу при ликвидации сейчас»</span>
+						</div>
+						<p className="text-[10.5px] text-text-muted">
+							Состояния вне шкалы показывают отдельно от полосы: «риск не ограничен» и «не удалось рассчитать»; «риска нет» — при нулевом реальном риске.
+						</p>
+					</PopoverContent>
+				</Popover>
+			</div>
 		</section>
 	);
 }
