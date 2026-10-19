@@ -1,4 +1,5 @@
 import { apiCommand, apiFetch } from "./http";
+import type { TradeSource } from "./manual-trades";
 
 // Контракты карточки конструкции единого API: полный снимок экрана одним
 // запросом (шапка, метрики с периодом, четыре таблицы записей) и команды
@@ -110,9 +111,10 @@ export interface ConstructionCardSyntheticClose {
 	readonly counterOptionExecId: string;
 }
 
-/** Строка таблицы сделок карточки. */
+/** Строка таблицы сделок карточки; источники различаются полем source. */
 export interface ConstructionCardTrade {
-	readonly execId: string;
+	/** Ключ исполнения биржевой сделки; у ручной записи отсутствует. */
+	readonly execId: string | null;
 	readonly symbol: string;
 	readonly executedAt: string;
 	readonly isBuy: boolean;
@@ -121,6 +123,11 @@ export interface ConstructionCardTrade {
 	readonly amountUsdt: number;
 	readonly fee: number;
 	readonly comment: string | null;
+	/** Источник записи: «биржа» либо «ручной ввод» — признак бейджа источника. */
+	// Traceability: openspec:ui/screens#scenario-source-badge-shown
+	readonly source: TradeSource;
+	/** Идентификатор строки сырья ручной сделки для правки и удаления; null у биржевых. */
+	readonly manualTradeId: number | null;
 }
 
 /** Строка таблицы закрывающих записей карточки. */

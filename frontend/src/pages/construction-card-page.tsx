@@ -159,6 +159,9 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 		commands.deleteCloseMark,
 		commands.returnTrade,
 		commands.moveTrade,
+		commands.createManualTrade,
+		commands.editManualTrade,
+		commands.deleteManualTrade,
 		commands.addAdjustment,
 		commands.editAdjustment,
 		commands.deleteAdjustment,
@@ -245,11 +248,20 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 
 					<TradesTable
 						constructionId={constructionId}
+						constructionName={card.name}
 						trades={card.trades}
 						actionsPending={commands.returnTrade.isPending || commands.moveTrade.isPending}
+						tradeCommandsPending={commands.createManualTrade.isPending || commands.editManualTrade.isPending || commands.deleteManualTrade.isPending}
 						onReturn={(execId) => commands.returnTrade.mutate(execId)}
 						onMove={(input) => commands.moveTrade.mutate(input)}
 						onSaveComment={(input) => commands.tradeComment.mutate(input)}
+						onCreateManualTrade={(input) => commands.createManualTrade.mutate(input)}
+						onEditManualTrade={(input) => commands.editManualTrade.mutate(input)}
+						onDeleteManualTrade={(id) => commands.deleteManualTrade.mutate(id)}
+						manualTradeError={commands.createManualTrade.error?.message
+							?? commands.editManualTrade.error?.message
+							?? commands.deleteManualTrade.error?.message
+							?? null}
 					/>
 
 					<ClosingEntriesTable

@@ -1,5 +1,5 @@
 ﻿import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Calendar, MousePointer2 } from "lucide-react";
+import { ArrowRight, Calendar, MousePointer2, Plus } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router";
 import {
@@ -11,11 +11,16 @@ import {
 	type InboxTargetConstruction,
 	type InboxTrade,
 } from "@/lib/api/inbox";
+import { createManualTrade, deleteManualTrade, editManualTrade, type ManualTradeInput } from "@/lib/api/manual-trades";
+import { ManualTradeForm } from "@/components/trades/manual-trade-form";
+import { TradeSourceBadge } from "@/components/trades/trade-source-badge";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useContextPanel } from "@/components/layout/context-panel";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DASH } from "@/lib/format/degradation";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatCount } from "@/lib/format/plural";
 import { formatSignedAmount } from "@/lib/format/quantity";
@@ -58,6 +63,12 @@ export function InboxPage() {
 	const [dragExecIds, setDragExecIds] = React.useState<string[]>([]);
 	const [createName, setCreateName] = React.useState("");
 	const [createCapital, setCreateCapital] = React.useState("");
+	// Форма ручной сделки по мастеру XJapZ: создание из «Входящих» без
+	// конструкции, правка адресуется ключом строки сырья записи.
+	// Traceability: openspec:ui/screens#scenario-inbox-create-manual-trade
+	const [manualFormOpen, setManualFormOpen] = React.useState(false);
+	const [editingTrade, setEditingTrade] = React.useState<InboxTrade | null>(null);
+	const [deleteTarget, setDeleteTarget] = React.useState<InboxTrade | null>(null);
 
 	const overviewQuery = useQuery({ queryKey: inboxOverviewKey, queryFn: fetchInboxOverview });
 
@@ -160,8 +171,46 @@ export function InboxPage() {
 		},
 	});
 
+	// Ручные сделки: внесение в общий пул «Входящих», правка атрибутов и
+	// удаление по ключу строки сырья; ошибки валидации приходят от сервера
+	// и показываются у формы/действия.
+	// Traceability: openspec:ui/screens#requirement-manual-trade-creation-ui
+	// Traceability: openspec:ui/screens#scenario-detail-edit-manual-trade
+	const manualCreateMutation = useMutation({
+		mutationFn: (input: ManualTradeInput) => createManualTrade({ ...input, constructionId: null }),
+		onSuccess: async () => {
+			setManualFormOpen(false);
+			await invalidateAfterMutation(queryClient);
+		},
+	});
+	const manualEditMutation = useMutation({
+		mutationFn: (input: { id: number; trade: ManualTradeInput }) => editManualTrade(input.id, input.trade),
+		onSuccess: async () => {
+			setEditingTrade(null);
+			await invalidateAfterMutation(queryClient);
+		},
+	});
+	const manualDeleteMutation = useMutation({
+		mutationFn: (id: number) => deleteManualTrade(id),
+		onSuccess: async () => {
+			setDeleteTarget(null);
+			await invalidateAfterMutation(queryClient);
+		},
+	});
+	const manualTradeBusy = manualCreateMutation.isPending || manualEditMutation.isPending || manualDeleteMutation.isPending;
+	const manualTradeError = manualCreateMutation.error?.message
+		?? manualEditMutation.error?.message
+		?? manualDeleteMutation.error?.message
+		?? null;
+
 	const selectedCount = selectedExecIds.length;
-	const allVisibleSelected = visibleTrades.length > 0 && selectedCount === visibleTrades.length;
+	// Распределение адресуется execId биржевых записей: ручные записи в
+	// привязке не участвуют и в «выбрать всё» не попадают.
+	const selectableTrades = React.useMemo(
+		() => visibleTrades.filter((trade) => trade.execId !== null),
+		[visibleTrades],
+	);
+	const allVisibleSelected = selectableTrades.length > 0 && selectedCount === selectableTrades.length;
 	const busy = bindMutation.isPending || createMutation.isPending || assembleMutation.isPending;
 
 	// Суммарный объём выбранных сделок — правая подпись блока выбранного
@@ -169,7 +218,7 @@ export function InboxPage() {
 	const selectedVolume = React.useMemo(
 		() =>
 			visibleTrades
-				.filter((trade) => selectedExecIds.includes(trade.execId))
+				.filter((trade) => trade.execId !== null && selectedExecIds.includes(trade.execId))
 				.reduce((sum, trade) => sum + trade.amountUsdt, 0),
 		[visibleTrades, selectedExecIds],
 	);
@@ -184,7 +233,7 @@ export function InboxPage() {
 			return;
 		}
 
-		setSelectedExecIds(checked ? visibleTrades.map((trade) => trade.execId) : []);
+		setSelectedExecIds(checked ? selectableTrades.map((trade) => trade.execId!) : []);
 	};
 
 	const onToggleRow = (execId: string, checked: boolean) => {
@@ -274,6 +323,10 @@ export function InboxPage() {
 
 	const onDragStart = React.useCallback(
 		(trade: InboxTrade) => {
+			if (trade.execId === null) {
+				return;
+			}
+
 			const ids = selectedExecIds.includes(trade.execId) ? selectedExecIds : [trade.execId];
 			setDragExecIds(ids);
 		},
@@ -378,7 +431,95 @@ export function InboxPage() {
 						{assembleMutation.isPending ? "Сборка выполняется…" : "Собрать из Входящих"}
 					</Button>
 				)}
+				{/* «Ручная сделка» — outline-кнопка мастера «Кнопка:Ручная сделка»
+				    шапки «Входящих» (tSfT8): иконка plus 12 $textSecondary и подпись
+				    11.5/500 $textSecondary; слева от «Собрать из Входящих». */}
+				{/* Traceability: openspec:ui/screens#requirement-manual-trade-creation-ui */}
+				<Button
+					variant="outline"
+					size="sm"
+					className="h-auto gap-1.5 px-2.5 py-[5px] text-[11.5px]"
+					disabled={manualTradeBusy}
+					onClick={() => setManualFormOpen(true)}
+				>
+					<Plus aria-hidden className="size-3" />
+					Ручная сделка
+				</Button>
 			</div>
+
+			{/* Форма ручной сделки по мастеру XJapZ: создание кладёт запись
+			    в общий пул «Входящих», правка предзаполняет атрибуты записи;
+			    ошибки серверной валидации показывает сама форма. */}
+			{/* Traceability: openspec:ui/screens#requirement-manual-trade-creation-ui */}
+			{manualFormOpen && (
+				<ManualTradeForm
+					target={{ constructionName: null }}
+					submitLabel="Создать"
+					pending={manualTradeBusy}
+					error={manualTradeError}
+					onSubmit={(input) => manualCreateMutation.mutate(input)}
+					onCancel={() => setManualFormOpen(false)}
+				/>
+			)}
+			{editingTrade !== null && editingTrade.manualTradeId !== null && (
+				<ManualTradeForm
+					target={{ constructionName: null }}
+					submitLabel="Сохранить"
+					pending={manualTradeBusy}
+					error={manualTradeError}
+					initialValues={{
+						executedAt: toLocalInputValue(editingTrade.executedAt),
+						symbol: editingTrade.symbol,
+						side: editingTrade.isBuy ? "Buy" : "Sell",
+						quantity: String(Math.abs(editingTrade.quantity)),
+						price: String(editingTrade.price),
+						feeUsdt: String(editingTrade.fee),
+					}}
+					onSubmit={(input) => manualEditMutation.mutate({ id: editingTrade.manualTradeId!, trade: input })}
+					onCancel={() => setEditingTrade(null)}
+				/>
+			)}
+
+			{/* Подтверждение удаления ручной сделки: необратимое действие с
+			    явным вопросом по действующему паттерну диалогов. */}
+			{/* Traceability: openspec:ui/screens#requirement-manual-trade-creation-ui */}
+			<Dialog
+				open={deleteTarget !== null}
+				onOpenChange={(value) => {
+					if (value === false && manualDeleteMutation.isPending == false) {
+						setDeleteTarget(null);
+					}
+				}}
+			>
+				<DialogContent showCloseButton={manualDeleteMutation.isPending == false}>
+					<DialogTitle>Удалить ручную сделку?</DialogTitle>
+					<DialogDescription>
+						Ручная сделка «{deleteTarget?.symbol ?? ""}» будет удалена из журнала. Действие нельзя отменить.
+					</DialogDescription>
+					<div className="flex gap-2">
+						<Button
+							variant="destructive"
+							size="sm"
+							disabled={manualDeleteMutation.isPending}
+							onClick={() => {
+								if (deleteTarget?.manualTradeId != null) {
+									manualDeleteMutation.mutate(deleteTarget.manualTradeId);
+								}
+							}}
+						>
+							Подтвердить удаление
+						</Button>
+						<Button variant="outline" size="sm" disabled={manualDeleteMutation.isPending} onClick={() => setDeleteTarget(null)}>
+							Отмена
+						</Button>
+					</div>
+					{manualDeleteMutation.error !== null && (
+						<p className="text-destructive text-sm" role="alert">
+							Сделка не удалена: {manualDeleteMutation.error.message}
+						</p>
+					)}
+				</DialogContent>
+			</Dialog>
 
 			{/* Итог последней сборки виден под действием, которое её запустило. */}
 			{assembleMutation.data !== undefined && <AssembleStatus result={assembleMutation.data} />}
@@ -490,15 +631,18 @@ export function InboxPage() {
 										<TableHead>Цена</TableHead>
 										<TableHead>Сумма</TableHead>
 										<TableHead>Комиссия</TableHead>
+										<TableHead>Действия</TableHead>
 									</TableRow>
 								</TableHeader>
 								<TableBody>
 									{visibleTrades.map((trade) => {
-										const rowSelected = selectedExecIds.includes(trade.execId);
+										// Привязка адресуется execId: ручная запись не выбирается
+										// и не перетаскивается — её действия в ячейке «Действия».
+										const rowSelected = trade.execId !== null && selectedExecIds.includes(trade.execId);
 										return (
 											<TableRow
-												key={trade.execId}
-												draggable={isMobile == false}
+												key={trade.execId ?? `manual:${trade.manualTradeId}`}
+												draggable={isMobile == false && trade.execId !== null}
 												onDragStart={() => {
 													if (isMobile == false) {
 														onDragStart(trade);
@@ -508,21 +652,27 @@ export function InboxPage() {
 												className="border-divider data-[state=selected]:bg-accent-softer"
 											>
 												<TableCell>
-													{isMobile ? (
+													{isMobile || trade.execId === null ? (
 														<span className="text-muted-foreground text-xs">—</span>
 													) : (
 														<Checkbox
 															aria-label={`Выбрать сделку ${trade.execId}`}
 															checked={rowSelected}
-															onChange={(event) => onToggleRow(trade.execId, event.currentTarget.checked)}
+															onChange={(event) => onToggleRow(trade.execId!, event.currentTarget.checked)}
 														/>
 													)}
 												</TableCell>
 												<TableCell className="text-text-secondary">{formatMoment(trade.executedAt)}</TableCell>
-												<TableCell className="text-text-secondary">{trade.execId}</TableCell>
-												{/* Инструмент по мастеру Body #5 — Inter 12.5/500 на textPrimary. */}
+												{/* execId адресует биржевую запись; у ручной его нет — прочерк. */}
+												<TableCell className="text-text-secondary">{trade.execId ?? DASH}</TableCell>
+												{/* Инструмент по мастеру Body #5 — Inter 12.5/500 на textPrimary,
+												    рядом бейдж источника записи («Инстр-ряд» мастера). */}
+												{/* Traceability: openspec:ui/screens#scenario-source-badge-shown */}
 												<TableCell>
-													<span className="text-[12.5px] font-medium">{trade.symbol}</span>
+													<span className="flex items-center gap-1.5">
+														<span className="text-[12.5px] font-medium">{trade.symbol}</span>
+														<TradeSourceBadge source={trade.source} />
+													</span>
 												</TableCell>
 												{/* Направление мастера тонировано: покупка — $info,
 												    продажа — $risk (textFills Body #5: info ×4, risk ×1). */}
@@ -537,6 +687,38 @@ export function InboxPage() {
 												<TableCell className="text-text-secondary">{trade.price}</TableCell>
 												<TableCell className="text-text-secondary">{trade.amountUsdt}</TableCell>
 												<TableCell className="text-text-secondary">{formatSignedAmount(trade.fee)} {trade.feeCurrency ?? ""}</TableCell>
+												<TableCell>
+													{/* Правка и удаление ручной записи — desktop-действие;
+													    у биржевой записи этих действий нет (неизменяемость). */}
+													{/* Traceability: openspec:ui/screens#scenario-detail-edit-manual-trade */}
+													{/* Traceability: openspec:ui/screens#scenario-detail-synced-trade-immutable */}
+													{isMobile == false && (
+														trade.source === "manual" ? (
+															<div className="flex gap-1.5">
+																<Button
+																	variant="outline"
+																	size="sm"
+																	className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
+																	disabled={manualTradeBusy}
+																	onClick={() => setEditingTrade(trade)}
+																>
+																	Изменить
+																</Button>
+																<Button
+																	variant="outline"
+																	size="sm"
+																	className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
+																	disabled={manualTradeBusy}
+																	onClick={() => setDeleteTarget(trade)}
+																>
+																	<span className="text-neg">Удалить</span>
+																</Button>
+															</div>
+														) : (
+															<span className="text-muted-foreground text-xs">{DASH}</span>
+														)
+													)}
+												</TableCell>
 											</TableRow>
 										);
 									})}
@@ -744,6 +926,13 @@ async function invalidateAfterMutation(queryClient: ReturnType<typeof useQueryCl
 
 function formatDateInput(value: Date) {
 	return value.toISOString().slice(0, 10);
+}
+
+/** Переводит ISO-момент в значение поля datetime-local в зоне браузера. */
+function toLocalInputValue(iso: string): string {
+	const date = new Date(iso);
+	const pad = (value: number) => String(value).padStart(2, "0");
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 /** Формы числительного для строк «Выбрано: N …» блока выбранного мастера. */

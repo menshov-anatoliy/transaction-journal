@@ -1759,9 +1759,9 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			],
 			Trades:
 			[
-				new ConstructionTradeRow("exec-1", "ETH-28JUN24-3200-C", openedAt, true, 2m, 30m, 60m, 0.1m, null),
-				new ConstructionTradeRow("exec-2", "ETHUSDT", openedAt.AddHours(1), true, 0.5m, 3500m, 1750m, 0.2m, null),
-				new ConstructionTradeRow("exec-3", "ETHUSDT", openedAt.AddHours(2), false, 0.5m, 3520m, 1760m, 0.15m, null),
+				new ConstructionTradeRow("exec-1", "ETH-28JUN24-3200-C", openedAt, true, 2m, 30m, 60m, 0.1m, null, "exchange"),
+				new ConstructionTradeRow("exec-2", "ETHUSDT", openedAt.AddHours(1), true, 0.5m, 3500m, 1750m, 0.2m, null, "exchange"),
+				new ConstructionTradeRow("exec-3", "ETHUSDT", openedAt.AddHours(2), false, 0.5m, 3520m, 1760m, 0.15m, null, "exchange"),
 			],
 			ClosingEntries:
 			[

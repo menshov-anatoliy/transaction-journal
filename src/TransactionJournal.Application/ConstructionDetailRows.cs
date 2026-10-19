@@ -95,6 +95,8 @@ public sealed record ConstructionPositionRow(
 /// <param name="AmountUsdt">Сумма сделки — количество, умноженное на цену, в USDT.</param>
 /// <param name="Fee">Комиссия со знаком исходной записи: положительная уплачена, отрицательная — rebate.</param>
 /// <param name="Comment">Комментарий сделки; null — комментария нет.</param>
+/// <param name="Source">Источник сделки: биржа или ручной ввод — признак бейджа источника в таблице.</param>
+/// <param name="ManualTradeId">Идентификатор строки сырья ручной сделки — ключ её правки и удаления; null у биржевой.</param>
 public sealed record ConstructionTradeRow(
 	string? ExecId,
 	string Symbol,
@@ -104,7 +106,9 @@ public sealed record ConstructionTradeRow(
 	decimal Price,
 	decimal AmountUsdt,
 	decimal Fee,
-	string? Comment);
+	string? Comment,
+	string Source,
+	long? ManualTradeId = null);
 
 /// <summary>
 /// Строка таблицы закрывающих записей деталей конструкции: запись единого

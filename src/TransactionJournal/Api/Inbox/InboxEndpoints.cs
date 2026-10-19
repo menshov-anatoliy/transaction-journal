@@ -53,8 +53,8 @@ public static class InboxEndpoints
 			}
 
 			var items = trades.Select(trade => new InboxTradeResponse(
-				// У ручной сделки execId отсутствует: экран различает источники записей,
-				// пока полный контракт бейджа источника не перенесён задачами UI.
+				// У ручной сделки execId отсутствует: её идентичность несёт ключ
+				// строки сырья manualTradeId, по нему адресуются правка и удаление.
 				trade.ExecId,
 				trade.Symbol,
 				trade.ExecutedAt,
@@ -63,7 +63,11 @@ public static class InboxEndpoints
 				trade.Price,
 				Math.Abs(trade.Quantity) * trade.Price,
 				trade.Fee,
-				trade.FeeCurrency))
+				trade.FeeCurrency,
+				// Источник берётся из сырья: экран различает записи бейджем источника.
+				// Traceability: openspec:ui/screens#scenario-source-badge-shown
+				trade.Source == TradeSource.Manual ? "manual" : "exchange",
+				trade.ManualTradeId))
 				.ToArray();
 
 			var targets = constructions.Items
@@ -186,7 +190,7 @@ public sealed record InboxOverviewResponse(
 	IReadOnlyList<InboxTradeResponse> Items,
 	IReadOnlyList<InboxTargetConstructionResponse> Targets);
 
-/// <summary>Строка непривязанной сделки для таблицы раздела; сделки обоих источников различаются execId.</summary>
+/// <summary>Строка непривязанной сделки для таблицы раздела; сделки обоих источников различаются полем source.</summary>
 /// <param name="ExecId">Ключ исполнения сделки на бирже; у ручной сделки отсутствует.</param>
 /// <param name="Symbol">Инструмент сделки.</param>
 /// <param name="ExecutedAt">Время исполнения сделки.</param>
@@ -196,6 +200,8 @@ public sealed record InboxOverviewResponse(
 /// <param name="AmountUsdt">Сумма исполнения в USDT без знака (|qty| × price).</param>
 /// <param name="Fee">Комиссия со знаком биржевой записи.</param>
 /// <param name="FeeCurrency">Валюта комиссии.</param>
+/// <param name="Source">Источник записи: exchange либо manual — признак бейджа источника.</param>
+/// <param name="ManualTradeId">Идентификатор строки сырья ручной сделки для правки и удаления; null у биржевых.</param>
 public sealed record InboxTradeResponse(
 	string? ExecId,
 	string Symbol,
@@ -205,7 +211,9 @@ public sealed record InboxTradeResponse(
 	decimal Price,
 	decimal AmountUsdt,
 	decimal Fee,
-	string? FeeCurrency);
+	string? FeeCurrency,
+	string Source,
+	long? ManualTradeId);
 
 /// <summary>Компактная цель привязки сделки в разделе «Входящие».</summary>
 /// <param name="ConstructionId">Идентификатор конструкции-цели.</param>

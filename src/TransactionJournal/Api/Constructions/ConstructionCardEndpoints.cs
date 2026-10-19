@@ -768,7 +768,13 @@ public static class ConstructionCardEndpoints
 			trade.Price,
 			trade.AmountUsdt,
 			trade.Fee,
-			trade.Comment)).ToArray(),
+			trade.Comment,
+			// Источник и ключ ручной сделки пробрасываются аддитивно: таблица
+			// различает записи бейджем источника, ручные адресует правкой
+			// и удалением по идентификатору строки сырья.
+			// Traceability: openspec:ui/screens#requirement-manual-trade-creation-ui
+			trade.Source,
+			trade.ManualTradeId)).ToArray(),
 		data.ClosingEntries.Select(entry => new ConstructionCardClosingEntryResponse(
 			entry.ClosedAt,
 			SerializeClosingKind(entry.Kind),
@@ -1087,16 +1093,18 @@ public sealed record ConstructionCardSyntheticCloseResponse(
 	string LinearExecId,
 	string CounterOptionExecId);
 
-/// <summary>Строка таблицы сделок карточки.</summary>
-/// <param name="ExecId">Биржевой идентификатор исполнения — ключ сделки.</param>
+/// <summary>Строка таблицы сделок карточки; источники различаются полем source.</summary>
+/// <param name="ExecId">Ключ исполнения биржевой сделки; у ручной сделки отсутствует.</param>
 /// <param name="Symbol">Инструмент сделки.</param>
 /// <param name="ExecutedAt">Время исполнения сделки.</param>
-/// <param name="IsBuy">true — покупка, false — продажа.</param>
+/// <param name="IsBuy">Признак направления: true — покупка, false — продажа.</param>
 /// <param name="Quantity">Количество без знака.</param>
 /// <param name="Price">Цена исполнения.</param>
-/// <param name="AmountUsdt">Сумма сделки в USDT.</param>
-/// <param name="Fee">Комиссия со знаком: положительная уплачена, отрицательная — rebate.</param>
-/// <param name="Comment">Комментарий сделки в Markdown; null — комментария нет.</param>
+/// <param name="AmountUsdt">Сумма сделки в USDT без знака.</param>
+/// <param name="Fee">Комиссия со знаком исходной записи.</param>
+/// <param name="Comment">Комментарий сделки; null — комментария нет.</param>
+/// <param name="Source">Источник записи: exchange либо manual — признак бейджа источника.</param>
+/// <param name="ManualTradeId">Идентификатор строки сырья ручной сделки для правки и удаления; null у биржевых.</param>
 public sealed record ConstructionCardTradeResponse(
 	string ExecId,
 	string Symbol,
@@ -1106,7 +1114,9 @@ public sealed record ConstructionCardTradeResponse(
 	decimal Price,
 	decimal AmountUsdt,
 	decimal Fee,
-	string? Comment);
+	string? Comment,
+	string Source,
+	long? ManualTradeId);
 
 /// <summary>Строка таблицы закрывающих записей карточки.</summary>
 /// <param name="ClosedAt">Момент закрытия: биржевая запись или время пометки.</param>

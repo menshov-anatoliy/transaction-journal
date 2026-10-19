@@ -1,5 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as cardApi from "@/lib/api/construction-card";
+import type { ManualTradeInput } from "@/lib/api/manual-trades";
+import { createManualTrade, deleteManualTrade, editManualTrade } from "@/lib/api/manual-trades";
 
 /**
  * Команды карточки конструкции: мутации действий шапки, комментариев,
@@ -106,6 +108,26 @@ export function useCardCommands(constructionId: number) {
 		onSuccess: invalidate,
 	});
 
+	// Ручная сделка из карточки сразу принадлежит этой конструкции; правка
+	// и удаление адресуются ключом строки сырья, производные данные карточки
+	// пересчитываются ближайшим чтением снимка.
+	// Traceability: openspec:ui/screens#scenario-card-create-manual-trade
+	// Traceability: openspec:ui/screens#scenario-detail-edit-manual-trade
+	const createManualTradeCommand = useMutation({
+		mutationFn: (input: ManualTradeInput) => createManualTrade({ ...input, constructionId }),
+		onSuccess: invalidate,
+	});
+
+	const editManualTradeCommand = useMutation({
+		mutationFn: (input: { id: number; trade: ManualTradeInput }) => editManualTrade(input.id, input.trade),
+		onSuccess: invalidate,
+	});
+
+	const deleteManualTradeCommand = useMutation({
+		mutationFn: (id: number) => deleteManualTrade(id),
+		onSuccess: invalidate,
+	});
+
 	const addAdjustment = useMutation({
 		mutationFn: (adjustment: cardApi.AdjustmentInput) => cardApi.addAdjustment(constructionId, adjustment),
 		onSuccess: invalidate,
@@ -156,6 +178,9 @@ export function useCardCommands(constructionId: number) {
 		deleteCloseMark,
 		returnTrade,
 		moveTrade,
+		createManualTrade: createManualTradeCommand,
+		editManualTrade: editManualTradeCommand,
+		deleteManualTrade: deleteManualTradeCommand,
 		addAdjustment,
 		editAdjustment,
 		deleteAdjustment,

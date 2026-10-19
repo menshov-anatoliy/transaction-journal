@@ -92,6 +92,8 @@ const card: ConstructionCard = {
 			amountUsdt: 60,
 			fee: 0.1,
 			comment: null,
+			source: "exchange",
+			manualTradeId: null,
 		},
 	],
 	closingEntries: [

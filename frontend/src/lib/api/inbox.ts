@@ -1,4 +1,5 @@
 ﻿import { apiCommand, apiFetch } from "./http";
+import type { TradeSource } from "./manual-trades";
 
 // Контракт раздела «Входящие» единого API: чтение непривязанных сделок,
 // счётчик бейджа и команды разбора (привязка, создание, инкрементальная
@@ -6,9 +7,10 @@
 // Traceability: doc:.wf-research/ui-concept/concept.md#5-раздел-входящие-страница-разбора-маршрут-inbox
 // Traceability: openspec:http-api/transport#scenario-spa-served-through-single-api
 
-/** Непривязанная сделка таблицы «Входящих». */
+/** Непривязанная сделка таблицы «Входящих»; источники различаются полем source. */
 export interface InboxTrade {
-	readonly execId: string;
+	/** Ключ исполнения биржевой сделки; у ручной записи отсутствует. */
+	readonly execId: string | null;
 	readonly symbol: string;
 	readonly executedAt: string;
 	readonly isBuy: boolean;
@@ -17,6 +19,11 @@ export interface InboxTrade {
 	readonly amountUsdt: number;
 	readonly fee: number;
 	readonly feeCurrency: string | null;
+	/** Источник записи: «биржа» либо «ручной ввод» — признак бейджа источника. */
+	// Traceability: openspec:ui/screens#scenario-source-badge-shown
+	readonly source: TradeSource;
+	/** Идентификатор строки сырья ручной сделки для правки и удаления; null у биржевых. */
+	readonly manualTradeId: number | null;
 }
 
 /** Компактная конструкция-цель для привязки выбранных сделок. */

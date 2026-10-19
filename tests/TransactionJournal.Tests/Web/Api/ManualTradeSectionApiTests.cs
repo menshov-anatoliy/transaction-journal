@@ -188,6 +188,40 @@ public sealed class ManualTradeSectionApiTests
 	}
 
 	[TestMethod]
+	[Description("Проекции входящих и карточки помечают строки источником и ключом ручной сделки")]
+	// Таблицы экранов различают биржевые и ручные записи бейджем источника:
+	// у биржевой строки source «exchange» и execId, у ручной — source «manual»
+	// и ключ строки сырья для адресации правки и удаления.
+	// Traceability: openspec:ui/screens#scenario-source-badge-shown
+	public async Task TryIfTradeRowsExposeSourceAndManualKey()
+	{
+		// Arrange: биржевая запись остаётся во «Входящих», ручная уходит в конструкцию.
+		await using var factory = new SectionApiFactory();
+		using var client = factory.CreateClient();
+		await MigrateAsync(factory);
+		SeedLinearInstrument(factory.DatabasePath);
+		await SeedExchangeExecutionAsync(factory.DatabasePath);
+		var constructionId = await SeedConstructionAsync(factory.DatabasePath, "Смешанный источник");
+		await CreateManualTradeAsync(client, constructionId, "Sell", 0.5m, 41000m, minutesAgo: 10);
+
+		// Act: читаем карточку конструкции и обзор «Входящих».
+		var card = await ReadCardAsync(client, constructionId);
+		var inbox = await (await client.GetAsync("/api/v1/inbox")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: ручная строка карточки помечена источником и ключом сырья.
+		var manualRow = card["trades"]!.AsArray().Single();
+		Assert.That(manualRow!["source"]!.GetValue<string>(), Is.EqualTo("manual"));
+		Assert.That(manualRow["execId"], Is.Null);
+		Assert.That(manualRow["manualTradeId"]!.GetValue<long>(), Is.GreaterThan(0));
+
+		// Биржевая строка «Входящих» помечена источником без ключа ручной сделки.
+		var exchangeRow = inbox!["items"]!.AsArray().Single();
+		Assert.That(exchangeRow!["source"]!.GetValue<string>(), Is.EqualTo("exchange"));
+		Assert.That(exchangeRow["execId"]!.GetValue<string>(), Is.EqualTo("exec-exchange-case"));
+		Assert.That(exchangeRow["manualTradeId"], Is.Null);
+	}
+
+	[TestMethod]
 	[DataRow(true)]
 	[DataRow(false)]
 	[Description("Правка и удаление по идентификатору биржевой записи возвращают ошибку запроса")]

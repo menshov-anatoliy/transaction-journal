@@ -33,6 +33,15 @@ vi.mock("@/lib/api/inbox", async (importOriginal) => ({
 	fetchInboxCount: vi.fn(),
 }));
 
+// Команды ручных сделок мокаются на уровне API: страница проверяет
+// пользовательский сценарий создания, правки и удаления с подтверждением.
+vi.mock("@/lib/api/manual-trades", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/lib/api/manual-trades")>()),
+	createManualTrade: vi.fn(),
+	editManualTrade: vi.fn(),
+	deleteManualTrade: vi.fn(),
+}));
+
 // Обзор журнала и журнал синхронизаций читает каркас AppLayout (итог в
 // топбаре): заглушки каркасных данных, к проверкам «Входящих» отношения
 // не имеют.
@@ -47,6 +56,7 @@ vi.mock("@/lib/api/sync", async (importOriginal) => ({
 }));
 
 const api = vi.mocked(await import("@/lib/api/inbox"));
+const manualApi = vi.mocked(await import("@/lib/api/manual-trades"));
 const constructionsApi = vi.mocked(await import("@/lib/api/constructions"));
 const syncApi = vi.mocked(await import("@/lib/api/sync"));
 
@@ -137,6 +147,8 @@ beforeEach(() => {
 				amountUsdt: 450,
 				fee: 0.5,
 				feeCurrency: "USDT",
+				source: "exchange",
+				manualTradeId: null,
 			},
 			{
 				execId: "exec-sell",
@@ -148,6 +160,23 @@ beforeEach(() => {
 				amountUsdt: 1200,
 				fee: -0.1,
 				feeCurrency: "USDT",
+				source: "exchange",
+				manualTradeId: null,
+			},
+			{
+				// Ручная запись: execId отсутствует, ключ строки сырья адресует
+				// правку и удаление, бейдж различает источник в таблице.
+				execId: null,
+				symbol: "BTCUSDT",
+				executedAt: "2026-10-08T11:00:00Z",
+				isBuy: true,
+				quantity: 0.2,
+				price: 43000,
+				amountUsdt: 8600,
+				fee: 0,
+				feeCurrency: null,
+				source: "manual",
+				manualTradeId: 15,
 			},
 		],
 		targets: [{ constructionId: 7, name: "Календарь ETH", status: "open", totalPnL: 100.5 }],
@@ -155,6 +184,9 @@ beforeEach(() => {
 	api.bindInboxTrades.mockResolvedValue(undefined);
 	api.createConstructionFromInbox.mockResolvedValue({ constructionId: 9 });
 	api.assembleInbox.mockResolvedValue({ constructionsCount: 1, boundCount: 2, tradesInInbox: 0 });
+	manualApi.createManualTrade.mockResolvedValue({ id: 15, constructionId: null });
+	manualApi.editManualTrade.mockResolvedValue({ id: 15, constructionId: null });
+	manualApi.deleteManualTrade.mockResolvedValue(undefined);
 	// Данные каркаса AppLayout: счётчик входящих, общий обзор журнала и
 	// журнал синхронизаций (статус синхронизации топбара скрыт без запусков).
 	api.fetchInboxCount.mockResolvedValue(0);
@@ -294,7 +326,10 @@ describe("раздел «Входящие»", () => {
 
 		// Направление тонировано: покупка — $info, продажа — $risk.
 		// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
-		expect(screen.getByText("покупка", { selector: "span" }).className).toContain("text-info");
+		for (const buy of screen.getAllByText("покупка", { selector: "span" })) {
+			expect(buy).toHaveClass("text-info");
+		}
+
 		expect(screen.getByText("продажа", { selector: "span" })).toHaveClass("text-risk");
 
 		// Act: выбор строки чекбоксом дизайн-примитива.
@@ -329,6 +364,90 @@ describe("раздел «Входящие»", () => {
 		expect(within(pill).getByText(/открыта · итог \+100\.5/)).toBeInTheDocument();
 	});
 
+	// Ручной ввод из «Входящих» по сценарию «Сделка создаётся из «Входящих»»:
+	// форма открывается кнопкой шапки, серверная валидация возвращает записи
+	// с бейджем «ручная» и без идентификатора исполнения.
+	// Traceability: openspec:ui/screens#scenario-inbox-create-manual-trade
+	// Traceability: openspec:ui/screens#scenario-source-badge-shown
+	it("создаёт ручную сделку из формы шапки с бейджем источника", async () => {
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByText("exec-buy");
+
+		// Arrange: таблица различает источники бейджами; у ручной записи
+		// execId — прочерк, у биржевых бейдж «биржа».
+		const manualRow = screen.getByRole("row", { name: /ручная/i });
+		expect(within(manualRow).getByText("ручная")).toBeInTheDocument();
+		expect(within(manualRow).queryByText("exec-")).not.toBeInTheDocument();
+		const exchangeRow = screen.getByRole("row", { name: /exec-buy/i });
+		expect(within(exchangeRow).getByText("биржа")).toBeInTheDocument();
+
+		// Act: открытие формы, заполнение и создание без конструкции.
+		await user.click(screen.getByRole("button", { name: "Ручная сделка" }));
+		await user.type(screen.getByLabelText("Символ инструмента"), "BTCUSDT");
+		await user.type(screen.getByLabelText("Количество"), "0,3");
+		await user.type(screen.getByLabelText("Цена, USDT"), "43000");
+		await user.click(screen.getByRole("button", { name: "Создать" }));
+
+		// Assert: сделка адресована общему пулу «Входящих».
+		await waitFor(() => expect(manualApi.createManualTrade).toHaveBeenCalledTimes(1));
+		expect(manualApi.createManualTrade.mock.calls[0][0]).toMatchObject({ constructionId: null, symbol: "BTCUSDT" });
+	});
+
+	it("показывает причину отказа серверной валидации у формы", async () => {
+		// Arrange: сервер отклоняет будущую дату.
+		const user = userEvent.setup();
+		manualApi.createManualTrade.mockRejectedValue(new Error("Дата сделки не может быть в будущем."));
+		renderPage();
+		await screen.findByText("exec-buy");
+		await user.click(screen.getByRole("button", { name: "Ручная сделка" }));
+		await user.type(screen.getByLabelText("Символ инструмента"), "BTCUSDT");
+		await user.type(screen.getByLabelText("Количество"), "0,3");
+		await user.type(screen.getByLabelText("Цена, USDT"), "43000");
+
+		// Act: отправка формы с некорректной датой.
+		await user.click(screen.getByRole("button", { name: "Создать" }));
+
+		// Assert: человекочитаемая причина показана формой.
+		expect(await screen.findByRole("alert")).toHaveTextContent("Дата сделки не может быть в будущем.");
+		expect(screen.getByRole("button", { name: "Создать" })).toBeEnabled();
+	});
+
+	// Правка и удаление ручной записи доступны из таблицы «Входящих»;
+	// у биржевых записей этих действий нет — они неизменяемы.
+	// Traceability: openspec:ui/screens#scenario-detail-edit-manual-trade
+	// Traceability: openspec:ui/screens#scenario-detail-synced-trade-immutable
+	it("адресует правку и удаление только ручной записи", async () => {
+		const user = userEvent.setup();
+		renderPage();
+		await screen.findByText("exec-buy");
+
+		// Assert: у биржевой строки действий правки/удаления нет.
+		const exchangeRow = screen.getByRole("row", { name: /exec-buy/i });
+		expect(within(exchangeRow).queryByRole("button", { name: "Изменить" })).not.toBeInTheDocument();
+		expect(within(exchangeRow).queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+
+		// Arrange: форма правки ручной записи предзаполнена атрибутами.
+		const manualRow = screen.getByRole("row", { name: /ручная/i });
+		await user.click(within(manualRow).getByRole("button", { name: "Изменить" }));
+		expect(screen.getByLabelText("Символ инструмента")).toHaveValue("BTCUSDT");
+
+		// Act: сохранение правки.
+		await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+		// Assert: правка адресована ключом строки сырья.
+		await waitFor(() => expect(manualApi.editManualTrade).toHaveBeenCalledTimes(1));
+		expect(manualApi.editManualTrade.mock.calls[0][0]).toBe(15);
+
+		// Act: удаление с подтверждением.
+		await user.click(within(screen.getByRole("row", { name: /ручная/i })).getByRole("button", { name: "Удалить" }));
+		expect(screen.getByRole("dialog")).toBeInTheDocument();
+		await user.click(screen.getByRole("button", { name: "Подтвердить удаление" }));
+
+		// Assert: удаление адресовано ключом строки сырья.
+		await waitFor(() => expect(manualApi.deleteManualTrade).toHaveBeenCalledWith(15));
+	});
+
 	it("в мобильном режиме оставляет только просмотр без тяжёлых действий", async () => {
 		// Мобильная вёрстка проверяется последней: setViewport подменяет
 		// window.matchMedia на 390px для всех последующих тестов файла.
@@ -339,5 +458,8 @@ describe("раздел «Входящие»", () => {
 		expect(screen.getByText(/мобильный режим:/i)).toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: /Создать конструкцию из выбранного/i })).not.toBeInTheDocument();
 		expect(screen.queryByRole("button", { name: /Собрать из Входящих/i })).not.toBeInTheDocument();
+		// Форма ручной сделки доступна и на мобильном: ввод сделки — лёгкий
+		// сценарий, тяжёлые операции распределения остаются на desktop.
+		expect(screen.getByRole("button", { name: "Ручная сделка" })).toBeInTheDocument();
 	});
 });

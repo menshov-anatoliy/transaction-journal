@@ -259,6 +259,17 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		? parts!.Strike
 		: decimal.MinValue;
 
+	/// <summary>Стабильная строка источника сделки в контракте таблицы: exchange либо manual.</summary>
+	// Признак источника живёт в сырье и показывается проекцией: строки таблиц
+	// различаются бейджем источника.
+	// Traceability: openspec:domain/manual-trades#scenario-manual-trade-source-attribute
+	private static string SerializeTradeSource(TradeSource source) => source switch
+	{
+		TradeSource.Exchange => "exchange",
+		TradeSource.Manual => "manual",
+		_ => throw new ArgumentOutOfRangeException(nameof(source), source, null),
+	};
+
 	/// <summary>
 	/// Строки таблицы сделок: сделки материализуются проекцией журнала из сырья обоих
 	/// источников — сырых исполнений биржи и ручных сделок, затем фильтруются
@@ -326,7 +337,13 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				trade.Fee,
 				// Комментарий адресуется execId: у ручной сделки его нет, пользовательский
 				// комментарий к ней появится вместе с сервисом ручных сделок.
-				trade.Source == TradeSource.Manual ? null : commentsByExecId.GetValueOrDefault(trade.ExecId!)))
+				trade.Source == TradeSource.Manual ? null : commentsByExecId.GetValueOrDefault(trade.ExecId!),
+				// Источник берётся из сырья и передаётся экрану: таблица различает
+				// биржевые и ручные записи бейджем источника, ручные адресует
+				// командами правки и удаления по идентификатору строки сырья.
+				// Traceability: openspec:ui/screens#scenario-source-badge-shown
+				SerializeTradeSource(trade.Source),
+				trade.ManualTradeId))
 			.ToList(),
 			// В слой связок уходят все привязанные сделки обоих источников: распознаватель
 			// берёт из них биржевые, ручные связки адресуют сделки по единому ключу
