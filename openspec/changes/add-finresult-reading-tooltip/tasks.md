@@ -16,6 +16,6 @@
 
 ## 3. Приёмка
 
-- [ ] 3.1 Скриншот-сверка обоих состояний (свёрнутое: индикатор с «?»; открытое: попап) живой страницы localhost с макетом design.pen через MCP pen; пары скриншотов сохранить в `.wf-research/design-audit/screenshots/`. Проверка: токенно-компонентное соответствие обоих состояний, evidence сохранён.
-- [ ] 3.2 Прогнать сборку и тесты frontend: `npm run build` и `npm test` во `frontend`. Проверка: обе команды зелёные.
-- [ ] 3.3 Проверить трассировку: `rg "^Traceability ID: requirement-indicator-reading-tooltip" openspec/changes/add-finresult-reading-tooltip` и `rg "Traceability: change:add-finresult-reading-tooltip" frontend/src GLOSSARY.md` — каждая метка разрешается в дельту и сопровождена пояснением. Проверка: команды возвращают совпадения, пояснения присутствуют.
+- [x] 3.1 Скриншот-сверка обоих состояний (свёрнутое: индикатор с «?»; открытое: попап) живой страницы localhost с макетом design.pen через MCP pen; пары скриншотов сохранить в `.wf-research/design-audit/screenshots/`. Проверка: токенно-компонентное соответствие обоих состояний, evidence сохранён.
+- [x] 3.2 Прогнать сборку и тесты frontend: `npm run build` и `npm test` во `frontend`. Проверка: обе команды зелёные.
+- [x] 3.3 Проверить трассировку: `rg "^Traceability ID: requirement-indicator-reading-tooltip" openspec/changes/add-finresult-reading-tooltip` и `rg "Traceability: change:add-finresult-reading-tooltip" frontend/src GLOSSARY.md` — каждая метка разрешается в дельту и сопровождена пояснением. Проверка: команды возвращают совпадения, пояснения присутствуют.
