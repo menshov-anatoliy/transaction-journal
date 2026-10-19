@@ -1,8 +1,9 @@
 import * as React from "react";
 import type { AdjustmentInput, ConstructionCardAdjustment } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { GridSection } from "./grid-section";
 import { DASH } from "@/lib/format/degradation";
 import { formatDay } from "@/lib/format/display-time";
@@ -32,6 +33,47 @@ export interface AdjustmentsTableProps {
 /** Подпись источника корректировки. */
 function sourceText(source: ConstructionCardAdjustment["source"]): string {
 	return source === "robot" ? "робот" : "ручная";
+}
+
+// Сегментированный переключатель источника по образцу «Стороны» формы
+// ручной сделки: активный сегмент $accentSoft/$accentStrong, неактивный —
+// кайма $border и $textSecondary; кегль и паддинги задаёт вызов.
+function SourceSegmented(props: {
+	/** Доступное имя группы для скринридеров. */
+	readonly ariaLabel: string;
+	/** Текущий источник. */
+	readonly value: ConstructionCardAdjustment["source"];
+	/** Блокировка на время команды. */
+	readonly disabled: boolean;
+	/** Размер сегментов: крупные в форме, компактные в строке таблицы. */
+	readonly itemClassName: string;
+	/** Смена источника. */
+	readonly onChange: (source: ConstructionCardAdjustment["source"]) => void;
+}) {
+	return (
+		<div className="flex gap-1.5" role="radiogroup" aria-label={props.ariaLabel}>
+			{(["manual", "robot"] as const).map((source) => {
+				const active = props.value === source;
+				return (
+					<button
+						key={source}
+						type="button"
+						role="radio"
+						aria-checked={active}
+						disabled={props.disabled}
+						onClick={() => props.onChange(source)}
+						className={cn(
+							"rounded-[8px] font-medium transition-colors",
+							active ? "bg-accent-soft text-accent-strong" : "border text-text-secondary",
+							props.itemClassName,
+						)}
+					>
+						{source === "manual" ? "ручная" : "робот"}
+					</button>
+				);
+			})}
+		</div>
+	);
 }
 
 /** Тон суммы: положительная — зелёная, отрицательная — красная. */
@@ -160,54 +202,79 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 			{/* Изменение корректировок — desktop-операция, суммы доступны на мобильном. */}
 			{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
 			{isMobile === false && addForm !== null ? (
-				// Форма добавления: дата-пикер с дефолтом «сегодня», источник,
-				// знаковая сумма и необязательное описание.
-				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
-					<label className="flex flex-col gap-1 text-sm">
-						дата
-						<input
-							type="date"
-							className="border-input bg-background h-9 rounded-md border px-2 text-sm"
-							value={addForm.date}
-							onChange={(event) => setAddForm({ ...addForm, date: event.target.value })}
-						/>
-					</label>
-					<label className="flex flex-col gap-1 text-sm">
-						источник
-						<select
-							className="border-input bg-background h-9 rounded-md border px-2 text-sm"
-							value={addForm.source}
-							onChange={(event) => setAddForm({ ...addForm, source: event.target.value as ConstructionCardAdjustment["source"] })}
-						>
-							<option value="manual">ручная</option>
-							<option value="robot">робот</option>
-						</select>
-					</label>
-					<label className="flex flex-col gap-1 text-sm">
-						сумма, USDT
-						<input
-							className="border-input bg-background h-9 w-32 rounded-md border px-2 text-sm"
-							placeholder="+87.4 / -12"
-							value={addForm.amount}
-							onChange={(event) => setAddForm({ ...addForm, amount: event.target.value })}
-						/>
-					</label>
-					<label className="flex flex-col gap-1 text-sm">
-						описание
-						<input
-							className="border-input bg-background h-9 w-64 rounded-md border px-2 text-sm"
-							placeholder="PnL робота grid-ETH за сентябрь"
-							value={addForm.description}
-							onChange={(event) => setAddForm({ ...addForm, description: event.target.value })}
-						/>
-					</label>
-					<Button size="sm" disabled={actionsPending} onClick={submitAdd}>
-						Добавить корректировку
-					</Button>
-					<Button size="sm" variant="outline" onClick={() => setAddForm(null)}>
-						Отмена
-					</Button>
-					{invalid && <span className="text-destructive text-sm" role="alert">Введите корректную дату и сумму со знаком, например +87.4 или -12</span>}
+				// Форма добавления повторяет мастер формы ручной сделки: карточка
+				// с шапкой «Новая корректировка» и крестиком, подписи полей
+				// 11px $textMuted над примитивом Input, сегмент источника по
+				// образцу «Стороны», футер Ghost-«Отмена» + Primary-действие;
+				// отступы рамки симметричны со всех сторон секции.
+				<div className="p-2.5">
+					<div className="flex flex-col gap-2.5 rounded-lg border bg-card p-4">
+						<div className="flex items-center gap-2">
+							<h4 className="text-[14px] font-semibold text-foreground">Новая корректировка</h4>
+							<span className="h-px flex-1" aria-hidden="true" />
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-6"
+								aria-label="Закрыть форму корректировки"
+								onClick={() => setAddForm(null)}
+							>
+								<X aria-hidden className="size-3.5 text-text-muted" />
+							</Button>
+						</div>
+
+						<div className="flex gap-2.5">
+							<label className="flex min-w-0 flex-1 flex-col gap-1">
+								<span className="text-[11px] font-medium text-text-muted">дата</span>
+								<Input
+									type="date"
+									value={addForm.date}
+									onChange={(event) => setAddForm({ ...addForm, date: event.target.value })}
+								/>
+							</label>
+							<div className="flex min-w-0 flex-1 flex-col gap-1">
+								<span className="text-[11px] font-medium text-text-muted">источник</span>
+								<SourceSegmented
+									ariaLabel="Источник корректировки"
+									value={addForm.source}
+									disabled={actionsPending}
+									itemClassName="px-3.5 py-[6px] text-[12.5px]"
+									onChange={(source) => setAddForm({ ...addForm, source })}
+								/>
+							</div>
+						</div>
+
+						<div className="flex gap-2.5">
+							<label className="flex min-w-0 flex-1 flex-col gap-1">
+								<span className="text-[11px] font-medium text-text-muted">сумма, USDT</span>
+								<Input
+									inputMode="decimal"
+									placeholder="+87.4 / -12"
+									value={addForm.amount}
+									onChange={(event) => setAddForm({ ...addForm, amount: event.target.value })}
+								/>
+							</label>
+							<label className="flex min-w-0 flex-1 flex-col gap-1">
+								<span className="text-[11px] font-medium text-text-muted">описание</span>
+								<Input
+									placeholder="PnL робота grid-ETH за сентябрь"
+									value={addForm.description}
+									onChange={(event) => setAddForm({ ...addForm, description: event.target.value })}
+								/>
+							</label>
+						</div>
+
+						<div className="flex items-center gap-2 pt-0.5">
+							<span className="h-px flex-1" aria-hidden="true" />
+							<Button variant="ghost" size="sm" onClick={() => setAddForm(null)}>
+								Отмена
+							</Button>
+							<Button size="sm" disabled={actionsPending} onClick={submitAdd}>
+								Добавить корректировку
+							</Button>
+						</div>
+						{invalid && <p className="text-destructive text-sm" role="alert">Введите корректную дату и сумму со знаком, например +87.4 или -12</p>}
+						</div>
 				</div>
 			) : null}
 
@@ -235,50 +302,51 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 					) : (
 						adjustments.map((adjustment) =>
 							isMobile === false && editTarget?.adjustmentId === adjustment.adjustmentId && editForm !== null ? (
-								// Inline-правка корректировки в строке таблицы.
+								// Inline-правка корректировки в строке таблицы: те же
+								// примитивы, что и в форме добавления, в компактном
+								// размере; футер — Primary-«Сохранить» и Ghost-«Отмена».
 								<TableRow key={adjustment.adjustmentId}>
 									<TableCell>
-										<input
+										<Input
 											type="date"
-											className="border-input bg-background h-8 rounded-md border px-2 text-sm"
 											value={editForm.date}
 											onChange={(event) => setEditForm({ ...editForm, date: event.target.value })}
 										/>
 									</TableCell>
 									<TableCell>
-										<input
-											className="border-input bg-background h-8 w-56 rounded-md border px-2 text-sm"
+										<Input
+											className="w-56"
 											placeholder="описание"
 											value={editForm.description}
 											onChange={(event) => setEditForm({ ...editForm, description: event.target.value })}
 										/>
 									</TableCell>
 									<TableCell>
-										<select
-											className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+										<SourceSegmented
+											ariaLabel="Источник правимой корректировки"
 											value={editForm.source}
-											onChange={(event) => setEditForm({ ...editForm, source: event.target.value as ConstructionCardAdjustment["source"] })}
-										>
-											<option value="manual">ручная</option>
-											<option value="robot">робот</option>
-										</select>
+											disabled={actionsPending}
+											itemClassName="px-2.5 py-[3px] text-[11px]"
+											onChange={(source) => setEditForm({ ...editForm, source })}
+										/>
 									</TableCell>
 									<TableCell>
-										<input
-											className="border-input bg-background h-8 w-28 rounded-md border px-2 text-sm"
+										<Input
+											className="w-28"
+											inputMode="decimal"
 											placeholder="+87.4 / -12"
 											value={editForm.amount}
 											onChange={(event) => setEditForm({ ...editForm, amount: event.target.value })}
 										/>
 									</TableCell>
 									<TableCell>
-										<div className="flex gap-1.5">
+										<div className="flex items-center gap-1.5">
 											<Button size="sm" disabled={actionsPending} onClick={submitEdit}>
 												Сохранить
 											</Button>
 											<Button
+												variant="ghost"
 												size="sm"
-												variant="outline"
 												onClick={() => {
 													setEditTarget(null);
 													setEditForm(null);
