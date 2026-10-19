@@ -557,7 +557,8 @@ public static class ConstructionCardEndpoints
 
 	/// <summary>
 	/// Выполняет команду привязки сделки с единой обработкой отказов: ошибка
-	/// ключа или ввода — 400, прочие сбои — 500 с текстом причины.
+	/// ключа или ввода — 400, несуществующая сделка — 404 с причиной,
+	/// прочие сбои — 500 с текстом причины.
 	/// </summary>
 	private static async Task<IResult> RunBindingCommand(Func<Task> action, string errorPrefix)
 	{
@@ -568,6 +569,12 @@ public static class ConstructionCardEndpoints
 			catch (ArgumentException)
 			{
 				return Results.Json(new ConstructionCardErrorResponse("Действие не выполнено: проверьте заполненные поля."), statusCode: StatusCodes.Status400BadRequest);
+			}
+			catch (TradeNotFoundException exception)
+			{
+				// Сделка ключом не находится ни в биржевом сырье, ни в ручном —
+				// владелец видит, какой ключ не найден, вместо серверного сбоя.
+				return Results.Json(new ConstructionCardErrorResponse($"Сделка {exception.ExecId} не найдена в журнале."), statusCode: StatusCodes.Status404NotFound);
 			}
 			catch (Exception exception)
 			{
@@ -802,7 +809,11 @@ public static class ConstructionCardEndpoints
 			close.LockedValueUsdt,
 			close.Disputed,
 			close.LinearExecId,
-			close.CounterOptionExecId)).ToArray(),
+			close.CounterOptionExecId,
+			// Идентификатор ручной связки пробрасывается аддитивно: UI удаляет
+			// ручную связку по строке снимка, спора у ручной связки нет.
+			// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+			close.ManualLinkId)).ToArray(),
 		// Предупреждения диагностики входят в контракт карточки аддитивно:
 		// тексты идут из тех же метрик, что и счётчик бейджа списка, —
 		// расхождение перечня и счётчика исключено; пустой список вместо null.
@@ -859,6 +870,13 @@ public static class ConstructionCardEndpoints
 			// Повторный возврат неоспоренной связки — ошибка состояния:
 			// пользователь видит, какой пары в спорах нет.
 			return Results.Json(new ConstructionCardErrorResponse(exception.Message), statusCode: StatusCodes.Status404NotFound);
+		}
+		catch (SyntheticCloseDisputeNotApplicableException exception)
+		{
+			// Спор ручной связки правилами не предусмотрен: вместо no-op-записи
+			// клиент получает отказ с объяснением, что ручная связка удаляется.
+			// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+			return Results.Json(new ConstructionCardErrorResponse(exception.Message), statusCode: StatusCodes.Status400BadRequest);
 		}
 		catch (ArgumentException)
 		{
@@ -1076,22 +1094,27 @@ public sealed record ConstructionCardPositionResponse(
 /// <param name="Quantity">Количество связки — закрываемая часть ноги.</param>
 /// <param name="LockedValueUsdt">Величина «зафиксировано синтетикой» — паритетный лок связки к экспирации в USDT.</param>
 /// <param name="Disputed">Связка оспорена пользователем: её лок не входит в логический слой ноги.</param>
-/// <param name="LinearExecId">Биржевой идентификатор линейного исполнения связки — первый ключ команд оспаривания и возврата.</param>
-/// <param name="CounterOptionExecId">Биржевой идентификатор встречного опционного исполнения связки — второй ключ команд оспаривания и возврата.</param>
+/// <param name="LinearExecId">Идентификатор линейной сделки связки — единый ключ «execId» либо «manual:{id}», первый ключ команд оспаривания и возврата.</param>
+/// <param name="CounterOptionExecId">Идентификатор встречной опционной сделки связки — второй ключ команд оспаривания и возврата.</param>
+/// <param name="ManualLinkId">Идентификатор строки ручной связки — ключ её удаления; null у распознанных связок.</param>
 // Признак спора проходит рядом со связкой: строка остаётся видимой после
 // оспаривания, логический слой спорной связкой не трогается.
 // Пара execId добавлена в конец записи аддитивно: UI адресует связку
 // в готовых эндпоинтах synthetic-closes/dispute|revert, прежние потребители
 // ответа не ломаются.
+// Идентификатор ручной связки идёт следом: удаление адресуется строкой
+// снимка напрямую, клиентские сессионные реестры связок не нужны.
 // Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
 // Traceability: change:add-synthetic-close-dispute-ui/design#d1
+// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
 public sealed record ConstructionCardSyntheticCloseResponse(
 	string ClosedLegSymbol,
 	decimal Quantity,
 	decimal LockedValueUsdt,
 	bool Disputed,
 	string LinearExecId,
-	string CounterOptionExecId);
+	string CounterOptionExecId,
+	long? ManualLinkId);
 
 /// <summary>Строка таблицы сделок карточки; источники различаются полем source.</summary>
 /// <param name="ExecId">Ключ исполнения биржевой сделки; у ручной сделки отсутствует.</param>

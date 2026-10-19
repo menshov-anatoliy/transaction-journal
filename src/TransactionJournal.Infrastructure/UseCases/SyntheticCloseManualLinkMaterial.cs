@@ -22,9 +22,32 @@ internal static class SyntheticCloseManualLinkMaterial
 	/// <summary>Категория опционных записей журнала — материал сопоставления связок.</summary>
 	private const string OptionCategory = "option";
 
+	/// <summary>Префикс единого ключа ручной сделки: ключ строится как «manual:{id строки сырья}».</summary>
+	public const string ManualKeyPrefix = "manual:";
+
 	/// <summary>Строит единый ключ сделки: execId биржевой, ключ строки сырья ручной.</summary>
 	public static string TradeKey(MaterializedTrade trade) =>
-		trade.ExecId ?? $"manual:{trade.ManualTradeId?.ToString(CultureInfo.InvariantCulture)}";
+		trade.ExecId ?? BuildManualKey(trade.ManualTradeId!.Value);
+
+	/// <summary>Строит единый ключ ручной сделки по идентификатору строки её сырья.</summary>
+	public static string BuildManualKey(long manualTradeId) =>
+		$"{ManualKeyPrefix}{manualTradeId.ToString(CultureInfo.InvariantCulture)}";
+
+	/// <summary>Распознаёт единый ключ ручной сделки: true — ключ адресует строку сырья ручного ввода.</summary>
+	public static bool TryParseManualKey(string tradeKey, out long manualTradeId)
+	{
+		manualTradeId = 0;
+		if (tradeKey.StartsWith(ManualKeyPrefix, StringComparison.Ordinal) == false)
+		{
+			return false;
+		}
+
+		return long.TryParse(
+			tradeKey.AsSpan(ManualKeyPrefix.Length),
+			NumberStyles.Integer,
+			CultureInfo.InvariantCulture,
+			out manualTradeId);
+	}
 
 	/// <summary>Ищет сделку конструкции по идентификатору связки.</summary>
 	public static MaterializedTrade? FindTrade(IReadOnlyList<MaterializedTrade> trades, string tradeId) =>

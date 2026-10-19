@@ -135,6 +135,34 @@ public class SyntheticCloseDisputeServiceTests
 	}
 
 	[TestMethod]
+	[Description("Оспаривание пары ручных сделок отклоняется без записи спора")]
+	// Ручные сделки адресуются единым ключом «manual:{id}»: спор правилами
+	// журнала ручной связке не предусмотрен — вместо no-op-сохранения клиент
+	// получает отказ, хранилище споров остаётся чистым.
+	// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	public async Task ThrowOnDisputeWithManualKeys()
+	{
+		// Arrange: конструкция существует, связка состоит из ручных сделок.
+		var construction = await _constructionService.CreateAsync("XAUT ручная связка", 100m);
+
+		// Act: пытаемся оспорить ручную пару.
+		SyntheticCloseDisputeNotApplicableException? thrown = null;
+		try
+		{
+			await _disputeService.DisputeAsync(construction.Id, "manual:5", "manual:7");
+		}
+		catch (SyntheticCloseDisputeNotApplicableException exception)
+		{
+			thrown = exception;
+		}
+
+		// Assert: отказ называет ручную пару, записи спора нет.
+		Assert.That(thrown, Is.Not.Null);
+		Assert.That(thrown!.LinearExecId, Is.EqualTo("manual:5"));
+		Assert.That(ReadDisputes(construction.Id), Is.Empty);
+	}
+
+	[TestMethod]
 	[Description("Возврат неоспоренной пары отказывает")]
 	[ExpectedException(typeof(SyntheticCloseDisputeNotFoundException))]
 	public async Task ThrowOnRevertUnknownPair()

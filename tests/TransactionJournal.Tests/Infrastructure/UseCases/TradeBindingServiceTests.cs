@@ -229,6 +229,134 @@ public class TradeBindingServiceTests
 	}
 
 	[TestMethod]
+	[Description("Привязка выводит ручную сделку из «Входящих»: привязка меняет её строку сырья")]
+	public async Task TryIfBindingManualTradeRemovesItFromInbox()
+	{
+		// Arrange: конструкция и ручная сделка во «Входящих» (ConstructionId null).
+		var construction = await CreateConstructionAsync("Ручной вход");
+		var manualTrade = await SeedManualTradeAsync(constructionId: null);
+
+		// Act: привязываем ручную сделку единым ключом «manual:{id}».
+		await _service.BindAsync(construction.Id, $"manual:{manualTrade.Id}");
+
+		// Assert: ручная сделка принадлежит ровно одной конструкции — привязка
+		// живёт в её строке сырья, строк пользовательских данных не появляется.
+		// Требование: ручная сделка из «Входящих» доступна привязке и сборке
+		// теми же командами, что и биржевая.
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-created-into-inbox
+		// Traceability: change:manual-journal-management/design#d4
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			var stored = db.ManualTrades.Single();
+			Assert.That(stored.Id, Is.EqualTo(manualTrade.Id));
+			Assert.That(stored.ConstructionId, Is.EqualTo(construction.Id));
+			Assert.That(db.TradeUserdata, Is.Empty);
+		}
+
+		// Assert: повторная привязка к той же конструкции идемпотентна.
+		await _service.BindAsync(construction.Id, $"manual:{manualTrade.Id}");
+		using (var dbAgain = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(dbAgain.ManualTrades.Single().ConstructionId, Is.EqualTo(construction.Id));
+		}
+	}
+
+	[TestMethod]
+	[Description("Перенос ручной сделки между конструкциями меняет её единственную принадлежность")]
+	public async Task TryIfTransferMovesManualTradeBetweenConstructions()
+	{
+		// Arrange: две конструкции; ручная сделка привязана к первой.
+		var first = await CreateConstructionAsync("Прежняя ручная");
+		var second = await CreateConstructionAsync("Новая ручная");
+		var manualTrade = await SeedManualTradeAsync(first.Id);
+
+		// Act: переносим ручную сделку во вторую конструкцию.
+		await _service.BindAsync(second.Id, $"manual:{manualTrade.Id}");
+
+		// Assert: единственная принадлежность — вторая конструкция, следов
+		// прежней привязки нет; инвариант единственной принадлежности сохранён.
+		// Traceability: openspec:domain/constructions#scenario-rebind-recomputes-both
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.ManualTrades.Single().ConstructionId, Is.EqualTo(second.Id));
+		}
+	}
+
+	[TestMethod]
+	[Description("Возврат ручной сделки во «Входящие» снимает привязку в её сырье")]
+	public async Task TryIfUnbindReturnsManualTradeToInbox()
+	{
+		// Arrange: конструкция с привязанной ручной сделкой.
+		var construction = await CreateConstructionAsync("Ручной возврат");
+		var manualTrade = await SeedManualTradeAsync(construction.Id);
+
+		// Act: возвращаем ручную сделку во «Входящие» единым ключом.
+		await _service.UnbindAsync($"manual:{manualTrade.Id}");
+
+		// Assert: привязка снята, строка сырья пережила возврат — сделка снова
+		// во «Входящих» и доступна повторной привязке.
+		// Traceability: openspec:domain/constructions#scenario-return-to-inbox
+		// Traceability: change:manual-journal-management/design#d4
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.ManualTrades.Single().ConstructionId, Is.Null);
+		}
+
+		// Assert: повторный возврат непривязанной ручной сделки бездействует.
+		await _service.UnbindAsync($"manual:{manualTrade.Id}");
+		using (var dbAgain = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(dbAgain.ManualTrades.Single().ConstructionId, Is.Null);
+		}
+	}
+
+	[TestMethod]
+	[Description("Массовая привязка обслуживает пачку из биржевых и ручных сделок")]
+	public async Task TryIfBatchBindingAcceptsMixedSources()
+	{
+		// Arrange: целевая конструкция, биржевая и ручная сделки во «Входящих».
+		var target = await CreateConstructionAsync("Смешанная пачка");
+		await SeedRawExecutionAsync("exec-mixed-1");
+		var manualTrade = await SeedManualTradeAsync(constructionId: null);
+
+		// Act: массово привязываем обе сделки одним действием.
+		await _service.BindBatchAsync(target.Id, new[] { "exec-mixed-1", $"manual:{manualTrade.Id}" });
+
+		// Assert: каждый источник привязан своим хранилищем, обе сделки ровно
+		// в целевой конструкции.
+		// Traceability: openspec:domain/constructions#scenario-batch-binding
+		// Traceability: change:manual-journal-management/design#d4
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.ManualTrades.Single().ConstructionId, Is.EqualTo(target.Id));
+			Assert.That(db.TradeUserdata.Single(u => u.ExecId == "exec-mixed-1").ConstructionId, Is.EqualTo(target.Id));
+		}
+	}
+
+	[TestMethod]
+	[Description("Привязка неизвестной ручной сделки отклоняется с её единым ключом")]
+	public async Task ThrowOnBindUnknownManualTrade()
+	{
+		// Arrange: конструкция есть, ручной сделки с таким идентификатором нет.
+		var construction = await CreateConstructionAsync("Без ручной сделки");
+
+		// Act: пытаемся привязать несуществующую ручную сделку.
+		TradeNotFoundException? thrown = null;
+		try
+		{
+			await _service.BindAsync(construction.Id, "manual:9999");
+		}
+		catch (TradeNotFoundException exception)
+		{
+			thrown = exception;
+		}
+
+		// Assert: отказ называет единый ключ отсутствующей сделки.
+		Assert.That(thrown, Is.Not.Null);
+		Assert.That(thrown!.ExecId, Is.EqualTo("manual:9999"));
+	}
+
+	[TestMethod]
 	[Description("Привязка к несуществующей конструкции отклоняется")]
 	[ExpectedException(typeof(ConstructionNotFoundException))]
 	public async Task ThrowOnBindToUnknownConstruction()
@@ -360,6 +488,27 @@ public class TradeBindingServiceTests
 			FetchedAt = FetchedAt,
 		});
 		await db.SaveChangesAsync();
+	}
+
+	/// <summary>Вносит ручную сделку в хранилище: сразу в указанную конструкцию либо во «Входящие».</summary>
+	private async Task<ManualTrade> SeedManualTradeAsync(long? constructionId)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		var trade = new ManualTrade
+		{
+			ExecutedAt = FetchedAt,
+			Symbol = "BTCUSDT",
+			Side = "Buy",
+			Quantity = 0.01m,
+			Price = 42000m,
+			FeeUsdt = 0m,
+			ConstructionId = constructionId,
+			CreatedAt = FetchedAt,
+			UpdatedAt = FetchedAt,
+		};
+		db.ManualTrades.Add(trade);
+		await db.SaveChangesAsync();
+		return trade;
 	}
 
 	#endregion

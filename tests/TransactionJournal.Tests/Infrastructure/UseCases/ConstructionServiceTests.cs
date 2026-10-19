@@ -302,6 +302,64 @@ public class ConstructionServiceTests
 	}
 
 	[TestMethod]
+	[Description("Удаление конструкции с ручными сделками отказывает с объяснением и не меняет данные")]
+	public async Task ThrowOnDeleteConstructionWithManualTrades()
+	{
+		// Arrange: конструкция с двумя ручными сделками, внесёнными сразу в неё.
+		var construction = await _service.CreateAsync("Ручные на месте", 350m);
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			foreach (var side in new[] { "Buy", "Sell" })
+			{
+				db.ManualTrades.Add(new ManualTrade
+				{
+					ExecutedAt = new DateTimeOffset(2026, 9, 1, 10, 0, 0, TimeSpan.Zero),
+					Symbol = "BTCUSDT",
+					Side = side,
+					Quantity = 0.01m,
+					Price = 42000m,
+					FeeUsdt = 0m,
+					ConstructionId = construction.Id,
+					CreatedAt = new DateTimeOffset(2026, 9, 1, 10, 5, 0, TimeSpan.Zero),
+					UpdatedAt = new DateTimeOffset(2026, 9, 1, 10, 5, 0, TimeSpan.Zero),
+				});
+			}
+
+			await db.SaveChangesAsync();
+		}
+
+		// Act: пытаемся удалить конструкцию с ручными сделками.
+		ConstructionDeletionRefusedException? thrown = null;
+		try
+		{
+			await _service.DeleteAsync(construction.Id);
+		}
+		catch (ConstructionDeletionRefusedException exception)
+		{
+			thrown = exception;
+		}
+
+		// Assert: отказ объясняет причину — ручные сделки, а не серверный сбой
+		// внешнего ключа; счётчик ручных сделок заполнен.
+		// Требование: удаление возможно только без сделок и корректировок,
+		// ручные сделки блокируют удаление наравне с биржевыми привязками.
+		// Traceability: openspec:domain/constructions#scenario-delete-only-when-empty
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+		Assert.That(thrown, Is.Not.Null);
+		Assert.That(thrown!.BoundTradeCount, Is.EqualTo(0));
+		Assert.That(thrown.ManualTradeCount, Is.EqualTo(2));
+		Assert.That(thrown.AdjustmentCount, Is.EqualTo(0));
+		Assert.That(thrown.Message, Does.Contain("ручных сделок"));
+
+		// Assert: конструкция и её ручные сделки остались неизменными.
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			Assert.That(db.Constructions.Count(), Is.EqualTo(1));
+			Assert.That(db.ManualTrades.Count(), Is.EqualTo(2));
+		}
+	}
+
+	[TestMethod]
 	[Description("Удаление конструкции с внешними корректировками PnL отказывает с объяснением и не меняет данные")]
 	public async Task ThrowOnDeleteConstructionWithAdjustments()
 	{

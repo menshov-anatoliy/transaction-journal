@@ -124,6 +124,31 @@ describe("таблица сделок карточки: ручные запис�
 		expect(commands.onDeleteManualTrade).toHaveBeenCalledWith(42);
 	});
 
+	// Возврат и перенос доступны каждой строке таблицы: ручная запись
+	// адресуется единым ключом «manual:{id}» теми же командами.
+	// Traceability: openspec:ui/screens#requirement-trade-actions-in-detail
+	it("адресует возврат и перенос ручной записи единым ключом", async () => {
+		// Arrange: таблица с ручной записью и одной целью переноса.
+		const cardApi = await import("@/lib/api/construction-card");
+		vi.mocked(cardApi.fetchMoveTargets).mockResolvedValue([{ constructionId: 9, name: "Цель переноса" }]);
+		const user = userEvent.setup();
+		const { commands } = renderTable();
+		const manualRow = screen.getByRole("row", { name: /BTCUSDT/i });
+
+		// Act: возвращаем ручную запись во «Входящие».
+		await user.click(within(manualRow).getByRole("button", { name: "Во «Входящие»" }));
+
+		// Assert: команда получила единый ключ ручной записи.
+		expect(commands.onReturn).toHaveBeenCalledWith("manual:42");
+
+		// Act: переносим ручную запись в целевую конструкцию.
+		await user.click(within(manualRow).getByRole("button", { name: "Перенести…" }));
+		await user.click(screen.getByRole("button", { name: "Перенести" }));
+
+		// Assert: команда переноса получила тот же единый ключ и выбранную цель.
+		expect(commands.onMove).toHaveBeenCalledWith({ execId: "manual:42", targetConstructionId: 9 });
+	});
+
 	it("отменяет удаление без вызова команды", async () => {
 		// Arrange: диалог подтверждения открыт.
 		const user = userEvent.setup();

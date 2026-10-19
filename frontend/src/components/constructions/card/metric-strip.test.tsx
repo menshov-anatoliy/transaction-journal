@@ -5,7 +5,6 @@ import type {
 	ConstructionCard,
 	SyntheticCloseDisputeInput,
 	SyntheticCloseManualLinkInput,
-	SyntheticCloseManualLinkRecord,
 } from "@/lib/api/construction-card";
 import { ConstructionMetricStrip } from "./metric-strip";
 
@@ -117,7 +116,6 @@ beforeEach(() => {
 
 /** Состояние формы ручной связки и команд по умолчанию для помощника рендера. */
 interface ManualLinkProps {
-	readonly manualLinks: readonly SyntheticCloseManualLinkRecord[];
 	readonly manualLinkFormOpen: boolean;
 	readonly manualLinkPending: boolean;
 	readonly manualLinkError: string | null;
@@ -134,7 +132,6 @@ function renderStrip(
 	manualLinkProps: Partial<ManualLinkProps> = {},
 ) {
 	const defaults: ManualLinkProps = {
-		manualLinks: [],
 		manualLinkFormOpen: false,
 		manualLinkPending: false,
 		manualLinkError: null,
@@ -148,7 +145,6 @@ function renderStrip(
 			card={card}
 			onDispute={onDispute}
 			onRevert={onRevert}
-			manualLinks={defaults.manualLinks}
 			manualLinkPending={defaults.manualLinkPending}
 			manualLinkError={defaults.manualLinkError}
 			manualLinkFormOpen={defaults.manualLinkFormOpen}
@@ -174,6 +170,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 				disputed: false,
 				linearExecId: "exec-linear-1",
 				counterOptionExecId: "exec-option-1",
+				manualLinkId: null,
 			}],
 		});
 
@@ -198,6 +195,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 					disputed: false,
 					linearExecId: "exec-linear-1",
 					counterOptionExecId: "exec-option-1",
+					manualLinkId: null,
 				},
 				{
 					closedLegSymbol: "ETH-28MAR-1600-P",
@@ -206,6 +204,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 					disputed: false,
 					linearExecId: "exec-linear-2",
 					counterOptionExecId: "exec-option-2",
+					manualLinkId: null,
 				},
 			],
 		});
@@ -249,6 +248,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 				disputed: true,
 				linearExecId: "exec-linear-1",
 				counterOptionExecId: "exec-option-1",
+				manualLinkId: null,
 			}],
 		});
 
@@ -284,6 +284,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 					disputed: false,
 					linearExecId: "exec-linear-2",
 					counterOptionExecId: "exec-option-2",
+					manualLinkId: null,
 				},
 				{
 					closedLegSymbol: "ETH-28MAR-1600-P",
@@ -292,6 +293,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 					disputed: true,
 					linearExecId: "exec-linear-1",
 					counterOptionExecId: "exec-option-1",
+					manualLinkId: null,
 				},
 			],
 		});
@@ -333,6 +335,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 				disputed: true,
 				linearExecId: "exec-linear-1",
 				counterOptionExecId: "exec-option-1",
+				manualLinkId: null,
 			}],
 		});
 		const user = userEvent.setup();
@@ -362,6 +365,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 				disputed: false,
 				linearExecId: "exec-linear-2",
 				counterOptionExecId: "exec-option-2",
+				manualLinkId: null,
 			}],
 		});
 		const user = userEvent.setup();
@@ -392,6 +396,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 					disputed: false,
 					linearExecId: "exec-linear-2",
 					counterOptionExecId: "exec-option-2",
+					manualLinkId: null,
 				},
 				{
 					closedLegSymbol: "ETH-28MAR-1600-P",
@@ -400,6 +405,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 					disputed: true,
 					linearExecId: "exec-linear-1",
 					counterOptionExecId: "exec-option-1",
+					manualLinkId: null,
 				},
 			],
 		});
@@ -426,6 +432,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 				disputed: false,
 				linearExecId: "exec-linear-1",
 				counterOptionExecId: "exec-option-1",
+				manualLinkId: null,
 			}],
 		});
 
@@ -545,9 +552,10 @@ describe("ConstructionMetricStrip: ручная синтетическая св�
 		expect(screen.getByRole("alert")).toHaveTextContent("не совпадает страйком");
 	});
 
-	it("ручная связка в списке удаляется по идентификатору, распознанная оспаривается", async () => {
-		// Arrange: раскрытый список — ручная связка (известна UI по ответу
-		// создания) и распознанная; замеры команд.
+	it("ручная связка в списке удаляется по идентификатору из снимка, распознанная оспаривается", async () => {
+		// Arrange: раскрытый список — ручная связка (идентификатор строки
+		// связки приходит в строке снимка карточки) и распознанная; замер
+		// команды удаления.
 		const onDeleteManualLink = vi.fn();
 		const card = makeCard({
 			syntheticCloses: [
@@ -558,6 +566,7 @@ describe("ConstructionMetricStrip: ручная синтетическая св�
 					disputed: false,
 					linearExecId: "manual:5",
 					counterOptionExecId: "manual:7",
+					manualLinkId: 12,
 				},
 				{
 					closedLegSymbol: "ETH-28MAR-1600-P",
@@ -566,23 +575,25 @@ describe("ConstructionMetricStrip: ручная синтетическая св�
 					disputed: false,
 					linearExecId: "exec-linear-2",
 					counterOptionExecId: "exec-option-2",
+					manualLinkId: null,
 				},
 			],
 		});
 		const user = userEvent.setup();
-		renderStrip(card, () => undefined, () => undefined, {
-			manualLinks: [{ id: 12, linearTradeId: "manual:5", optionTradeId: "manual:7", quantity: 0.3 }],
-			onDeleteManualLink,
-		});
+		renderStrip(card, () => undefined, () => undefined, { onDeleteManualLink });
 		await user.click(screen.getByRole("button", { name: /зафиксировано синтетикой/ }));
 
 		// Act: владелец удаляет ручную связку.
 		await user.click(screen.getByRole("button", { name: "Удалить" }));
 
-		// Assert: команда удаления получила идентификатор ручной связки;
-		// распознанная связка осталась с действием «Оспорить».
+		// Assert: команда удаления получила идентификатор ручной связки из
+		// строки снимка — действие доступно в любой сессии, без сессионного
+		// реестра; у ручной строки спора нет, распознанная связка осталась
+		// с действием «Оспорить».
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
 		expect(onDeleteManualLink).toHaveBeenCalledWith(12);
 		expect(onDeleteManualLink).toHaveBeenCalledTimes(1);
 		expect(screen.getByRole("button", { name: "Оспорить" })).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "Вернуть" })).toBeNull();
 	});
 });

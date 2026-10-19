@@ -269,9 +269,10 @@ public sealed class ConstructionService : IConstructionService
 	#region Удаление
 
 	/// <summary>
-	/// Удаляет конструкцию. Удаление возможно только для конструкций без привязанных
-	/// сделок и внешних корректировок PnL; при нарушении отказывает с объяснением
-	/// причины, не меняя данные конструкции.
+	/// Удаляет конструкцию. Удаление возможно только для конструкций без
+	/// привязанных биржевых сделок, ручных сделок и внешних корректировок PnL;
+	/// при нарушении отказывает с объяснением причины, не меняя данные
+	/// конструкции.
 	/// </summary>
 	/// <param name="constructionId">Идентификатор конструкции.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
@@ -280,20 +281,26 @@ public sealed class ConstructionService : IConstructionService
 	public async Task DeleteAsync(long constructionId, CancellationToken cancellationToken = default)
 	{
 		// Удаление допустимо только для пустой конструкции: блокирующие записи
-		// считаются до попытки удаления, чтобы отказ объяснил причину и не тронул данные.
+		// считаются до попытки удаления, чтобы отказ объяснил причину и не тронул
+		// данные. Ручные сделки считаются наравне с биржевыми привязками: их
+		// внешний ключ не даст удалить конструкцию каскадом.
 		// Traceability: openspec:domain/constructions#scenario-delete-only-when-empty
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
 		using var db = CreateContext();
 		var construction = await FindConstructionAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 
 		var boundTradeCount = await db.TradeUserdata
 			.CountAsync(userdata => userdata.ConstructionId == constructionId, cancellationToken)
 			.ConfigureAwait(false);
+		var manualTradeCount = await db.ManualTrades
+			.CountAsync(trade => trade.ConstructionId == constructionId, cancellationToken)
+			.ConfigureAwait(false);
 		var adjustmentCount = await db.PnLAdjustments
 			.CountAsync(adjustment => adjustment.ConstructionId == constructionId, cancellationToken)
 			.ConfigureAwait(false);
-		if (boundTradeCount > 0 || adjustmentCount > 0)
+		if (boundTradeCount > 0 || manualTradeCount > 0 || adjustmentCount > 0)
 		{
-			throw new ConstructionDeletionRefusedException(boundTradeCount, adjustmentCount);
+			throw new ConstructionDeletionRefusedException(boundTradeCount, manualTradeCount, adjustmentCount);
 		}
 
 		db.Constructions.Remove(construction);

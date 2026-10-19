@@ -40,7 +40,9 @@ public sealed class SyntheticCloseDisputeService : ISyntheticCloseDisputeService
 	/// Оспаривает распознанную связку конструкции: запись по паре execId делается
 	/// спорной, и связка исключается из логического слоя до явного возврата.
 	/// Повторное оспаривание той же связки безвредно — спор связки один, запись
-	/// не дублируется уникальным индексом.
+	/// не дублируется уникальным индексом. Связка с ручными сделками оспариванию
+	/// не подлежит: спор предусмотрен только распознанным связкам, ручная
+	/// удаляется свободно.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, внутри которой оспаривается связка.</param>
 	/// <param name="linearExecId">Биржевой идентификатор линейного исполнения связки.</param>
@@ -48,6 +50,7 @@ public sealed class SyntheticCloseDisputeService : ISyntheticCloseDisputeService
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <exception cref="ArgumentException">Идентификатор исполнения не задан или состоит из пробелов.</exception>
 	/// <exception cref="ConstructionNotFoundException">Конструкция не найдена.</exception>
+	/// <exception cref="SyntheticCloseDisputeNotApplicableException">Пара адресует ручные сделки.</exception>
 	public async Task DisputeAsync(
 		long constructionId,
 		string linearExecId,
@@ -56,6 +59,15 @@ public sealed class SyntheticCloseDisputeService : ISyntheticCloseDisputeService
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(linearExecId);
 		ArgumentException.ThrowIfNullOrWhiteSpace(counterOptionExecId);
+
+		// Ручные сделки адресуются единым ключом «manual:{id}»: спор по такой паре
+		// не сохраняется — вместо no-op-записи клиенту отказывают с объяснением.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		if (SyntheticCloseManualLinkMaterial.TryParseManualKey(linearExecId, out _)
+			|| SyntheticCloseManualLinkMaterial.TryParseManualKey(counterOptionExecId, out _))
+		{
+			throw new SyntheticCloseDisputeNotApplicableException(linearExecId, counterOptionExecId);
+		}
 
 		// Оспаривание идемпотентно: существующий спор той же связки остаётся
 		// прежней записью, повторный вызов не меняет момент оспаривания.

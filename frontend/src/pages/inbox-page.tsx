@@ -54,6 +54,15 @@ const inboxOverviewKey = ["inbox-overview"] as const;
 const inboxCountKey = ["inbox-count"] as const;
 const constructionsOverviewKey = ["constructions-overview"] as const;
 
+/**
+ * Единый ключ сделки: execId биржевой записи либо «manual:{id}» строки ручного
+ * сырья — им адресуются привязка, перенос и возврат для обоих источников.
+ * Traceability: openspec:domain/manual-trades#scenario-manual-trade-created-into-inbox
+ */
+function tradeKey(trade: InboxTrade): string {
+	return trade.execId ?? `manual:${trade.manualTradeId}`;
+}
+
 export function InboxPage() {
 	const isMobile = useIsMobile();
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -140,8 +149,11 @@ export function InboxPage() {
 		});
 	}, [overviewQuery.data?.items, selectedSymbols, selectedSides, fromDate, toDate]);
 
+	// Выбор переживает перечитывание обзора: ключи, исчезнувшие из фильтра
+	// или привязанные, выпадают из выбора ближайшим эффектом.
 	React.useEffect(() => {
-		setSelectedExecIds((current) => current.filter((execId) => visibleTrades.some((trade) => trade.execId === execId)));
+		const keys = new Set(visibleTrades.map(tradeKey));
+		setSelectedExecIds((current) => current.filter((execId) => keys.has(execId)));
 	}, [visibleTrades]);
 
 	const bindMutation = useMutation({
@@ -204,12 +216,10 @@ export function InboxPage() {
 		?? null;
 
 	const selectedCount = selectedExecIds.length;
-	// Распределение адресуется execId биржевых записей: ручные записи в
-	// привязке не участвуют и в «выбрать всё» не попадают.
-	const selectableTrades = React.useMemo(
-		() => visibleTrades.filter((trade) => trade.execId !== null),
-		[visibleTrades],
-	);
+	// Выбор адресует оба источника единым ключом: ручные записи привязываются
+	// теми же командами, что и биржевые (design.md D4).
+	// Traceability: openspec:domain/manual-trades#scenario-manual-trade-created-into-inbox
+	const selectableTrades = visibleTrades;
 	const allVisibleSelected = selectableTrades.length > 0 && selectedCount === selectableTrades.length;
 	const busy = bindMutation.isPending || createMutation.isPending || assembleMutation.isPending;
 
@@ -218,7 +228,7 @@ export function InboxPage() {
 	const selectedVolume = React.useMemo(
 		() =>
 			visibleTrades
-				.filter((trade) => trade.execId !== null && selectedExecIds.includes(trade.execId))
+				.filter((trade) => selectedExecIds.includes(tradeKey(trade)))
 				.reduce((sum, trade) => sum + trade.amountUsdt, 0),
 		[visibleTrades, selectedExecIds],
 	);
@@ -233,7 +243,7 @@ export function InboxPage() {
 			return;
 		}
 
-		setSelectedExecIds(checked ? selectableTrades.map((trade) => trade.execId!) : []);
+		setSelectedExecIds(checked ? selectableTrades.map(tradeKey) : []);
 	};
 
 	const onToggleRow = (execId: string, checked: boolean) => {
@@ -323,11 +333,8 @@ export function InboxPage() {
 
 	const onDragStart = React.useCallback(
 		(trade: InboxTrade) => {
-			if (trade.execId === null) {
-				return;
-			}
-
-			const ids = selectedExecIds.includes(trade.execId) ? selectedExecIds : [trade.execId];
+			const key = tradeKey(trade);
+			const ids = selectedExecIds.includes(key) ? selectedExecIds : [key];
 			setDragExecIds(ids);
 		},
 		[selectedExecIds],
@@ -636,13 +643,16 @@ export function InboxPage() {
 								</TableHeader>
 								<TableBody>
 									{visibleTrades.map((trade) => {
-										// Привязка адресуется execId: ручная запись не выбирается
-										// и не перетаскивается — её действия в ячейке «Действия».
-										const rowSelected = trade.execId !== null && selectedExecIds.includes(trade.execId);
+										// Привязка адресует оба источника единым ключом: ручная
+										// запись выбирается и перетаскивается наравне с биржевой,
+										// её правка и удаление — в ячейке «Действия».
+										// Traceability: openspec:domain/manual-trades#scenario-manual-trade-created-into-inbox
+										const key = tradeKey(trade);
+										const rowSelected = selectedExecIds.includes(key);
 										return (
 											<TableRow
-												key={trade.execId ?? `manual:${trade.manualTradeId}`}
-												draggable={isMobile == false && trade.execId !== null}
+												key={key}
+												draggable={isMobile == false}
 												onDragStart={() => {
 													if (isMobile == false) {
 														onDragStart(trade);
@@ -652,13 +662,13 @@ export function InboxPage() {
 												className="border-divider data-[state=selected]:bg-accent-softer"
 											>
 												<TableCell>
-													{isMobile || trade.execId === null ? (
+													{isMobile ? (
 														<span className="text-muted-foreground text-xs">—</span>
 													) : (
 														<Checkbox
-															aria-label={`Выбрать сделку ${trade.execId}`}
+															aria-label={`Выбрать сделку ${key}`}
 															checked={rowSelected}
-															onChange={(event) => onToggleRow(trade.execId!, event.currentTarget.checked)}
+															onChange={(event) => onToggleRow(key, event.currentTarget.checked)}
 														/>
 													)}
 												</TableCell>

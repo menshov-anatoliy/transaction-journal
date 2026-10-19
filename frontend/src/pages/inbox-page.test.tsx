@@ -258,6 +258,19 @@ describe("раздел «Входящие»", () => {
 		await waitFor(() => expect(api.bindInboxTrades).toHaveBeenCalledWith(7, ["exec-sell"]));
 	});
 
+	// Ручная запись участвует в разборе наравне с биржевой: выбирается и
+	// привязывается единым ключом «manual:{id}» (design.md D4).
+	// Traceability: openspec:domain/manual-trades#scenario-manual-trade-created-into-inbox
+	it("привязывает ручную запись единым ключом «manual:{id}»", async () => {
+		const user = userEvent.setup();
+		renderPageInFrame();
+		await screen.findByText("exec-buy");
+
+		await user.click(screen.getByRole("checkbox", { name: "Выбрать сделку manual:15" }));
+		await user.click(screen.getByRole("button", { name: /Календарь ETH/i }));
+		await waitFor(() => expect(api.bindInboxTrades).toHaveBeenCalledWith(7, ["manual:15"]));
+	});
+
 	it("создаёт конструкцию из выбранного и запускает сборку из входящих", async () => {
 		const user = userEvent.setup();
 		renderPageInFrame();
@@ -269,10 +282,12 @@ describe("раздел «Входящие»", () => {
 		await user.click(screen.getByRole("button", { name: /Создать конструкцию из выбранного/i }));
 
 		await waitFor(() => expect(api.createConstructionFromInbox).toHaveBeenCalled());
+		// «Выбрать всё» охватывает оба источника: ручная запись идёт в пачку
+		// своим единым ключом.
 		expect(api.createConstructionFromInbox.mock.calls[0]?.[0]).toEqual({
 			name: "Новая конструкция",
 			allocatedCapitalUsdt: 3000,
-			execIds: ["exec-buy", "exec-sell"],
+			execIds: ["exec-buy", "exec-sell", "manual:15"],
 		});
 
 		await user.click(screen.getByRole("button", { name: /Собрать из Входящих/i }));

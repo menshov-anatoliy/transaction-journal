@@ -152,6 +152,10 @@ public sealed class ManualModeEndToEndApiTests
 		Assert.That(syntheticCloses[0]["disputed"]!.GetValue<bool>(), Is.False);
 		Assert.That(syntheticCloses[0]["linearExecId"]!.GetValue<string>(), Is.EqualTo($"manual:{perpId}"));
 		Assert.That(syntheticCloses[0]["counterOptionExecId"]!.GetValue<string>(), Is.EqualTo($"manual:{callSellId}"));
+		// Строка снимка несёт идентификатор ручной связки из ответа создания:
+		// удаление адресуется списком карточки без сессионных реестров.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		Assert.That(syntheticCloses[0]["manualLinkId"]!.GetValue<long>(), Is.EqualTo(link!["id"]!.GetValue<long>()));
 		var perpWithLink = ReadPosition(card, PerpSymbol);
 		Assert.That(perpWithLink!["syntheticResidual"]!.GetValue<decimal>(), Is.EqualTo(0.2m));
 		Assert.That(perpWithLink["otherResidual"]!.GetValue<decimal>(), Is.EqualTo(0m));

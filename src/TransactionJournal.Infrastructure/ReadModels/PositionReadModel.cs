@@ -158,7 +158,10 @@ public sealed class PositionReadModel
 			pair => pair.Key,
 			pair => (string?)pair.Value.ToString(CultureInfo.InvariantCulture));
 		var expiry = new ExpiryMaterializer(tradeMaterializer, resolver)
-			.Materialize(rawExecutions, rawDeliveries, assignments, _timeProvider.GetUtcNow());
+			// Ручные сделки — второе сырьё остатков и для экспираций: delivery/OTM
+			// закрывают и ручную часть позиции, иначе позиции расходятся с метриками.
+			// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+			.Materialize(rawExecutions, rawDeliveries, assignments, _timeProvider.GetUtcNow(), manualTrades);
 
 		var timelines = new Dictionary<(long ConstructionId, string Symbol), List<TimelineEvent>>();
 		foreach (var trade in trades)

@@ -579,7 +579,7 @@ describe("карточка конструкции: действия и ввод"
 		await user.clear(input);
 		await user.type(input, "Infinity");
 		await user.click(screen.getByRole("button", { name: "Сохранить пометку" }));
-		expect(screen.getByText(/Введите корректную цену и время/)).toHaveAttribute("role", "alert");
+		expect(screen.getByText(/Введите корректную цену, время и количество/)).toHaveAttribute("role", "alert");
 		expect(cardApi.editManualCloseMark).not.toHaveBeenCalled();
 	});
 

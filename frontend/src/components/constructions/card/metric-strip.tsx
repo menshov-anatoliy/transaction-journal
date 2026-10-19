@@ -4,7 +4,6 @@ import type {
 	ConstructionCard,
 	SyntheticCloseDisputeInput,
 	SyntheticCloseManualLinkInput,
-	SyntheticCloseManualLinkRecord,
 } from "@/lib/api/construction-card";
 import { Metric } from "@/components/design";
 import { Button } from "@/components/ui/button";
@@ -32,8 +31,6 @@ export interface ConstructionMetricStripProps {
 	readonly onDispute: (key: SyntheticCloseDisputeInput) => void;
 	/** Возврат оспоренной связки по паре execId — команда карточки. */
 	readonly onRevert: (key: SyntheticCloseDisputeInput) => void;
-	/** Ручные связки, известные UI (созданные в текущей сессии) — источник действия удаления. */
-	readonly manualLinks: readonly SyntheticCloseManualLinkRecord[];
 	/** Состояние команд ручной связки (создание/удаление) — блокирует действия. */
 	readonly manualLinkPending: boolean;
 	/** Человекочитаемая причина отказа команд ручной связки. */
@@ -127,7 +124,6 @@ export function ConstructionMetricStrip({
 	card,
 	onDispute,
 	onRevert,
-	manualLinks,
 	manualLinkPending,
 	manualLinkError,
 	manualLinkFormOpen,
@@ -390,14 +386,11 @@ export function ConstructionMetricStrip({
 				{hasSyntheticCloses && syntheticListOpen && (
 					<div role="list" data-slot="synthetic-closes-list" className="flex flex-col gap-1 pl-2.5">
 						{card.syntheticCloses.map((close, index) => {
-							// Ручная связка узнаваема по паре ключей сделок из ответа
-							// создания: read-модель карточки идентификатор связки не
-							// отдаёт, поэтому удаление адресовано связкам, созданным
-							// в текущей сессии.
+							// Ручная связка узнаваема по идентификатору строки связки
+							// в строке снимка: удаление адресуется списком напрямую
+							// в любой сессии; у ручной связки спора нет.
 							// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
-							const manualLink = manualLinks.find(
-								(link) => link.linearTradeId === close.linearExecId && link.optionTradeId === close.counterOptionExecId,
-							);
+							const isManualLink = close.manualLinkId !== null;
 							return (
 								<div
 									key={`${index}:${close.linearExecId}/${close.counterOptionExecId}`}
@@ -421,16 +414,17 @@ export function ConstructionMetricStrip({
 											оспорена
 										</span>
 									)}
-									{manualLink !== undefined ? (
+									{isManualLink ? (
 										// Ручная связка удаляется свободно по идентификатору
-										// из ответа создания; спор правилами не предусмотрен.
+										// из строки снимка; спор правилами не предусмотрен,
+										// поэтому «Оспорить» ручной строке не показывается.
 										// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
 										<Button
 											variant="ghost"
 											size="sm"
 											className="ml-auto h-6 px-2 text-[11px]"
 											disabled={manualLinkPending}
-											onClick={() => onDeleteManualLink(manualLink.id)}
+											onClick={() => onDeleteManualLink(close.manualLinkId!)}
 										>
 											<span className="text-neg">Удалить</span>
 										</Button>

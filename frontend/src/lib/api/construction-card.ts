@@ -105,10 +105,15 @@ export interface ConstructionCardSyntheticClose {
 	// не ломаются.
 	// Traceability: change:add-synthetic-close-dispute-ui/design#d1
 	// Traceability: change:add-synthetic-close-dispute-ui/specs/ui/screens/spec#requirement-detail-synthetic-close-dispute-list
-	/** Биржевой идентификатор линейного исполнения связки — первый ключ команд спора. */
+	/** Идентификатор линейной сделки связки — единый ключ «execId» либо «manual:{id}». */
 	readonly linearExecId: string;
-	/** Биржевой идентификатор встречного опционного исполнения связки — второй ключ команд спора. */
+	/** Идентификатор встречной опционной сделки связки. */
 	readonly counterOptionExecId: string;
+	// Идентификатор ручной связки идёт рядом с парой: удаление адресуется
+	// строкой снимка напрямую, клиентский сессионный реестр связок не нужен.
+	// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	/** Идентификатор строки ручной связки — ключ удаления; null у распознанных связок. */
+	readonly manualLinkId: number | null;
 }
 
 /** Строка таблицы сделок карточки; источники различаются полем source. */
@@ -408,9 +413,8 @@ export interface SyntheticCloseManualLinkRecord {
 // Ручная синтетическая связка создаётся из двух сделок конструкции без
 // 60-минутного окна; правила пары (одна конструкция, совпадение страйка
 // и экспирации, согласованное количество) проверяет сервер, форма показывает
-// человекочитаемую причину отказа. Ответ несёт идентификатор связки — по нему
-// UI адресует удаление, пока перечень ручных связок карточки не отдаёт их
-// в read-модели.
+// человекочитаемую причину отказа. Тот же идентификатор приходит в строке
+// связки снимка карточки — удаление адресуется списком напрямую.
 // Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
 // Traceability: change:manual-journal-management/design#d5
 /** Создаёт ручную синтетическую связку из линейной сделки и встречного опциона. */

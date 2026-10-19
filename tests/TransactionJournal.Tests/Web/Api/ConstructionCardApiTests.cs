@@ -1195,7 +1195,7 @@ internal sealed class RecordingConstructionService : IConstructionService
 		EnsureKnown(constructionId);
 		if (_refuseDelete)
 		{
-			throw new ConstructionDeletionRefusedException(boundTradeCount: 2, adjustmentCount: 0);
+			throw new ConstructionDeletionRefusedException(boundTradeCount: 2, manualTradeCount: 1, adjustmentCount: 0);
 		}
 
 		_deletedIds.Add(constructionId);

@@ -148,30 +148,35 @@ public sealed record ConstructionAdjustmentRow(
 
 /// <summary>
 /// Строка списка синтетических закрытий деталей конструкции: распознанная
-/// связка с ногой, количеством, величиной лока и признаком спора. Строка
-/// вычисляется при чтении деталей и не хранится в сборке; спорная связка
+/// либо ручная связка с ногой, количеством, величиной лока и признаком спора.
+/// Строка вычисляется при чтении деталей и не хранится в сборке; спорная связка
 /// остаётся в списке с признаком спора — её лок в логический слой не входит.
 /// </summary>
 /// <param name="ClosedLegSymbol">Символ закрываемой опционной ноги — инструмент, который в связке не продаётся.</param>
 /// <param name="Quantity">Количество связки — закрываемая часть ноги.</param>
 /// <param name="LockedValueUsdt">Величина «зафиксировано синтетикой» — паритетный лок связки к экспирации в USDT.</param>
 /// <param name="Disputed">Связка оспорена пользователем: лок не входит в логический слой ноги.</param>
-/// <param name="LinearExecId">Биржевой идентификатор линейного исполнения связки — первый ключ команд оспаривания и возврата.</param>
-/// <param name="CounterOptionExecId">Биржевой идентификатор встречного опционного исполнения связки — второй ключ команд оспаривания и возврата.</param>
+/// <param name="LinearExecId">Идентификатор линейной сделки связки — единый ключ «execId» либо «manual:{id}».</param>
+/// <param name="CounterOptionExecId">Идентификатор встречной опционной сделки связки — с теми же правилами.</param>
+/// <param name="ManualLinkId">Идентификатор строки ручной связки — ключ её удаления; null у распознанных связок.</param>
 // Список связок и признак спора вычисляются read-моделью деталей при чтении
 // и приходят в контракт аддитивно: транспортные требования не меняются.
 // Пара execId пробрасывается из распознанной связки в конец строки: без неё
 // UI не может адресовать связку в командах оспаривания и возврата.
+// Идентификатор ручной связки идёт рядом: удаление адресуется строкой
+// read-модели напрямую, без сессионных реестров на клиенте.
 // Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
 // Traceability: change:synthetic-close-logical-layer/design#d5
 // Traceability: change:add-synthetic-close-dispute-ui/design#d1
+// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
 public sealed record SyntheticCloseRow(
 	string ClosedLegSymbol,
 	decimal Quantity,
 	decimal LockedValueUsdt,
 	bool Disputed,
 	string LinearExecId,
-	string CounterOptionExecId);
+	string CounterOptionExecId,
+	long? ManualLinkId = null);
 
 /// <summary>
 /// Данные экрана деталей конструкции: заголовок с комментарием, сводка метрик

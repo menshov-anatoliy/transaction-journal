@@ -62,6 +62,16 @@ function toLocalInputValue(iso: string): string {
 	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+/**
+ * Единый ключ сделки для команд принадлежности: execId биржевой записи либо
+ * «manual:{id}» строки ручного сырья — возврат и перенос обслуживают оба
+ * источника одними командами.
+ * Traceability: openspec:ui/screens#requirement-trade-actions-in-detail
+ */
+function tradeKey(trade: ConstructionCardTrade): string {
+	return trade.execId ?? `manual:${trade.manualTradeId}`;
+}
+
 export function TradesTable({
 	constructionId,
 	constructionName,
@@ -366,7 +376,7 @@ export function TradesTable({
 											size="sm"
 											className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
 											disabled={actionsPending}
-											onClick={() => trade.execId !== null && onReturn(trade.execId)}
+											onClick={() => onReturn(tradeKey(trade))}
 										>
 											Во «Входящие»
 										</Button>
@@ -375,7 +385,7 @@ export function TradesTable({
 											size="sm"
 											className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
 											disabled={actionsPending}
-											onClick={() => trade.execId !== null && beginMove(trade.execId)}
+											onClick={() => beginMove(tradeKey(trade))}
 										>
 											Перенести…
 										</Button>

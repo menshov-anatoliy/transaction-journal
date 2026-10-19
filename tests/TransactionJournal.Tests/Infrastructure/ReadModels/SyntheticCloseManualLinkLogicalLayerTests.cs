@@ -173,7 +173,7 @@ public class SyntheticCloseManualLinkLogicalLayerTests
 		await _binding.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		var manualPerp = await AddManualTradeAsync(construction.Id, XautPerp, "Buy", 0.2m, 4100m, 0.1m, ExecMs(2026, 10, 15, 16, 0));
 		var manualCall = await AddManualTradeAsync(construction.Id, XautCall4400, "Sell", 0.2m, 5m, 0.1m, ExecMs(2026, 10, 15, 16, 4));
-		await AddManualLinkAsync(construction.Id, $"manual:{manualPerp.Id}", $"manual:{manualCall.Id}", 0.2m);
+		var manualLink = await AddManualLinkAsync(construction.Id, $"manual:{manualPerp.Id}", $"manual:{manualCall.Id}", 0.2m);
 		var readModel = CreateReadModel();
 
 		// Act: читаем данные экрана деталей.
@@ -190,6 +190,13 @@ public class SyntheticCloseManualLinkLogicalLayerTests
 		Assert.That(manual.Quantity, Is.EqualTo(0.2m));
 		Assert.That(manual.LockedValueUsdt, Is.EqualTo(32.4m));
 		Assert.That(manual.Disputed, Is.False);
+
+		// Идентификатор связки в строке снимка: ручная строка несёт ключ
+		// удаления из хранилища ручных связок, распознанная остаётся null —
+		// удаление адресуется строкой карточки без клиентских реестров.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		Assert.That(manual.ManualLinkId, Is.EqualTo(manualLink.Id));
+		Assert.That(recognized.ManualLinkId, Is.Null);
 
 		// Распад остатка перпа 0.54 суммирует обе действующие связки:
 		// 0.5 синтетики и 0.04 прочего остатка.
@@ -265,17 +272,19 @@ public class SyntheticCloseManualLinkLogicalLayerTests
 	}
 
 	/// <summary>Пишет ручную связку напрямую в хранилище ручных данных логического слоя.</summary>
-	private async Task AddManualLinkAsync(long constructionId, string linearTradeId, string optionTradeId, decimal quantity)
+	private async Task<SyntheticCloseManualLink> AddManualLinkAsync(long constructionId, string linearTradeId, string optionTradeId, decimal quantity)
 	{
 		using var db = new JournalDbContext(CreateOptions());
-		db.SyntheticCloseManualLinks.Add(new SyntheticCloseManualLink
+		var link = new SyntheticCloseManualLink
 		{
 			ConstructionId = constructionId,
 			LinearTradeId = linearTradeId,
 			OptionTradeId = optionTradeId,
 			Quantity = quantity,
-		});
+		};
+		db.SyntheticCloseManualLinks.Add(link);
 		await db.SaveChangesAsync();
+		return link;
 	}
 
 	/// <summary>Справочник проверки: пут и колл доски 30OCT26 08:00 UTC и перп XAUTUSDT.</summary>

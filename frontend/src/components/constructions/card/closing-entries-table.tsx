@@ -75,12 +75,16 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 	const isMobile = useIsMobile();
 	const [editMark, setEditMark] = React.useState<ConstructionCardClosingEntry | null>(null);
 	const [editPrice, setEditPrice] = React.useState("");
+	const [editQuantity, setEditQuantity] = React.useState("");
 	const [editTime, setEditTime] = React.useState("");
 	const [editError, setEditError] = React.useState<string | null>(null);
 
 	const beginEdit = (entry: ConstructionCardClosingEntry) => {
 		setEditMark(entry);
 		setEditPrice(entry.price === null ? "" : String(entry.price));
+		// Количество предзаполняется применённым количеством записи: правка
+		// цены и времени по умолчанию не меняет охват закрытия.
+		setEditQuantity(String(Math.abs(entry.quantity)));
 		setEditTime(toLocalInputValue(entry.closedAt));
 		setEditError(null);
 	};
@@ -91,19 +95,27 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 		}
 
 		const price = editPrice.trim() === "" ? null : Number(editPrice.replace(",", "."));
+		// Пустое количество возвращает пометку к закрытию всего остатка — та же
+		// семантика, что в форме создания; заданное клэмпится остатком на бэке.
+		// Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity
+		const quantity = editQuantity.trim() === "" ? null : Number(editQuantity.replace(",", "."));
 		const time = new Date(editTime);
-		// Неизвестная цена допустима только при пустом вводе, а ошибочные
-		// число и дата оставляют форму открытой с пояснением.
+		// Неизвестная цена допустима только при пустом вводе, а ошибочные число
+		// и дата оставляют форму открытой с пояснением.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-		if ((price !== null && Number.isFinite(price) === false) || Number.isFinite(time.getTime()) === false) {
-			setEditError("Введите корректную цену и время пометки.");
+		if ((price !== null && Number.isFinite(price) === false)
+			|| (quantity !== null && Number.isFinite(quantity) === false)
+			|| Number.isFinite(time.getTime()) === false) {
+			setEditError("Введите корректную цену, время и количество пометки.");
 			return;
 		}
 		onEditMark({
 			markId: editMark.manualMarkId,
-			// Форма правки меняет цену и время; количество в неё не входит, поэтому
-			// правка возвращает пометку к закрытию всего остатка — контракт PUT.
-			mark: { symbol: editMark.symbol, markedAt: time.toISOString(), price, quantity: null },
+			// Форма правки меняет цену, время и количество пометки; правка
+			// сохраняет частичность закрытия вместо молчаливого расширения
+			// до всего остатка.
+			// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+			mark: { symbol: editMark.symbol, markedAt: time.toISOString(), price, quantity },
 		});
 		setEditMark(null);
 	};
@@ -132,8 +144,10 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 			) : null}
 		>
 			{isMobile === false && editMark !== null && (
-				// Правка ручной пометки: цена и время предзаполнены эффективными
-				// значениями записи; пустая цена возвращает пометку к последней марке.
+				// Правка ручной пометки: цена, количество и время предзаполнены
+				// значениями записи; пустая цена возвращает пометку к последней
+				// марке, пустое количество — к закрытию всего остатка.
+				// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
 					<span className="text-sm font-medium">правка ручной пометки «{editMark.symbol}»</span>
 					<label className="flex flex-col gap-1 text-sm">
@@ -143,6 +157,21 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 							placeholder="пусто — последняя марка"
 							value={editPrice}
 							onChange={(event) => setEditPrice(event.target.value)}
+						/>
+					</label>
+					<label className="flex flex-col gap-1 text-sm">
+						{/* Количество правки с семантикой формы создания: пустое поле
+						    закрывает весь остаток, заданное клэмпится остатком. */}
+						{/* Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity */}
+						количество
+						<input
+							data-slot="mark-quantity-input"
+							aria-label="количество пометки"
+							className="border-input bg-background h-9 w-28 rounded-md border px-2 text-sm"
+							inputMode="decimal"
+							placeholder="пусто — весь остаток"
+							value={editQuantity}
+							onChange={(event) => setEditQuantity(event.target.value)}
 						/>
 					</label>
 					<label className="flex flex-col gap-1 text-sm">

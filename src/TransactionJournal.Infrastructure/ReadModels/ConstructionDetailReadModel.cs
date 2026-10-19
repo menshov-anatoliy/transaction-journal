@@ -443,7 +443,9 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		// Ручные связки добавляются к прогону распознавания: каждая действует
 		// в логическом слое наравне с неоспоренными распознанными, строка
 		// показывает величину лока по той же формуле калькулятора. Спор ручной
-		// связки правилами журнала не предусмотрен — признак спора всегда ложный.
+		// связки правилами журнала не предусмотрен — признак спора всегда ложный,
+		// а идентификатор строки связки идёт в строку: удаление адресуется
+		// списком карточки напрямую.
 		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
 		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-locked-value
 		foreach (var manualLink in manualLinks)
@@ -458,7 +460,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 
 			var valuation = SyntheticCloseValuationOf(link, materializedTrades);
 			var lockedValue = SyntheticCloseValuationCalculator.CalculateToExpiry(link, valuation);
-			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, Disputed: false, link.LinearExecId, link.CounterOptionExecId));
+			rows.Add(new SyntheticCloseRow(link.ClosedLegSymbol, link.Quantity, lockedValue, Disputed: false, link.LinearExecId, link.CounterOptionExecId, manualLink.Id));
 			var linearTrade = TradeOf(link.LinearExecId, materializedTrades);
 			quantityByLinearSymbol[linearTrade.Symbol] =
 				quantityByLinearSymbol.GetValueOrDefault(linearTrade.Symbol) + link.Quantity;

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
@@ -225,6 +226,71 @@ public class PositionReadModelTests
 		Assert.That(entry.Quantity, Is.EqualTo(-0.0001m));
 		Assert.That(entry.Price, Is.EqualTo(1000m));
 		Assert.That(entry.SourceKey, Is.EqualTo($"{CallSymbol}|{OptionDeliveryMs}"));
+		Assert.That(result.Warnings, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Delivery-экспирация закрывает ручную часть позиции: остаток считается из обоих источников")]
+	public async Task TryIfDeliveryClosingEntryCoversManualPartOfPosition()
+	{
+		// Arrange: ручная покупка опциона 0.0001 по 100 привязана к конструкции;
+		// аккаунтовая delivery-запись с расчётной ценой 46000 и страйком 45000
+		// даёт внутреннюю стоимость 1000.
+		var construction = await _constructionService.CreateAsync("Ручной колл BTC", 700m);
+		await AddManualOptionTradeAsync(construction.Id, side: "Buy", quantity: "0.0001", price: "100");
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.RawDeliveries.Add(Delivery(deliveryPrice: "46000", strike: "45000", fee: "0", deliveryRpl: "0.09"));
+			await db.SaveChangesAsync();
+		}
+
+		// Act: читаем позиции.
+		var readModel = new PositionReadModel(CreateOptions());
+		var result = await readModel.ListAsync();
+
+		// Assert: ручная сделка питает остаток позиции, и delivery-запись выводится
+		// на полный её объём — позиция закрыта целиком, без ручного «хвоста».
+		// Требование: ручная сделка полноправна в расчётах, закрывающие записи
+		// экспираций строятся по остаткам обоих источников.
+		// Traceability: openspec:domain/manual-trades#requirement-manual-trade-full-member
+		var position = result.Positions.Single();
+		Assert.That(position.Residual, Is.EqualTo(0m));
+		Assert.That(position.IsOpen, Is.False);
+		var entry = result.ClosingEntries.Single();
+		Assert.That(entry.ConstructionId, Is.EqualTo(construction.Id));
+		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.Delivery));
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0001m));
+		Assert.That(entry.Price, Is.EqualTo(1000m));
+		Assert.That(result.Warnings, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("OTM-экспирация закрывает позицию, собранную только из ручных сделок")]
+	public async Task TryIfOtmExpiryClosesManualOnlyPosition()
+	{
+		// Arrange: ручная покупка опциона 0.0001 по 100 привязана к конструкции;
+		// delivery-записи нет — опцион истёк вне денег, закрывающая запись выводится
+		// при чтении по времени доски справочника.
+		var construction = await _constructionService.CreateAsync("Ручной OTM-колл BTC", 500m);
+		await AddManualOptionTradeAsync(construction.Id, side: "Buy", quantity: "0.0001", price: "100");
+
+		// Act: читаем позиции.
+		var readModel = new PositionReadModel(CreateOptions());
+		var result = await readModel.ListAsync();
+
+		// Assert: OTM-закрывающая запись обнуляет ручную позицию по нулевой цене
+		// в момент доски — позиции не расходятся с метриками, где ручные сделки
+		// участвуют в остатках наравне с биржевыми.
+		// Traceability: openspec:domain/manual-trades#scenario-manual-trade-feeds-position-and-fifo
+		var position = result.Positions.Single();
+		Assert.That(position.Residual, Is.EqualTo(0m));
+		Assert.That(position.IsOpen, Is.False);
+		var entry = result.ClosingEntries.Single();
+		Assert.That(entry.ConstructionId, Is.EqualTo(construction.Id));
+		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.OtmExpiry));
+		Assert.That(entry.ClosedAt, Is.EqualTo(OptionDelivery));
+		Assert.That(entry.Quantity, Is.EqualTo(-0.0001m));
+		Assert.That(entry.Price, Is.EqualTo(0m));
 		Assert.That(result.Warnings, Is.Empty);
 	}
 
@@ -676,6 +742,30 @@ public class PositionReadModelTests
 		db.RawExecutions.Add(Raw(
 			execId, "option", symbol, execTimeMs,
 			ExecutionPayload(execId, symbol, side, execPrice, execQty, "0", "USDC", execTimeMs)));
+		await db.SaveChangesAsync();
+	}
+
+	/// <summary>Вносит ручную сделку по опциону сразу в конструкцию; по умолчанию колл BTC из справочника.</summary>
+	private async Task AddManualOptionTradeAsync(
+		long constructionId,
+		string side,
+		string quantity,
+		string price,
+		string symbol = CallSymbol)
+	{
+		using var db = new JournalDbContext(CreateOptions());
+		db.ManualTrades.Add(new ManualTrade
+		{
+			ExecutedAt = new DateTimeOffset(2023, 12, 28, 10, 0, 0, TimeSpan.Zero),
+			Symbol = symbol,
+			Side = side,
+			Quantity = decimal.Parse(quantity, CultureInfo.InvariantCulture),
+			Price = decimal.Parse(price, CultureInfo.InvariantCulture),
+			FeeUsdt = 0m,
+			ConstructionId = constructionId,
+			CreatedAt = FetchedAt,
+			UpdatedAt = FetchedAt,
+		});
 		await db.SaveChangesAsync();
 	}
 
