@@ -6338,331 +6338,346 @@
                 },
                 {
                   "type": "frame",
-                  "id": "h69OG",
-                  "name": "Сводка метрик",
+                  "id": "e96333",
+                  "name": "Сводка и индикатор",
                   "width": "fill_container",
-                  "fill": "$surface",
-                  "cornerRadius": 12,
-                  "stroke": "$border",
                   "layout": "vertical",
-                  "gap": 12,
-                  "padding": [
-                    14,
-                    18
-                  ],
                   "children": [
                     {
                       "type": "frame",
-                      "id": "NEN9T",
-                      "name": "Метрики",
+                      "id": "h69OG",
+                      "name": "Сводка метрик",
                       "width": "fill_container",
-                      "gap": 20,
-                      "children": [
-                        {
-                          "id": "ZzdbC",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M1",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Общий P&L"
-                            },
-                            "Q4NLmR": {
-                              "content": "+385,30",
-                              "fill": "$accentStrong",
-                              "fontSize": 16
-                            }
-                          }
-                        },
-                        {
-                          "id": "dpMJg",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M2",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "% капитала"
-                            },
-                            "Q4NLmR": {
-                              "content": "64%",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "CqQnP",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M3",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Стоимость"
-                            },
-                            "Q4NLmR": {
-                              "content": "1 240",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "vw4zf",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M4",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Занятость"
-                            },
-                            "Q4NLmR": {
-                              "content": "78%",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "lN9aE",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M5",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Реализов."
-                            },
-                            "Q4NLmR": {
-                              "content": "+240,20",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "RT5pk",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M6",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Нереализов."
-                            },
-                            "Q4NLmR": {
-                              "content": "+145,10",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "bIjcE",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M7",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Корректировки"
-                            },
-                            "Q4NLmR": {
-                              "content": "3",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "Sn0Ud",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M8",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Котировки на"
-                            },
-                            "Q4NLmR": {
-                              "content": "07.10 13:51",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "e5auzF",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "M9",
-                          "width": "fill_container",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Период"
-                            },
-                            "Q4NLmR": {
-                              "content": "12 авг — 07 окт · 56 дн.",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Ee94Q",
-                      "name": "Метрики времени жизни",
-                      "width": "fill_container",
-                      "gap": 20,
-                      "children": [
-                        {
-                          "id": "LpRC6",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "ML1",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "До экспирации"
-                            },
-                            "Q4NLmR": {
-                              "content": "9 дн.",
-                              "fill": "$neg",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "IBQsh",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "ML2",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Распад / сутки"
-                            },
-                            "Q4NLmR": {
-                              "content": "−6,80",
-                              "fill": "$neg",
-                              "fontSize": 14
-                            }
-                          }
-                        },
-                        {
-                          "id": "iPIIy",
-                          "type": "ref",
-                          "ref": "jtDmV",
-                          "name": "ML3",
-                          "width": "fit_content",
-                          "descendants": {
-                            "bGGN9": {
-                              "content": "Временная стоимость"
-                            },
-                            "Q4NLmR": {
-                              "content": "+1 060",
-                              "fill": "$textPrimary",
-                              "fontSize": 14
-                            }
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "V9nPG",
-                      "name": "Divider",
-                      "width": "fill_container",
-                      "height": 1,
-                      "fill": "$divider"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Z5uVG",
-                      "name": "Зафиксировано синтетикой",
-                      "width": "fill_container",
-                      "gap": 10,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "AqBUE",
-                          "name": "Label",
-                          "fill": "$textMuted",
-                          "content": "зафиксировано синтетикой",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal",
-                          "letterSpacing": 0.3
-                        },
-                        {
-                          "type": "text",
-                          "id": "tz9z8",
-                          "name": "Value",
-                          "fill": "$accentStrong",
-                          "content": "+35,70 USDT",
-                          "fontFamily": "$font",
-                          "fontSize": 14,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "zxepU",
-                          "name": "LegInfo",
-                          "fill": "$textSecondary",
-                          "content": "ETH-28MAR-1600-P · нога 0,5 → 0,2",
-                          "fontFamily": "$font",
-                          "fontSize": 12,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "v47Xn",
-                  "name": "Индикатор и легенда",
-                  "width": "fill_container",
-                  "layout": "vertical",
-                  "gap": 24,
-                  "children": [
-                    {
-                      "id": "Hi6Lw",
-                      "type": "ref",
-                      "ref": "onchD",
-                      "name": "Индикатор полный",
-                      "width": 832
-                    },
-                    {
-                      "type": "frame",
-                      "id": "P8b1c",
-                      "layoutPosition": "absolute",
-                      "x": 840,
-                      "y": 20,
-                      "name": "Триггер подсказки «?»",
-                      "width": 20,
-                      "height": 20,
-                      "fill": "$surface2",
-                      "cornerRadius": 10,
+                      "fill": "$surface",
+                      "cornerRadius": 12,
                       "stroke": "$border",
-                      "justifyContent": "center",
-                      "alignItems": "center",
+                      "layout": "vertical",
+                      "gap": 12,
+                      "padding": [
+                        14,
+                        18
+                      ],
                       "children": [
                         {
-                          "type": "text",
-                          "id": "nkFXz",
-                          "name": "Знак",
-                          "fill": "$textSecondary",
-                          "content": "?",
-                          "fontFamily": "$font",
-                          "fontSize": 12,
-                          "fontWeight": "600"
+                          "type": "frame",
+                          "id": "NEN9T",
+                          "name": "Метрики",
+                          "width": "fill_container",
+                          "gap": 20,
+                          "children": [
+                            {
+                              "id": "ZzdbC",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M1",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Общий P&L"
+                                },
+                                "Q4NLmR": {
+                                  "content": "+385,30",
+                                  "fill": "$accentStrong",
+                                  "fontSize": 16
+                                }
+                              }
+                            },
+                            {
+                              "id": "dpMJg",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M2",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "% капитала"
+                                },
+                                "Q4NLmR": {
+                                  "content": "64%",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "CqQnP",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M3",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Стоимость"
+                                },
+                                "Q4NLmR": {
+                                  "content": "1 240",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "vw4zf",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M4",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Занятость"
+                                },
+                                "Q4NLmR": {
+                                  "content": "78%",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "lN9aE",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M5",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Реализов."
+                                },
+                                "Q4NLmR": {
+                                  "content": "+240,20",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "RT5pk",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M6",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Нереализов."
+                                },
+                                "Q4NLmR": {
+                                  "content": "+145,10",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "bIjcE",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M7",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Корректировки"
+                                },
+                                "Q4NLmR": {
+                                  "content": "3",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "Sn0Ud",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M8",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Котировки на"
+                                },
+                                "Q4NLmR": {
+                                  "content": "07.10 13:51",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "e5auzF",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "M9",
+                              "width": "fill_container",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Период"
+                                },
+                                "Q4NLmR": {
+                                  "content": "12 авг — 07 окт · 56 дн.",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Ee94Q",
+                          "name": "Метрики времени жизни",
+                          "width": "fill_container",
+                          "gap": 20,
+                          "children": [
+                            {
+                              "id": "LpRC6",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "ML1",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "До экспирации"
+                                },
+                                "Q4NLmR": {
+                                  "content": "9 дн.",
+                                  "fill": "$neg",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "IBQsh",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "ML2",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Распад / сутки"
+                                },
+                                "Q4NLmR": {
+                                  "content": "−6,80",
+                                  "fill": "$neg",
+                                  "fontSize": 14
+                                }
+                              }
+                            },
+                            {
+                              "id": "iPIIy",
+                              "type": "ref",
+                              "ref": "jtDmV",
+                              "name": "ML3",
+                              "width": "fit_content",
+                              "descendants": {
+                                "bGGN9": {
+                                  "content": "Временная стоимость"
+                                },
+                                "Q4NLmR": {
+                                  "content": "+1 060",
+                                  "fill": "$textPrimary",
+                                  "fontSize": 14
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "V9nPG",
+                          "name": "Divider",
+                          "width": "fill_container",
+                          "height": 1,
+                          "fill": "$divider"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Z5uVG",
+                          "name": "Зафиксировано синтетикой",
+                          "width": "fill_container",
+                          "gap": 10,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "AqBUE",
+                              "name": "Label",
+                              "fill": "$textMuted",
+                              "content": "зафиксировано синтетикой",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal",
+                              "letterSpacing": 0.3
+                            },
+                            {
+                              "type": "text",
+                              "id": "tz9z8",
+                              "name": "Value",
+                              "fill": "$accentStrong",
+                              "content": "+35,70 USDT",
+                              "fontFamily": "$font",
+                              "fontSize": 14,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "zxepU",
+                              "name": "LegInfo",
+                              "fill": "$textSecondary",
+                              "content": "ETH-28MAR-1600-P · нога 0,5 → 0,2",
+                              "fontFamily": "$font",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "v47Xn",
+                      "name": "Индикатор и триггер",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "h0UMJv",
+                          "name": "Ряд триггера",
+                          "width": "fill_container",
+                          "height": 28
+                        },
+                        {
+                          "id": "Hi6Lw",
+                          "type": "ref",
+                          "ref": "onchD",
+                          "name": "Индикатор полный",
+                          "width": 832
+                        },
+                        {
+                          "type": "frame",
+                          "id": "P8b1c",
+                          "layoutPosition": "absolute",
+                          "x": 1084,
+                          "y": 4,
+                          "name": "Триггер подсказки «?»",
+                          "width": 20,
+                          "height": 20,
+                          "fill": "$surface2",
+                          "cornerRadius": 10,
+                          "stroke": "$border",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "nkFXz",
+                              "name": "Знак",
+                              "fill": "$textSecondary",
+                              "content": "?",
+                              "fontFamily": "$font",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
                         }
                       ]
                     }
@@ -25327,7 +25342,7 @@
       "name": "Экран/Карточка конструкции · подсказка чтения открыта",
       "clip": true,
       "width": 1240,
-      "height": 360,
+      "height": 440,
       "fill": "$bg",
       "layout": "none",
       "children": [
@@ -25339,8 +25354,14 @@
           "name": "Индикатор и триггер",
           "width": 1104,
           "layout": "vertical",
-          "gap": 24,
           "children": [
+            {
+              "type": "frame",
+              "id": "aGaoR",
+              "name": "Ряд триггера",
+              "width": "fill_container",
+              "height": 28
+            },
             {
               "id": "Hm5uK",
               "type": "ref",
@@ -25352,8 +25373,8 @@
               "type": "frame",
               "id": "PbbUg",
               "layoutPosition": "absolute",
-              "x": 840,
-              "y": 20,
+              "x": 1084,
+              "y": 4,
               "name": "Триггер подсказки «?»",
               "width": 20,
               "height": 20,
@@ -25382,8 +25403,8 @@
           "type": "ref",
           "ref": "jdeRd",
           "name": "Подсказка чтения · открыта",
-          "x": 872,
-          "y": 52
+          "x": 764,
+          "y": 178
         }
       ]
     }

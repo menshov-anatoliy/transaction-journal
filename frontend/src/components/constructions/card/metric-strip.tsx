@@ -475,8 +475,9 @@ export function ConstructionMetricStrip({
 			    профита, насечка худшего исхода конструкции, маркер итога (§9);
 			    граница шкалы именуется худшим исходом по ADR-0015, а не
 			    величиной реального риска. */}
-			{/* Подсказка чтения индикатора карточки: «?» справа от полосы по
-			    клику открывает попап с пояснением чтения шкалы — зоны планового
+			{/* Подсказка чтения индикатора карточки: «?» в правом верхнем
+			    углу блока индикатора, выше текстовых меток, по клику
+			    открывает попап с пояснением чтения шкалы — зоны планового
 			    риска, профита и сверхприбыли, насечка худшего исхода
 			    конструкции, маркер итога и состояния вне шкалы; закрывается
 			    кликом вне, Esc и повторным кликом по триггеру. Подсказка живёт
@@ -487,7 +488,7 @@ export function ConstructionMetricStrip({
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-closes */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-card-only */}
-			<div className="relative">
+			<div className="relative -mt-4 pt-[28px]">
 				<Indicator
 					input={{
 						plannedRisk: card.riskUsdt,
@@ -509,18 +510,22 @@ export function ConstructionMetricStrip({
 						realRiskStatus: metrics.realRiskStatus,
 					}}
 				/>
-				{/* Триггер прижат к правому краю полосы на её вертикальном
-				    уровне: деления шкалы над полосой занимают одну строку
-				    (14px полного пресета) плюс зазор секций 10px, полоса 14px —
-				    центр полосы на 31px от верха индикатора, поэтому триггер
-				    20px ставится с top 21px; средний вид геометрически близок
-				    (13px + 8px, центр полосы 28px). Попап открывается справа
-				    от триггера, на узком экране Radix разворачивает его
-				    столкновениями с границей вьюпорта. */}
+				{/* Триггер стоит в отдельном верхнем ряду блока индикатора:
+				    ряд занимает 28px над метками шкалы, сам триггер 20px
+				    ставится с top 4px в правом углу ряда и не конкурирует с
+				    числовыми подписями у полосы; ряд общий для полного и
+				    среднего вида. -mt-4 компенсирует гэп секции gap-4: кнопка
+				    отстоит от нижней границы сводки метрик на те же 4px, что и
+				    от цифры шкалы под ней (макет: фрейм «Сводка и индикатор»
+				    с нулевым зазором). Попап открывается под триггером: правый
+				    край совпадает с правым краем блока, верх — ниже строки
+				    меток шкалы, чтобы подписи индикатора не перекрывались;
+				    на узких экранах Radix avoidCollisions разворачивает
+				    попап в границах вьюпорта. */}
 				<Popover>
 					<PopoverTrigger
 						aria-label="Как читать индикатор"
-						className="absolute top-[21px] right-0 flex size-5 items-center justify-center rounded-full border bg-surface-2 text-text-secondary"
+						className="absolute top-[4px] right-0 flex size-5 items-center justify-center rounded-full border bg-surface-2 text-text-secondary"
 					>
 						<CircleHelp className="size-3.5" aria-hidden="true" />
 					</PopoverTrigger>
@@ -529,9 +534,9 @@ export function ConstructionMetricStrip({
 					    насечка худшего исхода, маркер итога и примечание про
 					    состояния вне шкалы. */}
 					<PopoverContent
-						side="right"
-						align="start"
-						sideOffset={12}
+						side="bottom"
+						align="end"
+						sideOffset={24}
 						className="flex w-[340px] max-w-[calc(100vw-1.5rem)] flex-col gap-2"
 					>
 						<p className="text-[12.5px] font-semibold text-text-primary">Как читать индикатор</p>
