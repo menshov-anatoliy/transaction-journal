@@ -45,8 +45,8 @@ export interface TradesTableProps {
 	readonly onMove: (input: { execId: string; targetConstructionId: number }) => void;
 	/** Сохранение комментария биржевой сделки. */
 	readonly onSaveComment: (input: { execId: string; text: string | null }) => void;
-	/** Внесение ручной сделки в показанную конструкцию. */
-	readonly onCreateManualTrade: (input: ManualTradeInput) => void;
+	/** Внесение ручной сделки в показанную конструкцию; promise разрешается только подтверждением сервера. */
+	readonly onCreateManualTrade: (input: ManualTradeInput) => void | Promise<unknown>;
 	/** Правка атрибутов ручной сделки по ключу строки сырья. */
 	readonly onEditManualTrade: (input: { id: number; trade: ManualTradeInput }) => void;
 	/** Удаление ручной сделки по ключу строки сырья. */
@@ -119,6 +119,19 @@ export function TradesTable({
 		setMoveExecId(null);
 	};
 
+		// Форма создания скрывается только после успешного создания сделки;
+		// при отказе сервера она остаётся открытой, причину отказа выводит
+		// проп error из состояния команды родителя.
+		// Traceability: change:manual-journal-management/specs/ui/screens/spec.md#requirement-manual-trade-creation-ui
+		const submitCreate = async (input: ManualTradeInput) => {
+			try {
+				await onCreateManualTrade(input);
+				setCreateFormOpen(false);
+			} catch {
+				// причина отказа уже показана формой из состояния команды родителя
+			}
+		};
+
 	return (
 		// Секция-карточка сетки сделок по мастеру design.pen: головка с
 		// заголовком, счётчиком «10 колонок · N» и действием создания ручной
@@ -147,15 +160,18 @@ export function TradesTable({
 		>
 			{isMobile === false && createFormOpen && (
 				// Форма создания ручной сделки: чип цели показывает конструкцию,
-				// в которую сделка попадёт сразу после сохранения.
+				// в которую сделка попадёт сразу после сохранения; отступы рамки
+				// симметричны со всех сторон секции. Форма скрывается только после
+				// успешного создания, при отказе остаётся открытой с ошибкой.
 				// Traceability: openspec:ui/screens#scenario-card-create-manual-trade
-				<div className="p-2.5 pb-0">
+				// Traceability: change:manual-journal-management/specs/ui/screens/spec.md#requirement-manual-trade-creation-ui
+				<div className="p-2.5">
 					<ManualTradeForm
 						target={{ constructionName }}
 						submitLabel="Создать"
 						pending={tradeCommandsPending}
 						error={manualTradeError}
-						onSubmit={(input) => onCreateManualTrade(input)}
+						onSubmit={(input) => void submitCreate(input)}
 						onCancel={() => setCreateFormOpen(false)}
 					/>
 				</div>
@@ -163,9 +179,9 @@ export function TradesTable({
 
 			{isMobile === false && editingTrade !== null && editingTrade.manualTradeId !== null && (
 				// Форма правки ручной сделки: значения предзаполнены атрибутами
-				// записи, привязка правкой не меняется.
+				// записи, привязка правкой не меняется; отступы рамки симметричны.
 				// Traceability: openspec:ui/screens#scenario-detail-edit-manual-trade
-				<div className="p-2.5 pb-0">
+				<div className="p-2.5">
 					<ManualTradeForm
 						target={{ constructionName }}
 						submitLabel="Сохранить"

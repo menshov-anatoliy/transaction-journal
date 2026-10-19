@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConstructionCardPosition } from "@/lib/api/construction-card";
@@ -290,5 +290,47 @@ describe("PositionsTable: форма пометки — количество и 
 
 		// Assert: в команде quantity null — закроется весь остаток.
 		expect(onAddCloseMark).toHaveBeenCalledWith({ symbol: "ETH-28MAR-1600-P", markedAt: expect.any(String), price: null, quantity: null });
+	});
+});
+
+// Форма пометки скрывается только после успешной постановки; при отказе
+// сервера она остаётся открытой с человекочитаемой причиной отказа.
+// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+describe("PositionsTable: форма пометки закрывается по результату", () => {
+	async function openForm(position: ConstructionCardPosition, onAddCloseMark: () => void) {
+		renderTable([position], onAddCloseMark);
+		const user = userEvent.setup();
+		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
+		return { user, onAddCloseMark };
+	}
+
+	it("скрывает форму после успешной постановки пометки", async () => {
+		// Arrange: открытая форма с командой, разрешающейся успехом.
+		const { user, onAddCloseMark } = await openForm(
+			makePosition({ symbol: "ETH-28MAR-1600-P", residual: 0.5, intrinsicValueUsdt: 120, timeValueUsdt: 30 }),
+			vi.fn().mockResolvedValue(undefined),
+		);
+
+		// Act: пометка ставится.
+		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
+
+		// Assert: команда выполнена, форма скрыта.
+		await waitFor(() => expect(onAddCloseMark).toHaveBeenCalledTimes(1));
+		expect(screen.queryByRole("button", { name: "Поставить пометку" })).not.toBeInTheDocument();
+	});
+
+	it("оставляет форму открытой с причиной отказа при ошибке сервера", async () => {
+		// Arrange: открытая форма с отклонённой командой.
+		const { user } = await openForm(
+			makePosition({ symbol: "ETH-28MAR-1600-P", residual: 0.5, intrinsicValueUsdt: 120, timeValueUsdt: 30 }),
+			vi.fn().mockRejectedValue(new Error("инструмент неизвестен")),
+		);
+
+		// Act: попытка постановки пометки.
+		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
+
+		// Assert: форма осталась открыта, причина отказа показана в форме.
+		expect(await screen.findByText(/Пометка не поставлена: инструмент неизвестен/)).toHaveAttribute("role", "alert");
+		expect(screen.getByRole("button", { name: "Поставить пометку" })).toBeInTheDocument();
 	});
 });

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ConstructionCardTrade } from "@/lib/api/construction-card";
@@ -205,4 +205,43 @@ describe("таблица сделок карточки: ручные запис�
 		expect(call.trade.symbol).toBe("BTCUSDT");
 		expect(call.trade.side).toBe("Sell");
 	});
+
+		// Форма создания скрывается только после успешного создания; при отказе
+		// сервера остаётся открытой с причиной отказа из команды родителя.
+		// Traceability: change:manual-journal-management/specs/ui/screens/spec.md#requirement-manual-trade-creation-ui
+		it("скрывает форму создания после успешного ответа", async () => {
+			// Arrange: открытая форма с командой, разрешающейся успехом.
+			const user = userEvent.setup();
+			const onCreateManualTrade = vi.fn().mockResolvedValue(undefined);
+			renderTable({ onCreateManualTrade });
+			await user.click(screen.getByRole("button", { name: "Ручная сделка" }));
+			await user.type(screen.getByLabelText("Символ инструмента"), "BTCUSDT");
+			await user.type(screen.getByLabelText("Количество"), "0,5");
+			await user.type(screen.getByLabelText("Цена, USDT"), "2400");
+
+			// Act: отправка формы.
+			await user.click(screen.getByRole("button", { name: "Создать" }));
+
+			// Assert: команда выполнена, форма скрыта.
+			await waitFor(() => expect(onCreateManualTrade).toHaveBeenCalledTimes(1));
+			expect(screen.queryByLabelText("Символ инструмента")).not.toBeInTheDocument();
+		});
+
+		it("оставляет форму создания открытой с причиной отказа при ошибке", async () => {
+			// Arrange: открытая форма с отклонённой командой и причиной от родителя.
+			const user = userEvent.setup();
+			const onCreateManualTrade = vi.fn().mockRejectedValue(new Error("сбой"));
+			renderTable({ onCreateManualTrade, manualTradeError: "символ не распознан" });
+			await user.click(screen.getByRole("button", { name: "Ручная сделка" }));
+			await user.type(screen.getByLabelText("Символ инструмента"), "BTCUSDT");
+			await user.type(screen.getByLabelText("Количество"), "1");
+			await user.type(screen.getByLabelText("Цена, USDT"), "100");
+
+			// Act: отправка формы.
+			await user.click(screen.getByRole("button", { name: "Создать" }));
+
+			// Assert: форма осталась открыта, причина отказа видна.
+			expect(await screen.findByText("символ не распознан")).toBeInTheDocument();
+			expect(screen.getByLabelText("Символ инструмента")).toBeInTheDocument();
+		});
 });

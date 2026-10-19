@@ -512,6 +512,9 @@ describe("карточка конструкции: действия и ввод"
 		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
 		await waitFor(() => expect(cardApi.addManualCloseMark).toHaveBeenCalledWith(7,
 			expect.objectContaining({ symbol: "ETH-28JUN24-3200-C", price: 0.00012345 })));
+		// Форма скрывается только после успешной постановки пометки.
+		expect(screen.queryByLabelText("цена закрытия")).toBeNull();
+		expect(await screen.findByRole("button", { name: "закрыть пометкой…" })).toBeInTheDocument();
 	});
 
 	// Запоздавшая котировка не перезаписывает цену, которую владелец уже ввёл.

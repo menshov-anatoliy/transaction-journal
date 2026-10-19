@@ -29,8 +29,8 @@ export interface PositionsTableProps {
 	readonly positions: readonly ConstructionCardPosition[];
 	/** Состояние команды добавления пометки (для блокировки кнопок). */
 	readonly markPending: boolean;
-	/** Постановка ручной пометки закрытия позиции. */
-	readonly onAddCloseMark: (mark: { symbol: string; markedAt: string; price: number | null; quantity: number | null }) => void;
+	/** Постановка ручной пометки закрытия позиции; promise разрешается только подтверждением сервера. */
+	readonly onAddCloseMark: (mark: { symbol: string; markedAt: string; price: number | null; quantity: number | null }) => void | Promise<unknown>;
 	/** Сохранение комментария позиции. */
 	readonly onSaveComment: (input: { symbol: string; text: string | null }) => void;
 }
@@ -197,7 +197,10 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 		}
 	};
 
-	const submitMark = () => {
+	// Пометка ставится подтверждением сервера: форма скрывается только после
+	// успешной постановки, при отказе остаётся открытой с причиной отказа.
+	// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
+	const submitMark = async () => {
 		if (markSymbol === null) {
 			return;
 		}
@@ -214,9 +217,13 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 			setMarkError("Введите корректную цену, время и количество пометки.");
 			return;
 		}
-		onAddCloseMark({ symbol: markSymbol, markedAt: time.toISOString(), price, quantity });
-		++markRequest.current;
-		setMarkSymbol(null);
+		try {
+			await onAddCloseMark({ symbol: markSymbol, markedAt: time.toISOString(), price, quantity });
+			++markRequest.current;
+			setMarkSymbol(null);
+		} catch (error) {
+			setMarkError(`Пометка не поставлена: ${error instanceof Error ? error.message : String(error)}.`);
+		}
 	};
 
 	return (
@@ -287,7 +294,7 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 						/>
 						<span className="text-[10.5px] font-normal text-text-muted">{quantityHintText}</span>
 					</label>
-					<Button size="sm" disabled={markPending || markTime === ""} onClick={submitMark}>
+					<Button size="sm" disabled={markPending || markTime === ""} onClick={() => void submitMark()}>
 						Поставить пометку
 					</Button>
 					<Button size="sm" variant="outline" onClick={() => {

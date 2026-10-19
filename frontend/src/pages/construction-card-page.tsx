@@ -272,7 +272,7 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 						constructionId={constructionId}
 						positions={card.positions}
 						markPending={commands.addCloseMark.isPending}
-						onAddCloseMark={(mark) => commands.addCloseMark.mutate(mark)}
+						onAddCloseMark={(mark) => commands.addCloseMark.mutateAsync(mark)}
 						onSaveComment={(input) => commands.positionComment.mutate(input)}
 					/>
 
@@ -285,7 +285,7 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 						onReturn={(execId) => commands.returnTrade.mutate(execId)}
 						onMove={(input) => commands.moveTrade.mutate(input)}
 						onSaveComment={(input) => commands.tradeComment.mutate(input)}
-						onCreateManualTrade={(input) => commands.createManualTrade.mutate(input)}
+						onCreateManualTrade={(input) => commands.createManualTrade.mutateAsync(input)}
 						onEditManualTrade={(input) => commands.editManualTrade.mutate(input)}
 						onDeleteManualTrade={(id) => commands.deleteManualTrade.mutate(id)}
 						manualTradeError={commands.createManualTrade.error?.message
