@@ -2,6 +2,7 @@ import * as React from "react";
 import type { AdjustmentInput, ConstructionCardAdjustment } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Plus } from "lucide-react";
 import { GridSection } from "./grid-section";
 import { DASH } from "@/lib/format/degradation";
 import { formatDay } from "@/lib/format/display-time";
@@ -133,17 +134,32 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 
 	return (
 		// Секция-карточка сетки корректировок по мастеру design.pen: головка
-		// с заголовком и счётчиком «5 колонок · N»; кнопка добавления и формы
-		// остаются транзиентным контентом над таблицей.
+		// с заголовком и счётчиком «5 колонок · N»; кнопка добавления живёт
+		// в головке секции — в стиле кнопки «Ручная сделка», форма остаётся
+		// транзиентным контентом над таблицей.
 		// Traceability: change:rework-spa-shell-and-screens/design#D7
-		<GridSection dataSlot="adjustments-table" title="Корректировки PnL" columnCount={5} rowCount={adjustments.length}>
-			{/* Изменение корректировок — desktop-операция, суммы доступны на мобильном. */}
-			{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
-			{isMobile ? null : addForm === null ? (
-				<Button variant="outline" size="sm" onClick={() => setAddForm(emptyForm())}>
+		<GridSection
+			dataSlot="adjustments-table"
+			title="Корректировки PnL"
+			columnCount={5}
+			rowCount={adjustments.length}
+			headExtra={isMobile === false && addForm === null ? (
+				// Кнопка добавления стилистически повторяет кнопку «Ручная сделка»
+				// головки секции «Сделки»: outline, иконка плюс, правый край головки.
+				<Button
+					variant="outline"
+					size="sm"
+					className="ml-auto h-auto gap-1.5 px-2.5 py-[5px] text-[11.5px]"
+					onClick={() => setAddForm(emptyForm())}
+				>
+					<Plus aria-hidden className="size-3" />
 					Добавить корректировку…
 				</Button>
-			) : (
+			) : null}
+		>
+			{/* Изменение корректировок — desktop-операция, суммы доступны на мобильном. */}
+			{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
+			{isMobile === false && addForm !== null ? (
 				// Форма добавления: дата-пикер с дефолтом «сегодня», источник,
 				// знаковая сумма и необязательное описание.
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
@@ -193,7 +209,7 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 					</Button>
 					{invalid && <span className="text-destructive text-sm" role="alert">Введите корректную дату и сумму со знаком, например +87.4 или -12</span>}
 				</div>
-			)}
+			) : null}
 
 			{/* Плотность Body #2: ячейки 7/6 кегль 11, заголовки 9.5/600 на
 			    заливке surface-2; значения вторичным текстом, описание — тоже. */}
