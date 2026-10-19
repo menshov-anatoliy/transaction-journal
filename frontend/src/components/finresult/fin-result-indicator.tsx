@@ -48,7 +48,10 @@ interface SizePreset {
 	readonly borderOverhang: number;
 	/** Высота строки подписи, px. */
 	readonly labelLineHeightPx: number;
-	/** Вертикальный отступ между секциями (метки/полоса), px. */
+	/** Вертикальный отступ между секциями (метки/полоса), px: flex-gap
+	 * прибавляется к боксу полосы, который уже несёт выступ насечки,
+	 * поэтому видимый зазор «метка → полоса» равен sectionGapPx +
+	 * borderOverhang. */
 	readonly sectionGapPx: number;
 	/** Ширина символа подписей над полосой (деления шкалы), px. */
 	readonly aboveCharWidthPx: number;
@@ -73,7 +76,12 @@ const FULL_PRESET: SizePreset = {
 	borderWidth: 2,
 	borderOverhang: 4,
 	labelLineHeightPx: 14,
-	sectionGapPx: 10,
+	// Видимый зазор «строка меток шкалы → видимая полоса» задан мастером
+	// onchD (и средним rMxFZ) как 9px; бокс полосы уже содержит 4px выступа
+	// насечки, поэтому flex-gap = 9 − 4 = 5px. Больший gap уводил числовые
+	// метки от полосы вверх относительно макета.
+	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
+	sectionGapPx: 5,
 	aboveCharWidthPx: 7,
 	belowCharWidthPx: 6.5,
 	nominalWidthPx: 480,
@@ -93,7 +101,10 @@ const MEDIUM_PRESET: SizePreset = {
 	borderWidth: 2,
 	borderOverhang: 4,
 	labelLineHeightPx: 13,
-	sectionGapPx: 8,
+	// Тот же расчёт, что у полного вида: 9px видимого зазора мастера rMxFZ
+	// минус 4px выступа насечки в боксе полосы.
+	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
+	sectionGapPx: 5,
 	aboveCharWidthPx: 6.5,
 	belowCharWidthPx: 6,
 	nominalWidthPx: 360,
