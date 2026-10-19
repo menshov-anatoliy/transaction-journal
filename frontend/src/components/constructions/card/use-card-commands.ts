@@ -163,6 +163,22 @@ export function useCardCommands(constructionId: number) {
 		onSuccess: invalidate,
 	});
 
+	// Ручная синтетическая связка: создание из двух сделок конструкции —
+	// правила пары проверяет сервер, форма показывает причину отказа; удаление
+	// свободно по идентификатору из ответа создания. Логический слой (лок и
+	// логический размер ноги) пересчитывается ближайшим перечитыванием снимка.
+	// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	const createManualLink = useMutation({
+		mutationFn: (input: cardApi.SyntheticCloseManualLinkInput) =>
+			cardApi.createManualSyntheticLink(constructionId, input),
+		onSuccess: invalidate,
+	});
+
+	const deleteManualLink = useMutation({
+		mutationFn: (linkId: number) => cardApi.deleteManualSyntheticLink(constructionId, linkId),
+		onSuccess: invalidate,
+	});
+
 	return {
 		rename,
 		status,
@@ -186,5 +202,7 @@ export function useCardCommands(constructionId: number) {
 		deleteAdjustment,
 		disputeSynthetic,
 		revertSynthetic,
+		createManualLink,
+		deleteManualLink,
 	};
 }

@@ -379,6 +379,59 @@ export function revertSyntheticClose(constructionId: number, key: SyntheticClose
 	});
 }
 
+/** Атрибуты ручной синтетической связки из формы деталей конструкции. */
+export interface SyntheticCloseManualLinkInput {
+	/** Идентификатор линейной сделки: execId биржевой либо ключ ручной «manual:{id}». */
+	readonly linearTradeId: string;
+	/** Идентификатор встречной опционной сделки — с теми же правилами. */
+	readonly optionTradeId: string;
+	/** Количество связки: не превышает количество ни одной из сделок пары. */
+	readonly quantity: number;
+}
+
+/** Сохранённая ручная синтетическая связка в контракте API. */
+export interface SyntheticCloseManualLinkRecord {
+	/** Идентификатор ручной связки — ключ удаления. */
+	readonly id: number;
+	/** Идентификатор линейной сделки связки. */
+	readonly linearTradeId: string;
+	/** Идентификатор встречной опционной сделки связки. */
+	readonly optionTradeId: string;
+	/** Количество связки. */
+	readonly quantity: number;
+}
+
+// Ручная синтетическая связка создаётся из двух сделок конструкции без
+// 60-минутного окна; правила пары (одна конструкция, совпадение страйка
+// и экспирации, согласованное количество) проверяет сервер, форма показывает
+// человекочитаемую причину отказа. Ответ несёт идентификатор связки — по нему
+// UI адресует удаление, пока перечень ручных связок карточки не отдаёт их
+// в read-модели.
+// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+// Traceability: change:manual-journal-management/design#d5
+/** Создаёт ручную синтетическую связку из линейной сделки и встречного опциона. */
+export function createManualSyntheticLink(
+	constructionId: number,
+	request: SyntheticCloseManualLinkInput,
+): Promise<SyntheticCloseManualLinkRecord> {
+	return apiFetch<SyntheticCloseManualLinkRecord>(`/constructions/${constructionId}/synthetic-closes/manual-links`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(request),
+	});
+}
+
+// Удаление свободно: связка исчезает из логического слоя ближайшим
+// чтением карточки; несуществующий идентификатор сервер отвечает 404
+// с человекочитаемой причиной.
+// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+/** Удаляет ручную синтетическую связку по идентификатору из ответа создания. */
+export function deleteManualSyntheticLink(constructionId: number, linkId: number): Promise<void> {
+	return apiCommand(`/constructions/${constructionId}/synthetic-closes/manual-links/${linkId}`, {
+		method: "DELETE",
+	});
+}
+
 /** Читает цели переноса сделки: активные конструкции без текущей. */
 export function fetchMoveTargets(constructionId: number): Promise<readonly ConstructionMoveTarget[]> {
 	return apiFetch<{ targets: readonly ConstructionMoveTarget[] }>(`/constructions/${constructionId}/move-targets`).then(

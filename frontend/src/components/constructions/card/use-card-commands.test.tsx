@@ -36,11 +36,13 @@ const cardApi = vi.hoisted(() => ({
 	deleteAdjustment: vi.fn(),
 	disputeSyntheticClose: vi.fn(),
 	revertSyntheticClose: vi.fn(),
+	createManualSyntheticLink: vi.fn(),
+	deleteManualSyntheticLink: vi.fn(),
 }));
 
 vi.mock("@/lib/api/construction-card", () => cardApi);
 
-/** Минимальная обвязка команд спора: две кнопки действия без UI-списка связок. */
+/** Минимальная обвязка команд спора и ручной связки: кнопки действия без UI-списка связок. */
 function DisputeCommandsHarness() {
 	const commands = useCardCommands(7);
 	return (
@@ -57,11 +59,24 @@ function DisputeCommandsHarness() {
 			>
 				Вернуть
 			</button>
+			<button
+				onClick={() =>
+					commands.createManualLink.mutate({ linearTradeId: "exec-linear-1", optionTradeId: "manual:5", quantity: 0.3 })}
+			>
+				Создать связку
+			</button>
+			<button onClick={() => commands.deleteManualLink.mutate(12)}>Удалить связку</button>
 			{commands.disputeSynthetic.error !== null && (
 				<span role="alert">{commands.disputeSynthetic.error.message}</span>
 			)}
 			{commands.revertSynthetic.error !== null && (
 				<span role="alert">{commands.revertSynthetic.error.message}</span>
+			)}
+			{commands.createManualLink.error !== null && (
+				<span role="alert">{commands.createManualLink.error.message}</span>
+			)}
+			{commands.deleteManualLink.error !== null && (
+				<span role="alert">{commands.deleteManualLink.error.message}</span>
 			)}
 		</div>
 	);
@@ -171,5 +186,71 @@ describe("useCardCommands: спор синтетической связки", ()
 		// Assert: ошибка мутации всплывает в состоянии команды — её сообщение
 		// и становится значением firstError страницы карточки у шапки.
 		expect(await screen.findByRole("alert")).toHaveTextContent("связка уже возвращена");
+	});
+
+	it("создание ручной связки вызывает эндпоинт и помечает запрос карточки устаревшим", async () => {
+		// Сценарий «Связка создаётся из двух сделок конструкции»: команда
+		// карточки отправляет пару ключей сделок и количество, логический слой
+		// обновляется ближайшим перечитыванием снимка.
+		// Traceability: openspec:domain/synthetic-close#scenario-manual-link-created
+		// Arrange: кэш представлений прочитан; эндпоинт создания успешен.
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		for (const key of viewKeys) client.setQueryData(key, {});
+		cardApi.createManualSyntheticLink.mockResolvedValue({ id: 12, linearTradeId: "exec-linear-1", optionTradeId: "manual:5", quantity: 0.3 });
+		const user = userEvent.setup();
+		renderCommands(client);
+
+		// Act: владелец создаёт ручную связку из формы.
+		await user.click(screen.getByRole("button", { name: "Создать связку" }));
+
+		// Assert: вызван эндпоинт создания с ключами сделок и количеством,
+		// все связанные представления помечены для перечитывания.
+		await waitFor(() => expect(cardApi.createManualSyntheticLink).toHaveBeenCalledWith(7, {
+			linearTradeId: "exec-linear-1",
+			optionTradeId: "manual:5",
+			quantity: 0.3,
+		}));
+		await waitFor(() => {
+			for (const key of viewKeys) expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+		});
+	});
+
+	it("удаление ручной связки вызывает эндпоинт и помечает запрос карточки устаревшим", async () => {
+		// Ручная связка удаляется свободно по идентификатору из ответа
+		// создания; логический слой пересчитывается перечитыванием карточки.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+		// Arrange: кэш представлений прочитан; эндпоинт удаления успешен.
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		for (const key of viewKeys) client.setQueryData(key, {});
+		cardApi.deleteManualSyntheticLink.mockResolvedValue(undefined);
+		const user = userEvent.setup();
+		renderCommands(client);
+
+		// Act: владелец удаляет ручную связку.
+		await user.click(screen.getByRole("button", { name: "Удалить связку" }));
+
+		// Assert: вызван эндпоинт удаления с идентификатором связки,
+		// представления помечены для перечитывания.
+		await waitFor(() => expect(cardApi.deleteManualSyntheticLink).toHaveBeenCalledWith(7, 12));
+		await waitFor(() => {
+			for (const key of viewKeys) expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+		});
+	});
+
+	it("отказ создания ручной связки попадает в ошибку мутации для формы", async () => {
+		// Сценарий «Рассогласованные инструменты или количества отклоняются»:
+		// отказ валидации сервера становится ошибкой мутации — форма и шапка
+		// карточки показывают человекочитаемую причину.
+		// Traceability: openspec:domain/synthetic-close#scenario-manual-link-rejected-on-mismatch
+		// Arrange: эндпоинт создания отвечает причиной отказа.
+		cardApi.createManualSyntheticLink.mockRejectedValue(new Error("Количество связки 0.9 не согласовано со сделками"));
+		const user = userEvent.setup();
+		renderCommands();
+
+		// Act: попытка создать несогласованную связку.
+		await user.click(screen.getByRole("button", { name: "Создать связку" }));
+
+		// Assert: причина отказа доступна как alert.
+		expect(await screen.findByRole("alert")).toHaveTextContent("не согласовано со сделками");
 	});
 });

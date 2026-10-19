@@ -1,7 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ConstructionCard, SyntheticCloseDisputeInput } from "@/lib/api/construction-card";
+import type {
+	ConstructionCard,
+	SyntheticCloseDisputeInput,
+	SyntheticCloseManualLinkInput,
+	SyntheticCloseManualLinkRecord,
+} from "@/lib/api/construction-card";
 import { ConstructionMetricStrip } from "./metric-strip";
 
 // Проверяется строка «зафиксировано синтетикой» сводки деталей конструкции
@@ -110,13 +115,48 @@ beforeEach(() => {
 	setViewport(1280);
 });
 
-/** Рендер сводки с заглушками команд спора и возврата связки. */
+/** Состояние формы ручной связки и команд по умолчанию для помощника рендера. */
+interface ManualLinkProps {
+	readonly manualLinks: readonly SyntheticCloseManualLinkRecord[];
+	readonly manualLinkFormOpen: boolean;
+	readonly manualLinkPending: boolean;
+	readonly manualLinkError: string | null;
+	readonly onCreateManualLink: (input: SyntheticCloseManualLinkInput) => void;
+	readonly onDeleteManualLink: (linkId: number) => void;
+	readonly onManualLinkFormOpenChange: (open: boolean) => void;
+}
+
+/** Рендер сводки с заглушками команд спора, возврата и ручной связки. */
 function renderStrip(
 	card: ConstructionCard,
 	onDispute: (key: SyntheticCloseDisputeInput) => void = () => undefined,
 	onRevert: (key: SyntheticCloseDisputeInput) => void = () => undefined,
+	manualLinkProps: Partial<ManualLinkProps> = {},
 ) {
-	return render(<ConstructionMetricStrip card={card} onDispute={onDispute} onRevert={onRevert} />);
+	const defaults: ManualLinkProps = {
+		manualLinks: [],
+		manualLinkFormOpen: false,
+		manualLinkPending: false,
+		manualLinkError: null,
+		onCreateManualLink: () => undefined,
+		onDeleteManualLink: () => undefined,
+		onManualLinkFormOpenChange: () => undefined,
+		...manualLinkProps,
+	};
+	return render(
+		<ConstructionMetricStrip
+			card={card}
+			onDispute={onDispute}
+			onRevert={onRevert}
+			manualLinks={defaults.manualLinks}
+			manualLinkPending={defaults.manualLinkPending}
+			manualLinkError={defaults.manualLinkError}
+			manualLinkFormOpen={defaults.manualLinkFormOpen}
+			onCreateManualLink={defaults.onCreateManualLink}
+			onDeleteManualLink={defaults.onDeleteManualLink}
+			onManualLinkFormOpenChange={defaults.onManualLinkFormOpenChange}
+		/>,
+	);
 }
 
 describe("ConstructionMetricStrip: строка «зафиксировано синтетикой»", () => {
@@ -463,5 +503,86 @@ describe("ConstructionMetricStrip: саммари времени жизни", ()
 		for (const metric of [...metricNodes].slice(-3)) {
 			expect(metric).toHaveTextContent("—");
 		}
+	});
+});
+
+describe("ConstructionMetricStrip: ручная синтетическая связка", () => {
+	// Точка входа формы ручной связки в сводке деталей: действие доступно
+	// и без действующих связок — первую ручную связку иначе не создать;
+	// при связках форма открывается из зоны синтетики.
+	// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	it("действие «Ручная связка» доступно без действующих связок, строка синтетики скрыта", async () => {
+		// Arrange: карточка без связок; замер смены состояния формы.
+		const onManualLinkFormOpenChange = vi.fn();
+		const user = userEvent.setup();
+
+		// Act: рендер сводки без связок и клик по действию.
+		renderStrip(makeCard({ syntheticCloses: [] }), () => undefined, () => undefined, {
+			onManualLinkFormOpenChange,
+		});
+		await user.click(screen.getByRole("button", { name: "Ручная связка" }));
+
+		// Assert: строка «зафиксировано синтетикой» не выводится, но действие
+		// открыло форму ручной связки.
+		expect(document.querySelector('[data-slot="synthetic-locked-line"]')).toBeNull();
+		expect(onManualLinkFormOpenChange).toHaveBeenCalledWith(true);
+	});
+
+	it("открытая форма ручной связки встроена в зону синтетики и показывает ошибку сервера", () => {
+		// Сценарий «Рассогласованные инструменты или количества отклоняются»:
+		// человекочитаемая причина отказа серверной валидации показывается
+		// в самой форме.
+		// Traceability: openspec:domain/synthetic-close#scenario-manual-link-rejected-on-mismatch
+		// Arrange: форма открыта, сервер ответил причиной отказа.
+		renderStrip(makeCard(), () => undefined, () => undefined, {
+			manualLinkFormOpen: true,
+			manualLinkError: "Встречный опцион «ETH-26DEC-3000-C» не совпадает страйком с закрываемой ногой.",
+		});
+
+		// Assert: форма присутствует, причина отказа доступна как alert.
+		expect(document.querySelector('[data-slot="manual-synthetic-link-form"]')).not.toBeNull();
+		expect(screen.getByText("Ручная синтетическая связка")).toBeTruthy();
+		expect(screen.getByRole("alert")).toHaveTextContent("не совпадает страйком");
+	});
+
+	it("ручная связка в списке удаляется по идентификатору, распознанная оспаривается", async () => {
+		// Arrange: раскрытый список — ручная связка (известна UI по ответу
+		// создания) и распознанная; замеры команд.
+		const onDeleteManualLink = vi.fn();
+		const card = makeCard({
+			syntheticCloses: [
+				{
+					closedLegSymbol: "ETH-28MAR-1600-P",
+					quantity: 0.3,
+					lockedValueUsdt: 35.7,
+					disputed: false,
+					linearExecId: "manual:5",
+					counterOptionExecId: "manual:7",
+				},
+				{
+					closedLegSymbol: "ETH-28MAR-1600-P",
+					quantity: 0.2,
+					lockedValueUsdt: 23.7,
+					disputed: false,
+					linearExecId: "exec-linear-2",
+					counterOptionExecId: "exec-option-2",
+				},
+			],
+		});
+		const user = userEvent.setup();
+		renderStrip(card, () => undefined, () => undefined, {
+			manualLinks: [{ id: 12, linearTradeId: "manual:5", optionTradeId: "manual:7", quantity: 0.3 }],
+			onDeleteManualLink,
+		});
+		await user.click(screen.getByRole("button", { name: /зафиксировано синтетикой/ }));
+
+		// Act: владелец удаляет ручную связку.
+		await user.click(screen.getByRole("button", { name: "Удалить" }));
+
+		// Assert: команда удаления получила идентификатор ручной связки;
+		// распознанная связка осталась с действием «Оспорить».
+		expect(onDeleteManualLink).toHaveBeenCalledWith(12);
+		expect(onDeleteManualLink).toHaveBeenCalledTimes(1);
+		expect(screen.getByRole("button", { name: "Оспорить" })).toBeTruthy();
 	});
 });

@@ -24,7 +24,7 @@ import { DASH } from "@/lib/format/degradation";
 import { formatCount } from "@/lib/format/plural";
 import { formatAmount } from "@/lib/format/quantity";
 import { formatMoment } from "@/lib/format/display-time";
-import type { ConstructionCard, ConstructionCardRiskWarning, TargetUnit } from "@/lib/api/construction-card";
+import type { ConstructionCard, ConstructionCardRiskWarning, SyntheticCloseManualLinkInput, SyntheticCloseManualLinkRecord, TargetUnit } from "@/lib/api/construction-card";
 
 // Карточка конструкции — маршрут /constructions/{id} по концепции §4: полная
 // информация и всё управление (паритет №3–№9). Шапка с именем, статусом и
@@ -38,6 +38,50 @@ import type { ConstructionCard, ConstructionCardRiskWarning, TargetUnit } from "
 
 /** Ключ запроса снимка карточки. */
 const cardKey = (constructionId: number) => ["construction-card", constructionId] as const;
+
+/** Ключ хранилища сессии с идентификаторами ручных связок конструкции. */
+const manualLinksStorageKey = (constructionId: number) => `synthetic-manual-links:${constructionId}`;
+
+/**
+ * Читает реестр ручных связок из хранилища сессии: read-модель карточки
+ * показывает ручные связки строками без идентификатора связки, а удаление
+ * адресуется идентификатором из ответа создания — реестр переживает
+ * перезагрузку страницы в пределах сессии браузера.
+ * Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+ */
+function readStoredManualLinks(constructionId: number): readonly SyntheticCloseManualLinkRecord[] {
+	try {
+		const raw = window.sessionStorage.getItem(manualLinksStorageKey(constructionId));
+		if (raw === null) {
+			return [];
+		}
+
+		const parsed: unknown = JSON.parse(raw);
+		if (Array.isArray(parsed) === false) {
+			return [];
+		}
+
+		return parsed.filter((entry): entry is SyntheticCloseManualLinkRecord =>
+			typeof entry === "object"
+			&& entry !== null
+			&& typeof (entry as SyntheticCloseManualLinkRecord).id === "number"
+			&& typeof (entry as SyntheticCloseManualLinkRecord).linearTradeId === "string"
+			&& typeof (entry as SyntheticCloseManualLinkRecord).optionTradeId === "string"
+			&& typeof (entry as SyntheticCloseManualLinkRecord).quantity === "number");
+	} catch {
+		return [];
+	}
+}
+
+/** Сохраняет реестр ручных связок в хранилище сессии; недоступное хранилище удалению в сессии не мешает. */
+function writeStoredManualLinks(constructionId: number, links: readonly SyntheticCloseManualLinkRecord[]): void {
+	try {
+		window.sessionStorage.setItem(manualLinksStorageKey(constructionId), JSON.stringify(links));
+	} catch {
+		// Хранилище сессии недоступно (приватный режим, квота) — связки
+		// создаются как прежде, удаление переживёт только текущий рендер.
+	}
+}
 
 export function ConstructionCardPage() {
 	const { constructionId } = useParams<{ constructionId: string }>();
@@ -123,6 +167,47 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 	const navigate = useNavigate();
 	const [commentOpen, setCommentOpen] = React.useState(false);
 	const isClosed = card.status !== "open";
+	// Реестр ручных связок, известных UI: read-модель карточки показывает
+	// ручные связки строками без идентификатора связки, а удаление адресуется
+	// идентификатором из ответа создания — реестр хранится в хранилище сессии
+	// и переживает перезагрузку страницы.
+	// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	const [manualLinks, setManualLinks] = React.useState<readonly SyntheticCloseManualLinkRecord[]>(() =>
+		readStoredManualLinks(constructionId));
+	const [manualLinkFormOpen, setManualLinkFormOpen] = React.useState(false);
+
+	// Реестр синхронизируется с хранилищем сессии ближайшим эффектом —
+	// создание и удаление просто меняют состояние.
+	React.useEffect(() => {
+		writeStoredManualLinks(constructionId, manualLinks);
+	}, [constructionId, manualLinks]);
+
+	// Создание связки: успешный ответ пополняет реестр и закрывает форму,
+	// отказ оставляет форму с человекочитаемой причиной серверной валидации.
+	// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+	const onCreateManualLink = (input: SyntheticCloseManualLinkInput) => {
+		commands.createManualLink.mutate(input, {
+			onSuccess: (record) => {
+				setManualLinks((current) => [...current, record]);
+				setManualLinkFormOpen(false);
+			},
+		});
+	};
+
+	// Удаление связки: строка исчезает из списка связок и логического слоя
+	// ближайшим перечитыванием снимка карточки; связка, стёртая полным
+	// пересбором, выпадает из реестра ответом 404, чтобы повторное удаление
+	// не адресовало несуществующий идентификатор.
+	const onDeleteManualLink = (linkId: number) => {
+		commands.deleteManualLink.mutate(linkId, {
+			onSuccess: () => setManualLinks((current) => current.filter((link) => link.id !== linkId)),
+			onError: (error) => {
+				if (error instanceof ApiError && error.status === 404) {
+					setManualLinks((current) => current.filter((link) => link.id !== linkId));
+				}
+			},
+		});
+	};
 
 	// Панель чатов конструкции монтируется в слот контекстной панели каркаса
 	// (design.md D4): у карточки контекст существует всегда, поэтому регистрация
@@ -171,6 +256,11 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 		// Traceability: openspec:ui/screens#scenario-dispute-action-updates-logical-layer
 		commands.disputeSynthetic,
 		commands.revertSynthetic,
+		// Ошибки ручной связки (валидация пары сделок, 404 повторного удаления)
+		// всплывают у шапки рядом с ошибкой формы связки.
+		// Traceability: openspec:domain/synthetic-close#scenario-manual-link-rejected-on-mismatch
+		commands.createManualLink,
+		commands.deleteManualLink,
 	);
 
 	return (
@@ -185,6 +275,15 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 				card={card}
 				onDispute={(key) => commands.disputeSynthetic.mutate(key)}
 				onRevert={(key) => commands.revertSynthetic.mutate(key)}
+				manualLinks={manualLinks}
+				manualLinkPending={commands.createManualLink.isPending || commands.deleteManualLink.isPending}
+				manualLinkError={commands.createManualLink.error?.message
+					?? commands.deleteManualLink.error?.message
+					?? null}
+				manualLinkFormOpen={manualLinkFormOpen}
+				onCreateManualLink={onCreateManualLink}
+				onDeleteManualLink={onDeleteManualLink}
+				onManualLinkFormOpenChange={setManualLinkFormOpen}
 			/>
 
 			{/* Комментарий конструкции — карточка по фрейму «Комментарий» мастера

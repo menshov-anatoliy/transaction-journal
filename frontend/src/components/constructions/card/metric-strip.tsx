@@ -1,6 +1,11 @@
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
-import type { ConstructionCard, SyntheticCloseDisputeInput } from "@/lib/api/construction-card";
+import type {
+	ConstructionCard,
+	SyntheticCloseDisputeInput,
+	SyntheticCloseManualLinkInput,
+	SyntheticCloseManualLinkRecord,
+} from "@/lib/api/construction-card";
 import { Metric } from "@/components/design";
 import { Button } from "@/components/ui/button";
 import { FullFinResultIndicator, MediumFinResultIndicator } from "@/components/finresult/fin-result-indicator";
@@ -9,6 +14,7 @@ import { DASH } from "@/lib/format/degradation";
 import { formatDay, formatMoment } from "@/lib/format/display-time";
 import { EXPIRY_WARNING_DAYS } from "@/lib/lifetime";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
+import { ManualSyntheticLinkForm } from "./manual-synthetic-link-form";
 import { cn } from "@/lib/utils";
 
 // Сводка метрик карточки (kstrip) по концепции §4: общий P&L, % капитала,
@@ -26,6 +32,20 @@ export interface ConstructionMetricStripProps {
 	readonly onDispute: (key: SyntheticCloseDisputeInput) => void;
 	/** Возврат оспоренной связки по паре execId — команда карточки. */
 	readonly onRevert: (key: SyntheticCloseDisputeInput) => void;
+	/** Ручные связки, известные UI (созданные в текущей сессии) — источник действия удаления. */
+	readonly manualLinks: readonly SyntheticCloseManualLinkRecord[];
+	/** Состояние команд ручной связки (создание/удаление) — блокирует действия. */
+	readonly manualLinkPending: boolean;
+	/** Человекочитаемая причина отказа команд ручной связки. */
+	readonly manualLinkError: string | null;
+	/** Открытая форма ручной связки — состояние владеет страница карточки. */
+	readonly manualLinkFormOpen: boolean;
+	/** Создание ручной синтетической связки из формы. */
+	readonly onCreateManualLink: (input: SyntheticCloseManualLinkInput) => void;
+	/** Удаление ручной связки по идентификатору из ответа создания. */
+	readonly onDeleteManualLink: (linkId: number) => void;
+	/** Смена состояния формы ручной связки. */
+	readonly onManualLinkFormOpenChange: (open: boolean) => void;
 }
 
 /** Кегль значения показателя: итог — 16, разбивка — 14 (инстансы M1–M9). */
@@ -103,7 +123,18 @@ function formatDuration(seconds: number): string {
 	return parts.join(" ");
 }
 
-export function ConstructionMetricStrip({ card, onDispute, onRevert }: ConstructionMetricStripProps) {
+export function ConstructionMetricStrip({
+	card,
+	onDispute,
+	onRevert,
+	manualLinks,
+	manualLinkPending,
+	manualLinkError,
+	manualLinkFormOpen,
+	onCreateManualLink,
+	onDeleteManualLink,
+	onManualLinkFormOpenChange,
+}: ConstructionMetricStripProps) {
 	const metrics = card.metrics;
 	// Узкий экран сохраняет ту же геометрию и подписи в среднем размере.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив
@@ -278,6 +309,13 @@ export function ConstructionMetricStrip({ card, onDispute, onRevert }: Construct
 					</Metric>
 				</div>
 
+				{/* Зона синтетики: строка «зафиксировано синтетикой» с раскрытым
+				    списком связок, действие «Ручная связка» и форма создания.
+				    Действие доступно и без действующих связок — первую ручную
+				    связку иначе не создать; при связках оно встроено в строку
+				    синтетики справа, без связок строка не выводится (строка
+				    синтетики отсутствует, действие живёт отдельным рядом).
+				    Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link */}
 				{hasSyntheticCloses && (
 					<>
 						{/* Разделитель строки синтетики от метрик — линия по мастеру h69OG. */}
@@ -293,7 +331,7 @@ export function ConstructionMetricStrip({ card, onDispute, onRevert }: Construct
 							type="button"
 							data-slot="synthetic-locked-line"
 							aria-expanded={syntheticListOpen}
-							className="flex flex-wrap items-center gap-2.5 text-left"
+							className="flex min-w-0 flex-1 flex-wrap items-center gap-2.5 text-left"
 							onClick={() => setSyntheticListOpen((open) => open === false)}
 						>
 							<span className="text-[11px] tracking-[0.3px] text-text-muted">
@@ -325,39 +363,81 @@ export function ConstructionMetricStrip({ card, onDispute, onRevert }: Construct
 								className={cn("size-3.5 text-text-muted transition-transform", syntheticListOpen && "rotate-180")}
 							/>
 						</button>
-						{/* Раскрытый список распознанных связок: каждая связка видна,
-						    включая оспоренные — приглушённые с признаком спора; действие
-						    «Оспорить»/«Вернуть» в конце строки вызывает команду карточки,
-						    а карточка после действия перечитывается целиком. */}
-						{/* Traceability: openspec:ui/screens#requirement-detail-synthetic-close-dispute-list */}
-						{syntheticListOpen && (
-							<div role="list" data-slot="synthetic-closes-list" className="flex flex-col gap-1 pl-2.5">
-								{card.syntheticCloses.map((close) => (
-									<div
-										key={`${close.linearExecId}/${close.counterOptionExecId}`}
-										role="listitem"
-										data-slot="synthetic-close-row"
-										data-disputed={close.disputed}
-										className={cn(
-											"flex flex-wrap items-center gap-2 rounded-[2px] px-2 py-1 text-[12px]",
-											close.disputed && "text-text-muted",
-										)}
-									>
-										<span className="text-text-secondary">{close.closedLegSymbol}</span>
-										<span className="tabular-nums">{`· ${formatAmount(close.quantity)}`}</span>
-										<span className="tabular-nums">{`· лок ${formatSignedAmount(close.lockedValueUsdt)} USDT`}</span>
-										{/* Признак спора оспоренной связки — спорная связка
-										    остаётся видимой в списке, но из логического
-										    слоя (лока и размера ноги) исключена. */}
-										{/* Traceability: openspec:ui/screens#scenario-dispute-list-expands-shows-links */}
-										{close.disputed && (
-											<span data-slot="synthetic-close-disputed-mark" className="text-[11px] tracking-[0.3px]">
-												оспорена
-											</span>
-										)}
-										{/* Действие адресует связку парой execId: спор идёт
-										    через команду карточки с перечитыванием снимка. */}
-										{/* Traceability: openspec:ui/screens#scenario-revert-action-restores-link */}
+					</>
+				)}
+				{/* Действие «Ручная связка»: точка входа формы создания ручной
+				    синтетической связки из двух сделок конструкции; при строке
+				    синтетики встроено в её ряд, без строки — единственный элемент
+				    ряда справа. */}
+				{/* Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link */}
+				<div data-slot="synthetic-manual-link-row" className="flex items-center gap-2.5">
+					{hasSyntheticCloses === false && <span className="h-px flex-1" aria-hidden="true" />}
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-auto px-2 py-1 text-[11px]"
+						disabled={manualLinkPending}
+						onClick={() => onManualLinkFormOpenChange(true)}
+					>
+						Ручная связка
+					</Button>
+				</div>
+				{/* Раскрытый список связок: каждая связка видна, включая оспоренные
+				    — приглушённые с признаком спора; действие в конце строки адресует
+				    команду карточки — «Оспорить»/«Вернуть» распознанной связки парой
+				    execId, «Удалить» ручной связке по её идентификатору. */}
+				{/* Traceability: openspec:ui/screens#requirement-detail-synthetic-close-dispute-list */}
+				{hasSyntheticCloses && syntheticListOpen && (
+					<div role="list" data-slot="synthetic-closes-list" className="flex flex-col gap-1 pl-2.5">
+						{card.syntheticCloses.map((close, index) => {
+							// Ручная связка узнаваема по паре ключей сделок из ответа
+							// создания: read-модель карточки идентификатор связки не
+							// отдаёт, поэтому удаление адресовано связкам, созданным
+							// в текущей сессии.
+							// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+							const manualLink = manualLinks.find(
+								(link) => link.linearTradeId === close.linearExecId && link.optionTradeId === close.counterOptionExecId,
+							);
+							return (
+								<div
+									key={`${index}:${close.linearExecId}/${close.counterOptionExecId}`}
+									role="listitem"
+									data-slot="synthetic-close-row"
+									data-disputed={close.disputed}
+									className={cn(
+										"flex flex-wrap items-center gap-2 rounded-[2px] px-2 py-1 text-[12px]",
+										close.disputed && "text-text-muted",
+									)}
+								>
+									<span className="text-text-secondary">{close.closedLegSymbol}</span>
+									<span className="tabular-nums">{`· ${formatAmount(close.quantity)}`}</span>
+									<span className="tabular-nums">{`· лок ${formatSignedAmount(close.lockedValueUsdt)} USDT`}</span>
+									{/* Признак спора оспоренной связки — спорная связка
+									    остаётся видимой в списке, но из логического
+									    слоя (лока и размера ноги) исключена. */}
+									{/* Traceability: openspec:ui/screens#scenario-dispute-list-expands-shows-links */}
+									{close.disputed && (
+										<span data-slot="synthetic-close-disputed-mark" className="text-[11px] tracking-[0.3px]">
+											оспорена
+										</span>
+									)}
+									{manualLink !== undefined ? (
+										// Ручная связка удаляется свободно по идентификатору
+										// из ответа создания; спор правилами не предусмотрен.
+										// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+										<Button
+											variant="ghost"
+											size="sm"
+											className="ml-auto h-6 px-2 text-[11px]"
+											disabled={manualLinkPending}
+											onClick={() => onDeleteManualLink(manualLink.id)}
+										>
+											<span className="text-neg">Удалить</span>
+										</Button>
+									) : (
+										// Действие адресует связку парой execId: спор идёт
+										// через команду карточки с перечитыванием снимка.
+										// Traceability: openspec:ui/screens#scenario-revert-action-restores-link
 										<Button
 											variant="ghost"
 											size="sm"
@@ -375,11 +455,24 @@ export function ConstructionMetricStrip({ card, onDispute, onRevert }: Construct
 										>
 											{close.disputed ? "Вернуть" : "Оспорить"}
 										</Button>
-									</div>
-								))}
-							</div>
-						)}
-					</>
+									)}
+								</div>
+							);
+						})}
+					</div>
+				)}
+				{manualLinkFormOpen && (
+					// Форма ручной синтетической связки (мастер vG1f8): выбор линейной
+					// сделки и встречного опциона из сделок конструкции, количество;
+					// правила пары проверяет сервер, причина отказа показывается формой.
+					// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
+					<ManualSyntheticLinkForm
+						trades={card.trades}
+						pending={manualLinkPending}
+						error={manualLinkError}
+						onSubmit={onCreateManualLink}
+						onCancel={() => onManualLinkFormOpenChange(false)}
+					/>
 				)}
 			</div>
 
