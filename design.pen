@@ -1604,6 +1604,7 @@
               "type": "frame",
               "id": "Ghnte",
               "name": "Ряд 1",
+              "width": 1552,
               "gap": 24,
               "children": [
                 {
@@ -1872,6 +1873,196 @@
                       "content": "v1 · показана впервые 07.10 13:12",
                       "fontFamily": "$font",
                       "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "jdeRd",
+                  "name": "Подсказка/Чтение индикатора",
+                  "reusable": true,
+                  "width": 340,
+                  "fill": "$surface",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "nvLAT",
+                      "name": "Заголовок",
+                      "fill": "$textPrimary",
+                      "content": "Как читать индикатор",
+                      "fontFamily": "$font",
+                      "fontSize": 12.5,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "u8Pbo",
+                      "name": "Зона",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 3,
+                          "id": "eUCym",
+                          "name": "Свотч",
+                          "fill": "$riskZone",
+                          "width": 12,
+                          "height": 12
+                        },
+                        {
+                          "type": "text",
+                          "id": "AE5TC",
+                          "name": "Описание",
+                          "fill": "$textSecondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "плановый риск — красная зона от −Риск до 0",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "dmU8x",
+                      "name": "Зона",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 3,
+                          "id": "NrWpN",
+                          "name": "Свотч",
+                          "fill": "$profitZone",
+                          "width": 12,
+                          "height": 12
+                        },
+                        {
+                          "type": "text",
+                          "id": "wyuxu",
+                          "name": "Описание",
+                          "fill": "$textSecondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "плановый профит — зелёная зона от 0 до +Профит",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "KiC5S",
+                      "name": "Зона",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "cornerRadius": 3,
+                          "id": "bEC2E",
+                          "name": "Свотч",
+                          "fill": "$superZone",
+                          "width": 12,
+                          "height": 12
+                        },
+                        {
+                          "type": "text",
+                          "id": "sMV3R",
+                          "name": "Описание",
+                          "fill": "$textSecondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "сверхприбыль — золотая зона за +Профит",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Bj2JN",
+                      "name": "Насечка",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "rectangle",
+                          "id": "tWCT3",
+                          "name": "Насечка",
+                          "fill": "$textPrimary",
+                          "width": 3,
+                          "height": 14
+                        },
+                        {
+                          "type": "text",
+                          "id": "DdAIa",
+                          "name": "Описание",
+                          "fill": "$textSecondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "насечка — худший исход конструкции, подпись «худший исход · X USDT · N%» от плановой границы зоны",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "TbkJd",
+                      "name": "Маркер",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "Or1cu",
+                          "name": "Маркер",
+                          "fill": "$accent",
+                          "width": 11,
+                          "height": 11
+                        },
+                        {
+                          "type": "text",
+                          "id": "tDeon",
+                          "name": "Описание",
+                          "fill": "$textSecondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "маркер — оценка итога «заберу при ликвидации сейчас»",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "t45Pcu",
+                      "name": "Примечание",
+                      "fill": "$textMuted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Состояния вне шкалы показывают отдельно от полосы: «риск не ограничен» и «не удалось рассчитать».",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
                       "fontWeight": "normal"
                     }
                   ]
@@ -6451,300 +6642,28 @@
                     },
                     {
                       "type": "frame",
-                      "id": "U3n3q",
-                      "name": "Легенда индикатора",
-                      "width": "fill_container",
-                      "fill": "$surface",
-                      "cornerRadius": 12,
+                      "id": "P8b1c",
+                      "layoutPosition": "absolute",
+                      "x": 840,
+                      "y": 20,
+                      "name": "Триггер подсказки «?»",
+                      "width": 20,
+                      "height": 20,
+                      "fill": "$surface2",
+                      "cornerRadius": 10,
                       "stroke": "$border",
-                      "layout": "vertical",
-                      "gap": 8,
-                      "padding": [
-                        12,
-                        16
-                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
                       "children": [
                         {
-                          "type": "frame",
-                          "id": "mdtkS",
-                          "name": "TitleRow",
-                          "width": "fill_container",
-                          "gap": 10,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "Ch0r2",
-                              "name": "T",
-                              "fill": "$textPrimary",
-                              "content": "Как читать индикатор",
-                              "fontFamily": "$font",
-                              "fontSize": 12.5,
-                              "fontWeight": "600"
-                            },
-                            {
-                              "type": "frame",
-                              "id": "M9d3r",
-                              "name": "Sp",
-                              "width": "fill_container",
-                              "height": 1
-                            },
-                            {
-                              "type": "text",
-                              "id": "xaVwh",
-                              "name": "Ref",
-                              "fill": "$textMuted",
-                              "content": "пример: плановый риск 300 · реальный 250 · профит 900",
-                              "fontFamily": "$font",
-                              "fontSize": 10.5,
-                              "fontWeight": "normal"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "mycrI",
-                          "name": "Columns",
-                          "width": "fill_container",
-                          "gap": 20,
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "JTBn1",
-                              "name": "Зоны",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 6,
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "vhzES",
-                                  "name": "R",
-                                  "width": "fill_container",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "rectangle",
-                                      "cornerRadius": 3,
-                                      "id": "DC52G",
-                                      "name": "Sw",
-                                      "fill": "$riskZone",
-                                      "width": 12,
-                                      "height": 12
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "aaNJV",
-                                      "name": "Tx",
-                                      "fill": "$textSecondary",
-                                      "textGrowth": "fixed-width",
-                                      "width": "fill_container",
-                                      "content": "плановый риск — стартовый параметр (300 / 5%)",
-                                      "lineHeight": 1.4,
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "VQzjE",
-                                  "name": "R",
-                                  "width": "fill_container",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "rectangle",
-                                      "cornerRadius": 3,
-                                      "id": "plnTn",
-                                      "name": "Sw",
-                                      "fill": "$profitZone",
-                                      "width": 12,
-                                      "height": 12
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "BKxun",
-                                      "name": "Tx",
-                                      "fill": "$textSecondary",
-                                      "textGrowth": "fixed-width",
-                                      "width": "fill_container",
-                                      "content": "плановая прибыль — цель (900 / 15%)",
-                                      "lineHeight": 1.4,
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "K7pYD",
-                                  "name": "R",
-                                  "width": "fill_container",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "rectangle",
-                                      "cornerRadius": 3,
-                                      "id": "O3zHf",
-                                      "name": "Sw",
-                                      "fill": "$superZone",
-                                      "width": 12,
-                                      "height": 12
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "g59hF",
-                                      "name": "Tx",
-                                      "fill": "$textSecondary",
-                                      "textGrowth": "fixed-width",
-                                      "width": "fill_container",
-                                      "content": "сверхприбыль — правый край = вошедшая метка",
-                                      "lineHeight": 1.4,
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "l5EzSL",
-                              "name": "Метки",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 6,
-                              "children": [
-                                {
-                                  "type": "frame",
-                                  "id": "n6Roa",
-                                  "name": "R",
-                                  "width": "fill_container",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "rectangle",
-                                      "cornerRadius": 1,
-                                      "id": "meuSG",
-                                      "name": "Sw",
-                                      "fill": "#17171E",
-                                      "width": 3,
-                                      "height": 14
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "HsLkX",
-                                      "name": "Tx",
-                                      "fill": "$textSecondary",
-                                      "textGrowth": "fixed-width",
-                                      "width": "fill_container",
-                                      "content": "граница — реальный риск минус реализованная прибыль: «риск есть» красным или «риска нет» зелёным, в USDT и % от планового",
-                                      "lineHeight": 1.4,
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "BY81M",
-                                  "name": "R",
-                                  "width": "fill_container",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "ellipse",
-                                      "id": "RoCWL",
-                                      "name": "Sw",
-                                      "fill": "$accent",
-                                      "width": 11,
-                                      "height": 11,
-                                      "stroke": "#FFFFFF",
-                                      "strokeWidth": 1.5
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "EsqH1",
-                                      "name": "Tx",
-                                      "fill": "$textSecondary",
-                                      "textGrowth": "fixed-width",
-                                      "width": "fill_container",
-                                      "content": "маркер — текущий итог: заберу при ликвидации сейчас; число — цветом центра",
-                                      "lineHeight": 1.4,
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "lcqLt",
-                                  "name": "R",
-                                  "width": "fill_container",
-                                  "gap": 8,
-                                  "alignItems": "center",
-                                  "children": [
-                                    {
-                                      "type": "ellipse",
-                                      "id": "s1obaY",
-                                      "name": "Sw",
-                                      "fill": "$neg",
-                                      "width": 11,
-                                      "height": 11,
-                                      "stroke": "#FFFFFF",
-                                      "strokeWidth": 1.5
-                                    },
-                                    {
-                                      "type": "text",
-                                      "id": "GtGqv",
-                                      "name": "Tx",
-                                      "fill": "$textSecondary",
-                                      "textGrowth": "fixed-width",
-                                      "width": "fill_container",
-                                      "content": "центр маркера: зелёный — итог выше планового риска, красный — ниже",
-                                      "lineHeight": 1.4,
-                                      "fontFamily": "$font",
-                                      "fontSize": 11,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "Vujmx",
-                              "name": "Примечание",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "e71Y43",
-                                  "name": "Tx",
-                                  "fill": "$textMuted",
-                                  "textGrowth": "fixed-width",
-                                  "width": "fill_container",
-                                  "content": "Реальный риск может быть меньше планового: он равен текущей стоимости опционной конструкции — наихудшему результату на экспирацию. Граница строится от нуля: влево — реальный риск, вправо — реализованная прибыль. Маркер откладывается от точки реального риска.",
-                                  "lineHeight": 1.5,
-                                  "fontFamily": "$font",
-                                  "fontSize": 10.5,
-                                  "fontWeight": "normal"
-                                }
-                              ]
-                            }
-                          ]
+                          "type": "text",
+                          "id": "nkFXz",
+                          "name": "Знак",
+                          "fill": "$textSecondary",
+                          "content": "?",
+                          "fontFamily": "$font",
+                          "fontSize": 12,
+                          "fontWeight": "600"
                         }
                       ]
                     }
@@ -25400,6 +25319,74 @@
       ],
       "width": 572,
       "height": 883
+    },
+    {
+      "type": "frame",
+      "id": "uXD1o",
+      "x": 14592,
+      "y": 0,
+      "name": "Экран/Карточка конструкции · подсказка чтения открыта",
+      "clip": true,
+      "width": 1240,
+      "height": 360,
+      "fill": "$bg",
+      "layout": "none",
+      "children": [
+        {
+          "type": "frame",
+          "id": "FlhdB",
+          "x": 0,
+          "y": 130,
+          "name": "Индикатор и триггер",
+          "width": 1104,
+          "layout": "vertical",
+          "gap": 24,
+          "children": [
+            {
+              "id": "Hm5uK",
+              "type": "ref",
+              "ref": "onchD",
+              "name": "Индикатор полный",
+              "width": 832
+            },
+            {
+              "type": "frame",
+              "id": "PbbUg",
+              "layoutPosition": "absolute",
+              "x": 840,
+              "y": 20,
+              "name": "Триггер подсказки «?»",
+              "width": 20,
+              "height": 20,
+              "fill": "$surface2",
+              "cornerRadius": 10,
+              "stroke": "$border",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Kbhys",
+                  "name": "Знак",
+                  "fill": "$textSecondary",
+                  "content": "?",
+                  "fontFamily": "$font",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "y9QxO",
+          "type": "ref",
+          "ref": "jdeRd",
+          "name": "Подсказка чтения · открыта",
+          "x": 872,
+          "y": 52
+        }
+      ]
     }
   ],
   "variables": {
