@@ -49,6 +49,7 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 			capitalUsagePercent: 16.7,
 			realRiskUsdt: 45,
 			worstCaseUsdt: 15.25,
+			syntheticAdjustedTotalUsdt: null,
 			realRiskStatus: "finite",
 			openedAt: "2026-10-01T09:05:00+00:00",
 			closedAt: null,
@@ -445,6 +446,93 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 	});
 });
 
+describe("ConstructionMetricStrip: сводная величина «с учётом зафиксированного синтетикой»", () => {
+	// Сводная величина зоны синтетики карточки: «Реализованный результат» +
+	// Σ локов действующих связок; приходит из API nullable — число при
+	// действующих (неоспоренных) связках, null без них. Величина не меняет
+	// инструментальные метрики и индикатор финрезультата.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#requirement-card-synthetic-adjusted-total-row
+	it("показывает сводную рядом со строкой «зафиксировано синтетикой» при действующих связках", () => {
+		// Сценарий «Величина показывается при действующих связках»: число из
+		// API выводится в зоне синтетики со подписью и тоном по знаку.
+		// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#scenario-card-adjusted-total-shown-with-links
+		// Arrange: неоспоренная связка с локом 35.7 USDT; сводная 96 USDT
+		// приходит из API (реализованный 60.25 + лок 35.7 ≈ 95.95).
+		const card = makeCard({
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.3,
+				lockedValueUsdt: 35.7,
+				disputed: false,
+				linearExecId: "exec-linear-1",
+				counterOptionExecId: "exec-option-1",
+				manualLinkId: null,
+			}],
+		});
+
+		// Act: рендер сводки карточки со сводной из API.
+		renderStrip({ ...card, metrics: { ...card.metrics, syntheticAdjustedTotalUsdt: 96 } });
+
+		// Assert: сводная строка выведена — подпись и значение рядом со
+		// строкой лока, тон значения зелёный по положительному знаку.
+		expect(screen.getByText("зафиксировано синтетикой")).toBeTruthy();
+		expect(screen.getByText("с учётом зафиксированного синтетикой")).toBeTruthy();
+		expect(screen.getByText("+96 USDT")).toBeTruthy();
+		const total = document.querySelector('[data-slot="synthetic-adjusted-total"]');
+		expect(total).not.toBeNull();
+		expect(total!.querySelector('[data-slot="synthetic-adjusted-total-value"]')).toHaveClass(
+			"text-[color:var(--fin-positive-strong)]",
+		);
+	});
+
+	it("не выводит сводную без действующих связок", () => {
+		// Сценарий «Без связок величина отсутствует»: null из API — сводной
+		// строки нет вместе со всей зоной синтетики.
+		// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#scenario-card-adjusted-total-absent-without-links
+		// Arrange: карточка без связок; фикстура по умолчанию несёт null.
+		const card = makeCard({ syntheticCloses: [] });
+
+		// Act: рендер сводки карточки.
+		renderStrip(card);
+
+		// Assert: ни строки лока, ни сводной в DOM нет.
+		expect(document.querySelector('[data-slot="synthetic-locked-line"]')).toBeNull();
+		expect(document.querySelector('[data-slot="synthetic-adjusted-total"]')).toBeNull();
+		expect(screen.queryByText("с учётом зафиксированного синтетикой")).toBeNull();
+	});
+
+	it("в раскрытом состоянии списка связок сводная стоит между переключателем и списком", async () => {
+		// Порядок зоны синтетики по макету: строка-переключатель → сводная
+		// величина → раскрытый список связок.
+		// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#requirement-card-synthetic-adjusted-total-row
+		// Arrange: связка и сводная из API; раскрытие списка кликом.
+		const card = makeCard({
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.3,
+				lockedValueUsdt: 35.7,
+				disputed: false,
+				linearExecId: "exec-linear-1",
+				counterOptionExecId: "exec-option-1",
+				manualLinkId: null,
+			}],
+		});
+		const user = userEvent.setup();
+		renderStrip({ ...card, metrics: { ...card.metrics, syntheticAdjustedTotalUsdt: 96 } });
+		await user.click(screen.getByRole("button", { name: /зафиксировано синтетикой/ }));
+
+		// Act: список связок раскрыт.
+
+		// Assert: в DOM сводная следует за строкой лока и стоит перед
+		// раскрытым списком связок.
+		const lockedLine = document.querySelector('[data-slot="synthetic-locked-line"]')!;
+		const adjusted = document.querySelector('[data-slot="synthetic-adjusted-total"]')!;
+		const list = document.querySelector('[data-slot="synthetic-closes-list"]')!;
+		expect(lockedLine.compareDocumentPosition(adjusted) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(adjusted.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+});
+
 describe("ConstructionMetricStrip: саммари времени жизни", () => {
 	// Саммари времени жизни в сводке карточки: остаток суток до ближайшей
 	// экспирации открытых опционных ног, нетто-дневной распад и суммарная
@@ -646,6 +734,29 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(within(popup).getByText(/маркер — оценка итога «заберу при ликвидации сейчас»/)).toBeTruthy();
 		expect(within(popup).queryByText(/реальный риск минус реализованная прибыль/)).toBeNull();
 		expect(within(popup).queryByText(/граница строится от нуля/)).toBeNull();
+	});
+
+	it("объясняет насечку правее маркера синтетической фиксацией остатков и отсылает к зоне синтетики", async () => {
+		// Сценарий «Подсказка объясняет насечку правее маркера»: случай
+		// «насечка правее маркера итога» объясняется гарантией платежа
+		// остатков, в частности синтетической фиксацией по правилу ac-43,
+		// а место зафиксированной части названо строкой «зафиксировано
+		// синтетикой» и сводной величиной зоны синтетики карточки.
+		// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#scenario-tooltip-explains-notch-right-of-marker
+		// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#scenario-tooltip-points-to-synthetic-zone
+		// Arrange: открытая подсказка чтения.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
+		const popup = screen.getByRole("dialog");
+
+		// Assert: насечка правее маркера объяснена синтетической фиксацией
+		// остатков по правилу ac-43; зафиксированная часть адресована
+		// строкой лока и сводной величиной зоны синтетики.
+		expect(within(popup).getByText(/правее маркера итога/)).toBeTruthy();
+		expect(within(popup).getByText(/синтетическая фиксация по правилу ac-43/)).toBeTruthy();
+		expect(within(popup).getByText(/в строке «зафиксировано синтетикой»/)).toBeTruthy();
+		expect(within(popup).getByText(/сводной величине «с учётом зафиксированного синтетикой»/)).toBeTruthy();
 	});
 
 	it("закрывается по Esc", async () => {

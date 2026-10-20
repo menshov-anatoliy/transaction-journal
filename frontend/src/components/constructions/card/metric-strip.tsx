@@ -360,6 +360,30 @@ export function ConstructionMetricStrip({
 								className={cn("size-3.5 text-text-muted transition-transform", syntheticListOpen && "rotate-180")}
 							/>
 						</button>
+						{/* Сводная величина «с учётом зафиксированного синтетикой» —
+						    отдельная строка под строкой лока: «Реализованный
+						    результат» + Σ локов действующих связок; приходит из API
+						    nullable — null без действующих связок, тогда и строки
+						    нет. В раскрытом состоянии списка связок сводная стоит
+						    между строкой-переключателем и списком. Число не
+						    пересчитывает инструментальные метрики и индикатор
+						    финрезультата — его место только в зоне синтетики. */}
+						{/* Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#requirement-card-synthetic-adjusted-total-row */}
+						{metrics.syntheticAdjustedTotalUsdt !== null && (
+							<div data-slot="synthetic-adjusted-total" className="flex flex-wrap items-center gap-2.5">
+								<span className="text-[11px] tracking-[0.3px] text-text-muted">
+									с учётом зафиксированного синтетикой
+								</span>
+								{/* Значение — по образцу величины лока: кегль 14/600,
+								    тон по знаку, табличные цифры и суффикс USDT. */}
+								<span
+									data-slot="synthetic-adjusted-total-value"
+									className={cn("tabular-nums text-[14px] font-semibold", toneClass(metrics.syntheticAdjustedTotalUsdt))}
+								>
+									{`${formatSignedAmount(metrics.syntheticAdjustedTotalUsdt)} USDT`}
+								</span>
+							</div>
+						)}
 					</>
 				)}
 				{/* Действие «Ручная связка»: точка входа формы создания ручной
@@ -552,9 +576,17 @@ export function ConstructionMetricStrip({
 							<span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] bg-super-zone" />
 							<span>сверхприбыль — золотая зона за +Профит</span>
 						</div>
+						{/* Насечка может стоять и правее маркера итога — открытые
+						    остатки зафиксированы синтетикой (гарантия платежа
+						    остатков, в частности синтетическая фиксация по правилу
+						    ac-43); текст отсылает к величинам зоны синтетики
+						    карточки: строка лока и сводная «с учётом
+						    зафиксированного синтетикой». Новых визуальных элементов
+						    нет — дополнен текст существующей строки насечки. */}
+						{/* Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#requirement-indicator-tooltip-synthetic-mention */}
 						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
 							<span aria-hidden="true" className="h-[14px] w-[3px] shrink-0 bg-text-primary" />
-							<span>насечка — худший исход конструкции, подпись «худший исход · X USDT · N%» от плановой границы зоны (насечка может стоять правее реализованного результата)</span>
+							<span>насечка — худший исход конструкции, подпись «худший исход · X USDT · N%» от плановой границы зоны (насечка может стоять правее реализованного результата). Насечка может стоять и правее маркера итога — тогда открытые остатки зафиксированы синтетикой: гарантия платежа остатков, в частности синтетическая фиксация по правилу ac-43. Величина зафиксированного видна в зоне синтетики карточки — в строке «зафиксировано синтетикой» и сводной величине «с учётом зафиксированного синтетикой»</span>
 						</div>
 						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
 							<span aria-hidden="true" className="size-[11px] shrink-0 rounded-full bg-primary" />
