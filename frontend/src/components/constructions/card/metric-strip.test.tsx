@@ -794,4 +794,29 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(screen.getByRole("dialog")).toBeInTheDocument();
 		expect(screen.getByText("Как читать индикатор")).toBeTruthy();
 	});
+
+	it("держит равные видимые отступы вокруг кнопки подсказки: ряд 26px", () => {
+		// Геометрия ряда подсказки: jsdom не считает layout, поэтому
+		// фиксируются классы-носители размеров; полный расчёт «почему 26px,
+		// а не 28px» — в комментарии у триггера metric-strip.tsx. Паттерн
+		// с computeFinResultGeometry здесь не применяется: вертикальный
+		// ритм ряда не зависит от ширины полосы. Равенство зазоров
+		// подтверждено замером в реальном браузере (headless Chrome
+		// на стенде с настоящими шрифтами): оба вида дают 4px и 4px,
+		// зазор «метки → полоса» 11px.
+		// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
+		// Arrange: рабочая ширина — полный вид индикатора; ряд общий.
+		setViewport(1280);
+		renderStrip(makeCard());
+		const trigger = screen.getByRole("button", { name: "Как читать индикатор" });
+		const row = trigger.parentElement;
+
+		// Assert: обёртка несёт компенсацию гэпа секции и 26px-ряд,
+		// триггер — 20px в top 4px правого угла ряда.
+		expect(row).not.toBeNull();
+		expect(row?.className).toContain("-mt-4");
+		expect(row?.className).toContain("pt-[26px]");
+		expect(trigger.className).toContain("top-[4px]");
+		expect(trigger.className).toContain("size-5");
+	});
 });

@@ -512,7 +512,7 @@ export function ConstructionMetricStrip({
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-closes */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-card-only */}
-			<div className="relative -mt-4 pt-[28px]">
+			<div className="relative -mt-4 pt-[26px]">
 				<Indicator
 					input={{
 						plannedRisk: card.riskUsdt,
@@ -535,17 +535,25 @@ export function ConstructionMetricStrip({
 					}}
 				/>
 				{/* Триггер стоит в отдельном верхнем ряду блока индикатора:
-				    ряд занимает 28px над метками шкалы, сам триггер 20px
-				    ставится с top 4px в правом углу ряда и не конкурирует с
-				    числовыми подписями у полосы; ряд общий для полного и
-				    среднего вида. -mt-4 компенсирует гэп секции gap-4: кнопка
-				    отстоит от нижней границы сводки метрик на те же 4px, что и
-				    от цифры шкалы под ней (макет: фрейм «Сводка и индикатор»
-				    с нулевым зазором). Попап открывается под триггером: правый
+				    сам триггер 20px ставится с top 4px в правом углу ряда и
+				    не конкурирует с числовыми подписями у полосы; ряд общий
+				    для полного и среднего вида. -mt-4 компенсирует гэп секции
+				    gap-4, а высота ряда 26px держит одинаковые видимые зазоры
+				    по 4px вокруг кнопки: строка меток шкалы отдаёт свои
+				    чернила на 2px ниже бокса (Inter при кегле 11.5: подъём
+				    шрифта 11px против видимых 9px цифр), поэтому боксовые
+				    4 + 20 + 4 = 28px укорочены на эти 2px. Замер в реальном
+				    браузере: «сводка → кнопка» 4px и «кнопка → чернила цифр
+				    шкалы» 4px, зазор «метки → полоса» 11px не изменился
+				    (макет: фрейм «Сводка и индикатор» с нулевым зазором).
+				    Попап открывается под триггером: правый
 				    край совпадает с правым краем блока, верх — ниже строки
 				    меток шкалы, чтобы подписи индикатора не перекрывались;
 				    на узких экранах Radix avoidCollisions разворачивает
 				    попап в границах вьюпорта. */}
+				{/* Ритм отступов кнопки повторяет мастер design.pen: равные
+				    зазоры вокруг подсказки внутри блока индикатора. */}
+				{/* Traceability: openspec:ui/design-system#requirement-design-pen-single-source */}
 				<Popover>
 					<PopoverTrigger
 						aria-label="Как читать индикатор"
