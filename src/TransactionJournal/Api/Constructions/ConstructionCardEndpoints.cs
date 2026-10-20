@@ -736,7 +736,12 @@ public static class ConstructionCardEndpoints
 			// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
 			data.Metrics.Lifetime?.Summary?.DaysToNearestExpiry,
 			data.Metrics.Lifetime?.Summary?.NetDailyDecayUsdt,
-			data.Metrics.Lifetime?.Summary?.TotalTimeValueUsdt),
+			data.Metrics.Lifetime?.Summary?.TotalTimeValueUsdt,
+			// Сводная величина «с учётом зафиксированного синтетикой» публикуется
+			// в метриках карточки как есть из read-модели деталей: null без
+			// действующих связок, инструментальные величины рядом не меняются.
+			// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#requirement-synthetic-close-adjusted-total
+			data.Metrics.SyntheticAdjustedTotalUsdt),
 		data.Positions.Select(position => new ConstructionCardPositionResponse(
 			position.Symbol,
 			position.Residual,
@@ -1000,6 +1005,7 @@ public sealed record ConstructionCardResponse(
 /// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
 /// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
 /// <param name="TotalTimeValueUsdt">Суммарная временная стоимость открытых опционных остатков; null без опционных ног или без тикеров.</param>
+/// <param name="SyntheticAdjustedTotalUsdt">Сводная величина «с учётом зафиксированного синтетикой» — реализованный результат плюс сумма локов действующих связок (оспоренные не входят, ручные входят наравне); null без действующих связок.</param>
 // Реальный риск входит в контракт метрик карточки со статусом состояния:
 // полный индикатор карточки строится с насечкой только конечного риска.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
@@ -1010,6 +1016,10 @@ public sealed record ConstructionCardResponse(
 // Саммари времени жизни входит в контракт метрик аддитивно: metric-strip
 // карточки строит сводку времени жизни, null рендерится прочерком.
 // Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+// Сводная величина синтетики входит в контракт метрик аддитивно: null без
+// действующих связок отличим от нуля, список и таблица конструкций её не
+// получают — место числа только в карточке.
+// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#requirement-synthetic-close-adjusted-total
 public sealed record ConstructionCardMetricsResponse(
 	decimal RealizedPnL,
 	decimal? UnrealizedPnL,
@@ -1029,7 +1039,8 @@ public sealed record ConstructionCardMetricsResponse(
 	long? DurationSeconds,
 	int? DaysToNearestExpiry,
 	decimal? NetDailyDecayUsdt,
-	decimal? TotalTimeValueUsdt);
+	decimal? TotalTimeValueUsdt,
+	decimal? SyntheticAdjustedTotalUsdt);
 
 /// <summary>Строка таблицы позиций карточки.</summary>
 /// <param name="Symbol">Инструмент позиции.</param>

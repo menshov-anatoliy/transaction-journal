@@ -45,6 +45,7 @@ const card: ConstructionCard = {
 		capitalUsagePercent: 16.7,
 		realRiskUsdt: 45,
 		worstCaseUsdt: 15.25,
+		syntheticAdjustedTotalUsdt: null,
 		realRiskStatus: "finite",
 		openedAt: "2026-06-18T09:05:00+00:00",
 		closedAt: null,

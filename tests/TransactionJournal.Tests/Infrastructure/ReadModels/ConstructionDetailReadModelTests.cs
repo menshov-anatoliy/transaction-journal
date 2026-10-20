@@ -556,6 +556,161 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
+	[Description("Сводная «с учётом зафиксированного синтетикой» суммирует реализованный результат и локи связок кейса XAUT")]
+	// Эталонный кейс XAUT: реализованный результат конструкции −46.6 USDT и
+	// лок действующей связки ≈ +35.7 USDT дают сводную величину ≈ −10.9 USDT.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#scenario-adjusted-total-sums-realized-and-locks
+	public async Task TryIfSyntheticAdjustedTotalSumsRealizedResultAndActiveLocks()
+	{
+		// Arrange: кейс XAUT с довершающим выходом скальпа «sell 0.04 @ 3099.91»:
+		// FIFO-результат перпа (−1042 × 0.04 − 0.64) вместе с ногами опционов
+		// даёт реализованный результат −46.6 USDT, связка действует с локом 35.697.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-сводная", 1000m);
+		await SeedXautCaseAsync();
+		await AddXautExecutionAsync("scalp-exit", XautPerp, "linear", "Sell", "0.04", "3099.91", "0", ExecMs(2026, 10, 15, 16, 0), "USDC");
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp", "scalp-exit"]);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: сводная величина — реализованный −46.6 плюс лок 35.697 —
+		// равна −10.903 с допуском округления; связка действует неоспоренной.
+		Assert.That(data.Metrics.RealizedPnL, Is.EqualTo(-46.6m).Within(0.001m));
+		Assert.That(data.Metrics.SyntheticAdjustedTotalUsdt, Is.EqualTo(-10.903m).Within(0.001m));
+		var link = data.SyntheticCloses!.Single();
+		Assert.That(link.Disputed, Is.False);
+		Assert.That(link.LockedValueUsdt, Is.EqualTo(35.697m));
+	}
+
+	[TestMethod]
+	[Description("Сводная складывается из действующих связок: оспоренная исключается, ручная включается наравне")]
+	// Состав суммы определяет логический слой: лок оспоренной распознанной
+	// связки в сводную не входит, ручная связка той же пары входит в неё
+	// наравне с распознанными.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#scenario-adjusted-total-uses-active-links
+	public async Task TryIfSyntheticAdjustedTotalUsesActiveLinksOnly()
+	{
+		// Arrange: кейс XAUT с оспоренной распознанной связкой и ручной связкой
+		// той же парой количеством 0.3 — действует только ручная.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-спор-и-ручная", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(construction.Id, "case-perp", "case-call");
+		var manualLink = await new SyntheticCloseManualLinkService(CreateOptions()).CreateAsync(construction.Id, "case-perp", "case-call", 0.3m);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные экрана деталей после спора и ручной связки.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: распознанная строка осталась со спором, ручная действует без
+		// спора; сводная величина собрана из реализованного результата и лока
+		// ровно одной действующей ручной связки.
+		Assert.That(data.SyntheticCloses, Has.Count.EqualTo(2));
+		Assert.That(data.SyntheticCloses!.Single(row => row.ManualLinkId == null).Disputed, Is.True);
+		var manualRow = data.SyntheticCloses!.Single(row => row.ManualLinkId == manualLink.Id);
+		Assert.That(manualRow.Disputed, Is.False);
+		Assert.That(manualRow.LockedValueUsdt, Is.EqualTo(35.697m));
+		Assert.That(data.Metrics.SyntheticAdjustedTotalUsdt, Is.EqualTo(data.Metrics.RealizedPnL + 35.697m).Within(0.001m));
+	}
+
+	[TestMethod]
+	[Description("Сводная отсутствует без действующих связок: нет связок вовсе и когда все связки оспорены")]
+	// Null — отсутствие величины, а не ноль: конструкция без связок и
+	// конструкция, у которой оспорена единственная связка, сводную не публикуют.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#scenario-adjusted-total-absent-without-active-links
+	public async Task TryIfSyntheticAdjustedTotalAbsentWithoutActiveLinks()
+	{
+		// Arrange: конструкция с одной линейной сделкой без связок и кейс XAUT
+		// с оспоренной единственной связкой.
+		var plain = await _constructionService.CreateAsync("Без связок", 1000m);
+		await AddLinearTradeAsync("exec-lone", "Buy", "1", "43000", "0", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(plain.Id, "exec-lone");
+		SeedXautInstruments();
+		var disputed = await _constructionService.CreateAsync("XAUT-всё-оспорено", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(disputed.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(disputed.Id, "case-perp", "case-call");
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные обеих конструкций.
+		var plainData = await readModel.ReadAsync(plain.Id);
+		var disputedData = await readModel.ReadAsync(disputed.Id);
+
+		// Assert: сводной величины нет в обоих чтениях — поле остаётся null.
+		Assert.That(plainData.Metrics.SyntheticAdjustedTotalUsdt, Is.Null);
+		Assert.That(disputedData.Metrics.SyntheticAdjustedTotalUsdt, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Сбой марок не мешает сводной: величина вычисляется при недоступных тикерах")]
+	// Локи связок детерминированы к экспирации и от марок не зависят:
+	// деградация гасит только нереализованные метрики, сводная остаётся
+	// суммой реализованного результата и локов действующих связок.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#scenario-adjusted-total-marks-failure-independent
+	public async Task TryIfSyntheticAdjustedTotalComputedOnMarkFailure()
+	{
+		// Arrange: кейс XAUT с действующей связкой и сбойным провайдером марок —
+		// публичные тикеры недоступны.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-без-марок", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		var readModel = CreateDetailReadModel(new FailingMarkSource());
+
+		// Act: читаем данные экрана деталей при сбое марок.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: сбой марок признан, нереализованная часть отсутствует,
+		// а сводная величина собрана из реализованного результата и лока 35.697.
+		Assert.That(data.HasMarkFailure, Is.True);
+		Assert.That(data.Metrics.UnrealizedPnL, Is.Null);
+		Assert.That(data.Metrics.SyntheticAdjustedTotalUsdt, Is.EqualTo(data.Metrics.RealizedPnL + 35.697m).Within(0.001m));
+	}
+
+	[TestMethod]
+	[Description("Публикация сводной не меняет инструментальных метрик: значения с величиной и без неё совпадают")]
+	// Сводная — аддитивное поле поверх готовых метрик: реализованный и
+	// нереализованный результат, итог, остатки позиций и признак открытости
+	// одинаковы при действующей связке и после её оспаривания, когда сводной нет.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#scenario-adjusted-total-instrumental-metrics-untouched
+	public async Task TryIfSyntheticAdjustedTotalLeavesInstrumentalMetricsUnchanged()
+	{
+		// Arrange: кейс XAUT с действующей связкой; спор выполняется между
+		// чтениями одной и той же конструкции.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-инварианты", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: первое чтение — связка действует; после оспаривания читаем снова.
+		var withActiveLink = await readModel.ReadAsync(construction.Id);
+		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(construction.Id, "case-perp", "case-call");
+		var withoutActiveLink = await readModel.ReadAsync(construction.Id);
+
+		// Assert: сводная публикуется только при действующей связке, а все
+		// инструментальные величины между чтениями не изменились.
+		Assert.That(withActiveLink.Metrics.SyntheticAdjustedTotalUsdt, Is.Not.Null);
+		Assert.That(withoutActiveLink.Metrics.SyntheticAdjustedTotalUsdt, Is.Null);
+		Assert.That(withoutActiveLink.Metrics.RealizedPnL, Is.EqualTo(withActiveLink.Metrics.RealizedPnL));
+		Assert.That(withoutActiveLink.Metrics.UnrealizedPnL, Is.EqualTo(withActiveLink.Metrics.UnrealizedPnL));
+		Assert.That(withoutActiveLink.Metrics.TotalPnL, Is.EqualTo(withActiveLink.Metrics.TotalPnL));
+		Assert.That(withoutActiveLink.HasOpenResidual, Is.EqualTo(withActiveLink.HasOpenResidual));
+		var perpWith = withActiveLink.Positions.Single(row => row.Symbol == XautPerp);
+		var perpWithout = withoutActiveLink.Positions.Single(row => row.Symbol == XautPerp);
+		Assert.That(perpWithout.Residual, Is.EqualTo(perpWith.Residual));
+		Assert.That(perpWithout.IsOpen, Is.EqualTo(perpWith.IsOpen));
+		Assert.That(perpWithout.RealizedPnL, Is.EqualTo(perpWith.RealizedPnL));
+		var putWith = withActiveLink.Positions.Single(row => row.Symbol == XautPut);
+		var putWithout = withoutActiveLink.Positions.Single(row => row.Symbol == XautPut);
+		Assert.That(putWithout.Residual, Is.EqualTo(putWith.Residual));
+		Assert.That(putWithout.RealizedPnL, Is.EqualTo(putWith.RealizedPnL));
+	}
+
+	[TestMethod]
 	[Description("Строки позиций упорядочены: открытые раньше закрытых, далее экспирация, страйк и тип")]
 	public async Task TryIfPositionRowsOrderedByStatusExpiryStrikeAndType()
 	{

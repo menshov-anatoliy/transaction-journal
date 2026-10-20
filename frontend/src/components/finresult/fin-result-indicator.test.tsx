@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { computeFinResultGeometry } from "@/lib/finresult/geometry";
 import {
 	CompactFinResultIndicator,
 	FullFinResultIndicator,
@@ -251,6 +252,75 @@ describe("полный индикатор", () => {
 		expect(markerLeft).toBeCloseTo((150 / 1200) * 100, 3);
 		expect(borderLeft).toBeCloseTo((230 / 1200) * 100, 3);
 		expect(markerLeft).toBeLessThan(borderLeft);
+	});
+
+	// Вертикальный разнос: метка нулевого уровня прижата к полосе одинаково
+	// с обеих сторон — верхней стороной стека под полосой и нижней стороной
+	// стека над полосой, — поэтому верхние числовые метки держат тот же отступ
+	// до линейки, что и нижние; внешний уровень уходит на свои строки от полосы.
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+	it("прижимает метки нулевого уровня к полосе одинаково с обеих сторон", () => {
+		// Arrange: в jsdom полоса не измеряется (ширина 0 даёт вырожденный
+		// разнос), поэтому фиксируем ширину явно — калькулятор в тесте и в
+		// компоненте считает по номинальной ширине полного вида 480px.
+		const rectSpy = vi
+			.spyOn(HTMLElement.prototype, "getBoundingClientRect")
+			.mockReturnValue({ width: 480, height: 0, top: 0, left: 0, x: 0, y: 0, right: 480, bottom: 0, toJSON: () => ({}) } as DOMRect);
+		try {
+			const geometry = computeFinResultGeometry(CASE_C3, {
+				scaleWidthPx: 480,
+				aboveCharWidthPx: 7,
+				belowCharWidthPx: 6.5,
+			});
+			const placements = geometry.placements;
+			expect(placements).not.toBeNull();
+			const { container } = render(<FullFinResultIndicator input={CASE_C3} />);
+
+			const partToKey = {
+				"risk-scale": "risk",
+				"zero-scale": "zero",
+				"profit-scale": "profit",
+				"border-label": "border",
+				"marker-label": "marker",
+			} as const;
+			const lineHeight = 14;
+
+			// Act: стеки сторон — первый и третий ребёнок корня (между ними полоса).
+			const root = container.firstElementChild as HTMLElement;
+			const stacks = [
+				{ side: "above" as const, stack: root.children[0] as HTMLElement },
+				{ side: "below" as const, stack: root.children[2] as HTMLElement },
+			];
+
+			for (const { side, stack } of stacks) {
+				const stackRows = Number.parseFloat(stack.style.height) / lineHeight;
+				expect(stackRows).toBeGreaterThan(0);
+
+				for (const el of Array.from(stack.querySelectorAll<HTMLElement>("[data-part]"))) {
+					const key = partToKey[el.dataset.part as keyof typeof partToKey];
+					const placement = placements![key];
+					expect(placement?.side).toBe(side);
+
+					// Подпись границы занимает две строки модели, остальные — одну.
+					const rows = key === "border" ? 2 : 1;
+					const expectedTop =
+						side === "below"
+							? placement!.level * lineHeight
+							: (stackRows - placement!.level - rows) * lineHeight;
+
+					// Assert: метка стоит на своём уровне, нулевой — вплотную к полосе.
+					expect(el.style.top).toBe(`${expectedTop}px`);
+					if (placement!.level === 0 && side === "below") {
+						expect(el.style.top).toBe("0px");
+					}
+					if (placement!.level === 0 && side === "above") {
+						expect(Number.parseFloat(el.style.top) + rows * lineHeight).toBe(stackRows * lineHeight);
+					}
+				}
+			}
+		} finally {
+			rectSpy.mockRestore();
+		}
 	});
 });
 

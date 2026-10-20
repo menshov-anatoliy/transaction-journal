@@ -246,7 +246,8 @@ function DetailedFinResultIndicator({
 // Стек меток одной стороны полосы: контейнер высотой в занятые уровни,
 // каждая метка абсолютом на своём уровне; сторона, уровень и выравнивание
 // назначены калькулятором так, чтобы метки не пересекались, а крайние
-// прижимались внутрь шкалы.
+// прижимались внутрь шкалы. Высота стека считается по нижней границе самой
+// далёкой метки (уровень + строки), чтобы внешние уровни не обрезались.
 // Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 function LabelStack({
 	geometry,
@@ -267,16 +268,16 @@ function LabelStack({
 		return null;
 	}
 
-	const rows = Math.max(...items.map((item) => item.rows));
+	const stackRows = Math.max(...items.map((item) => item.placement.level + item.rows));
 
 	return (
-		<div className="relative w-full" style={{ height: rows * preset.labelLineHeightPx }}>
+		<div className="relative w-full" style={{ height: stackRows * preset.labelLineHeightPx }}>
 			{items.map((item) => (
 				<span
 					key={item.part}
 					data-part={item.part}
 					className={cn("absolute whitespace-nowrap", item.className)}
-					style={labelAnchorStyle(item, preset.labelLineHeightPx)}
+					style={labelAnchorStyle(item, preset.labelLineHeightPx, side, stackRows)}
 				>
 					{item.content}
 				</span>
@@ -431,12 +432,24 @@ function itemsAlignClass(align: FinResultLabelAlign): string {
 // Позиционирование метки по выравниванию из разноса: центр — по ширине
 // позиции; края — прижаты изнутри («start» — левым краем от позиции,
 // «end» — правым краем до позиции), габариты индикатора не растут.
+// Вертикаль: нулевой уровень прижат к полосе одинаково с обеих сторон —
+// строка метки примыкает к стороне стека, обращённой к полосе (снизу стека
+// над полосой, сверху стека под ней); уровень L смещает метку на L строк от
+// полосы наружу, поэтому верхние числовые метки держат тот же отступ до
+// линейки, что и нижние.
 // Traceability: openspec:ui/screens#scenario-finresult-labels-edge-flush
+// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 function labelAnchorStyle(
 	item: { rows: number; x: number; placement: FinResultLabelPlacement },
 	lineHeightPx: number,
+	side: "above" | "below",
+	stackRows: number,
 ): React.CSSProperties {
-	const base: React.CSSProperties = { top: 0, lineHeight: `${lineHeightPx}px` };
+	const levelOffsetRows = side === "below" ? item.placement.level : stackRows - item.placement.level - item.rows;
+	const base: React.CSSProperties = {
+		top: levelOffsetRows * lineHeightPx,
+		lineHeight: `${lineHeightPx}px`,
+	};
 	const left = `${item.x * 100}%`;
 
 	if (item.placement.align === "start") {

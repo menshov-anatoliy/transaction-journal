@@ -248,6 +248,62 @@ public sealed class ConstructionCardApiTests
 	}
 
 	[TestMethod]
+	[Description("Сводная «с учётом зафиксированного синтетикой» публикуется в метриках карточки при действующих связках")]
+	// Контракт метрик: сводная величина идёт рядом с прежними полями числом
+	// в camelCase syntheticAdjustedTotalUsdt, а строка связки действует без спора.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#requirement-synthetic-close-adjusted-total
+	public async Task TryIfCardMetricsPublishSyntheticAdjustedTotalWithActiveLinks()
+	{
+		// Arrange: read-модель деталей с действующей связкой и сводной величиной.
+		await using var factory = new SectionApiFactory(services => services
+			.ReplaceDetailReadModel(new StubCardDetailReadModel().WithSyntheticAdjustedTotalUsdt(-10.903m)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: сводная величина сериализуется числом в camelCase-поле
+		// syntheticAdjustedTotalUsdt, инструментальные метрики не изменились.
+		var metrics = payload!["metrics"]!;
+		Assert.That(metrics["syntheticAdjustedTotalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-10.903m));
+		Assert.That(metrics["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(60.25m));
+		Assert.That(metrics["totalPnL"]!.GetValue<decimal>(), Is.EqualTo(105.5m));
+
+		// OpenAPI-описание метрик дополнено аддитивно: схема несёт сводную
+		// величину рядом с прежними полями.
+		var document = await (await client.GetAsync("/openapi/v1.json")).Content.ReadFromJsonAsync<JsonNode>();
+		var metricsSchemaProperties = document!["components"]!["schemas"]!["ConstructionCardMetricsResponse"]!["properties"]!
+			.AsObject().Select(property => property.Key).ToArray();
+		Assert.That(metricsSchemaProperties, Does.Contain("syntheticAdjustedTotalUsdt"));
+
+		// Строка связки при действующей связке отдаётся без признака спора —
+		// сводная величина согласована с составом действующих связок.
+		// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#scenario-adjusted-total-uses-active-links
+		Assert.That(payload["syntheticCloses"]!.AsArray().Single()!["disputed"]!.GetValue<bool>(), Is.False);
+	}
+
+	[TestMethod]
+	[Description("Карточка без действующих связок сериализует сводную величину явным null")]
+	// Null вместо числа — отсутствие величины, а не ноль: у карточки со
+	// споренной связкой действующих связок нет и сводная не публикуется.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#scenario-adjusted-total-absent-without-active-links
+	public async Task TryIfCardMetricsSerializeSyntheticAdjustedTotalAsNullWithoutActiveLinks()
+	{
+		// Arrange: стабильная read-модель деталей со споренной связкой и без сводной.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: поле syntheticAdjustedTotalUsdt присутствует в ответе со
+		// значением null, споренная строка связки сохраняется рядом.
+		var metrics = payload!["metrics"]!;
+		Assert.That(metrics["syntheticAdjustedTotalUsdt"], Is.Null);
+		Assert.That(payload["syntheticCloses"]!.AsArray().Single()!["disputed"]!.GetValue<bool>(), Is.True);
+	}
+
+	[TestMethod]
 	[Description("Перечень предупреждений диагностики входит в контракт карточки аддитивно")]
 	// Аддитивность контракта: прежние поля снимка не меняются, список
 	// riskWarnings с текстами появляется рядом — существующие потребители
@@ -1572,6 +1628,9 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	/// <summary>Метрики времени жизни открытой опционной строки: сутки, распад и состав тултипа.</summary>
 	private OptionLegLifetimeMetrics? _optionLeg;
 
+	/// <summary>Сводная величина «с учётом зафиксированного синтетикой» метрик карточки; null — действующих связок нет.</summary>
+	private decimal? _syntheticAdjustedTotalUsdt;
+
 	private StubCardDetailReadModel(bool brokenJournal, RealRiskStatus realRiskStatus)
 	{
 		_brokenJournal = brokenJournal;
@@ -1627,6 +1686,16 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 		return this;
 	}
 
+	/// <summary>
+	/// Вариант с действующей связкой: сводная величина «с учётом зафиксированного
+	/// синтетикой» публикуется в метриках, строка связки теряет признак спора.
+	/// </summary>
+	public StubCardDetailReadModel WithSyntheticAdjustedTotalUsdt(decimal totalUsdt)
+	{
+		_syntheticAdjustedTotalUsdt = totalUsdt;
+		return this;
+	}
+
 	public Task<ConstructionDetailData> ReadAsync(long constructionId, CancellationToken cancellationToken = default)
 	{
 		if (_brokenJournal)
@@ -1675,6 +1744,9 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			// величинами; null у карточки без открытых опционных ног.
 			// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
 			Lifetime = _lifetime,
+			// Сводная величина синтетики задаётся вариантом стаба: число при
+			// действующих связках, null — действующих связок нет.
+			SyntheticAdjustedTotalUsdt = _syntheticAdjustedTotalUsdt,
 		};
 		var data = new ConstructionDetailData(
 			ConstructionId: constructionId,
@@ -1784,10 +1856,11 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			],
 			// Строка связки с оспоренным локом: признак спора и величина проходят
 			// в контракт карточки вместе с распадом линейной ноги; пара execId
-			// несёт ключи эндпоинтов спора и возврата.
+			// несёт ключи эндпоинтов спора и возврата. Вариант с действующей
+			// связкой снимает признак спора: сводная величина согласована с ней.
 			SyntheticCloses:
 			[
-				new SyntheticCloseRow("XAUT-30OCT26-4400-P-USDT", 0.3m, 35.697m, true, "case-perp", "case-call"),
+				new SyntheticCloseRow("XAUT-30OCT26-4400-P-USDT", 0.3m, 35.697m, _syntheticAdjustedTotalUsdt == null, "case-perp", "case-call"),
 			],
 			RiskUnit: TargetUnit.Percent,
 			ProfitUnit: TargetUnit.Usdt,

@@ -72,6 +72,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		// капитал передаётся как есть, без базы процентов величины остаются null.
 		var trades = await ReadTradesAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 		var synthetic = await ReadSyntheticClosesAsync(db, constructionId, trades.MaterializedTrades, cancellationToken).ConfigureAwait(false);
+		// Сводная величина «с учётом зафиксированного синтетикой» дополняет
+		// готовые метрики при чтении: чистая функция над строками связок и
+		// заголовочным реализованным результатом, калькулятор метрик не меняется.
+		// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#requirement-synthetic-close-adjusted-total
+		var adjustedMetrics = ApplySyntheticAdjustedTotal(constructionMetrics, synthetic.Rows);
 		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, constructionMetrics.Lifetime, synthetic.QuantityByLinearSymbol, cancellationToken).ConfigureAwait(false);
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
@@ -98,7 +103,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			profit.Percent,
 			profit.Usdt,
 			construction.Comment,
-			constructionMetrics,
+			adjustedMetrics,
 			hasOpenResidual,
 			hasOpenResidual && constructionMetrics.UnrealizedPnL is null,
 			metrics.MarksAsOf,
@@ -120,6 +125,29 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	}
 
 	#region Чтение таблиц
+
+	/// <summary>
+	/// Сводная величина «с учётом зафиксированного синтетикой» дополняет метрики
+	/// деталей при чтении: «Реализованный результат» плюс сумма локов действующих
+	/// связок — оспоренные распознанные в сумму не входят, ручные входят наравне
+	/// с распознанными. Величина публикуется только при наличии действующих
+	/// связок: без них поле остаётся null — отсутствие, а не ноль. Копия метрик
+	/// строится выражением «with»: инструментальные величины калькулятора
+	/// не пересчитываются и не меняются.
+	/// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#requirement-synthetic-close-adjusted-total
+	/// </summary>
+	private static ConstructionMetrics ApplySyntheticAdjustedTotal(ConstructionMetrics metrics, List<SyntheticCloseRow> rows)
+	{
+		var activeRows = rows
+			.Where(row => row.Disputed == false)
+			.ToList();
+		if (activeRows.Count == 0)
+		{
+			return metrics;
+		}
+
+		return metrics with { SyntheticAdjustedTotalUsdt = metrics.RealizedPnL + activeRows.Sum(row => row.LockedValueUsdt) };
+	}
 
 	/// <summary>
 	/// Строки таблицы позиций: метрики позиций конструкции из аналитики

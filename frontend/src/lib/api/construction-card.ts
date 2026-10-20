@@ -40,6 +40,12 @@ export interface ConstructionCardMetrics {
 	// число при том же статусе finite, null при unbounded/unavailable.
 	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 	readonly worstCaseUsdt: number | null;
+	// Сводная величина «с учётом зафиксированного синтетикой» —
+	// «Реализованный результат» + Σ локов действующих (неоспоренных)
+	// связок; null без действующих связок. Величина не меняет
+	// инструментальные метрики и индикатор финрезультата.
+	// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#requirement-card-synthetic-adjusted-total-row
+	readonly syntheticAdjustedTotalUsdt: number | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly durationSeconds: number | null;
