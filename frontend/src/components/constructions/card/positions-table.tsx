@@ -3,7 +3,9 @@ import { Info, Pencil } from "lucide-react";
 import type { ConstructionCardPosition } from "@/lib/api/construction-card";
 import { fetchLastInstrumentMark } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
+import { MetricHint } from "@/components/ui/metric-tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { GridSection } from "./grid-section";
 import { MarkdownEditDialog } from "@/components/markdown/markdown-edit-dialog";
 import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
@@ -313,24 +315,50 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
 			{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
 			<Table density="compact" className="text-text-secondary">
+				{/* Подсказка числовой колонки живёт в её заголовке: триггер
+				    оборачивает текст заголовка целиком, механика заголовков
+				    не меняется. */}
+				{/* Traceability: openspec:ui/screens#requirement-column-header-tooltips */}
 				<TableHeader className="bg-surface-2">
 					<TableRow className="border-divider">
 						<TableHead>Инструмент</TableHead>
 						<TableHead>Остаток</TableHead>
 						<TableHead>Вх. цена</TableHead>
 						<TableHead>Закр. цена</TableHead>
-						<TableHead>Стоимость</TableHead>
-						<TableHead>Изм., %</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.positionValue}>Стоимость</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.priceChangePercent}>Изм., %</MetricHint>
+						</TableHead>
 						{/* Колонки времени жизни опционной ноги по мастеру таблицы
 						    позиций design.pen: сутки и распад между изменением цены
 						    и реализованной частью P&L. */}
 						{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-detail-lifetime-columns-and-tooltip */}
-						<TableHead>До экспирации</TableHead>
-						<TableHead>Распад</TableHead>
-						<TableHead>Реализ. P&L</TableHead>
-						<TableHead>Нереализ. P&L</TableHead>
-						<TableHead>Общий P&L</TableHead>
-						<TableHead>Комиссии</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.daysToExpiry}>До экспирации</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.decayPerDay}>Распад</MetricHint>
+						</TableHead>
+						{/* Колонки результата позиции двухпоказательные: подсказка
+						    заголовка даёт раздельный раздел на каждый показатель —
+						    значение в USDT и процент от капитала. */}
+						{/* Traceability: openspec:ui/screens#scenario-column-tooltip-sections-per-indicator */}
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.positionRealizedPnl}>Реализ. P&amp;L</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.positionUnrealizedPnl}>Нереализ. P&amp;L</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.positionTotalPnl}>Общий P&amp;L</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.commissionFees}>Комиссии</MetricHint>
+						</TableHead>
+						{/* Колонки дат и времён подсказками в заголовках не снабжаются. */}
+						{/* Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip */}
 						<TableHead>Открыта</TableHead>
 						<TableHead>Закрыта</TableHead>
 						<TableHead>Статус</TableHead>

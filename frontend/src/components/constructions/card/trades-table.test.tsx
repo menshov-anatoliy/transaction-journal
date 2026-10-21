@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ConstructionCardTrade } from "@/lib/api/construction-card";
 import type { ManualTradeInput } from "@/lib/api/manual-trades";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { TradesTable } from "./trades-table";
 
 // Таблица сделок карточки: бейдж источника в строках, правка и удаление
@@ -69,7 +71,9 @@ function renderTable(overrides?: Partial<Parameters<typeof TradesTable>[0]>) {
 	};
 	render(
 		<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-			<TradesTable {...props} />
+			<TooltipProvider delayDuration={0}>
+				<TradesTable {...props} />
+			</TooltipProvider>
 		</QueryClientProvider>,
 	);
 	return { commands, props };
@@ -244,4 +248,52 @@ describe("таблица сделок карточки: ручные запис�
 			expect(await screen.findByText("символ не распознан")).toBeInTheDocument();
 			expect(screen.getByLabelText("Символ инструмента")).toBeInTheDocument();
 		});
+});
+
+// Методы расчёта, зафиксированные в справочнике для других метрик: у сырых
+// колонок сделок метода нет, и чужая формула в подсказке появляться не должна.
+const knownMethodTexts = Object.values(METRIC_TOOLTIPS)
+	.map((tooltip) => tooltip.method)
+	.filter((method): method is string => method !== undefined);
+
+describe("таблица сделок карточки: подсказки заголовков колонок", () => {
+	// Числовые колонки сделок поясняются в заголовке подсказкой метрики;
+	// сырые данные сделок — только назначением, без метода расчёта.
+	// Traceability: openspec:ui/screens#requirement-column-header-tooltips
+	it.each([
+		["Кол-во", "tradeQuantity"],
+		["Цена", "tradePrice"],
+		["Сумма", "tradeAmount"],
+		["Комиссия", "tradeCommission"],
+	] as const)("даёт подсказку колонке «%s» с назначением без метода", async (header, key) => {
+		// Arrange: таблица сделок под провайдером подсказок.
+		const user = userEvent.setup();
+		renderTable();
+
+		// Act: наведение на заголовок колонки.
+		await user.hover(screen.getByText(header));
+
+		// Assert: попап с ролью tooltip содержит заголовок и назначение
+		// из справочника и не содержит метода ни одной другой метрики.
+		const tooltip = screen.getByRole("tooltip");
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS[key].title);
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS[key].purpose);
+		for (const method of knownMethodTexts) {
+			expect(tooltip).not.toHaveTextContent(method);
+		}
+	});
+
+	// Колонка времени — дата/время сделки: подсказка метрики у дат нет.
+	// Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip
+	it("не даёт подсказки колонке времени", async () => {
+		// Arrange: таблица сделок под провайдером подсказок.
+		const user = userEvent.setup();
+		renderTable();
+
+		// Act: наведение на заголовок колонки времени.
+		await user.hover(screen.getByText("Время"));
+
+		// Assert: подсказка не открылась.
+		expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+	});
 });

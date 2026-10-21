@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ConstructionCardClosingEntry, ConstructionCardClosingWarning } from "@/lib/api/construction-card";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ClosingEntriesTable } from "./closing-entries-table";
 
 // Таблица закрывающих записей: правка ручной пометки из строки — форма с
@@ -15,13 +17,15 @@ import { ClosingEntriesTable } from "./closing-entries-table";
 function renderTable(entries: ConstructionCardClosingEntry[], onEditMark: (input: unknown) => void = () => undefined) {
 	const warnings: ConstructionCardClosingWarning[] = [];
 	render(
-		<ClosingEntriesTable
-			entries={entries}
-			warnings={warnings}
-			actionsPending={false}
-			onEditMark={onEditMark as never}
-			onDeleteMark={() => undefined}
-		/>,
+		<TooltipProvider delayDuration={0}>
+			<ClosingEntriesTable
+				entries={entries}
+				warnings={warnings}
+				actionsPending={false}
+				onEditMark={onEditMark as never}
+				onDeleteMark={() => undefined}
+			/>
+		</TooltipProvider>,
 	);
 }
 
@@ -79,5 +83,68 @@ describe("таблица закрывающих записей: правка р�
 			markId: 21,
 			mark: { symbol: "ETH-28MAR-1600-P", markedAt: expect.any(String), price: 100, quantity: null },
 		});
+	});
+});
+
+// Методы расчёта, зафиксированные в справочнике для других метрик: у суммы
+// закрывающей записи метода нет, и чужая формула в подсказке не появляется.
+const knownMethodTexts = Object.values(METRIC_TOOLTIPS)
+	.map((tooltip) => tooltip.method)
+	.filter((method): method is string => method !== undefined);
+
+describe("таблица закрывающих записей: подсказки заголовков колонок", () => {
+	// Сумма закрывающей записи поясняется в заголовке подсказкой метрики —
+	// только назначением, без метода расчёта.
+	// Traceability: openspec:ui/screens#requirement-column-header-tooltips
+	it("даёт подсказку колонке «Сумма» с назначением без метода", async () => {
+		// Arrange: таблица закрывающих записей под провайдером подсказок.
+		const user = userEvent.setup();
+		renderTable([partialMark]);
+
+		// Act: наведение на заголовок колонки суммы.
+		await user.hover(screen.getByText("Сумма"));
+
+		// Assert: попап содержит заголовок и назначение из справочника
+		// и не содержит метода ни одной другой метрики.
+		const tooltip = screen.getByRole("tooltip");
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.closingEntriesAmount.title);
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.closingEntriesAmount.purpose);
+		for (const method of knownMethodTexts) {
+			expect(tooltip).not.toHaveTextContent(method);
+		}
+	});
+
+	// Колонка времени записи — дата/время: подсказка метрики у дат нет.
+	// Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip
+	it("не даёт подсказки колонке времени", async () => {
+		// Arrange: таблица закрывающих записей под провайдером подсказок.
+		const user = userEvent.setup();
+		renderTable([partialMark]);
+
+		// Act: наведение на заголовок колонки времени.
+		await user.hover(screen.getByText("Время"));
+
+		// Assert: подсказка не открылась.
+		expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+	});
+
+	// Колонка «Детали» объединяет количество и цену закрытия —
+	// подсказка даёт по разделу на каждый показатель колонки.
+	// Traceability: openspec:ui/screens#scenario-column-tooltip-sections-per-indicator
+	it("даёт подсказку колонке «Детали» с разделами количества и цены", async () => {
+		// Arrange: таблица закрывающих записей под провайдером подсказок.
+		const user = userEvent.setup();
+		renderTable([partialMark]);
+
+		// Act: наведение на заголовок колонки деталей.
+		await user.hover(screen.getByText("Детали"));
+
+		// Assert: попап содержит заголовок и оба раздела показателей.
+		const tooltip = screen.getByRole("tooltip");
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.closingEntryDetails.title);
+		for (const section of METRIC_TOOLTIPS.closingEntryDetails.sections ?? []) {
+			expect(tooltip).toHaveTextContent(section.label);
+			expect(tooltip).toHaveTextContent(section.text);
+		}
 	});
 });

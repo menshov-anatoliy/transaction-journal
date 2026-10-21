@@ -16,6 +16,8 @@ import { DASH, degrade } from "@/lib/format/degradation";
 import { formatDay } from "@/lib/format/display-time";
 import { EXPIRY_WARNING_DAYS } from "@/lib/lifetime";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
+import { MetricHint } from "@/components/ui/metric-tooltip";
+import { METRIC_TOOLTIPS, type MetricTooltip } from "@/lib/metric-tooltips";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-mobile";
 
@@ -89,6 +91,30 @@ function ExpiryDaysValue({ days }: { days: number }) {
 		<span className={cn("text-text-secondary tabular-nums", days <= EXPIRY_WARNING_DAYS && "text-destructive")}>{days}</span>
 	);
 }
+
+// Подсказки метрик в заголовках колонок: ключ колонки → текст справочника.
+// Одна точка входа на колонку — триггер рисуется только в шапке, ячейки
+// строк не оборачиваются; колонки дат («Открыта», «Закрыта») и текстовые
+// колонки (имя, статус) в карту не входят.
+// Traceability: openspec:ui/screens#requirement-column-header-tooltips
+const headerHints: Record<string, MetricTooltip> = {
+	// Колонка-бейдж «✦»: подсказка объясняет число живых подсказок строки.
+	// Traceability: openspec:ui/screens#requirement-ui-construction-hint-badge
+	hints: METRIC_TOOLTIPS.hintBadge,
+	// Колонка-бейдж «⚠»: подсказка объясняет число предупреждений строки.
+	// Traceability: openspec:ui/screens#requirement-construction-warnings-display
+	warnings: METRIC_TOOLTIPS.warningBadge,
+	capital: METRIC_TOOLTIPS.listCapital,
+	value: METRIC_TOOLTIPS.constructionValue,
+	realized: METRIC_TOOLTIPS.realizedPnl,
+	unrealized: METRIC_TOOLTIPS.unrealizedPnl,
+	adjustments: METRIC_TOOLTIPS.adjustmentsCount,
+	total: METRIC_TOOLTIPS.listTotal,
+	totalPercent: METRIC_TOOLTIPS.capitalPercent,
+	capitalUsage: METRIC_TOOLTIPS.capitalUsage,
+	daysToNearestExpiry: METRIC_TOOLTIPS.daysToExpiry,
+	netDailyDecayUsdt: METRIC_TOOLTIPS.decayPerDay,
+};
 
 export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWindow }: ConstructionsTableProps) {
 	const isMobile = useIsMobile();
@@ -447,18 +473,41 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 			<TableHeader className="bg-surface-2 [&_tr]:border-divider">
 				{table.getHeaderGroups().map((headerGroup) => (
 					<TableRow key={headerGroup.id}>
-						{headerGroup.headers.map((header) => (
-							<TableHead key={header.id}>
-								<button
-									type="button"
-									className="inline-flex cursor-pointer items-center gap-1 hover:text-foreground"
-									onClick={header.column.getToggleSortingHandler()}
-								>
-									{flexRender(header.column.columnDef.header, header.getContext())}
-									<SortIcon direction={header.column.getIsSorted()} />
-								</button>
-							</TableHead>
-						))}
+						{headerGroup.headers.map((header) => {
+							// Подсказка заголовка берётся из карты по колонке: у колонок
+							// дат («Открыта», «Закрыта») и текстовых колонок триггера нет.
+							// Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip
+							const headerHint = headerHints[header.column.id];
+							const sortHandler = header.column.getToggleSortingHandler();
+							return (
+								<TableHead key={header.id}>
+									{headerHint === undefined ? (
+										<button
+											type="button"
+											className="inline-flex cursor-pointer items-center gap-1 hover:text-foreground"
+											onClick={sortHandler}
+										>
+											{flexRender(header.column.columnDef.header, header.getContext())}
+											<SortIcon direction={header.column.getIsSorted()} />
+										</button>
+									) : (
+										// У колонки с подсказкой триггер — сам фокусируемый
+										// элемент шапки: клик и Enter на нём всплывают до
+										// области сортировки, механика заголовков сохраняется
+										// без вложенных интерактивных элементов.
+										<span
+											className="inline-flex cursor-pointer items-center gap-1 hover:text-foreground"
+											onClick={sortHandler}
+										>
+											<MetricHint tooltip={headerHint}>
+												{flexRender(header.column.columnDef.header, header.getContext())}
+											</MetricHint>
+											<SortIcon direction={header.column.getIsSorted()} />
+										</span>
+									)}
+								</TableHead>
+							);
+						})}
 					</TableRow>
 				))}
 			</TableHeader>

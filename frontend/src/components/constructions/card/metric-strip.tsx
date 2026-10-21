@@ -7,6 +7,7 @@ import type {
 } from "@/lib/api/construction-card";
 import { Metric } from "@/components/design";
 import { Button } from "@/components/ui/button";
+import { MetricHint } from "@/components/ui/metric-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FullFinResultIndicator, MediumFinResultIndicator } from "@/components/finresult/fin-result-indicator";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -14,6 +15,7 @@ import { DASH } from "@/lib/format/degradation";
 import { formatDay, formatMoment } from "@/lib/format/display-time";
 import { EXPIRY_WARNING_DAYS } from "@/lib/lifetime";
 import { formatAmount, formatSignedAmount, formatSignedPercent } from "@/lib/format/quantity";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { ManualSyntheticLinkForm } from "./manual-synthetic-link-form";
 import { cn } from "@/lib/utils";
 
@@ -162,6 +164,12 @@ export function ConstructionMetricStrip({
 			    синтетикой» из мастера сводки (5.1 change synthetic-close-logical-layer). */}
 			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
 			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+			{/* Числовые метрики сводки снабжаются подсказкой метрики: триггер —
+			    само значение с пунктирным подчёркиванием примитива, попап —
+			    тексты справочника (назначение, метод, разделы по показателям);
+			    деградации (прочерк, «сбой котировок») обёртываются вместе со
+			    значением, подписи-категории триггерами не становятся. */}
+			{/* Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics */}
 			<div
 				data-slot="construction-metrics-card"
 				className="flex flex-col gap-3 rounded-lg border bg-surface px-[18px] py-3.5"
@@ -171,75 +179,94 @@ export function ConstructionMetricStrip({
 						label="общий P&L"
 						valueClassName={`tabular-nums ${VALUE_TOTAL} ${toneClass(metrics.totalPnL ?? 0)}`}
 					>
-						{metrics.totalPnL === null ? (
-							// Итог без нереализованной части неполный — признак сбоя марок.
-							<span className="text-text-muted" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя котировок">
-								неполный (сбой котировок)
-							</span>
-						) : (
-							`${formatSignedAmount(metrics.totalPnL)} USDT`
-						)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.totalPnl}>
+							{metrics.totalPnL === null ? (
+								// Итог без нереализованной части неполный — признак сбоя марок.
+								<span className="text-text-muted" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя котировок">
+									неполный (сбой котировок)
+								</span>
+							) : (
+								`${formatSignedAmount(metrics.totalPnL)} USDT`
+							)}
+						</MetricHint>
 					</Metric>
 					<Metric
 						label={`% капитала${card.allocatedCapitalUsdt !== null ? ` (${formatAmount(card.allocatedCapitalUsdt)})` : ""}`}
 						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.totalPnLPercent ?? 0)}`}
 					>
-						{metrics.totalPnLPercent === null ? (
-							<span className="text-text-muted">{DASH}</span>
-						) : (
-							formatSignedPercent(metrics.totalPnLPercent)
-						)}
+						{/* Ячейка объединяет процент результата и выделенный капитал —
+						    один триггер на ячейку, подсказка даёт раздел на каждый
+						    показатель. */}
+						{/* Traceability: openspec:ui/screens#scenario-multi-indicator-sections */}
+						<MetricHint tooltip={METRIC_TOOLTIPS.capitalPercent}>
+							{metrics.totalPnLPercent === null ? (
+								<span className="text-text-muted">{DASH}</span>
+							) : (
+								formatSignedPercent(metrics.totalPnLPercent)
+							)}
+						</MetricHint>
 					</Metric>
 					<Metric
 						label="стоимость"
 						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.markValue ?? 0)}`}
 					>
-						{card.hasOpenResidual === false ? (
-							<span className="text-text-muted" title="Открытых остатков нет — стоимости нет">
-								{DASH}
-							</span>
-						) : metrics.markValue === null ? (
-							<span className="text-text-muted" title="Провайдер котировок недоступен — стоимость не оценена">
-								сбой котировок
-							</span>
-						) : (
-							formatSignedAmount(metrics.markValue)
-						)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.constructionValue}>
+							{card.hasOpenResidual === false ? (
+								<span className="text-text-muted" title="Открытых остатков нет — стоимости нет">
+									{DASH}
+								</span>
+							) : metrics.markValue === null ? (
+								<span className="text-text-muted" title="Провайдер котировок недоступен — стоимость не оценена">
+									сбой котировок
+								</span>
+							) : (
+								formatSignedAmount(metrics.markValue)
+							)}
+						</MetricHint>
 					</Metric>
 					<Metric
 						label="занято капитала, %"
 						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.capitalUsagePercent ?? 0)}`}
 					>
-						{metrics.capitalUsagePercent === null ? (
-							<span className="text-text-muted">{DASH}</span>
-						) : (
-							formatSignedPercent(metrics.capitalUsagePercent)
-						)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.capitalUsage}>
+							{metrics.capitalUsagePercent === null ? (
+								<span className="text-text-muted">{DASH}</span>
+							) : (
+								formatSignedPercent(metrics.capitalUsagePercent)
+							)}
+						</MetricHint>
 					</Metric>
 					<Metric
 						label="реализ. P&L"
 						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.realizedPnL)}`}
 					>
-						{formatSignedAmount(metrics.realizedPnL)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.realizedPnl}>{formatSignedAmount(metrics.realizedPnL)}</MetricHint>
 					</Metric>
 					<Metric
 						label="нереализ. P&L"
 						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.unrealizedPnL ?? 0)}`}
 					>
-						{card.hasMarkFailure ? (
-							<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
-								сбой котировок
-							</span>
-						) : (
-							formatSignedAmount(metrics.unrealizedPnL ?? 0)
-						)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.unrealizedPnl}>
+							{card.hasMarkFailure ? (
+								<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
+									сбой котировок
+								</span>
+							) : (
+								formatSignedAmount(metrics.unrealizedPnL ?? 0)
+							)}
+						</MetricHint>
 					</Metric>
 					<Metric
 						label="корректировки"
 						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.adjustmentsPnL)}`}
 					>
-						{metrics.adjustmentsPnL === 0 ? DASH : formatSignedAmount(metrics.adjustmentsPnL)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.adjustmentsCount}>
+							{metrics.adjustmentsPnL === 0 ? DASH : formatSignedAmount(metrics.adjustmentsPnL)}
+						</MetricHint>
 					</Metric>
+					{/* «Котировки на» — метрика времени: даты и времена подсказками
+					    метрик не снабжаются. */}
+					{/* Traceability: openspec:ui/screens#scenario-dates-skip-tooltip */}
 					<Metric label="котировки на" valueClassName={VALUE_PART}>
 						{card.hasMarkFailure ? (
 							<span className="text-text-muted" title="Провайдер котировок недоступен — время получения котировок неизвестно">
@@ -253,6 +280,9 @@ export function ConstructionMetricStrip({
 							(card.marksAsOf === null ? DASH : formatMoment(card.marksAsOf))
 						)}
 					</Metric>
+					{/* «Период» — метрика времени: даты и времена подсказками
+					    метрик не снабжаются. */}
+					{/* Traceability: openspec:ui/screens#scenario-dates-skip-tooltip */}
 					<Metric label="период" valueClassName={VALUE_PART}>
 						{metrics.openedAt === null ? (
 							<span className="text-text-muted">{DASH}</span>
@@ -275,34 +305,40 @@ export function ConstructionMetricStrip({
 						label="до экспирации"
 						valueClassName={`tabular-nums ${VALUE_PART} ${metrics.daysToNearestExpiry !== null && metrics.daysToNearestExpiry <= EXPIRY_WARNING_DAYS ? "text-destructive" : ""}`}
 					>
-						{metrics.daysToNearestExpiry === null ? (
-							<span className="text-text-muted" title="Открытых опционных ног нет — времени жизни нет">
-								{DASH}
-							</span>
-						) : (
-							<span title="Остаток суток до ближайшей экспирации открытых опционных ног">{metrics.daysToNearestExpiry} дн.</span>
-						)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.daysToExpiry}>
+							{metrics.daysToNearestExpiry === null ? (
+								<span className="text-text-muted" title="Открытых опционных ног нет — времени жизни нет">
+									{DASH}
+								</span>
+							) : (
+								<span title="Остаток суток до ближайшей экспирации открытых опционных ног">{metrics.daysToNearestExpiry} дн.</span>
+							)}
+						</MetricHint>
 					</Metric>
 					<Metric
 						label="распад / сутки"
 						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.netDailyDecayUsdt ?? 0)}`}
 					>
-						{metrics.netDailyDecayUsdt === null ? (
-							<span className="text-text-muted" title="Тикеры опционных ног недоступны — распад не оценён">
-								{DASH}
-							</span>
-						) : (
-							formatSignedAmount(metrics.netDailyDecayUsdt)
-						)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.decayPerDay}>
+							{metrics.netDailyDecayUsdt === null ? (
+								<span className="text-text-muted" title="Тикеры опционных ног недоступны — распад не оценён">
+									{DASH}
+								</span>
+							) : (
+								formatSignedAmount(metrics.netDailyDecayUsdt)
+							)}
+						</MetricHint>
 					</Metric>
 					<Metric label="временная стоимость" valueClassName={`tabular-nums ${VALUE_PART}`}>
-						{metrics.totalTimeValueUsdt === null ? (
-							<span className="text-text-muted" title="Тикеры опционных ног недоступны — временная стоимость не оценена">
-								{DASH}
-							</span>
-						) : (
-							formatSignedAmount(metrics.totalTimeValueUsdt)
-						)}
+						<MetricHint tooltip={METRIC_TOOLTIPS.timeValue}>
+							{metrics.totalTimeValueUsdt === null ? (
+								<span className="text-text-muted" title="Тикеры опционных ног недоступны — временная стоимость не оценена">
+									{DASH}
+								</span>
+							) : (
+								formatSignedAmount(metrics.totalTimeValueUsdt)
+							)}
+						</MetricHint>
 					</Metric>
 				</div>
 
@@ -339,19 +375,32 @@ export function ConstructionMetricStrip({
 							    переключателем — без лока и логических размеров. */}
 							{/* Traceability: openspec:ui/screens#scenario-dispute-list-available-when-all-disputed */}
 							{syntheticLegs.length > 0 && (
-								<>
-									<span
-										data-slot="synthetic-locked-value"
-										className={cn("tabular-nums text-[14px] font-semibold", toneClass(syntheticLockedUsdt))}
-									>
-										{`${formatSignedAmount(syntheticLockedUsdt)} USDT`}
+								// Величины строки — одна многопоказательная ячейка:
+								// лок и логический размер ноги поясняются одной
+								// подсказкой с разделом на каждый показатель. Триггер
+								// переносится на строчный span (triggerAsChild) со
+								// tabindex: подсказка открывается наведением и фокусом,
+								// внутри кнопки-переключателя не появляется вложенной
+								// кнопки, клик по величинам всплывает в переключатель.
+								// Зазор и перенос внутри триггера повторяют прежнюю
+								// раскладку величин строки.
+								// Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
+								// Traceability: openspec:ui/screens#scenario-multi-indicator-sections
+								<MetricHint tooltip={METRIC_TOOLTIPS.syntheticLocked} className="flex-wrap gap-2.5" triggerAsChild>
+									<span className="flex min-w-0 flex-wrap items-baseline gap-2.5" tabIndex={0}>
+										<span
+											data-slot="synthetic-locked-value"
+											className={cn("tabular-nums text-[14px] font-semibold", toneClass(syntheticLockedUsdt))}
+										>
+											{`${formatSignedAmount(syntheticLockedUsdt)} USDT`}
+										</span>
+										<span data-slot="synthetic-locked-legs" className="text-[12px] text-text-secondary">
+											{syntheticLegs
+												.map((leg) => `${leg.symbol} · нога ${formatAmount(leg.residual)} → ${formatAmount(leg.logicalResidual)}`)
+												.join(" · ")}
+										</span>
 									</span>
-									<span data-slot="synthetic-locked-legs" className="text-[12px] text-text-secondary">
-										{syntheticLegs
-											.map((leg) => `${leg.symbol} · нога ${formatAmount(leg.residual)} → ${formatAmount(leg.logicalResidual)}`)
-											.join(" · ")}
-									</span>
-								</>
+								</MetricHint>
 							)}
 							{/* Хвостовой chevron переключателя раскрытия списка связок. */}
 							{/* Traceability: change:add-synthetic-close-dispute-ui/design#d2 */}
@@ -375,13 +424,17 @@ export function ConstructionMetricStrip({
 									с учётом зафиксированного синтетикой
 								</span>
 								{/* Значение — по образцу величины лока: кегль 14/600,
-								    тон по знаку, табличные цифры и суффикс USDT. */}
-								<span
-									data-slot="synthetic-adjusted-total-value"
-									className={cn("tabular-nums text-[14px] font-semibold", toneClass(metrics.syntheticAdjustedTotalUsdt))}
-								>
-									{`${formatSignedAmount(metrics.syntheticAdjustedTotalUsdt)} USDT`}
-								</span>
+								    тон по знаку, табличные цифры и суффикс USDT.
+								    Подсказка объясняет состав сводной величины. */}
+								{/* Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics */}
+								<MetricHint tooltip={METRIC_TOOLTIPS.adjustedTotal}>
+									<span
+										data-slot="synthetic-adjusted-total-value"
+										className={cn("tabular-nums text-[14px] font-semibold", toneClass(metrics.syntheticAdjustedTotalUsdt))}
+									>
+										{`${formatSignedAmount(metrics.syntheticAdjustedTotalUsdt)} USDT`}
+									</span>
+								</MetricHint>
 							</div>
 						)}
 					</>

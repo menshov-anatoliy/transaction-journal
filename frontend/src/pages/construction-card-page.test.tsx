@@ -8,6 +8,7 @@ import type { ChatDto } from "@/chat/types";
 import type { ConstructionsOverview } from "@/lib/api/constructions";
 import type { ConstructionCard } from "@/lib/api/construction-card";
 import type { HintPanel } from "@/lib/api/hints";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConstructionCardPage } from "./construction-card-page";
 
 // Проверяется карточка конструкции по концепции §4: шапка с именем, статусом
@@ -220,13 +221,17 @@ function renderCardPage(
 	queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
 ): ReturnType<typeof render> {
 	return render(
-		<QueryClientProvider client={queryClient}>
-			<MemoryRouter initialEntries={[path]}>
-				<Routes>
-					<Route path="/constructions/:constructionId" element={<ConstructionCardPage />} />
-				</Routes>
-			</MemoryRouter>
-		</QueryClientProvider>,
+		// Сводка метрик и индикатор карточки строятся на Radix Tooltip —
+		// провайдер-предок обязателен для рендера.
+		<TooltipProvider delayDuration={0}>
+			<QueryClientProvider client={queryClient}>
+				<MemoryRouter initialEntries={[path]}>
+					<Routes>
+						<Route path="/constructions/:constructionId" element={<ConstructionCardPage />} />
+					</Routes>
+				</MemoryRouter>
+			</QueryClientProvider>
+		</TooltipProvider>,
 	);
 }
 
@@ -249,9 +254,13 @@ function renderCardPageInFrame(search = ""): () => void {
 		{ initialEntries: [`/constructions/7${search}`] },
 	);
 	const view = render(
-		<QueryClientProvider client={queryClient}>
-			<RouterProvider router={router} />
-		</QueryClientProvider>,
+		// Провайдер подсказок обязателен: сводка метрик и индикатор
+		// карточки строятся на Radix Tooltip.
+		<TooltipProvider delayDuration={0}>
+			<QueryClientProvider client={queryClient}>
+				<RouterProvider router={router} />
+			</QueryClientProvider>
+		</TooltipProvider>,
 	);
 	return () => view.unmount();
 }
@@ -574,8 +583,10 @@ describe("карточка конструкции: действия и ввод"
 		const user = userEvent.setup();
 		renderCardPage();
 		await screen.findByText("exec-1");
+		// Кнопка правки выбирается по имени: в заголовках таблицы появились
+		// триггеры подсказок метрик, индексы кнопок больше не стабильны.
 		const closeTable = document.querySelector('[data-slot="closing-entries-table"]');
-		const edit = closeTable?.querySelectorAll("button")[1];
+		const edit = closeTable && within(closeTable as HTMLElement).getByRole("button", { name: "править" });
 		expect(edit).toBeDefined();
 		await user.click(edit!);
 		const input = screen.getByLabelText("цена закрытия");
@@ -597,8 +608,10 @@ describe("карточка конструкции: действия и ввод"
 		const user = userEvent.setup();
 		renderCardPage();
 		await screen.findByText("exec-1");
+		// Кнопка правки выбирается по имени: в заголовках таблицы появились
+		// триггеры подсказок метрик, индексы кнопок больше не стабильны.
 		const table = document.querySelector('[data-slot="adjustments-table"]');
-		const edit = table?.querySelectorAll("button")[1];
+		const edit = table && within(table as HTMLElement).getByRole("button", { name: "править" });
 		expect(edit).toBeDefined();
 		await user.click(edit!);
 		await user.click(screen.getByRole("button", { name: "Сохранить" }));

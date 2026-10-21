@@ -1,8 +1,10 @@
 import { act, render, screen, within } from "@testing-library/react";
-import { Profiler, useState } from "react";
+import { type ReactElement, Profiler, useState } from "react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ConstructionRow } from "@/lib/api/constructions";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConstructionsTable } from "./constructions-table";
 
 // Проверяется таблица конструкций раздела по концепции §3: паритет колонок
@@ -65,6 +67,11 @@ const closedRow: ConstructionRow = {
 	netDailyDecayUsdt: null,
 };
 
+/** Рендер таблицы внутри провайдера подсказок: Radix Tooltip требует провайдера. */
+function renderTable(ui: ReactElement) {
+	return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
+}
+
 describe("таблица конструкций", () => {
 	// Изменение выделения не должно запускать повторные обновления неизменных строк.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
@@ -77,7 +84,7 @@ describe("таблица конструкций", () => {
 			const [selectedId, setSelectedId] = useState<number | null>(null);
 			return <ConstructionsTable rows={rows} selectedId={selectedId} onSelect={setSelectedId} />;
 		}
-		render(
+		renderTable(
 			<Profiler id="table" onRender={() => {
 				commits += 1;
 				if (commits > 30) {
@@ -104,7 +111,7 @@ describe("таблица конструкций", () => {
 	// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
 	it("показывает открытый, закрытый и архивный статусы пилюлями", () => {
 		// Arrange / Act: строки всех трёх состояний.
-		render(
+		renderTable(
 			<ConstructionsTable
 				rows={[openRow, closedRow, { ...closedRow, constructionId: 9, status: "archived" }]}
 				selectedId={null}
@@ -121,7 +128,7 @@ describe("таблица конструкций", () => {
 
 	it("выводит колонки паритета и строки с величинами", () => {
 		// Act: таблица с двумя строками.
-		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
+		renderTable(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
 
 		// Assert: заголовки паритета колонок на месте (подписи по мастеру
 		// design.pen: «Имя», глифы «✦» подсказок и «⚠» предупреждений).
@@ -164,7 +171,7 @@ describe("таблица конструкций", () => {
 	it("выводит колонки времени жизни: сутки, распад, красные сутки и прочерки", () => {
 		// Arrange: открытая строка на 9 сутках (зона предупреждения), строка
 		// дальше зоны на 21 сутках и строка без опционных ног.
-		render(
+		renderTable(
 			<ConstructionsTable
 				rows={[
 					openRow,
@@ -193,7 +200,7 @@ describe("таблица конструкций", () => {
 
 	it("показывает бейдж живых подсказок только у строк с подсказками", () => {
 		// Act: таблица с двумя строками.
-		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
+		renderTable(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
 
 		// Assert: бейдж «✦ N» тоном риска у первой строки, у второй — прочерк.
 		// Traceability: openspec:ui/screens#requirement-construction-list-screen
@@ -205,7 +212,7 @@ describe("таблица конструкций", () => {
 
 	it("показывает бейдж предупреждений только у строк с предупреждениями", () => {
 		// Act: таблица с двумя строками.
-		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
+		renderTable(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
 
 		// Assert: бейдж «⚠ N» тоном риска у строки с предупреждениями, доступное
 		// имя несёт число предупреждений; у строки без предупреждений бейджа нет.
@@ -223,7 +230,7 @@ describe("таблица конструкций", () => {
 	// Traceability: openspec:ui/screens#scenario-unbounded-badge-coexists-with-warnings
 	it("показывает бейдж ∞ и бейдж предупреждений в строке независимо друг от друга", () => {
 		// Act: таблица со строкой, у которой статус риска unbounded и есть предупреждения.
-		render(
+		renderTable(
 			<ConstructionsTable
 				rows={[{ ...openRow, realRiskUsdt: null, realRiskStatus: "unbounded" as const }]}
 				selectedId={null}
@@ -241,7 +248,7 @@ describe("таблица конструкций", () => {
 	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 	it("рендерит компактный индикатор финрезультата в строке", () => {
 		// Act: таблица с открытой строкой.
-		render(<ConstructionsTable rows={[openRow]} selectedId={null} onSelect={() => {}} />);
+		renderTable(<ConstructionsTable rows={[openRow]} selectedId={null} onSelect={() => {}} />);
 
 		// Assert: компактный индикатор в ячейке итога.
 		const indicator = screen.getByRole("row", { name: /ETH-240628/ }).querySelector('[data-slot="fin-result-compact"]');
@@ -254,7 +261,7 @@ describe("таблица конструкций", () => {
 		// Arrange: обработчик выделения.
 		const user = userEvent.setup();
 		const onSelect = vi.fn();
-		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={7} onSelect={onSelect} />);
+		renderTable(<ConstructionsTable rows={[openRow, closedRow]} selectedId={7} onSelect={onSelect} />);
 
 		// Act: клик по невыделенной строке.
 		await user.click(screen.getByRole("row", { name: /BTC-240531/ }));
@@ -268,7 +275,7 @@ describe("таблица конструкций", () => {
 	it("сортирует строки кликом по колонке", async () => {
 		// Arrange: пользователь для нажатия заголовка сортировки.
 		const user = userEvent.setup();
-		render(<ConstructionsTable rows={[closedRow, openRow]} selectedId={null} onSelect={() => {}} />);
+		renderTable(<ConstructionsTable rows={[closedRow, openRow]} selectedId={null} onSelect={() => {}} />);
 
 		// Act: сортировка по колонке «Итог».
 		await user.click(screen.getByRole("button", { name: "Итог" }));
@@ -289,7 +296,7 @@ describe("таблица конструкций", () => {
 		const user = userEvent.setup();
 		const onSelect = vi.fn();
 		const onOpenInNewWindow = vi.fn();
-		render(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={onSelect} onOpenInNewWindow={onOpenInNewWindow} />);
+		renderTable(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={onSelect} onOpenInNewWindow={onOpenInNewWindow} />);
 
 		// Act: двойной клик по строке.
 		await user.dblClick(screen.getByRole("row", { name: /ETH-240628/ }));
@@ -300,9 +307,56 @@ describe("таблица конструкций", () => {
 
 	it("пустой список показывает явное сообщение", () => {
 		// Act: таблица без строк.
-		render(<ConstructionsTable rows={[]} selectedId={null} onSelect={() => {}} />);
+		renderTable(<ConstructionsTable rows={[]} selectedId={null} onSelect={() => {}} />);
 
 		// Assert: сообщение отсутствия, а не пустая разметка.
 		expect(screen.getByText("конструкций нет")).toBeInTheDocument();
+	});
+
+	// Заголовки числовых колонок несут подсказку метрики: триггер — шапка
+	// колонки, ячейки строк не оборачиваются; колонки дат и текстовые
+	// колонки («Имя», «Статус») триггеров не получают.
+	// Traceability: openspec:ui/screens#requirement-column-header-tooltips
+	// Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip
+	it("даёт подсказку заголовку «Итог», числовым шапкам и не даёт колонкам дат", async () => {
+		// Arrange: пользователь для наведения, таблица с двумя строками
+		// внутри провайдера с нулевой задержкой открытия.
+		const user = userEvent.setup();
+		renderTable(<ConstructionsTable rows={[openRow, closedRow]} selectedId={null} onSelect={() => {}} />);
+		const triggerOf = (name: string) =>
+			screen.getByRole("columnheader", { name }).querySelector('[data-slot="tooltip-trigger"]');
+
+		// Act: наведение на триггер заголовка «Итог».
+		await user.hover(within(screen.getByRole("columnheader", { name: "Итог" })).getByRole("button", { name: "Итог" }));
+
+		// Assert: попап содержит заголовок метрики и разделы итога из справочника.
+		const tooltip = screen.getByRole("tooltip");
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.listTotal.title);
+		for (const section of METRIC_TOOLTIPS.listTotal.sections ?? []) {
+			expect(tooltip).toHaveTextContent(section.label);
+		}
+
+		// Assert: у каждой числовой и бейджной колонки триггер в шапке.
+		for (const name of [
+			"✦",
+			"⚠",
+			"Капитал",
+			"Стоимость",
+			"Реализов.",
+			"Нереализов.",
+			"Коррект.",
+			"Итог",
+			"% капитала",
+			"Занято %",
+			"До экспирации",
+			"Распад",
+		]) {
+			expect(triggerOf(name)).not.toBeNull();
+		}
+
+		// Assert: колонки дат и текстовые колонки триггеров не имеют.
+		for (const name of ["Имя", "Статус", "Открыта", "Закрыта"]) {
+			expect(triggerOf(name)).toBeNull();
+		}
 	});
 });

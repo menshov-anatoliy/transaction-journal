@@ -6,6 +6,7 @@ import type { ManualTradeInput } from "@/lib/api/manual-trades";
 import { fetchMoveTargets } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { MetricHint } from "@/components/ui/metric-tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ManualTradeForm } from "@/components/trades/manual-trade-form";
 import { TradeSourceBadge } from "@/components/trades/trade-source-badge";
@@ -15,6 +16,7 @@ import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { DASH } from "@/lib/format/degradation";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatAmount } from "@/lib/format/quantity";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { useIsMobile } from "@/lib/use-mobile";
 
 // Таблица сделок карточки по концепции §4: атрибуты записи с inline-комментарием
@@ -290,16 +292,31 @@ export function TradesTable({
 			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
 			{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
 			<Table density="compact" className="text-text-secondary">
+				{/* Подсказки метрик в заголовках числовых колонок: заголовок
+				    оборачивается один раз, триггер наследует типографику; сырые
+				    данные сделок поясняются назначением без метода расчёта. */}
+				{/* Traceability: openspec:ui/screens#requirement-column-header-tooltips */}
 				<TableHeader className="bg-surface-2">
 					<TableRow className="border-divider">
+						{/* Колонка времени — дата/время сделки: подсказка метрики
+						    у дат не показывается. */}
+						{/* Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip */}
 						<TableHead>Время</TableHead>
 						<TableHead>execId</TableHead>
 						<TableHead>Инструмент</TableHead>
 						<TableHead>Направление</TableHead>
-						<TableHead>Кол-во</TableHead>
-						<TableHead>Цена</TableHead>
-						<TableHead>Сумма</TableHead>
-						<TableHead>Комиссия</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.tradeQuantity}>Кол-во</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.tradePrice}>Цена</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.tradeAmount}>Сумма</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.tradeCommission}>Комиссия</MetricHint>
+						</TableHead>
 						<TableHead>Комментарий</TableHead>
 						<TableHead>Действия</TableHead>
 					</TableRow>

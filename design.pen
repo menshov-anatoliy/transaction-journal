@@ -375,6 +375,255 @@
                   ]
                 }
               ]
+            },
+            {
+              "type": "frame",
+              "id": "Ghhev",
+              "name": "Подсказки метрик",
+              "gap": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "rwhvg",
+                  "name": "Метрика с подсказкой",
+                  "reusable": true,
+                  "layout": "vertical",
+                  "gap": 3,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "gkfz0",
+                      "name": "Caption",
+                      "fill": "$textMuted",
+                      "content": "Общий P&L",
+                      "fontFamily": "$font",
+                      "fontSize": 11,
+                      "fontWeight": "normal",
+                      "letterSpacing": 0.3
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Y4oCQo",
+                      "name": "Триггер",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Z3RnT",
+                          "name": "Value",
+                          "fill": "$textPrimary",
+                          "content": "+385,30",
+                          "fontFamily": "$font",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "J48y2",
+                          "name": "Пунктир",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "rectangle",
+                              "id": "ohilG",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "hBg8k",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "pJd0K",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "xRr4l",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "yxlBW",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "oCnpX",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "D3Xxg0",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "NqlPj",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "U2wdF",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "BjxBH",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "nfNTk",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "fPgfh",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            },
+                            {
+                              "type": "rectangle",
+                              "id": "C160A",
+                              "name": "Тире",
+                              "fill": "$textMuted",
+                              "width": 3,
+                              "height": 1
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "CDitz",
+                  "name": "Подсказка метрики",
+                  "reusable": true,
+                  "width": 300,
+                  "fill": "$surface",
+                  "cornerRadius": 10,
+                  "stroke": "$border",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "GeVNN",
+                      "name": "Заголовок",
+                      "fill": "$textPrimary",
+                      "content": "Общий P&L",
+                      "fontFamily": "$font",
+                      "fontSize": 12.5,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "w743TJ",
+                      "name": "Раздел",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "so206",
+                          "name": "Показатель",
+                          "fill": "$textSecondary",
+                          "content": "Значение, USDT",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "gk36c",
+                          "name": "Описание",
+                          "fill": "$textSecondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "реализованный + нереализованный результат всех позиций конструкции",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "R4XUz4",
+                      "name": "Раздел",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "BP8uh",
+                          "name": "Показатель",
+                          "fill": "$textSecondary",
+                          "content": "% от капитала",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "l8lnHC",
+                          "name": "Описание",
+                          "fill": "$textSecondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "доля результата в текущей величине капитала",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         },
@@ -3271,7 +3520,6 @@
                       "type": "frame",
                       "id": "pKJ6k",
                       "name": "Таблица конструкций",
-                      "clip": true,
                       "width": "fill_container",
                       "fill": "$surface",
                       "cornerRadius": 12,
@@ -3392,14 +3640,127 @@
                               "padding": 8,
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "j7L4i",
-                                  "name": "T",
-                                  "fill": "$textSecondary",
-                                  "content": "Стоимость",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "600"
+                                  "type": "frame",
+                                  "id": "j84iJ",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Ql6AJ",
+                                      "name": "Value",
+                                      "fill": "$textSecondary",
+                                      "content": "Стоимость",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "hsXVz",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "Z1P5p",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "LMU42",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "RVL58",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "z2X5E",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "O9OJjT",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "kIwOk",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "z6OiG",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "eG1IU",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "D2KGb",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "gp8p4",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "qwaaz",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "C5GqPh",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               ]
                             },
@@ -3468,14 +3829,71 @@
                               "padding": 8,
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "UzIgV",
-                                  "name": "T",
-                                  "fill": "$textSecondary",
-                                  "content": "Итог",
-                                  "fontFamily": "$font",
-                                  "fontSize": 11,
-                                  "fontWeight": "600"
+                                  "type": "frame",
+                                  "id": "CgiFs",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "TyxYZ",
+                                      "name": "Value",
+                                      "fill": "$textSecondary",
+                                      "content": "Итог",
+                                      "fontFamily": "$font",
+                                      "fontSize": 11,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "n5D8L",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "JwL3N",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "daFRt",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "Y9Y7AU",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "r9Ow5",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "W3KNpZ",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               ]
                             },
@@ -3519,39 +3937,255 @@
                             },
                             {
                               "type": "frame",
-                              "id": "ISLS6",
-                              "name": "HC:До экспирации",
-                              "width": 96,
-                              "padding": 8,
+                              "id": "zRDo9",
+                              "name": "Триггер",
+                              "layout": "vertical",
+                              "gap": 2,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "qj2Yd",
-                                  "name": "T",
+                                  "id": "IxdIa",
+                                  "name": "Value",
                                   "fill": "$textSecondary",
                                   "content": "До экспирации",
                                   "fontFamily": "$font",
                                   "fontSize": 11,
                                   "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "vyHqr",
+                                  "name": "Пунктир",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "rectangle",
+                                      "id": "toVyi",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "dF7pu",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "ugnmD",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "OK7Pu",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "KQ2If",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "xAj2F",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "popRP",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "E89Hkf",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "J6Pgd",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "ybi3x",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "xjbLf",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "esyqg",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "GUm8y",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "pxqb3",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "P6Vp0",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "KZInL",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "w7yL8K",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    }
+                                  ]
                                 }
                               ]
                             },
                             {
                               "type": "frame",
-                              "id": "OKqmT",
-                              "name": "HC:Распад",
-                              "width": 64,
-                              "padding": 8,
+                              "id": "g0F3o",
+                              "name": "Триггер",
+                              "layout": "vertical",
+                              "gap": 2,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "QmpXL",
-                                  "name": "T",
+                                  "id": "AygIm",
+                                  "name": "Value",
                                   "fill": "$textSecondary",
                                   "content": "Распад",
                                   "fontFamily": "$font",
                                   "fontSize": 11,
                                   "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "vDCAd",
+                                  "name": "Пунктир",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "rectangle",
+                                      "id": "uq0eI",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "ZEwoj",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "w7lM1t",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "n8Ywx6",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "o5xkz",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "JlgEj",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "z5jGfO",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "t1Mll",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    }
+                                  ]
                                 }
                               ]
                             },
@@ -5939,6 +6573,32 @@
                               ]
                             }
                           ]
+                        },
+                        {
+                          "id": "PlG60",
+                          "type": "ref",
+                          "ref": "CDitz",
+                          "name": "Подсказка «Итог» открыта",
+                          "layoutPosition": "absolute",
+                          "x": 745,
+                          "y": 38,
+                          "descendants": {
+                            "GeVNN": {
+                              "content": "Итог"
+                            },
+                            "so206": {
+                              "content": "Реализованный, USDT"
+                            },
+                            "gk36c": {
+                              "content": "закрытые сделки конструкции по FIFO, комиссии уменьшают результат"
+                            },
+                            "BP8uh": {
+                              "content": "Нереализованный, USDT"
+                            },
+                            "l8lnHC": {
+                              "content": "открытый остаток по текущим маркам без комиссий закрытия"
+                            }
+                          }
                         }
                       ]
                     }
@@ -6376,9 +7036,135 @@
                                   "content": "Общий P&L"
                                 },
                                 "Q4NLmR": {
-                                  "content": "+385,30",
-                                  "fill": "$accentStrong",
-                                  "fontSize": 16
+                                  "type": "frame",
+                                  "id": "R6aSut",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "gurGS",
+                                      "name": "Value",
+                                      "fill": "$accentStrong",
+                                      "content": "+385,30",
+                                      "fontFamily": "$font",
+                                      "fontSize": 15,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "ONvUa",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "cPZHy",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "MlCDp",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "z8pqgS",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "ss8IU",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "fIAxW",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "IZhZG",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "P1Weu",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "x1ZNf",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "Z5FqQ9",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "ls4yO",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "oVzCf",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "OLpuS",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "M0Sie",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6393,9 +7179,71 @@
                                   "content": "% капитала"
                                 },
                                 "Q4NLmR": {
-                                  "content": "64%",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "r67VLG",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "VZ5DQ",
+                                      "name": "Value",
+                                      "fill": "$textPrimary",
+                                      "content": "64%",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "J5I0w",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "G0LbK",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "gJkZK",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "SX9ow",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "gufx2",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "dOUHN",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6410,9 +7258,95 @@
                                   "content": "Стоимость"
                                 },
                                 "Q4NLmR": {
-                                  "content": "1 240",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "QrJ6G",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "MHmkW",
+                                      "name": "Value",
+                                      "fill": "$textPrimary",
+                                      "content": "1 240",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "h9T3OX",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "bqvq0",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "vO4N3",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "h9qIZF",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "pmkM4",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "L6cCxo",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "pCZpc",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "sgHKE",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "ziUm4",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6427,9 +7361,71 @@
                                   "content": "Занятость"
                                 },
                                 "Q4NLmR": {
-                                  "content": "78%",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "scTtv",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "r1jyJ",
+                                      "name": "Value",
+                                      "fill": "$textPrimary",
+                                      "content": "78%",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "qdVoR",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "vvOB9",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "rLC2l",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "jC6IJ",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "Q8omUc",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "VzNwD",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6444,9 +7440,127 @@
                                   "content": "Реализов."
                                 },
                                 "Q4NLmR": {
-                                  "content": "+240,20",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "tCnj3",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "bak5V",
+                                      "name": "Value",
+                                      "fill": "$textPrimary",
+                                      "content": "+240,20",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "p0AtFj",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "bLzJd",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "iRl0w",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "n1T5Og",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "bttFt",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "aIBQM",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "WobYp",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "iuWly",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "H7k4yy",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "qBMbM",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "aaMvV",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "oI3px",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "Qtb7L",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6461,9 +7575,127 @@
                                   "content": "Нереализов."
                                 },
                                 "Q4NLmR": {
-                                  "content": "+145,10",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "nmPHp",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "l6XbU",
+                                      "name": "Value",
+                                      "fill": "$textPrimary",
+                                      "content": "+145,10",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "LB9Lh",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "HTJUA",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "NiImN",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "ID3UT",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "ZYLTP",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "k1wycJ",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "J5cd6s",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "i5wrZR",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "qk9mE",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "rUJ56",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "hD1az",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "lHDAD",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "zNFYD",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6478,9 +7710,55 @@
                                   "content": "Корректировки"
                                 },
                                 "Q4NLmR": {
-                                  "content": "3",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "FvEwp",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "YShaY",
+                                      "name": "Value",
+                                      "fill": "$textPrimary",
+                                      "content": "3",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "a3CsC",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "I8vKER",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "D7YNBC",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "c2zkmf",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6538,9 +7816,95 @@
                                   "content": "До экспирации"
                                 },
                                 "Q4NLmR": {
-                                  "content": "9 дн.",
-                                  "fill": "$neg",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "bjPB4",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "JKyZw",
+                                      "name": "Value",
+                                      "fill": "$neg",
+                                      "content": "9 дн.",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "EhTgB",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "dIxa4",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "Sup27",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "H8Xaxx",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "MeNya",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "v8yfN",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "UrDak",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "fvkuX",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "hMFy0",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6555,9 +7919,95 @@
                                   "content": "Распад / сутки"
                                 },
                                 "Q4NLmR": {
-                                  "content": "−6,80",
-                                  "fill": "$neg",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "vjw1J",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "snCdn",
+                                      "name": "Value",
+                                      "fill": "$neg",
+                                      "content": "−6,80",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "xMTfc",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "a0D9V",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "jrayc",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "XRTkJ",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "zLMIZ",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "mHgQ0",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "gstay",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "R6nNF",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "YX8vX",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -6572,9 +8022,111 @@
                                   "content": "Временная стоимость"
                                 },
                                 "Q4NLmR": {
-                                  "content": "+1 060",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
+                                  "type": "frame",
+                                  "id": "b8vqPZ",
+                                  "name": "Триггер",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "RCmqw",
+                                      "name": "Value",
+                                      "fill": "$textPrimary",
+                                      "content": "+1 060",
+                                      "fontFamily": "$font",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "lfyQR",
+                                      "name": "Пунктир",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "rectangle",
+                                          "id": "bvtCT",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "S8hPh",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "b14rd7",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "XFP9c",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "O7eYP",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "m54nfh",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "N2CP6",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "RTG94",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "KdwU7",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        },
+                                        {
+                                          "type": "rectangle",
+                                          "id": "B3m2th",
+                                          "name": "Тире",
+                                          "fill": "$textMuted",
+                                          "width": 3,
+                                          "height": 1
+                                        }
+                                      ]
+                                    }
+                                  ]
                                 }
                               }
                             }
@@ -6608,14 +8160,175 @@
                               "letterSpacing": 0.3
                             },
                             {
-                              "type": "text",
-                              "id": "tz9z8",
-                              "name": "Value",
-                              "fill": "$accentStrong",
-                              "content": "+35,70 USDT",
-                              "fontFamily": "$font",
-                              "fontSize": 14,
-                              "fontWeight": "600"
+                              "type": "frame",
+                              "id": "M40LM",
+                              "name": "Триггер",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "kW1Mz",
+                                  "name": "Value",
+                                  "fill": "$accentStrong",
+                                  "content": "+35,70 USDT",
+                                  "fontFamily": "$font",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "HcbKT",
+                                  "name": "Пунктир",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "rectangle",
+                                      "id": "eYY64",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "pQLr6",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "reUt3",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "FCiHK",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "N991Bk",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "LaDWd",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "P6OnOn",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "zTeNg",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "k1TAG7",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "FSqMc",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "SeESJ",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "R8e49",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "Dei5I",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "R6pQzA",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "LPl5d",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "A7zy6",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "cS9ok",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "g23Db",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    }
+                                  ]
+                                }
+                              ]
                             },
                             {
                               "type": "text",
@@ -6649,16 +8362,202 @@
                               "letterSpacing": 0.3
                             },
                             {
-                              "type": "text",
-                              "id": "me2f8",
-                              "name": "Value",
-                              "fill": "$accentStrong",
-                              "content": "+275,90 USDT",
-                              "fontFamily": "$font",
-                              "fontSize": 14,
-                              "fontWeight": "600"
+                              "type": "frame",
+                              "id": "AGEUj",
+                              "name": "Триггер",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "HswDi",
+                                  "name": "Value",
+                                  "fill": "$accentStrong",
+                                  "content": "+275,90 USDT",
+                                  "fontFamily": "$font",
+                                  "fontSize": 14,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "vfuJL",
+                                  "name": "Пунктир",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "rectangle",
+                                      "id": "N6c4I",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "ywur1",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "xrX8t",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "zhxxX",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "KtE5k",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "j5K8hW",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "ysaqb",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "Mvr3d",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "mRrEn",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "oDbhr",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "k5Aoj1",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "PkRO6",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "FhgYE",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "Oojm6",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "hvYMg",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "oBbEI",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "D0BFG",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "pw0jp",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "ZCeSd",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    },
+                                    {
+                                      "type": "rectangle",
+                                      "id": "KBWMR",
+                                      "name": "Тире",
+                                      "fill": "$textMuted",
+                                      "width": 3,
+                                      "height": 1
+                                    }
+                                  ]
+                                }
+                              ]
                             }
                           ]
+                        },
+                        {
+                          "id": "g83v6",
+                          "type": "ref",
+                          "ref": "CDitz",
+                          "name": "Подсказка «Общий P&L» открыта",
+                          "layoutPosition": "absolute",
+                          "x": 18,
+                          "y": 57
                         }
                       ]
                     },

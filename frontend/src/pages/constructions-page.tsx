@@ -11,8 +11,10 @@ import { ConstructionPreviewCard } from "@/components/constructions/construction
 import { ConstructionsTable } from "@/components/constructions/constructions-table";
 import { useContextPanel } from "@/components/layout/context-panel";
 import { Button } from "@/components/ui/button";
+import { MetricHint } from "@/components/ui/metric-tooltip";
 import { formatClock, formatMoment } from "@/lib/format/display-time";
 import { formatSignedAmount } from "@/lib/format/quantity";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { useIsMobile } from "@/lib/use-mobile";
 import { cn } from "@/lib/utils";
 
@@ -195,10 +197,15 @@ export function ConstructionsPage() {
 					    Traceability: change:rework-contextual-topbar/tasks#2.0
 					    Traceability: openspec:ui/screens#requirement-construction-list-screen */}
 					{summary !== undefined && (
+						// Счётчики — числовые показатели шапки: снабжаются
+						// подсказкой метрики с назначением счётчиков.
+						// Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
 						<p data-slot="constructions-counters" className="text-[12.5px] text-text-secondary">
-							{`конструкций ${summary.constructionCount} · открыто ${summary.openCount} · архив ${
-								summary.constructionCount - summary.openCount
-							}`}
+							<MetricHint tooltip={METRIC_TOOLTIPS.constructionCounters}>
+								{`конструкций ${summary.constructionCount} · открыто ${summary.openCount} · архив ${
+									summary.constructionCount - summary.openCount
+								}`}
+							</MetricHint>
 						</p>
 					)}
 					<div className="ml-auto flex flex-wrap items-center gap-2">
@@ -330,11 +337,23 @@ function MobileSummaryBlock({ summary }: { summary: ConstructionsOverview["summa
 			data-testid="constructions-mobile-summary"
 			className="flex flex-col gap-[3px] px-4 py-3.5"
 		>
+			{/* Мобильный блок «Итог» — та же сводка шапки списка на узком экране:
+			    значение получает ту же подсказку метрики с разделами разбивки.
+			    Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics */}
 			<p className="text-[18px] font-semibold text-accent-strong">
-				{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
+				<MetricHint tooltip={METRIC_TOOLTIPS.journalTotal}>
+					{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
+				</MetricHint>
 			</p>
 			<p className="text-[11px] text-text-secondary">{`${pnlBreakdownText(summary)} · ${quotesNote}`}</p>
-			<p className="text-[11px] text-text-muted">{`конструкций ${summary.constructionCount} · открыто ${summary.openCount}`}</p>
+			{/* Счётчики мобильной сводки — числовые показатели: снабжаются
+			    подсказкой метрики, как и десктопная шапка.
+			    Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics */}
+			<p className="text-[11px] text-text-muted">
+				<MetricHint tooltip={METRIC_TOOLTIPS.constructionCounters}>
+					{`конструкций ${summary.constructionCount} · открыто ${summary.openCount}`}
+				</MetricHint>
+			</p>
 		</div>
 	);
 }
@@ -389,9 +408,17 @@ function ConstructionsHeader({
 				<p className="text-muted-foreground text-sm">чтение журнала…</p>
 			) : (
 				<div data-slot="constructions-summary" className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3.5">
+					{/* Значение итога журнала — числовая метрика сводки шапки: триггером
+					    служит само значение целиком, попап объясняет назначение итога
+					    и раскрывает разбивку разделами по реализованному и
+					    нереализованному PnL из справочника.
+					    Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
+					    Traceability: openspec:ui/screens#scenario-multi-indicator-sections */}
 					<p className="text-[20px] font-semibold text-accent-strong">
-						{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
-						{summary.totalPnL === null && summary.hasMarkFailure ? " (неполный: сбой котировок)" : ""}
+						<MetricHint tooltip={METRIC_TOOLTIPS.journalTotal}>
+							{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
+							{summary.totalPnL === null && summary.hasMarkFailure ? " (неполный: сбой котировок)" : ""}
+						</MetricHint>
 					</p>
 					<p className="text-[12.5px] text-text-secondary">{pnlBreakdownText(summary)}</p>
 					{/* Котировки всегда по полному набору конструкций, независимо

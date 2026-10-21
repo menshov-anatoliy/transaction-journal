@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
@@ -6,6 +6,8 @@ import type {
 	SyntheticCloseDisputeInput,
 	SyntheticCloseManualLinkInput,
 } from "@/lib/api/construction-card";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConstructionMetricStrip } from "./metric-strip";
 
 // Проверяется строка «зафиксировано синтетикой» сводки деталей конструкции
@@ -142,17 +144,21 @@ function renderStrip(
 		...manualLinkProps,
 	};
 	return render(
-		<ConstructionMetricStrip
-			card={card}
-			onDispute={onDispute}
-			onRevert={onRevert}
-			manualLinkPending={defaults.manualLinkPending}
-			manualLinkError={defaults.manualLinkError}
-			manualLinkFormOpen={defaults.manualLinkFormOpen}
-			onCreateManualLink={defaults.onCreateManualLink}
-			onDeleteManualLink={defaults.onDeleteManualLink}
-			onManualLinkFormOpenChange={defaults.onManualLinkFormOpenChange}
-		/>,
+		// Подсказки метрик строятся на Radix Tooltip: провайдер-предок
+		// обязателен, в тестах он же задаёт нулевую задержку открытия.
+		<TooltipProvider delayDuration={0}>
+			<ConstructionMetricStrip
+				card={card}
+				onDispute={onDispute}
+				onRevert={onRevert}
+				manualLinkPending={defaults.manualLinkPending}
+				manualLinkError={defaults.manualLinkError}
+				manualLinkFormOpen={defaults.manualLinkFormOpen}
+				onCreateManualLink={defaults.onCreateManualLink}
+				onDeleteManualLink={defaults.onDeleteManualLink}
+				onManualLinkFormOpenChange={defaults.onManualLinkFormOpenChange}
+			/>
+		</TooltipProvider>,
 	);
 }
 
@@ -683,6 +689,148 @@ describe("ConstructionMetricStrip: ручная синтетическая св�
 		expect(onDeleteManualLink).toHaveBeenCalledTimes(1);
 		expect(screen.getByRole("button", { name: "Оспорить" })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "Вернуть" })).toBeNull();
+	});
+});
+
+// Подсказки числовых метрик сводки: триггер — само значение, текст попапа
+// берётся из справочника; многопоказательные ячейки объясняют каждый
+// показатель своим разделом; даты и времена подсказок не получают.
+// Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
+describe("ConstructionMetricStrip: подсказки числовых метрик сводки", () => {
+	it("числовые метрики открывают подсказку с заголовком справочника", async () => {
+		// Каждая числовая метрика снабжается подсказкой: наведение на
+		// значение открывает попап, называющий метрику из справочника.
+		// Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
+		// Arrange: карточка по умолчанию; значение → ключ справочника.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+
+		for (const [value, key] of [
+			["+105.5 USDT", "totalPnl"],
+			["+3.5%", "capitalPercent"],
+			["+500", "constructionValue"],
+			["+16.7%", "capitalUsage"],
+			["+60.25", "realizedPnl"],
+			["+40.25", "unrealizedPnl"],
+			["+5", "adjustmentsCount"],
+			["9 дн.", "daysToExpiry"],
+			["-6.8", "decayPerDay"],
+			["+1240", "timeValue"],
+		] as const) {
+			// Act: наведение на значение очередной метрики.
+			await user.hover(screen.getByText(value));
+
+			// Assert: открыта ровно одна подсказка с заголовком справочника;
+			// предыдущая закрыта уходом указателя.
+			await waitFor(() => {
+				const tooltips = screen.getAllByRole("tooltip");
+				expect(tooltips).toHaveLength(1);
+				expect(tooltips[0]).toHaveTextContent(METRIC_TOOLTIPS[key].title);
+			});
+		}
+	});
+
+	it("подсказка «% капитала» даёт раздел на процент и на капитал", async () => {
+		// Многопоказательная ячейка объясняет оба показателя раздельно:
+		// раздел о проценте результата и раздел о выделенном капитале.
+		// Traceability: openspec:ui/screens#scenario-multi-indicator-sections
+		// Arrange: карточка по умолчанию с капиталом и процентом.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+
+		// Act: наведение на значение процента.
+		await user.hover(screen.getByText("+3.5%"));
+
+		// Assert: подсказка содержит оба раздела справочника.
+		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
+		const tooltip = screen.getByRole("tooltip");
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.capitalPercent.title);
+		for (const section of METRIC_TOOLTIPS.capitalPercent.sections ?? []) {
+			expect(tooltip).toHaveTextContent(section.label);
+			expect(tooltip).toHaveTextContent(section.text);
+		}
+	});
+
+	it("подсказка строки синтетики даёт разделы на лок и размер ноги", async () => {
+		// Строка «зафиксировано синтетикой» — одна многопоказательная
+		// ячейка: лок к экспирации и логический размер ноги поясняются
+		// одной подсказкой с разделом на каждый показатель.
+		// Traceability: openspec:ui/screens#scenario-multi-indicator-sections
+		// Arrange: неоспоренная связка — строка с величинами выведена.
+		const card = makeCard({
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.3,
+				lockedValueUsdt: 35.7,
+				disputed: false,
+				linearExecId: "exec-linear-1",
+				counterOptionExecId: "exec-option-1",
+				manualLinkId: null,
+			}],
+		});
+		const user = userEvent.setup();
+		renderStrip(card);
+
+		// Act: наведение на величину лока.
+		await user.hover(screen.getByText("+35.7 USDT"));
+
+		// Assert: подсказка называет строку и содержит оба раздела.
+		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
+		const tooltip = screen.getByRole("tooltip");
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.syntheticLocked.title);
+		for (const section of METRIC_TOOLTIPS.syntheticLocked.sections ?? []) {
+			expect(tooltip).toHaveTextContent(section.label);
+			expect(tooltip).toHaveTextContent(section.text);
+		}
+	});
+
+	it("сводная «с учётом зафиксированного синтетикой» открывает подсказку", async () => {
+		// Сводная величина зоны синтетики — числовая метрика: подсказка
+		// объясняет её состав из справочника.
+		// Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
+		// Arrange: действующая связка и сводная из API.
+		const card = makeCard({
+			syntheticCloses: [{
+				closedLegSymbol: "ETH-28MAR-1600-P",
+				quantity: 0.3,
+				lockedValueUsdt: 35.7,
+				disputed: false,
+				linearExecId: "exec-linear-1",
+				counterOptionExecId: "exec-option-1",
+				manualLinkId: null,
+			}],
+		});
+		const user = userEvent.setup();
+		renderStrip({ ...card, metrics: { ...card.metrics, syntheticAdjustedTotalUsdt: 96 } });
+
+		// Act: наведение на значение сводной.
+		await user.hover(screen.getByText("+96 USDT"));
+
+		// Assert: подсказка называет сводную из справочника.
+		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
+		expect(screen.getByRole("tooltip")).toHaveTextContent(METRIC_TOOLTIPS.adjustedTotal.title);
+	});
+
+	it("«Котировки на» и «Период» подсказок не имеют", async () => {
+		// Даты и времена подсказками метрик не снабжаются: триггера нет
+		// ни у подписи, ни у значения, наведение ничего не открывает.
+		// Traceability: openspec:ui/screens#scenario-dates-skip-tooltip
+		// Arrange: карточка по умолчанию с заполненными датами.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+
+		for (const label of ["котировки на", "период"]) {
+			// Assert (структура): у метрики-даты нет триггера подсказки.
+			const metric = screen.getByText(label).closest('[data-slot="metric"]');
+			expect(metric).not.toBeNull();
+			expect(metric!.querySelector('[data-slot="tooltip-trigger"]')).toBeNull();
+
+			// Act: наведение на всю метрику — и подпись, и значение.
+			await user.hover(metric!);
+
+			// Assert (поведение): подсказка не открылась.
+			expect(screen.queryByRole("tooltip")).toBeNull();
+		}
 	});
 });
 

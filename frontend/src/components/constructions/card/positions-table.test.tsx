@@ -2,6 +2,8 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConstructionCardPosition } from "@/lib/api/construction-card";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { PositionsTable } from "./positions-table";
 
 // Канал котировок подменён: форма пометки спрашивает последнюю марку
@@ -69,13 +71,17 @@ beforeEach(() => {
 
 function renderTable(positions: readonly ConstructionCardPosition[], onAddCloseMark: () => void = vi.fn()) {
 	return render(
-		<PositionsTable
-			constructionId={7}
-			positions={positions}
-			markPending={false}
-			onAddCloseMark={onAddCloseMark}
-			onSaveComment={vi.fn()}
-		/>,
+		// Подсказки заголовков открываются по наведению без задержки —
+		// провайдер задаёт нулевую задержку открытия для всех тестов.
+		<TooltipProvider delayDuration={0}>
+			<PositionsTable
+				constructionId={7}
+				positions={positions}
+				markPending={false}
+				onAddCloseMark={onAddCloseMark}
+				onSaveComment={vi.fn()}
+			/>
+		</TooltipProvider>,
 	);
 }
 
@@ -332,5 +338,74 @@ describe("PositionsTable: форма пометки закрывается по 
 		// Assert: форма осталась открыта, причина отказа показана в форме.
 		expect(await screen.findByText(/Пометка не поставлена: инструмент неизвестен/)).toHaveAttribute("role", "alert");
 		expect(screen.getByRole("button", { name: "Поставить пометку" })).toBeInTheDocument();
+	});
+});
+
+// Подсказки числовых колонок таблицы позиций живут в заголовках: заголовок
+// оборачивается в MetricHint целиком, даты и времена подсказок не получают.
+// Traceability: openspec:ui/screens#requirement-column-header-tooltips
+describe("PositionsTable: подсказки заголовков числовых колонок", () => {
+	it("подсказка «Реализ. P&L» содержит разделы о значении в USDT и о проценте от капитала", async () => {
+		// Двухпоказательная колонка объясняет оба показателя раздельно;
+		// тексты разделов берутся из справочника подсказок метрик.
+		// Traceability: openspec:ui/screens#scenario-column-tooltip-sections-per-indicator
+		// Arrange: таблица с одной открытой позицией.
+		const user = userEvent.setup();
+		renderTable([makePosition()]);
+
+		// Act: наведение на заголовок колонки.
+		await user.hover(screen.getByText("Реализ. P&L"));
+
+		// Assert: попап по роли tooltip содержит оба раздела справочника.
+		const tooltip = screen.getByRole("tooltip");
+		for (const section of METRIC_TOOLTIPS.positionRealizedPnl.sections ?? []) {
+			expect(tooltip).toHaveTextContent(section.label);
+			expect(tooltip).toHaveTextContent(section.text);
+		}
+	});
+
+	it("остальные числовые заголовки открывают подсказку по наведению", async () => {
+		// Каждая числовая колонка поясняется подсказкой метрики в заголовке.
+		// Traceability: openspec:ui/screens#requirement-column-header-tooltips
+		// Arrange: таблица с одной открытой позицией; колонка → ключ справочника.
+		const user = userEvent.setup();
+		renderTable([makePosition()]);
+
+		for (const [header, key] of [
+			["Стоимость", "positionValue"],
+			["Изм., %", "priceChangePercent"],
+			["До экспирации", "daysToExpiry"],
+			["Распад", "decayPerDay"],
+			["Нереализ. P&L", "positionUnrealizedPnl"],
+			["Общий P&L", "positionTotalPnl"],
+			["Комиссии", "commissionFees"],
+		] as const) {
+			// Act: наведение на заголовок очередной колонки.
+			await user.hover(screen.getByText(header));
+
+			// Assert: открыта ровно одна подсказка, называющая метрику
+			// из справочника; предыдущая закрыта уходом указателя.
+			await waitFor(() => {
+				const tooltips = screen.getAllByRole("tooltip");
+				expect(tooltips).toHaveLength(1);
+				expect(tooltips[0]).toHaveTextContent(METRIC_TOOLTIPS[key].title);
+			});
+		}
+	});
+
+	it("заголовки дат подсказок не имеют", async () => {
+		// Колонки дат и времён подсказками в заголовках не снабжаются.
+		// Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip
+		// Arrange: таблица с одной открытой позицией.
+		const user = userEvent.setup();
+		renderTable([makePosition()]);
+
+		for (const header of ["Открыта", "Закрыта"]) {
+			// Act: наведение на заголовок даты.
+			await user.hover(screen.getByText(header));
+
+			// Assert: подсказка не открылась.
+			expect(screen.queryByRole("tooltip")).toBeNull();
+		}
 	});
 });

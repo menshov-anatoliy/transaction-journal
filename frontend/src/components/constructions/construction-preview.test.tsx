@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import type { ConstructionPreview } from "@/lib/api/constructions";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConstructionPreviewCard } from "./construction-preview";
 
 // Проверяется краткая карточка конструкции в контекстной панели списка:
@@ -41,9 +42,13 @@ const preview: ConstructionPreview = {
 
 function renderPreview(overrides: Partial<ConstructionPreview> = {}, liveHintCount?: number) {
 	return render(
-		<MemoryRouter>
-			<ConstructionPreviewCard preview={{ ...preview, ...overrides }} liveHintCount={liveHintCount} />
-		</MemoryRouter>,
+		// Средний индикатор несёт подсказки чисел на Radix Tooltip —
+		// провайдер-предок обязателен для рендера.
+		<TooltipProvider delayDuration={0}>
+			<MemoryRouter>
+				<ConstructionPreviewCard preview={{ ...preview, ...overrides }} liveHintCount={liveHintCount} />
+			</MemoryRouter>
+		</TooltipProvider>,
 	);
 }
 

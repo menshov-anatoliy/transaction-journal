@@ -5,7 +5,9 @@ import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConstructionsOverview } from "@/lib/api/constructions";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConstructionsPage } from "./constructions-page";
 
 // Проверяется компоновка раздела «Конструкции» по концепции §3 и change
@@ -183,10 +185,14 @@ function renderPage() {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
 	return render(
 		<QueryClientProvider client={queryClient}>
-			<MemoryRouter>
-				<LocationProbe />
-				<ConstructionsPage />
-			</MemoryRouter>
+			{/* Провайдер подсказок с нулевой задержкой — для проверки попапов
+			    метрик наведением, как в примитиве Tooltip. */}
+			<TooltipProvider delayDuration={0}>
+				<MemoryRouter>
+					<LocationProbe />
+					<ConstructionsPage />
+				</MemoryRouter>
+			</TooltipProvider>
 		</QueryClientProvider>,
 	);
 }
@@ -215,7 +221,11 @@ function renderPageInFrame() {
 	);
 	render(
 		<QueryClientProvider client={queryClient}>
-			<RouterProvider router={router} />
+			{/* Radix Tooltip требует провайдера: сводка шапки и таблица рендерят
+			    подсказки метрик. */}
+			<TooltipProvider delayDuration={0}>
+				<RouterProvider router={router} />
+			</TooltipProvider>
 		</QueryClientProvider>,
 	);
 	return { router };
@@ -279,17 +289,21 @@ describe("раздел «Конструкции»", () => {
 		render(
 			<QueryClientProvider client={queryClient}>
 				<MemoryRouter>
-					<Profiler
-						id="constructions"
-						onRender={() => {
-							commits += 1;
-							if (commits > 30) {
-								throw new Error("Выделение конструкции вызвало бесконечное обновление страницы");
-							}
-						}}
-					>
-						<ConstructionsPage />
-					</Profiler>
+					{/* Radix Tooltip требует провайдера: страница рендерит подсказки
+					    метрик сводки и заголовков таблицы. */}
+					<TooltipProvider delayDuration={0}>
+						<Profiler
+							id="constructions"
+							onRender={() => {
+								commits += 1;
+								if (commits > 30) {
+									throw new Error("Выделение конструкции вызвало бесконечное обновление страницы");
+								}
+							}}
+						>
+							<ConstructionsPage />
+						</Profiler>
+					</TooltipProvider>
 				</MemoryRouter>
 			</QueryClientProvider>,
 		);
@@ -333,11 +347,13 @@ describe("раздел «Конструкции»", () => {
 		// Act: открытие раздела.
 		renderPage();
 
-		// Assert: значение итога — 20/600 на акцентном токене.
+		// Assert: значение итога — 20/600 на акцентном токене; триггер подсказки
+		// оборачивает значение целиком, типографика наследуется от абзаца.
 		const value = await screen.findByText("+100.5 USDT");
-		expect(value.className).toContain("text-[20px]");
-		expect(value.className).toContain("font-semibold");
-		expect(value.className).toContain("text-accent-strong");
+		const valueParagraph = value.closest("p");
+		expect(valueParagraph?.className).toContain("text-[20px]");
+		expect(valueParagraph?.className).toContain("font-semibold");
+		expect(valueParagraph?.className).toContain("text-accent-strong");
 
 		// Блок итога: одна строка по референсу design.pen — паддинги [14,16],
 		// сегменты по базовой линии, перенос на узком экране.
@@ -357,6 +373,47 @@ describe("раздел «Конструкции»", () => {
 		const quotes = screen.getByText(/котировки на/i);
 		expect(quotes.className).toContain("text-[11.5px]");
 		expect(quotes.className).toContain("text-text-muted");
+	});
+
+	it("подсказка «Итога журнала» раскрывает назначение и разделы разбивки", async () => {
+		// Числовая метрика сводки шапки — значение итога журнала: наведение
+		// открывает попап с назначением и разделами реализованного и
+		// нереализованного PnL из справочника; строка разбивки отдельного
+		// триггера не имеет, её показатели раскрыты разделами попапа.
+		// Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
+		// Traceability: openspec:ui/screens#scenario-multi-indicator-sections
+		// Arrange: пользователь для наведения, открытый раздел.
+		const user = userEvent.setup();
+		renderPage();
+
+		// Act: наведение на значение итога журнала в шапке сводки.
+		await user.hover(await screen.findByText("+100.5 USDT"));
+
+		// Assert: попап с заголовком метрики и обоими разделами разбивки.
+		const tooltip = screen.getByRole("tooltip");
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.journalTotal.title);
+		for (const section of METRIC_TOOLTIPS.journalTotal.sections ?? []) {
+			expect(tooltip).toHaveTextContent(section.label);
+			expect(tooltip).toHaveTextContent(section.text);
+		}
+	});
+
+	it("счётчики шапки раскрывают подсказку с назначением счётчиков", async () => {
+		// Счётчики «конструкций N · открыто N · архив N» — числовые
+		// показатели шапки: наведение открывает подсказку с назначением
+		// счётчиков из справочника.
+		// Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
+		// Arrange: пользователь для наведения, открытый раздел.
+		const user = userEvent.setup();
+		renderPage();
+
+		// Act: наведение на строку счётчиков в шапке.
+		await user.hover(await screen.findByText(/конструкций \d+ · открыто \d+ · архив \d+/));
+
+		// Assert: попап с назначением счётчиков из справочника.
+		const tooltip = screen.getByRole("tooltip");
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.constructionCounters.title);
+		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.constructionCounters.purpose);
 	});
 
 	it("не показывает кнопку «Разобрать входящие» в тулбаре раздела", async () => {
@@ -383,11 +440,15 @@ describe("раздел «Конструкции»", () => {
 		// Act: открытие раздела.
 		renderPage();
 
-		// Assert: счётчики следуют сразу за титулом H1 и несут токены макета.
-		const counters = await screen.findByText("конструкций 3 · открыто 1 · архив 2");
+		// Assert: счётчики следуют сразу за титулом H1 и несут токены макета;
+		// текст счётчиков обёрнут триггером подсказки — токены проверяются
+		// на абзаце-контейнере.
+		// Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics
+		const countersText = await screen.findByText("конструкций 3 · открыто 1 · архив 2");
+		const counters = countersText.closest("p");
 		expect(counters).toHaveAttribute("data-slot", "constructions-counters");
-		expect(counters.className).toContain("text-[12.5px]");
-		expect(counters.className).toContain("text-text-secondary");
+		expect(counters?.className).toContain("text-[12.5px]");
+		expect(counters?.className).toContain("text-text-secondary");
 		const heading = screen.getByRole("heading", { name: "Конструкции", level: 1 });
 		expect(heading.nextElementSibling).toBe(counters);
 	});
@@ -664,15 +725,21 @@ describe("раздел «Конструкции»", () => {
 		// Assert: блок «Итог» — три строки с токенами мастера iGlhI.
 		const block = await screen.findByTestId("constructions-mobile-summary");
 		const total = within(block).getByText("+100.5 USDT");
-		expect(total.className).toContain("text-[18px]");
-		expect(total.className).toContain("font-semibold");
-		expect(total.className).toContain("text-accent-strong");
+		// Триггер подсказки оборачивает значение целиком, типографика
+		// наследуется от абзаца блока «Итог».
+		const totalParagraph = total.closest("p");
+		expect(totalParagraph?.className).toContain("text-[18px]");
+		expect(totalParagraph?.className).toContain("font-semibold");
+		expect(totalParagraph?.className).toContain("text-accent-strong");
 		const breakdown = within(block).getByText(/реализов\. \+60\.25 \/ нереализов\. \+40\.25 · котировки \d{2}:\d{2}/);
 		expect(breakdown.className).toContain("text-[11px]");
 		expect(breakdown.className).toContain("text-text-secondary");
-		const counters = within(block).getByText("конструкций 3 · открыто 1");
-		expect(counters.className).toContain("text-[11px]");
-		expect(counters.className).toContain("text-text-muted");
+		// Текст счётчиков обёрнут триггером подсказки — токены проверяются
+		// на абзаце-контейнере.
+		const countersText = within(block).getByText("конструкций 3 · открыто 1");
+		const counters = countersText.closest("p");
+		expect(counters?.className).toContain("text-[11px]");
+		expect(counters?.className).toContain("text-text-muted");
 
 		// Assert: H1-тулбар скрыт — титул, счётчики-строка, сегмент области,
 		// синхронизация и десктопная шапка сводки отсутствуют.

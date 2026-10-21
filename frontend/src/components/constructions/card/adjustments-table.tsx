@@ -2,12 +2,14 @@ import * as React from "react";
 import type { AdjustmentInput, ConstructionCardAdjustment } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MetricHint } from "@/components/ui/metric-tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, X } from "lucide-react";
 import { GridSection } from "./grid-section";
 import { DASH } from "@/lib/format/degradation";
 import { formatDay } from "@/lib/format/display-time";
 import { formatSignedAmount } from "@/lib/format/quantity";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-mobile";
 
@@ -283,12 +285,20 @@ export function AdjustmentsTable({ adjustments, actionsPending, onAdd, onEdit, o
 			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
 			{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
 			<Table density="compact" className="text-text-secondary">
+				{/* Подсказка метрики в заголовке числовой колонки суммы: заголовок
+				    оборачивается один раз, триггер наследует типографику. */}
+				{/* Traceability: openspec:ui/screens#requirement-column-header-tooltips */}
 				<TableHeader className="bg-surface-2">
 					<TableRow className="border-divider">
+						{/* Колонка даты корректировки — дата: подсказка метрики
+						    у неё не показывается. */}
+						{/* Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip */}
 						<TableHead>Дата</TableHead>
 						<TableHead>Описание</TableHead>
 						<TableHead>Источник</TableHead>
-						<TableHead>Сумма</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.adjustmentValue}>Сумма</MetricHint>
+						</TableHead>
 						<TableHead>Действия</TableHead>
 					</TableRow>
 				</TableHeader>

@@ -1,11 +1,13 @@
 import * as React from "react";
 import type { ConstructionCardClosingEntry, ConstructionCardClosingWarning } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
+import { MetricHint } from "@/components/ui/metric-tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { GridSection } from "./grid-section";
 import { DASH } from "@/lib/format/degradation";
 import { formatMoment } from "@/lib/format/display-time";
 import { formatAmount, formatSignedAmount } from "@/lib/format/quantity";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { toLocalInputValue } from "./positions-table";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-mobile";
@@ -199,13 +201,26 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 			{/* Traceability: change:reconcile-frontend-with-design/design#D6 */}
 			{/* Traceability: change:rework-spa-shell-and-screens/design#D7 */}
 			<Table density="compact" className="text-text-secondary">
+				{/* Подсказка метрики в заголовке колонки суммы закрывающей записи:
+				    заголовок оборачивается один раз, триггер наследует типографику. */}
+				{/* Traceability: openspec:ui/screens#requirement-column-header-tooltips */}
 				<TableHeader className="bg-surface-2">
 					<TableRow className="border-divider">
+						{/* Колонка времени записи — дата/время: подсказка метрики
+						    у неё не показывается. */}
+						{/* Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip */}
 						<TableHead>Время</TableHead>
 						<TableHead>Тип</TableHead>
 						<TableHead>Инструмент</TableHead>
-						<TableHead>Детали</TableHead>
-						<TableHead>Сумма</TableHead>
+						{/* Колонка «Детали» объединяет два показателя записи — количество
+						    и цену закрытия: подсказка даёт раздел на каждый показатель.
+						    Traceability: openspec:ui/screens#requirement-column-header-tooltips */}
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.closingEntryDetails}>Детали</MetricHint>
+						</TableHead>
+						<TableHead>
+							<MetricHint tooltip={METRIC_TOOLTIPS.closingEntriesAmount}>Сумма</MetricHint>
+						</TableHead>
 						<TableHead>Действия</TableHead>
 					</TableRow>
 				</TableHeader>

@@ -1,5 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { MetricHint } from "@/components/ui/metric-tooltip";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import {
 	computeFinResultGeometry,
 	type FinResultGeometry,
@@ -216,11 +218,15 @@ function DetailedFinResultIndicator({
 			data-incomplete={geometry.incomplete ? "true" : "false"}
 			className={cn("flex flex-col", className)}
 			style={{ gap: preset.sectionGapPx }}
-			role="img"
-			aria-label={describeForScreenReader(geometry)}
 		>
 			<LabelStack geometry={geometry} preset={preset} side="above" />
-			<FinResultBar geometry={geometry} preset={preset} />
+			{/* Текстовое описание состояния несёт сама полоса: контейнер не
+			    объявлен role="img", иначе триггеры подсказок числовых подписей
+			    внутри были бы скрыты от скринридеров вместе с содержимым img.
+			    Traceability: openspec:ui/screens#requirement-indicator-numbers-tooltips-alongside-reading-popover */}
+			<div role="img" aria-label={describeForScreenReader(geometry)}>
+				<FinResultBar geometry={geometry} preset={preset} />
+			</div>
 			<LabelStack geometry={geometry} preset={preset} side="below" />
 			{geometry.labels.riskState !== null && (
 				// Статус не конечного риска — отдельная строка вне координат
@@ -316,7 +322,11 @@ interface LabelItemView {
 // коллизии он переносит метку на противоположную сторону полосы, поэтому
 // стек собирается по фактической стороне из разноса, а не по канонической;
 // перенесённая метка рендерится в стеке другой стороны.
+// Числовые подписи (кроме нулевого деления) снабжаются подсказками метрик
+// рядом с попапом «Как читать индикатор»: попап поясняет чтение шкалы
+// целиком и остаётся без изменений, подсказка — только отдельное число.
 // Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+// Traceability: openspec:ui/screens#requirement-indicator-numbers-tooltips-alongside-reading-popover
 function collectLabelItems(
 	geometry: FinResultGeometry,
 	preset: SizePreset,
@@ -353,7 +363,10 @@ function collectLabelItems(
 		rows: 1,
 		x: 0,
 		placement: placements.risk,
-		content: geometry.labels.risk,
+		// Деление планового риска поясняется назначением плановой оценки
+		// потерь к экспирации.
+		// Traceability: openspec:ui/screens#requirement-indicator-numbers-tooltips-alongside-reading-popover
+		content: <MetricHint tooltip={METRIC_TOOLTIPS.plannedRisk}>{geometry.labels.risk}</MetricHint>,
 		// Тон плановой границы зависит от представления: полный — красный,
 		// средний — приглушённый (мастера onchD и rMxFZ).
 		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
@@ -374,7 +387,9 @@ function collectLabelItems(
 		rows: 1,
 		x: geometry.profitZone === null ? geometry.zeroAt : geometry.profitZone.to,
 		placement: placements.profit,
-		content: geometry.labels.profit,
+		// Деление планового профита поясняется назначением плановой прибыли.
+		// Traceability: openspec:ui/screens#requirement-indicator-numbers-tooltips-alongside-reading-popover
+		content: <MetricHint tooltip={METRIC_TOOLTIPS.plannedProfit}>{geometry.labels.profit}</MetricHint>,
 		className: cn(preset.scaleLabelClass, preset.profitScaleToneClass),
 	});
 	add({
@@ -383,11 +398,16 @@ function collectLabelItems(
 		rows: 2,
 		x: geometry.borderAt ?? 0,
 		placement: placements.border,
+		// Подпись границы — один триггер на титул и значение: подсказка
+		// поясняет худший исход целиком, рядом остаётся попап чтения шкалы.
+		// Traceability: openspec:ui/screens#scenario-indicator-number-tooltip-coexists
 		content: (
-			<>
+			// Триггер наследует столбец подписи границы, чтобы титул и значение
+			// остались на отдельных строках модели разноса.
+			<MetricHint tooltip={METRIC_TOOLTIPS.worstCase} className="flex-col">
 				<span className={cn("font-medium", borderToneClass)}>{geometry.labels.borderTitle}</span>
 				<span className={cn("font-semibold", borderToneClass)}>{geometry.labels.borderValue}</span>
-			</>
+			</MetricHint>
 		),
 		// Строки границы рендерятся столбцом: модель разноса считает ширину
 		// метки по самой длинной из двух строк (rows=2), а инлайн-рендер давал
@@ -406,7 +426,9 @@ function collectLabelItems(
 		rows: 1,
 		x: geometry.markerAt ?? geometry.zeroAt,
 		placement: placements.marker,
-		content: geometry.labels.marker,
+		// Подпись маркера поясняет смысл итога на шкале.
+		// Traceability: openspec:ui/screens#requirement-indicator-numbers-tooltips-alongside-reading-popover
+		content: <MetricHint tooltip={METRIC_TOOLTIPS.totalMarker}>{geometry.labels.marker}</MetricHint>,
 		className: cn(
 			preset.markerLabelClass,
 			"font-semibold tabular-nums",
