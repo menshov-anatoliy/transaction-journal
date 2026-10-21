@@ -383,7 +383,25 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 								<TableCell className="font-medium text-foreground">{position.symbol}</TableCell>
 								<TableCell className="tabular-nums">
 									{position.syntheticResidual === null ? (
-										formatAmount(position.residual)
+										position.syntheticClosedQuantity === null ? (
+											formatAmount(position.residual)
+										) : (
+											// Признак закрытия синтетикой опционной ноги: факт
+											// действующих связок под неизменным инструментальным
+											// остатком; значения приходят из read model по факту
+											// связок — фронт ничего не вычисляет.
+											// Traceability: openspec:ui/screens#requirement-position-table-synthetic-close-annotation
+											<div
+												data-slot="option-leg-synthetic-split"
+												className="flex flex-col gap-[2px]"
+												title="Закрыто синтетикой — сумма действующих связок ноги; открыто — остаток минус закрытое синтетикой. Инструментальный остаток не меняется"
+											>
+												<span>{formatAmount(position.residual)}</span>
+												<span className="text-[9.5px] text-text-muted">
+													{`закрыто синтетикой ${formatAmount(position.syntheticClosedQuantity)} · открыто ${formatAmount(position.syntheticOpenQuantity ?? 0)}`}
+												</span>
+											</div>
+										)
 									) : (
 										// Распад остатка линейной ноги (мастер aU7Nx/LFEkd):
 										// синтетический хедж связки и прочий (скальперский)

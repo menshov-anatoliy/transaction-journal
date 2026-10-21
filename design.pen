@@ -9278,7 +9278,7 @@
                           "type": "frame",
                           "id": "GiiFb",
                           "name": "C0",
-                          "width": "fill_container",
+                          "width": 42,
                           "padding": [
                             7,
                             6
@@ -9300,7 +9300,8 @@
                           "type": "frame",
                           "id": "sgxOr",
                           "name": "C1",
-                          "width": 50,
+                          "layout": "vertical",
+                          "gap": 2,
                           "padding": [
                             7,
                             6
@@ -9314,6 +9315,16 @@
                               "content": "0,5",
                               "fontFamily": "$font",
                               "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "gQ9SJ",
+                              "name": "SyntheticSplit",
+                              "fill": "$textMuted",
+                              "content": "закрыто синтетикой 0,30 · открыто 0,20",
+                              "fontFamily": "$font",
+                              "fontSize": 9.5,
                               "fontWeight": "normal"
                             }
                           ]
@@ -20243,6 +20254,7 @@
       "y": 2600,
       "name": "Мастер/Синтетика · список связок",
       "width": 560,
+      "height": 372,
       "layout": "vertical",
       "gap": 8,
       "children": [
@@ -20518,6 +20530,75 @@
           "name": "Caption",
           "fill": "$textMuted",
           "content": "Строка-переключатель с раскрытым списком связок — оспоренная приглушена, действие в конце строки",
+          "fontFamily": "$font",
+          "fontSize": 10.5,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "lIyy5",
+          "name": "Остаток ноги · закрыто синтетикой",
+          "fill": "$surface",
+          "layout": "vertical",
+          "gap": 2,
+          "padding": [
+            7,
+            6
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "n9P9WM",
+              "name": "T",
+              "fill": "$textSecondary",
+              "content": "0,5",
+              "fontFamily": "$font",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "WFztx",
+              "name": "Split",
+              "fill": "$textMuted",
+              "content": "закрыто синтетикой 0,30 · открыто 0,20",
+              "fontFamily": "$font",
+              "fontSize": 9.5,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "v1h5Ge",
+          "name": "Остаток ноги · без связок",
+          "fill": "$surface",
+          "layout": "vertical",
+          "padding": [
+            7,
+            6
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "DZcd7",
+              "name": "T",
+              "fill": "$textSecondary",
+              "content": "0,5",
+              "fontFamily": "$font",
+              "fontSize": 11,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "Fa5Zt",
+          "name": "Caption",
+          "fill": "$textMuted",
+          "textGrowth": "fixed-width",
+          "width": 524,
+          "content": "Признак закрытия синтетикой на строке опционной ноги: при действующих связках под неизменным инструментальным остатком — вторичная строка «закрыто синтетикой X · открыто Y» (показывается и у закрытых позиций); без действующих связок ячейка одна",
           "fontFamily": "$font",
           "fontSize": 10.5,
           "fontWeight": "normal"

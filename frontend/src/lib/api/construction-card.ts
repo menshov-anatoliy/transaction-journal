@@ -94,6 +94,11 @@ export interface ConstructionCardPosition {
 	readonly intrinsicValueUsdt: number | null;
 	readonly timeValueUsdt: number | null;
 	readonly decayDayAgoUsdt: number | null;
+	// Признак закрытия синтетикой опционной ноги: сумма количеств действующих
+	// связок по символу ноги и остаток после вычета (может быть отрицательным);
+	// null-пара — действующих связок по ноге нет: отсутствие, а не ноль.
+	readonly syntheticClosedQuantity: number | null;
+	readonly syntheticOpenQuantity: number | null;
 }
 
 /** Строка распознанного синтетического закрытия карточки. */

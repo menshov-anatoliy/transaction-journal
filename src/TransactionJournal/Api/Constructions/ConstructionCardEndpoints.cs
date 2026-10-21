@@ -770,7 +770,14 @@ public static class ConstructionCardEndpoints
 			position.DailyDecayUsdt,
 			position.IntrinsicValueUsdt,
 			position.TimeValueUsdt,
-			position.DecayDayAgoUsdt)).ToArray(),
+			position.DecayDayAgoUsdt,
+			// Признак закрытия синтетикой опционной ноги проходит в контракт
+			// позиции как есть из read-модели: сумма действующих связок по символу
+			// ноги и остаток после вычета; null без действующих связок —
+			// отсутствие, а не ноль.
+			// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
+			position.SyntheticClosedQuantity,
+			position.SyntheticOpenQuantity)).ToArray(),
 		data.Trades.Select(trade => new ConstructionCardTradeResponse(
 			trade.ExecId,
 			trade.Symbol,
@@ -1067,10 +1074,16 @@ public sealed record ConstructionCardMetricsResponse(
 /// <param name="IntrinsicValueUsdt">Внутренняя стоимость ноги на чистый остаток; материал тултипа состава, null без индексной цены.</param>
 /// <param name="TimeValueUsdt">Временная стоимость ноги на чистый остаток; материал тултипа состава, null без индексной цены или марки.</param>
 /// <param name="DecayDayAgoUsdt">Распад ноги на снимке суточной давности; материал динамики «вчера → сегодня», null без снимка истории.</param>
+/// <param name="SyntheticClosedQuantity">Сумма количеств действующих синтетических связок по символу ноги; null — действующих связок по символу нет.</param>
+/// <param name="SyntheticOpenQuantity">Открытая после синтетического закрытия часть ноги — остаток минус закрытое синтетикой, без клэмпа; null вместе с закрытым.</param>
 // Распад остатка линейной ноги входит в контракт позиции аддитивно: null
 // при отсутствии неоспоренной синтетики отличим от нуля остатка.
 // Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
 // Traceability: change:synthetic-close-logical-layer/design#d5
+// Признак закрытия синтетикой опционной ноги входит в контракт позиции
+// аддитивно: пара величин публикуется при действующих связках по символу
+// ноги, null — их отсутствие, а не ноль.
+// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
 // Величины времени жизни входят в контракт позиции аддитивно: колонки «до
 // экспирации» и «распад» с тултипом состава; null клиент рендерит прочерком.
 // Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
@@ -1098,7 +1111,9 @@ public sealed record ConstructionCardPositionResponse(
 	decimal? DailyDecayUsdt,
 	decimal? IntrinsicValueUsdt,
 	decimal? TimeValueUsdt,
-	decimal? DecayDayAgoUsdt);
+	decimal? DecayDayAgoUsdt,
+	decimal? SyntheticClosedQuantity,
+	decimal? SyntheticOpenQuantity);
 
 /// <summary>Строка списка синтетических закрытий карточки.</summary>
 /// <param name="ClosedLegSymbol">Символ закрываемой опционной ноги связки.</param>

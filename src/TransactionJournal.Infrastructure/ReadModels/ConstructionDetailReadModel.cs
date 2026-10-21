@@ -77,7 +77,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		// заголовочным реализованным результатом, калькулятор метрик не меняется.
 		// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#requirement-synthetic-close-adjusted-total
 		var adjustedMetrics = ApplySyntheticAdjustedTotal(constructionMetrics, synthetic.Rows);
-		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, constructionMetrics.Lifetime, synthetic.QuantityByLinearSymbol, cancellationToken).ConfigureAwait(false);
+		var positions = await ReadPositionsAsync(db, constructionId, construction.AllocatedCapitalUsdt, metrics, constructionMetrics.Lifetime, synthetic.QuantityByLinearSymbol, synthetic.QuantityByClosedLegSymbol, cancellationToken).ConfigureAwait(false);
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 
@@ -157,10 +157,13 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// стоимость позиции уже выведена здесь же. Незаданный или нулевой капитал
 	/// базы процентов от капитала не образует, неположительная стоимость — базы
 	/// процентов от стоимости. Остаток линейной ноги распадается на синтетическую
-	/// и прочую части по количествам неоспоренных связок. Открытым опционным
+	/// и прочую части по количествам неоспоренных связок. Опционная нога несёт
+	/// признак закрытия синтетикой — сумму количеств действующих связок по её
+	/// символу и остаток после вычета. Открытым опционным
 	/// ногам величины времени жизни проходят из вычислителя аналитики по символу:
 	/// закрытая позиция и фьючерсная нога остаётся прочерком.
 	/// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
+	/// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
 	/// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
 	/// </summary>
 	private static async Task<List<ConstructionPositionRow>> ReadPositionsAsync(
@@ -170,6 +173,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		JournalMetrics metrics,
 		OptionLifetimeEvaluation? lifetime,
 		IReadOnlyDictionary<string, decimal> syntheticQuantityByLinearSymbol,
+		IReadOnlyDictionary<string, decimal> syntheticQuantityByClosedLegSymbol,
 		CancellationToken cancellationToken)
 	{
 		var commentsBySymbol = (await db.PositionComments
@@ -221,6 +225,21 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 					otherResidual = position.Residual - syntheticQuantity;
 				}
 
+				// Признак закрытия синтетикой опционной ноги: «закрыто синтетикой» —
+				// сумма количеств действующих связок по символу ноги, «открыто» —
+				// остаток после вычета без клэмпа, может быть отрицательным. Пара
+				// вычисляется при чтении независимо от признака закрытия позиции
+				// и не меняет инструментальные метрики строки; без действующих
+				// связок по символу пары нет — отсутствие, а не ноль.
+				// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
+				decimal? syntheticClosedQuantity = null;
+				decimal? syntheticOpenQuantity = null;
+				if (syntheticQuantityByClosedLegSymbol.TryGetValue(position.Symbol, out var syntheticClosed))
+				{
+					syntheticClosedQuantity = syntheticClosed;
+					syntheticOpenQuantity = position.Residual - syntheticClosed;
+				}
+
 				return new ConstructionPositionRow(
 					position.Symbol,
 					position.Residual,
@@ -256,7 +275,9 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 					DailyDecayUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.DailyDecayUsdt,
 					IntrinsicValueUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.IntrinsicValueUsdt,
 					TimeValueUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.TimeValueUsdt,
-					DecayDayAgoUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.DecayDayAgoUsdt);
+					DecayDayAgoUsdt: lifetimeBySymbol.GetValueOrDefault(position.Symbol)?.DecayDayAgoUsdt,
+					SyntheticClosedQuantity: syntheticClosedQuantity,
+					SyntheticOpenQuantity: syntheticOpenQuantity);
 			})
 			.ToList();
 	}
@@ -389,14 +410,17 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// из распознанных без оспоренных и ручных связок: ручная связка вступает
 	/// в силу наравне с распознанными. Оспоренные связки остаются в списке
 	/// с признаком спора — их лок не входит в логический слой; у ручной связки
-	/// спора нет, величина показывается при любом состоянии прогона.
+	/// спора нет, величина показывается при любом состоянии прогона. Вторая
+	/// карта сумм копится по символу закрываемой ноги в том же прогоне — она
+	/// питает признак закрытия синтетикой на строке позиции.
 	/// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-manual-link
 	/// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-locked-value
+	/// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
 	/// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
 	/// Traceability: change:manual-journal-management/design#d5
 	/// Traceability: change:synthetic-close-logical-layer/design#d1
 	/// </summary>
-	private static async Task<(List<SyntheticCloseRow> Rows, IReadOnlyDictionary<string, decimal> QuantityByLinearSymbol)> ReadSyntheticClosesAsync(
+	private static async Task<(List<SyntheticCloseRow> Rows, IReadOnlyDictionary<string, decimal> QuantityByLinearSymbol, IReadOnlyDictionary<string, decimal> QuantityByClosedLegSymbol)> ReadSyntheticClosesAsync(
 		JournalDbContext db,
 		long constructionId,
 		List<MaterializedTrade> materializedTrades,
@@ -447,6 +471,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			.ToHashSet();
 		var rows = new List<SyntheticCloseRow>();
 		var quantityByLinearSymbol = new Dictionary<string, decimal>(StringComparer.Ordinal);
+		// Вторая карта сумм — по символу закрываемой ноги: копится в том же
+		// прогоне, что и карта линейных символов, из одного набора действующих
+		// связок — расхождение признака с локом и сводной величиной исключено.
+		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
+		var quantityByClosedLegSymbol = new Dictionary<string, decimal>(StringComparer.Ordinal);
 		foreach (var link in links)
 		{
 			var key = (link.LinearExecId, link.CounterOptionExecId);
@@ -465,6 +494,11 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				var linearTrade = TradeOf(link.LinearExecId, materializedTrades);
 				quantityByLinearSymbol[linearTrade.Symbol] =
 					quantityByLinearSymbol.GetValueOrDefault(linearTrade.Symbol) + link.Quantity;
+				// Неоспоренная распознанная связка действует в логическом слое:
+				// её количество входит в сумму признака по символу закрываемой ноги.
+				// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
+				quantityByClosedLegSymbol[link.ClosedLegSymbol] =
+					quantityByClosedLegSymbol.GetValueOrDefault(link.ClosedLegSymbol) + link.Quantity;
 			}
 		}
 
@@ -492,9 +526,14 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			var linearTrade = TradeOf(link.LinearExecId, materializedTrades);
 			quantityByLinearSymbol[linearTrade.Symbol] =
 				quantityByLinearSymbol.GetValueOrDefault(linearTrade.Symbol) + link.Quantity;
+			// Ручная связка действует в логическом слое наравне с распознанной:
+			// её количество входит в сумму признака по символу закрываемой ноги.
+			// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
+			quantityByClosedLegSymbol[link.ClosedLegSymbol] =
+				quantityByClosedLegSymbol.GetValueOrDefault(link.ClosedLegSymbol) + link.Quantity;
 		}
 
-		return (rows, quantityByLinearSymbol);
+		return (rows, quantityByLinearSymbol, quantityByClosedLegSymbol);
 	}
 
 	/// <summary>

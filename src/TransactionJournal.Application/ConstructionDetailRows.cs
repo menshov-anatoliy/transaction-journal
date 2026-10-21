@@ -35,6 +35,8 @@ namespace TransactionJournal.Application;
 /// <param name="IntrinsicValueUsdt">Внутренняя стоимость открытой опционной ноги на чистый остаток, USDT; материал тултипа состава, null без индексной цены.</param>
 /// <param name="TimeValueUsdt">Временная стоимость открытой опционной ноги на чистый остаток, USDT; материал тултипа состава, null без индексной цены или марки.</param>
 /// <param name="DecayDayAgoUsdt">Распад ноги на снимке суточной давности, приведённый к текущему остатку; материал динамики «вчера → сегодня», null без снимка истории.</param>
+/// <param name="SyntheticClosedQuantity">Сумма количеств действующих синтетических связок по символу ноги; null — действующих связок по символу нет.</param>
+/// <param name="SyntheticOpenQuantity">Открытая после синтетического закрытия часть ноги — остаток минус закрытое синтетикой, без клэмпа; null вместе с закрытым.</param>
 // Строка показывает картину позиции её записями: вход, выход,
 // раздельные части реализованного и нереализованного результата
 // с процентом от капитала, общий P&L с процентом, комиссии и времена.
@@ -54,6 +56,12 @@ namespace TransactionJournal.Application;
 // позиция и фьючерсная нога показывают прочерк, тултип состава читает
 // внутреннюю/временную стоимость и динамику распада «вчера → сегодня».
 // Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
+// Признак закрытия синтетикой на опционной ноге публикуется парой величин:
+// «закрыто синтетикой» — сумма количеств действующих связок по символу ноги,
+// «открыто» — остаток после вычета без клэмпа (может уйти в минус); без
+// действующих связок по символу пары нет, инструментальные метрики строки
+// не меняются.
+// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
 public sealed record ConstructionPositionRow(
 	string Symbol,
 	decimal Residual,
@@ -78,7 +86,9 @@ public sealed record ConstructionPositionRow(
 	decimal? DailyDecayUsdt = null,
 	decimal? IntrinsicValueUsdt = null,
 	decimal? TimeValueUsdt = null,
-	decimal? DecayDayAgoUsdt = null);
+	decimal? DecayDayAgoUsdt = null,
+	decimal? SyntheticClosedQuantity = null,
+	decimal? SyntheticOpenQuantity = null);
 
 /// <summary>
 /// Строка таблицы сделок деталей конструкции: сделка с атрибутами исходной записи

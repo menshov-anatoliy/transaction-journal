@@ -46,6 +46,8 @@ function makePosition(overrides: Partial<ConstructionCardPosition> = {}): Constr
 		intrinsicValueUsdt: null,
 		timeValueUsdt: null,
 		decayDayAgoUsdt: null,
+		syntheticClosedQuantity: null,
+		syntheticOpenQuantity: null,
 		...overrides,
 	};
 }
@@ -125,6 +127,99 @@ describe("PositionsTable: распад остатка линейной ноги"
 
 		// Assert: узел распада в таблице не появился.
 		expect(document.querySelector('[data-slot="linear-leg-residual-split"]')).toBeNull();
+	});
+});
+
+// Признак закрытия синтетикой опционной ноги: под неизменным
+// инструментальным остатком вторичная строка «закрыто синтетикой · открыто»
+// из read model, ячейка остатка с тултипом состава; без действующих связок
+// признака нет, прочие строки таблицы не меняются.
+// Traceability: openspec:ui/screens#requirement-position-table-synthetic-close-annotation
+describe("PositionsTable: признак закрытия синтетикой опционной ноги", () => {
+	// Сценарий «Нога с действующей связкой показывает признак»: при остатке
+	// 0.5 и связке 0.3 под остатком вторичная строка «закрыто синтетикой
+	// 0.3 · открыто 0.2» и тултип состава на ячейке остатка.
+	// Traceability: openspec:ui/screens#scenario-annotation-shown-on-leg-with-active-link
+	it("показывает признак на опционной ноге с действующей связкой", () => {
+		// Arrange: длинный пут с остатком 0.5 и действующей связкой 0.3.
+		const position = makePosition({ symbol: "ETH-28MAR-1600-P", residual: 0.5, syntheticClosedQuantity: 0.3, syntheticOpenQuantity: 0.2 });
+
+		// Act: рендер таблицы позиций.
+		renderTable([position]);
+
+		// Assert: главная строка остатка не изменилась, под ней признак,
+		// ячейка снабжена тултипом состава и неизменности остатка.
+		const split = document.querySelector('[data-slot="option-leg-synthetic-split"]');
+		expect(split).toBeTruthy();
+		expect(split?.textContent).toContain("0.5");
+		expect(split?.textContent).toContain("закрыто синтетикой 0.3 · открыто 0.2");
+		expect(split).toHaveAttribute(
+			"title",
+			"Закрыто синтетикой — сумма действующих связок ноги; открыто — остаток минус закрытое синтетикой. Инструментальный остаток не меняется",
+		);
+	});
+
+	// Сценарий «Оспаривание связки убирает признак»: после оспаривания
+	// единственной связки контракт присылает null-пару — строка как без синтетики.
+	// Traceability: openspec:ui/screens#scenario-annotation-hidden-on-dispute
+	it("убирает признак после оспаривания единственной связки", () => {
+		// Arrange: та же нога после оспаривания связки — пара null/null.
+		const position = makePosition({ symbol: "ETH-28MAR-1600-P", residual: 0.5, syntheticClosedQuantity: null, syntheticOpenQuantity: null });
+
+		// Act: рендер таблицы позиций.
+		renderTable([position]);
+
+		// Assert: узла признака нет, остаток показан одной величиной.
+		expect(document.querySelector('[data-slot="option-leg-synthetic-split"]')).toBeNull();
+		expect(screen.getByText("0.5")).toBeTruthy();
+		expect(screen.queryByText(/закрыто синтетикой/)).toBeNull();
+	});
+
+	// Сценарий «Инструментально закрытая нога сохраняет признак»: признак
+	// живёт по факту связок независимо от закрытости позиции, «открыто»
+	// показывается как есть — без клэмпа в минус не клэмпится.
+	// Traceability: openspec:ui/screens#scenario-annotation-kept-on-closed-position
+	it("сохраняет признак у инструментально закрытой ноги с отрицательным «открыто»", () => {
+		// Arrange: закрытая позиция с остатком 0 и действующими связками
+		// на 0.5 — «открыто» уходит в минус.
+		const position = makePosition({
+			symbol: "ETH-28MAR-1600-P",
+			residual: 0,
+			closedAt: "2026-10-15T10:00:00+00:00",
+			isOpen: false,
+			syntheticClosedQuantity: 0.5,
+			syntheticOpenQuantity: -0.3,
+		});
+
+		// Act: рендер таблицы позиций.
+		renderTable([position]);
+
+		// Assert: признак на месте, включая отрицательное «открыто».
+		const split = document.querySelector('[data-slot="option-leg-synthetic-split"]');
+		expect(split).toBeTruthy();
+		expect(split?.textContent).toContain("закрыто синтетикой 0.5 · открыто -0.3");
+	});
+
+	// Сценарий «Прочие строки таблицы отображаются без изменений»: распад
+	// остатка линейной ноги и строки ног без действующих связок выглядят
+	// как прежде.
+	// Traceability: openspec:ui/screens#scenario-annotation-leaves-other-rows-unchanged
+	it("оставляет распад линейной ноги и строки без связок без изменений", () => {
+		// Arrange: три строки — опционная нога с признаком, линейная нога
+		// с распадом, опционная нога без действующих связок.
+		renderTable([
+			makePosition({ symbol: "ETH-28MAR-1600-P", residual: 0.5, syntheticClosedQuantity: 0.3, syntheticOpenQuantity: 0.2 }),
+			makePosition({ symbol: "ETHUSDT", syntheticResidual: 0.3, otherResidual: 0.04 }),
+			makePosition({ symbol: "ETH-28JUN-1900-C", residual: 1.2 }),
+		]);
+
+		// Assert: признак ровно один и на опционной ноге; распад линейной
+		// ноги не тронут; строка без связок — одна величина остатка.
+		expect(document.querySelectorAll('[data-slot="option-leg-synthetic-split"]')).toHaveLength(1);
+		const linearSplit = document.querySelector('[data-slot="linear-leg-residual-split"]');
+		expect(linearSplit?.textContent).toContain("0.34");
+		expect(linearSplit?.textContent).toContain("синтетика 0.3 · прочее 0.04");
+		expect(screen.getByText("1.2")).toBeTruthy();
 	});
 });
 

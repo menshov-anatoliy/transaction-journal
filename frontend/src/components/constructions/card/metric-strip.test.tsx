@@ -86,6 +86,8 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 				intrinsicValueUsdt: 180.4,
 				timeValueUsdt: 1059.6,
 				decayDayAgoUsdt: -6.2,
+				syntheticClosedQuantity: null,
+				syntheticOpenQuantity: null,
 			},
 		],
 		trades: [],

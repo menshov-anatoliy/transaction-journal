@@ -304,6 +304,59 @@ public sealed class ConstructionCardApiTests
 	}
 
 	[TestMethod]
+	[Description("Признак закрытия синтетикой публикуется в строке позиции карточки при действующих связках")]
+	// Пара величин сериализуется числами в camelCase-полях
+	// syntheticClosedQuantity/syntheticOpenQuantity рядом с прежними колонками,
+	// а OpenAPI-схема позиции дополнена аддитивно.
+	// Traceability: openspec:domain/synthetic-close#scenario-leg-annotation-sums-active-links
+	public async Task TryIfCardPositionPublishesSyntheticLegAnnotationWithActiveLinks()
+	{
+		// Arrange: read-модель деталей с признаком закрытия синтетикой на
+		// опционной строке — 0.4 закрыто синтетикой, 1.6 открыто.
+		await using var factory = new SectionApiFactory(services => services
+			.ReplaceDetailReadModel(new StubCardDetailReadModel().WithSyntheticLegAnnotation(0.4m, 1.6m)));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: пара сериализуется числами рядом с прежними колонками строки.
+		var optionPosition = payload!["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "ETH-28JUN24-3200-C")!;
+		Assert.That(optionPosition["syntheticClosedQuantity"]!.GetValue<decimal>(), Is.EqualTo(0.4m));
+		Assert.That(optionPosition["syntheticOpenQuantity"]!.GetValue<decimal>(), Is.EqualTo(1.6m));
+
+		// OpenAPI-описание позиции дополнено аддитивно: схема несёт пару величин
+		// рядом с прежними полями.
+		var document = await (await client.GetAsync("/openapi/v1.json")).Content.ReadFromJsonAsync<JsonNode>();
+		var positionSchemaProperties = document!["components"]!["schemas"]!["ConstructionCardPositionResponse"]!["properties"]!
+			.AsObject().Select(property => property.Key).ToArray();
+		Assert.That(positionSchemaProperties, Does.Contain("syntheticClosedQuantity"));
+		Assert.That(positionSchemaProperties, Does.Contain("syntheticOpenQuantity"));
+	}
+
+	[TestMethod]
+	[Description("Без действующих связок признак закрытия синтетикой сериализуется явным null")]
+	// Null вместо числа — отсутствие величины, а не ноль: у ноги без
+	// действующих связок пара «закрыто синтетикой / открыто» отсутствует.
+	// Traceability: openspec:domain/synthetic-close#scenario-leg-annotation-absent-without-active-links
+	public async Task TryIfCardPositionSerializesSyntheticLegAnnotationAsNullWithoutActiveLinks()
+	{
+		// Arrange: стабильная read-модель деталей без признака на ноге.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: поля присутствуют в ответе со значением null, прежние
+		// колонки строки не изменились.
+		var optionPosition = payload!["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "ETH-28JUN24-3200-C")!;
+		Assert.That(optionPosition["syntheticClosedQuantity"], Is.Null);
+		Assert.That(optionPosition["syntheticOpenQuantity"], Is.Null);
+		Assert.That(optionPosition["residual"]!.GetValue<decimal>(), Is.EqualTo(2m));
+	}
+
+	[TestMethod]
 	[Description("Перечень предупреждений диагностики входит в контракт карточки аддитивно")]
 	// Аддитивность контракта: прежние поля снимка не меняются, список
 	// riskWarnings с текстами появляется рядом — существующие потребители
@@ -1631,6 +1684,12 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	/// <summary>Сводная величина «с учётом зафиксированного синтетикой» метрик карточки; null — действующих связок нет.</summary>
 	private decimal? _syntheticAdjustedTotalUsdt;
 
+	/// <summary>Признак закрытия синтетикой на опционной строке: сумма действующих связок по символу ноги.</summary>
+	private decimal? _syntheticClosedQuantity;
+
+	/// <summary>Открытая после синтетического закрытия часть опционной ноги.</summary>
+	private decimal? _syntheticOpenQuantity;
+
 	private StubCardDetailReadModel(bool brokenJournal, RealRiskStatus realRiskStatus)
 	{
 		_brokenJournal = brokenJournal;
@@ -1693,6 +1752,18 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	public StubCardDetailReadModel WithSyntheticAdjustedTotalUsdt(decimal totalUsdt)
 	{
 		_syntheticAdjustedTotalUsdt = totalUsdt;
+		return this;
+	}
+
+	/// <summary>
+	/// Вариант с признаком закрытия синтетикой на опционной строке: сумма
+	/// действующих связок по символу ноги и открытая часть проходят рядом
+	/// с прежними колонками позиции.
+	/// </summary>
+	public StubCardDetailReadModel WithSyntheticLegAnnotation(decimal closedQuantity, decimal openQuantity)
+	{
+		_syntheticClosedQuantity = closedQuantity;
+		_syntheticOpenQuantity = openQuantity;
 		return this;
 	}
 
@@ -1789,7 +1860,11 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					DailyDecayUsdt: _optionLeg?.DailyDecayUsdt,
 					IntrinsicValueUsdt: _optionLeg?.IntrinsicValueUsdt,
 					TimeValueUsdt: _optionLeg?.TimeValueUsdt,
-					DecayDayAgoUsdt: _optionLeg?.DecayDayAgoUsdt),
+					DecayDayAgoUsdt: _optionLeg?.DecayDayAgoUsdt,
+					// Признак закрытия синтетикой опционной строки задаётся вариантом
+					// стаба: пара величин при действующих связках, null — их нет.
+					SyntheticClosedQuantity: _syntheticClosedQuantity,
+					SyntheticOpenQuantity: _syntheticOpenQuantity),
 				new ConstructionPositionRow(
 					Symbol: "ETHUSDT",
 					Residual: 0m,

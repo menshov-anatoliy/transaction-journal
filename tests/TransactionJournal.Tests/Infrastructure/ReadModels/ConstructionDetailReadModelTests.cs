@@ -382,7 +382,8 @@ public class ConstructionDetailReadModelTests
 		// цена) из строки убраны вместе с их колонками; стоимость и процент
 		// изменения цены открытого остатка добавлены выводимыми столбцами; распад
 		// остатка линейной ноги на синтетическую и прочую части — двумя колонками;
-		// величины времени жизни открытой опционной ноги — пятью колонками.
+		// величины времени жизни открытой опционной ноги — пятью колонками;
+		// признак закрытия синтетикой опционной ноги — парой величин.
 		// Требование: строка позиции показывает вход, выход и итог,
 		// колонки «Средняя», «Марка» и «Нереализов.» отсутствуют.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
@@ -415,6 +416,8 @@ public class ConstructionDetailReadModelTests
 			nameof(ConstructionPositionRow.IntrinsicValueUsdt),
 			nameof(ConstructionPositionRow.TimeValueUsdt),
 			nameof(ConstructionPositionRow.DecayDayAgoUsdt),
+			nameof(ConstructionPositionRow.SyntheticClosedQuantity),
+			nameof(ConstructionPositionRow.SyntheticOpenQuantity),
 		}));
 	}
 
@@ -708,6 +711,184 @@ public class ConstructionDetailReadModelTests
 		var putWithout = withoutActiveLink.Positions.Single(row => row.Symbol == XautPut);
 		Assert.That(putWithout.Residual, Is.EqualTo(putWith.Residual));
 		Assert.That(putWithout.RealizedPnL, Is.EqualTo(putWith.RealizedPnL));
+	}
+
+	[TestMethod]
+	[Description("Признак закрытия синтетикой суммирует действующие связки ноги: распознанная 0.3 и ручная 0.1")]
+	// Сумма количеств действующих связок по символу ноги даёт «закрыто
+	// синтетикой», остаток после вычета — «открыто»: 0.4 и 0.1 при ноге 0.5.
+	// Traceability: openspec:domain/synthetic-close#scenario-leg-annotation-sums-active-links
+	public async Task TryIfLegAnnotationSumsActiveLinksOfClosedLeg()
+	{
+		// Arrange: кейс XAUT с действующей распознанной связкой 0.3 и ручной
+		// связкой 0.1 по тому же путу; остаток ноги — покупка 0.5.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-признак-сумма", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		await new SyntheticCloseManualLinkService(CreateOptions()).CreateAsync(construction.Id, "case-perp", "case-call", 0.1m);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные экрана деталей.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: «закрыто синтетикой» на путе — 0.4, «открыто» — 0.1.
+		var put = data.Positions.Single(row => row.Symbol == XautPut);
+		Assert.That(put.Residual, Is.EqualTo(0.5m));
+		Assert.That(put.SyntheticClosedQuantity, Is.EqualTo(0.4m));
+		Assert.That(put.SyntheticOpenQuantity, Is.EqualTo(0.1m));
+	}
+
+	[TestMethod]
+	[Description("Оспоренная связка исключается из суммы признака: из связок 0.3 и 0.1 действует только 0.1")]
+	// Логический слой составляют неоспоренные распознанные и ручные связки:
+	// оспоренная 0.3 в сумму не входит, действующая ручная 0.1 входит.
+	// Traceability: openspec:domain/synthetic-close#scenario-leg-annotation-excludes-disputed
+	public async Task TryIfLegAnnotationExcludesDisputedLink()
+	{
+		// Arrange: кейс XAUT с оспоренной распознанной связкой 0.3 и ручной
+		// связкой 0.1 по тому же путу.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-признак-спор", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(construction.Id, "case-perp", "case-call");
+		await new SyntheticCloseManualLinkService(CreateOptions()).CreateAsync(construction.Id, "case-perp", "case-call", 0.1m);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные экрана деталей после оспаривания.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: «закрыто синтетикой» — только ручная 0.1, «открыто» — 0.4.
+		var put = data.Positions.Single(row => row.Symbol == XautPut);
+		Assert.That(put.SyntheticClosedQuantity, Is.EqualTo(0.1m));
+		Assert.That(put.SyntheticOpenQuantity, Is.EqualTo(0.4m));
+	}
+
+	[TestMethod]
+	[Description("«Открыто» не клэмпится остатком: связка 0.3 при остатке 0.2 даёт −0.1")]
+	// Величины публикуются как есть: после частичной ручной пометки закрытия
+	// остаток 0.2 меньше закрытого синтетикой 0.3, «открыто» уходит в минус.
+	// Traceability: openspec:domain/synthetic-close#scenario-leg-annotation-no-clamp
+	public async Task TryIfLegAnnotationNotClampedByResidual()
+	{
+		// Arrange: кейс XAUT с частично закрытой ногой: ручная пометка 0.3 пута
+		// оставляет инструментальный остаток 0.2 при действующей связке 0.3.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-без-клэмпа", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		await _markService.AddAsync(construction.Id, XautPut, new DateTimeOffset(2026, 10, 16, 10, 0, 0, TimeSpan.Zero), 100m, 0.3m);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные экрана деталей после пометки.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: «закрыто синтетикой» 0.3 не уменьшено остатком, «открыто»
+		// отрицательно — −0.1.
+		var put = data.Positions.Single(row => row.Symbol == XautPut);
+		Assert.That(put.Residual, Is.EqualTo(0.2m));
+		Assert.That(put.IsOpen, Is.True);
+		Assert.That(put.SyntheticClosedQuantity, Is.EqualTo(0.3m));
+		Assert.That(put.SyntheticOpenQuantity, Is.EqualTo(-0.1m));
+	}
+
+	[TestMethod]
+	[Description("Признак публикуется инструментально закрытой позиции: остаток 0, связка 0.3 → «открыто» −0.3")]
+	// Вычисление пары не зависит от признака закрытия позиции: у закрытого
+	// пута с действующей связкой величины по-прежнему видны.
+	// Traceability: openspec:domain/synthetic-close#scenario-leg-annotation-independent-of-close-state
+	public async Task TryIfLegAnnotationIndependentOfPositionCloseState()
+	{
+		// Arrange: кейс XAUT с путом, закрытым ручной пометкой по цене
+		// пользователя; связка 0.3 продолжает действовать.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-закрытый-пут", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		await _markService.AddAsync(construction.Id, XautPut, new DateTimeOffset(2026, 10, 16, 10, 0, 0, TimeSpan.Zero), 100m);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные экрана деталей после пометки.
+		var data = await readModel.ReadAsync(construction.Id);
+
+		// Assert: позиция закрыта (остаток 0), при этом «закрыто синтетикой» 0.3
+		// и «открыто» −0.3 публикуются как у открытой ноги.
+		var put = data.Positions.Single(row => row.Symbol == XautPut);
+		Assert.That(put.Residual, Is.EqualTo(0m));
+		Assert.That(put.IsOpen, Is.False);
+		Assert.That(put.SyntheticClosedQuantity, Is.EqualTo(0.3m));
+		Assert.That(put.SyntheticOpenQuantity, Is.EqualTo(-0.3m));
+	}
+
+	[TestMethod]
+	[Description("Без действующих связок признак отсутствует: связок нет вовсе и когда все оспорены")]
+	// Null — отсутствие величины, а не ноль: у ноги без действующих связок
+	// пара «закрыто синтетикой / открыто» не публикуется.
+	// Traceability: openspec:domain/synthetic-close#scenario-leg-annotation-absent-without-active-links
+	public async Task TryIfLegAnnotationAbsentWithoutActiveLinks()
+	{
+		// Arrange: конструкция без связок и кейс XAUT с оспоренной единственной
+		// связкой.
+		var plain = await _constructionService.CreateAsync("Без связок", 1000m);
+		await AddLinearTradeAsync("exec-lone", "Buy", "1", "43000", "0", ExecMs(2023, 12, 28, 10, 0));
+		await _bindingService.BindAsync(plain.Id, "exec-lone");
+		SeedXautInstruments();
+		var disputed = await _constructionService.CreateAsync("XAUT-все-оспорено", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(disputed.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(disputed.Id, "case-perp", "case-call");
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: читаем данные обеих конструкций.
+		var plainData = await readModel.ReadAsync(plain.Id);
+		var disputedData = await readModel.ReadAsync(disputed.Id);
+
+		// Assert: пары нет у ноги конструкции без связок и у ноги, чья
+		// единственная связка оспорена.
+		var linear = plainData.Positions.Single(row => row.Symbol == LinearSymbol);
+		Assert.That(linear.SyntheticClosedQuantity, Is.Null);
+		Assert.That(linear.SyntheticOpenQuantity, Is.Null);
+		var put = disputedData.Positions.Single(row => row.Symbol == XautPut);
+		Assert.That(put.SyntheticClosedQuantity, Is.Null);
+		Assert.That(put.SyntheticOpenQuantity, Is.Null);
+	}
+
+	[TestMethod]
+	[Description("Публикация признака не меняет инструментальных метрик строки: значения с парой и без совпадают")]
+	// Признак — аддитивная аннотация поверх строки: остаток, P&L, комиссии
+	// и признак закрытия одинаковы при действующей связке и после её
+	// оспаривания, когда пары нет.
+	// Traceability: openspec:domain/synthetic-close#scenario-leg-annotation-instrumental-metrics-untouched
+	public async Task TryIfLegAnnotationLeavesInstrumentalMetricsUnchanged()
+	{
+		// Arrange: кейс XAUT с действующей связкой; спор выполняется между
+		// чтениями одной и той же конструкции.
+		SeedXautInstruments();
+		var construction = await _constructionService.CreateAsync("XAUT-инварианты-ноги", 1000m);
+		await SeedXautCaseAsync();
+		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
+		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+
+		// Act: первое чтение — связка действует, пара опубликована; после
+		// оспаривания читаем снова — пары нет.
+		var withAnnotation = await readModel.ReadAsync(construction.Id);
+		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(construction.Id, "case-perp", "case-call");
+		var withoutAnnotation = await readModel.ReadAsync(construction.Id);
+
+		// Assert: пара присутствует только при действующей связке, а все
+		// инструментальные величины строки пута между чтениями не изменились.
+		var putWith = withAnnotation.Positions.Single(row => row.Symbol == XautPut);
+		var putWithout = withoutAnnotation.Positions.Single(row => row.Symbol == XautPut);
+		Assert.That(putWith.SyntheticClosedQuantity, Is.EqualTo(0.3m));
+		Assert.That(putWith.SyntheticOpenQuantity, Is.EqualTo(0.2m));
+		Assert.That(putWithout.SyntheticClosedQuantity, Is.Null);
+		Assert.That(putWithout.SyntheticOpenQuantity, Is.Null);
+		Assert.That(putWithout.Residual, Is.EqualTo(putWith.Residual));
+		Assert.That(putWithout.RealizedPnL, Is.EqualTo(putWith.RealizedPnL));
+		Assert.That(putWithout.UnrealizedPnL, Is.EqualTo(putWith.UnrealizedPnL));
+		Assert.That(putWithout.AccumulatedFees, Is.EqualTo(putWith.AccumulatedFees));
+		Assert.That(putWithout.IsOpen, Is.EqualTo(putWith.IsOpen));
 	}
 
 	[TestMethod]
