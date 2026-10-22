@@ -61,10 +61,9 @@ Traceability ID: scenario-sources-iteration-cap
 - **AND** каждый выполненный вызов соответствовал одному HTTP-запросу к бирже
 
 ### Requirement: Недоступность рынка деградирует в кэш с явным as-of
-
-При недоступности Bybit рыночный инструмент SHALL возвращать структурированный ответ «недоступно + последняя кэшированная проекция с явным as-of» из кэша марок; ИИ-помощник SHALL продолжать отвечать по журналу и корпусу, помечать устаревший as-of и отказываться от рыночно-зависимых рекомендаций ([#53](https://github.com/menshov-anatoliy/transaction-journal/issues/53), [ADR-0009](../../../../../../docs/adr/0009-consultation-chat-architecture.md)).
-
 Traceability ID: requirement-sources-degradation-cached-asof
+
+При недоступности Bybit рыночный инструмент SHALL возвращать структурированный ответ «недоступно + последняя кэшированная проекция с явным as-of» из кэша котировок; ИИ-помощник SHALL продолжать отвечать по журналу и корпусу, помечать устаревший as-of и отказываться от рыночно-зависимых рекомендаций ([#53](https://github.com/menshov-anatoliy/transaction-journal/issues/53), [ADR-0009](../../../../../../docs/adr/0009-consultation-chat-architecture.md)).
 
 #### Scenario: Bybit недоступен — инструмент отдаёт кэш
 Traceability ID: scenario-sources-market-down-cached-projection
