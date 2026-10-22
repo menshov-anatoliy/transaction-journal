@@ -20,7 +20,7 @@ using TransactionJournal.Tests.Infrastructure.Bybit;
 /// эндпоинту тикеров, снимок — линейным запросом по символу перпа, доска —
 /// опционным запросом с фильтром baseCoin, ошибка биржи превращается в
 /// недоступную запись с причиной вместо исключения, а недоступность деградирует
-/// в кэш марок провайдера — последняя известная проекция с её as-of.
+/// в кэш котировок провайдера — последняя известная проекция с её as-of.
 /// </summary>
 [TestClass]
 public sealed class BybitChatMarketReaderTests
@@ -31,7 +31,7 @@ public sealed class BybitChatMarketReaderTests
 	/// <summary>Фиксированный момент as-of для детерминированных проверок времени.</summary>
 	private static readonly DateTimeOffset FixedNow = new(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-	/// <summary>Момент получения кэшированных марок для проверок деградации.</summary>
+	/// <summary>Момент получения кэшированных котировок для проверок деградации.</summary>
 	private static readonly DateTimeOffset CachedAt = new(2029, 12, 31, 10, 0, 0, TimeSpan.Zero);
 
 	private string _databasePath = null!;
@@ -39,7 +39,7 @@ public sealed class BybitChatMarketReaderTests
 	[TestInitialize]
 	public void Initialize()
 	{
-		// Каждая проверка работает со своей пустой базой кэша марок во временной папке.
+		// Каждая проверка работает со своей пустой базой кэша котировок во временной папке.
 		_databasePath = Path.Combine(Path.GetTempPath(), $"chat-market-reader-tests-{Guid.NewGuid():N}.db");
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
@@ -68,7 +68,7 @@ public sealed class BybitChatMarketReaderTests
 	[Description("Снимок рынка читается одним линейным запросом и проецируется в поля порта")]
 	public async Task ReadSnapshotAsync_SingleLinearRequestAndProjection()
 	{
-		// Arrange: зафиксированный ответ линейного перпа BTCUSDT с маркой,
+		// Arrange: зафиксированный ответ линейного перпа BTCUSDT с котировкой,
 		// бид-аском, открытым интересом и ставкой фандинга — общий fixture клиента тикеров.
 		var handler = new ScriptedHttpMessageHandler();
 		handler.EnqueueJson(LoadFixture(Path.Combine("Bybit", "Fixtures", "tickers-linear.json")));
@@ -91,7 +91,7 @@ public sealed class BybitChatMarketReaderTests
 		Assert.That(snapshot.IsAvailable, Is.True);
 		Assert.That(snapshot.UnavailableReason, Is.Null);
 		Assert.That(snapshot.Symbol, Is.EqualTo("BTCUSDT"));
-		Assert.That(snapshot.MarkPrice, Is.EqualTo(27739.74m));
+		Assert.That(snapshot.QuotePrice, Is.EqualTo(27739.74m));
 		Assert.That(snapshot.Bid1Price, Is.EqualTo(27744.5m));
 		Assert.That(snapshot.Bid1Size, Is.EqualTo(84.149m));
 		Assert.That(snapshot.Ask1Price, Is.EqualTo(27745.5m));
@@ -135,8 +135,8 @@ public sealed class BybitChatMarketReaderTests
 		Assert.That(call.Expiry, Is.EqualTo(new DateOnly(2025, 12, 26)));
 		Assert.That(call.Strike, Is.EqualTo(95000m));
 		Assert.That(call.Type, Is.EqualTo(OptionType.Call));
-		Assert.That(call.MarkPrice, Is.EqualTo(5160.25m));
-		Assert.That(call.MarkIv, Is.EqualTo(0.4865m));
+		Assert.That(call.QuotePrice, Is.EqualTo(5160.25m));
+		Assert.That(call.QuoteIv, Is.EqualTo(0.4865m));
 		Assert.That(call.Delta, Is.EqualTo(0.6211m));
 		Assert.That(call.Gamma, Is.EqualTo(0.0000421m));
 		Assert.That(call.Vega, Is.EqualTo(168.5012m));
@@ -175,10 +175,10 @@ public sealed class BybitChatMarketReaderTests
 	}
 
 	[TestMethod]
-	[Description("Сбой биржи деградирует снимок в кэш: последняя марка перпа с моментом её получения в роли as-of")]
+	[Description("Сбой биржи деградирует снимок в кэш: последняя котировка перпа с моментом её получения в роли as-of")]
 	public async Task ReadSnapshotAsync_BybitApiError_ReturnsCachedPerpMarkWithItsAsOf()
 	{
-		// Arrange: кэш марок уже знает последнюю марку перпа BTCUSDT, биржа
+		// Arrange: кэш котировок уже знает последнюю котировку перпа BTCUSDT, биржа
 		// отвечает ошибкой конверта retCode.
 		SeedCache(("BTCUSDT", 106000m, CachedAt));
 		var handler = new ScriptedHttpMessageHandler();
@@ -189,22 +189,22 @@ public sealed class BybitChatMarketReaderTests
 		// Act: читаем снимок вопреки сбою биржи.
 		var snapshot = await reader.ReadSnapshotAsync("BTC");
 
-		// Assert: недоступность + последняя кэшированная марка с as-of кэша;
+		// Assert: недоступность + последняя кэшированная котировка с as-of кэша;
 		// биржевой запрос по-прежнему ровно один.
 		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(handler.Requests.Count, Is.EqualTo(1));
 		Assert.That(snapshot.IsAvailable, Is.False);
 		Assert.That(snapshot.UnavailableReason, Does.Contain("params error"));
 		Assert.That(snapshot.Symbol, Is.EqualTo("BTCUSDT"));
-		Assert.That(snapshot.MarkPrice, Is.EqualTo(106000m));
+		Assert.That(snapshot.QuotePrice, Is.EqualTo(106000m));
 		Assert.That(snapshot.AsOf, Is.EqualTo(CachedAt));
 	}
 
 	[TestMethod]
-	[Description("Сбой биржи без кэшированной марки перпа отдаёт недоступность без марки, as-of — момент сбоя")]
+	[Description("Сбой биржи без кэшированной котировки перпа отдаёт недоступность без котировки, as-of — момент сбоя")]
 	public async Task ReadSnapshotAsync_BybitApiErrorWithoutCache_ReturnsUnavailableWithoutMark()
 	{
-		// Arrange: кэш марок пуст, биржа отвечает ошибкой.
+		// Arrange: кэш котировок пуст, биржа отвечает ошибкой.
 		var handler = new ScriptedHttpMessageHandler();
 		handler.EnqueueJson("""{"retCode":10001,"retMsg":"params error","result":{"category":"linear","list":[]},"retExt":{},"time":1}""");
 
@@ -213,19 +213,19 @@ public sealed class BybitChatMarketReaderTests
 		// Act: читаем снимок вопреки сбою биржи.
 		var snapshot = await reader.ReadSnapshotAsync("BTC");
 
-		// Assert: деградировать нечем — марки нет, as-of совпадает с моментом сбоя.
+		// Assert: деградировать нечем — котировки нет, as-of совпадает с моментом сбоя.
 		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(snapshot.IsAvailable, Is.False);
 		Assert.That(snapshot.Symbol, Is.Null);
-		Assert.That(snapshot.MarkPrice, Is.Null);
+		Assert.That(snapshot.QuotePrice, Is.Null);
 		Assert.That(snapshot.AsOf, Is.EqualTo(FixedNow));
 	}
 
 	[TestMethod]
-	[Description("Сбой биржи деградирует доску в кэш: марки опционов актива с as-of самой старой марки, чужие и нечитаемые символы отброшены")]
+	[Description("Сбой биржи деградирует доску в кэш: котировки опционов актива с as-of самой старой котировки, чужие и нечитаемые символы отброшены")]
 	public async Task ReadOptionBoardAsync_BybitApiError_ReturnsCachedOptionMarksWithTheirAsOf()
 	{
-		// Arrange: кэш несёт марку перпа-якоря, две опционные марки BTC и шум —
+		// Arrange: кэш несёт котировку перпа-якоря, две опционные котировки BTC и шум —
 		// опцион чужого актива и нечитаемый символ с префиксом BTC-.
 		SeedCache(
 			("BTCUSDT", 106000m, new DateTimeOffset(2029, 12, 31, 10, 30, 0, TimeSpan.Zero)),
@@ -241,8 +241,8 @@ public sealed class BybitChatMarketReaderTests
 		// Act: читаем доску вопреки сбою биржи.
 		var board = await reader.ReadOptionBoardAsync("BTC");
 
-		// Assert: недоступность + кэшированные марки только опционов BTC; as-of —
-		// момент получения самой старой марки проекции; IV, греки и бид-аск кэш
+		// Assert: недоступность + кэшированные котировки только опционов BTC; as-of —
+		// момент получения самой старой котировки проекции; IV, греки и бид-аск кэш
 		// не хранит; биржевой запрос по-прежнему ровно один.
 		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(handler.Requests.Count, Is.EqualTo(1));
@@ -257,18 +257,18 @@ public sealed class BybitChatMarketReaderTests
 		Assert.That(call.Symbol, Is.EqualTo("BTC-26DEC25-95000-C"));
 		Assert.That(call.Expiry, Is.EqualTo(new DateOnly(2025, 12, 26)));
 		Assert.That(call.Strike, Is.EqualTo(95000m));
-		Assert.That(call.MarkPrice, Is.EqualTo(5160.25m));
-		Assert.That(call.MarkIv, Is.Null);
+		Assert.That(call.QuotePrice, Is.EqualTo(5160.25m));
+		Assert.That(call.QuoteIv, Is.Null);
 		Assert.That(call.Delta, Is.Null);
 		Assert.That(call.OpenInterest, Is.Null);
 		Assert.That(call.Bid1Price, Is.Null);
 	}
 
 	[TestMethod]
-	[Description("Сбой биржи без кэшированных марок опционов отдаёт недоступность с пустой доской")]
+	[Description("Сбой биржи без кэшированных котировок опционов отдаёт недоступность с пустой доской")]
 	public async Task ReadOptionBoardAsync_BybitApiErrorWithoutCache_ReturnsUnavailableEmptyBoard()
 	{
-		// Arrange: кэш марок пуст, биржа отвечает ошибкой.
+		// Arrange: кэш котировок пуст, биржа отвечает ошибкой.
 		var handler = new ScriptedHttpMessageHandler();
 		handler.EnqueueJson("""{"retCode":10001,"retMsg":"params error","result":{"category":"option","list":[]},"retExt":{},"time":1}""");
 
@@ -309,7 +309,7 @@ public sealed class BybitChatMarketReaderTests
 		Assert.That(snapshot.IsAvailable, Is.False);
 		Assert.That(snapshot.UnavailableReason, Does.Contain("actively refused"));
 		Assert.That(snapshot.Symbol, Is.EqualTo("BTCUSDT"));
-		Assert.That(snapshot.MarkPrice, Is.EqualTo(106000m));
+		Assert.That(snapshot.QuotePrice, Is.EqualTo(106000m));
 		Assert.That(snapshot.AsOf, Is.EqualTo(CachedAt));
 	}
 
@@ -317,7 +317,7 @@ public sealed class BybitChatMarketReaderTests
 	[Description("Транспортный сбой биржи деградирует доску в кэш так же, как ошибка конверта")]
 	public async Task ReadOptionBoardAsync_TransportOutage_ReturnsCachedOptionMarksWithTheirAsOf()
 	{
-		// Arrange: кэш несёт марку перпа-якоря и опционную марку BTC, биржа
+		// Arrange: кэш несёт котировку перпа-якоря и опционную котировку BTC, биржа
 		// физически недоступна — транспорт кидает HttpRequestException.
 		SeedCache(
 			("BTCUSDT", 106000m, new DateTimeOffset(2029, 12, 31, 10, 30, 0, TimeSpan.Zero)),
@@ -340,7 +340,7 @@ public sealed class BybitChatMarketReaderTests
 		Assert.That(board.Quotes.Single().Symbol, Is.EqualTo("BTC-26DEC25-95000-C"));
 	}
 
-	/// <summary>Создаёт адаптер над клиентом тикеров с фиктивным транспортом, кэшем марок и фиксированным временем.</summary>
+	/// <summary>Создаёт адаптер над клиентом тикеров с фиктивным транспортом, кэшем котировок и фиксированным временем.</summary>
 	private BybitChatMarketReader CreateReader(
 		ScriptedHttpMessageHandler handler,
 		BybitResilienceOptions? resilienceOptions = null)
@@ -354,23 +354,23 @@ public sealed class BybitChatMarketReaderTests
 
 	#region Помощники
 
-	/// <summary>Опции контекста журнала над временной базой кэша марок.</summary>
+	/// <summary>Опции контекста журнала над временной базой кэша котировок.</summary>
 	private DbContextOptions<JournalDbContext> CreateOptions() =>
 		new DbContextOptionsBuilder<JournalDbContext>()
 			.UseSqlite($"Data Source={_databasePath}")
 			.Options;
 
-	/// <summary>Складывает марки в кэш провайдера: символ, цена, момент получения.</summary>
-	private void SeedCache(params (string Symbol, decimal Price, DateTimeOffset ReceivedAt)[] marks)
+	/// <summary>Складывает котировки в кэш провайдера: символ, цена, момент получения.</summary>
+	private void SeedCache(params (string Symbol, decimal Price, DateTimeOffset ReceivedAt)[] quotes)
 	{
 		using var db = new JournalDbContext(CreateOptions());
-		foreach (var mark in marks)
+		foreach (var quote in quotes)
 		{
-			db.InstrumentMarks.Add(new InstrumentMark
+			db.InstrumentQuotes.Add(new InstrumentQuote
 			{
-				Symbol = mark.Symbol,
-				MarkPrice = mark.Price,
-				ReceivedAt = mark.ReceivedAt,
+				Symbol = quote.Symbol,
+				QuotePrice = quote.Price,
+				ReceivedAt = quote.ReceivedAt,
 			});
 		}
 

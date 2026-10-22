@@ -463,8 +463,8 @@ public sealed class JournalSyncStore :
 		return run;
 	}
 
-	/// <inheritdoc cref="ISyncRunJournal.MarkSucceededAsync" />
-	public async Task MarkSucceededAsync(SyncRun run, CancellationToken cancellationToken = default)
+	/// <inheritdoc cref="ISyncRunJournal.RecordSucceededAsync" />
+	public async Task RecordSucceededAsync(SyncRun run, CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(run);
 		var finishedAt = _timeProvider.GetUtcNow();
@@ -478,8 +478,8 @@ public sealed class JournalSyncStore :
 		SyncHandle(run, runRow);
 	}
 
-	/// <inheritdoc cref="ISyncRunJournal.MarkFailedAsync" />
-	public async Task MarkFailedAsync(SyncRun run, string error, CancellationToken cancellationToken = default)
+	/// <inheritdoc cref="ISyncRunJournal.RecordFailedAsync" />
+	public async Task RecordFailedAsync(SyncRun run, string error, CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(run);
 		ArgumentException.ThrowIfNullOrWhiteSpace(error);

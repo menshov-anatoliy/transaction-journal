@@ -188,7 +188,7 @@ public class ExecutionHistorySyncTests
 	public async Task TryIfWindowWithFundingPersistsNoRawRowsAndCountsZero()
 	{
 		// Arrange: окно backfill целиком из фандинг-записей с заполненными количеством
-		// и ценой по марк-цене — как в живом ответе биржи линейной торговли.
+		// и ценой по котировк-цене — как в живом ответе биржи линейной торговли.
 		// Требование: фандинг отфильтровывается до сырьевой записи — не доходит до писателя,
 		// не создаёт строк в RawExecutions и не учитывается счётчиком загрузки запуска.
 		// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
@@ -223,7 +223,7 @@ public class ExecutionHistorySyncTests
 	public async Task TryIfSyncedFundingRecordLeavesNoRawRowAndNoInboxTrade()
 	{
 		// WHEN: синхронизация получила в одном окне Trade-сделку и фандинг-запись
-		// с заполненными количеством и ценой по марк-цене — как в живом ответе биржи.
+		// с заполненными количеством и ценой по котировк-цене — как в живом ответе биржи.
 		// THEN: сырая запись фандинга не создаётся и во «Входящих» сделки по ней нет.
 		// AND: повторный проход того же окна снова отфильтровывает фандинг — без ошибок,
 		// дублей и предупреждений. Сценарий идёт сквозь проход окна и реальное хранилище
@@ -243,7 +243,7 @@ public class ExecutionHistorySyncTests
 			Is.EqualTo(new[] { "exec-trade-1" }));
 
 		// Assert: «Входящие» показывают единственную сделку — фандинг сделкой не стал,
-		// хотя количество и цена по марк-цене у него заполнены.
+		// хотя количество и цена по котировк-цене у него заполнены.
 		var inboxAfterFirst = await _inbox.ListAsync();
 		Assert.That(inboxAfterFirst.Select(trade => trade.ExecId).ToList(),
 			Is.EqualTo(new[] { "exec-trade-1" }));
@@ -396,7 +396,7 @@ public class ExecutionHistorySyncTests
 	};
 
 	// Фандинг-запись живого ответа биржи: тип Funding, сторона без направления,
-	// количество и цена по марк-цене заполнены.
+	// количество и цена по котировк-цене заполнены.
 	private static BybitExecution Funding(string execId, long execTimeMs) => new()
 	{
 		Symbol = "BTCUSDT",

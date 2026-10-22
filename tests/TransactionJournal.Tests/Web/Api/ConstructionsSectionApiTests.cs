@@ -65,8 +65,8 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(summary["totalPnL"]!.GetValue<decimal>(), Is.EqualTo(100.5m));
 		Assert.That(summary["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(60.25m));
 		Assert.That(summary["unrealizedPnL"]!.GetValue<decimal>(), Is.EqualTo(40.25m));
-		Assert.That(summary["marksAsOf"]!.GetValue<string>(), Is.EqualTo("2026-06-20T14:30:00+00:00"));
-		Assert.That(summary["hasMarkFailure"]!.GetValue<bool>(), Is.False);
+		Assert.That(summary["quotesAsOf"]!.GetValue<string>(), Is.EqualTo("2026-06-20T14:30:00+00:00"));
+		Assert.That(summary["hasQuoteFailure"]!.GetValue<bool>(), Is.False);
 		Assert.That(summary["constructionCount"]!.GetValue<int>(), Is.EqualTo(2));
 		Assert.That(summary["openCount"]!.GetValue<int>(), Is.EqualTo(1));
 
@@ -81,7 +81,7 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(row["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(0m));
 		Assert.That(row["totalPnL"]!.GetValue<decimal>(), Is.EqualTo(100.5m));
 		Assert.That(row["totalPnLPercent"]!.GetValue<decimal>(), Is.EqualTo(3.35m));
-		Assert.That(row["markValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
+		Assert.That(row["quoteValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(row["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
 		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
 		// Худший исход соседствует с риском: знаковая величина границы
@@ -112,7 +112,7 @@ public sealed class ConstructionsSectionApiTests
 	// Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
 	public async Task TryIfOverviewDegradesUnrealizedOnMarkFailure()
 	{
-		// Arrange: read-модель со сбоем марок — итог и нереализованные части null.
+		// Arrange: read-модель со сбоем котировок — итог и нереализованные части null.
 		await using var factory = new SectionApiFactory(services => services.ReplaceReadModel(StubListReadModel.WithMarkFailure()));
 		using var client = factory.CreateClient();
 
@@ -120,24 +120,24 @@ public sealed class ConstructionsSectionApiTests
 		var payload = await (await client.GetAsync("/api/v1/constructions")).Content.ReadFromJsonAsync<JsonNode>();
 
 		// Assert: сводка и строка несут null вместо величин и признак сбоя.
-		Assert.That(payload!["summary"]!["hasMarkFailure"]!.GetValue<bool>(), Is.True);
+		Assert.That(payload!["summary"]!["hasQuoteFailure"]!.GetValue<bool>(), Is.True);
 		Assert.That(payload["summary"]!["totalPnL"], Is.Null);
 		Assert.That(payload["summary"]!["unrealizedPnL"], Is.Null);
-		Assert.That(payload["summary"]!["marksAsOf"], Is.Null);
+		Assert.That(payload["summary"]!["quotesAsOf"], Is.Null);
 		var row = payload["items"]!.AsArray().Single();
 		Assert.That(row!["unrealizedPnL"], Is.Null);
 		Assert.That(row["totalPnL"], Is.Null);
-		Assert.That(row["markValue"], Is.Null);
+		Assert.That(row["quoteValue"], Is.Null);
 		Assert.That(row["capitalUsagePercent"], Is.Null);
-		// Реальный риск от марок не зависит: при сбое котировок он остаётся
+		// Реальный риск от котировок не зависит: при сбое котировок он остаётся
 		// доступным, пока нереализованные величины гаснут в null.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
 		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
 		// Худший исход выводится из структуры ног и средних цен остатков,
-		// поэтому при сбое марок он тоже остаётся доступным.
+		// поэтому при сбое котировок он тоже остаётся доступным.
 		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 		Assert.That(row["worstCaseUsdt"]!.GetValue<decimal>(), Is.EqualTo(-89.75m));
-		// Реализованная часть и корректировки при сбое марок остаются видимыми.
+		// Реализованная часть и корректировки при сбое котировок остаются видимыми.
 		Assert.That(row["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(60.25m));
 		Assert.That(row["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(0m));
 	}
@@ -251,7 +251,7 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(payload["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(5m));
 		Assert.That(payload["totalPnL"]!.GetValue<decimal>(), Is.EqualTo(105.5m));
 		Assert.That(payload["totalPnLPercent"]!.GetValue<decimal>(), Is.EqualTo(3.5m));
-		Assert.That(payload["markValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
+		Assert.That(payload["quoteValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(payload["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
 		Assert.That(payload["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
 		// Худший исход проходит в превью рядом с риском: знаковая величина
@@ -264,8 +264,8 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(payload["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
 		Assert.That(payload["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(payload["closedAt"], Is.Null);
-		Assert.That(payload["marksAsOf"]!.GetValue<string>(), Is.EqualTo("2026-06-20T14:30:00+00:00"));
-		Assert.That(payload["hasMarkFailure"]!.GetValue<bool>(), Is.False);
+		Assert.That(payload["quotesAsOf"]!.GetValue<string>(), Is.EqualTo("2026-06-20T14:30:00+00:00"));
+		Assert.That(payload["hasQuoteFailure"]!.GetValue<bool>(), Is.False);
 		Assert.That(payload["counts"]!["positions"]!.GetValue<int>(), Is.EqualTo(2));
 		Assert.That(payload["counts"]!["openPositions"]!.GetValue<int>(), Is.EqualTo(1));
 		Assert.That(payload["counts"]!["trades"]!.GetValue<int>(), Is.EqualTo(3));
@@ -936,13 +936,13 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 
 	private static ConstructionListData CreateDefaultData()
 	{
-		var marksAsOf = new DateTimeOffset(2026, 6, 20, 14, 30, 0, TimeSpan.Zero);
+		var quotesAsOf = new DateTimeOffset(2026, 6, 20, 14, 30, 0, TimeSpan.Zero);
 		return new ConstructionListData(
 			TotalPnL: 100.5m,
 			RealizedPnL: 60.25m,
 			UnrealizedPnL: 40.25m,
-			MarksAsOf: marksAsOf,
-			HasMarkFailure: false,
+			QuotesAsOf: quotesAsOf,
+			HasQuoteFailure: false,
 			ConstructionCount: 2,
 			OpenCount: 1,
 			Items:
@@ -963,7 +963,7 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					TotalPnLPercent: 3.35m,
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
-					MarkValue: 500m,
+					QuoteValue: 500m,
 					CapitalUsagePercent: 16.7m,
 					RealRiskUsdt: 150m,
 					// Худший исход открытой строки: реализованный результат
@@ -986,7 +986,7 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					TotalPnLPercent: null,
 					OpenedAt: new DateTimeOffset(2026, 5, 20, 10, 0, 0, TimeSpan.Zero),
 					ClosedAt: new DateTimeOffset(2026, 5, 31, 12, 0, 0, TimeSpan.Zero),
-					MarkValue: null,
+					QuoteValue: null,
 					CapitalUsagePercent: null,
 					// Закрытая конструкция без открытых остатков имеет нулевой конечный риск.
 					RealRiskUsdt: 0m,
@@ -1001,8 +1001,8 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 			TotalPnL: 60.25m,
 			RealizedPnL: 60.25m,
 			UnrealizedPnL: 0m,
-			MarksAsOf: null,
-			HasMarkFailure: false,
+			QuotesAsOf: null,
+			HasQuoteFailure: false,
 			ConstructionCount: 3,
 			OpenCount: 3,
 			Items:
@@ -1023,7 +1023,7 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					TotalPnLPercent: 2m,
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
-					MarkValue: 500m,
+					QuoteValue: 500m,
 					CapitalUsagePercent: 16.7m,
 					RealRiskUsdt: 150m,
 					WorstCaseUsdt: -89.75m,
@@ -1044,7 +1044,7 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					TotalPnLPercent: 0m,
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
-					MarkValue: 0m,
+					QuoteValue: 0m,
 					CapitalUsagePercent: 0m,
 					// Открытый нетто-короткий колл: число отсутствует, статус unbounded.
 					RealRiskUsdt: null,
@@ -1067,7 +1067,7 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					TotalPnLPercent: 0m,
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
-					MarkValue: 0m,
+					QuoteValue: 0m,
 					CapitalUsagePercent: 0m,
 					// Неполные данные открытых остатков: число отсутствует, статус unavailable.
 					RealRiskUsdt: null,
@@ -1087,13 +1087,13 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 		return new StubListReadModel(data with { Items = [broken] });
 	}
 
-	/// <summary>Вариант со сбоем марок: нереализованные величины и итоги null.</summary>
+	/// <summary>Вариант со сбоем котировок: нереализованные величины и итоги null.</summary>
 	public static StubListReadModel WithMarkFailure() => new(new ConstructionListData(
 			TotalPnL: null,
 			RealizedPnL: 60.25m,
 			UnrealizedPnL: null,
-			MarksAsOf: null,
-			HasMarkFailure: true,
+			QuotesAsOf: null,
+			HasQuoteFailure: true,
 			ConstructionCount: 1,
 			OpenCount: 1,
 			Items:
@@ -1114,10 +1114,10 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					TotalPnLPercent: null,
 					OpenedAt: new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					ClosedAt: null,
-					MarkValue: null,
+					QuoteValue: null,
 					CapitalUsagePercent: null,
 					RealRiskUsdt: 150m,
-					// Худший исход от марок не зависит: величина остаётся при сбое.
+					// Худший исход от котировок не зависит: величина остаётся при сбое.
 					WorstCaseUsdt: -89.75m,
 					RealRiskStatus: RealRiskStatus.Finite),
 			]));
@@ -1184,7 +1184,7 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			throw new ConstructionNotFoundException(constructionId);
 		}
 
-		var marksAsOf = new DateTimeOffset(2026, 6, 20, 14, 30, 0, TimeSpan.Zero);
+		var quotesAsOf = new DateTimeOffset(2026, 6, 20, 14, 30, 0, TimeSpan.Zero);
 		var openedAt = new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero);
 		var metrics = new ConstructionMetrics
 		{
@@ -1194,7 +1194,7 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			UnrealizedPnL = 40.25m,
 			AdjustmentsPnL = 5m,
 			TotalPnL = 105.5m,
-			MarkValue = 500m,
+			QuoteValue = 500m,
 			RealizedPnLPercent = 2.0m,
 			UnrealizedPnLPercent = 1.34m,
 			AdjustmentsPnLPercent = 0.17m,
@@ -1228,8 +1228,8 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			Comment: null,
 			Metrics: metrics,
 			HasOpenResidual: true,
-			HasMarkFailure: false,
-			MarksAsOf: marksAsOf,
+			HasQuoteFailure: false,
+			QuotesAsOf: quotesAsOf,
 			Positions:
 			[
 				new ConstructionPositionRow(
@@ -1248,7 +1248,7 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 					ClosedAt: null,
 					IsOpen: true,
 					Comment: null,
-					MarkValue: 300m,
+					QuoteValue: 300m,
 					PriceChangePercent: 5m),
 				new ConstructionPositionRow(
 					Symbol: "ETHUSDT",
@@ -1266,7 +1266,7 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 					ClosedAt: new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero),
 					IsOpen: false,
 					Comment: null,
-					MarkValue: 200m,
+					QuoteValue: 200m,
 					PriceChangePercent: null),
 			],
 			Trades:
@@ -1429,7 +1429,7 @@ internal sealed class StubHintDisplayReadModel : IHintDisplayReadModel
 
 	public Task<bool> DismissAsync(long hintId, CancellationToken cancellationToken = default) => Task.FromResult(false);
 
-	public Task MarkSeenAsync(long hintId, DateTimeOffset seenAt, CancellationToken cancellationToken = default)
+	public Task RecordSeenAsync(long hintId, DateTimeOffset seenAt, CancellationToken cancellationToken = default)
 	{
 		_seenHintIds.Add(hintId);
 		return Task.CompletedTask;

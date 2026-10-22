@@ -24,9 +24,9 @@ public sealed class PositionMetricsCalculator
 	/// первой записи позиции; дата закрытия — момент последнего обнуления остатка,
 	/// и пока после обнуления позиция переоткрыта, датой закрытия становится только
 	/// следующее обнуление. Закрытая позиция не имеет нереализованной части: её
-	/// нереализованный PnL равен нулю и марок не требует, средняя цена и марка не
-	/// вычисляются; нереализованная оценка открытого остатка марками подключается
-	/// слоем марок при запросе и до этого остаётся null.
+	/// нереализованный PnL равен нулю и котировок не требует, средняя цена и котировка не
+	/// вычисляются; нереализованная оценка открытого остатка котировками подключается
+	/// слоем котировок при запросе и до этого остаётся null.
 	/// </summary>
 	/// <param name="constructionId">Конструкция, которой принадлежит позиция.</param>
 	/// <param name="symbol">Инструмент позиции.</param>
@@ -66,12 +66,12 @@ public sealed class PositionMetricsCalculator
 		}
 
 		// Позиция открыта, пока остаток не нулевой: у открытой нет даты закрытия
-		// и длительности, у закрытой нет нереализованной части, средней цены и марки.
+		// и длительности, у закрытой нет нереализованной части, средней цены и котировки.
 		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-unrealized
 		var isOpen = fifo.Residual != 0m;
 
-		// Общий PnL закрытой позиции — реализованный: марок закрытая не требует.
-		// Открытая ждёт слой марок: он соберёт общий PnL из реализованной и
+		// Общий PnL закрытой позиции — реализованный: котировок закрытая не требует.
+		// Открытая ждёт слой котировок: он соберёт общий PnL из реализованной и
 		// нереализованной частей, до него общий PnL остаётся null.
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-mark-failure
@@ -88,7 +88,7 @@ public sealed class PositionMetricsCalculator
 			AverageEntryPrice = fifo.AverageEntryPrice,
 			AverageClosePrice = fifo.AverageClosePrice,
 			TotalPnL = totalPnL,
-			MarkPrice = null,
+			QuotePrice = null,
 			UnrealizedPnL = isOpen ? null : 0m,
 			OpenedAt = openedAt,
 			ClosedAt = isOpen ? null : closedAt,

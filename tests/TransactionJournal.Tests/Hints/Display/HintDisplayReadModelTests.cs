@@ -298,12 +298,12 @@ public class HintDisplayReadModelTests
 		var readModel = new HintDisplayReadModel(store.Object);
 
 		// Act: панель показала живую подсказку впервые.
-		await readModel.MarkSeenAsync(5, seenAt);
+		await readModel.RecordSeenAsync(5, seenAt);
 
 		// Assert: пометка первого показа ушла в хранилище.
 		// Требование: firstSeenAt — автопометка первого показа в UI.
 		// Traceability: openspec:ui/screens#requirement-ui-hint-panel-in-construction
-		store.Verify(hintStore => hintStore.MarkFirstSeenAsync(5, seenAt, It.IsAny<CancellationToken>()), Times.Once);
+		store.Verify(hintStore => hintStore.RecordFirstSeenAsync(5, seenAt, It.IsAny<CancellationToken>()), Times.Once);
 	}
 
 	/// <summary>Запись подсказки-минимум для панели и журнала.</summary>

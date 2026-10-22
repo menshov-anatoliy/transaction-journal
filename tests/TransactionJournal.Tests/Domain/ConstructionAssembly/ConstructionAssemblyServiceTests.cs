@@ -283,12 +283,12 @@ public class ConstructionAssemblyServiceTests
 				Symbol = "ETHUSDT",
 				Text = "комментарий позиции",
 			});
-			db.ManualCloseMarks.Add(new ManualCloseMark
+			db.ManualCloseAnnotations.Add(new ManualCloseAnnotation
 			{
 				Construction = old,
 				Symbol = "ETHUSDT",
 				Price = 3000m,
-				MarkedAt = Now,
+				AnnotatedAt = Now,
 			});
 			db.TradeUserdata.Add(new TradeUserdata
 			{
@@ -327,7 +327,7 @@ public class ConstructionAssemblyServiceTests
 
 			Assert.That(db.PnLAdjustments, Is.Empty, "Внешние корректировки PnL стёрты");
 			Assert.That(db.PositionComments, Is.Empty, "Комментарии позиций стёрты");
-			Assert.That(db.ManualCloseMarks, Is.Empty, "Ручные пометки закрытия стёрты");
+			Assert.That(db.ManualCloseAnnotations, Is.Empty, "Ручные пометки закрытия стёрты");
 
 			var userdata = db.TradeUserdata.ToList();
 			Assert.That(userdata.Select(row => row.ExecId), Is.EquivalentTo(new[] { "e1", "e2", "e3", "e4", "e5", "e6" }), "Остались только привязки плана");
@@ -584,12 +584,12 @@ public class ConstructionAssemblyServiceTests
 				Symbol = "ETHUSDT",
 				Text = "комментарий позиции",
 			});
-			db.ManualCloseMarks.Add(new ManualCloseMark
+			db.ManualCloseAnnotations.Add(new ManualCloseAnnotation
 			{
 				Construction = manual,
 				Symbol = "ETHUSDT",
 				Price = 3000m,
-				MarkedAt = Now,
+				AnnotatedAt = Now,
 			});
 			db.TradeUserdata.Add(new TradeUserdata
 			{
@@ -630,7 +630,7 @@ public class ConstructionAssemblyServiceTests
 
 			Assert.That(db.PnLAdjustments.Single().AmountUsdt, Is.EqualTo(-5m), "Корректировка PnL не изменена");
 			Assert.That(db.PositionComments.Single().Text, Is.EqualTo("комментарий позиции"), "Комментарий позиции не изменён");
-			Assert.That(db.ManualCloseMarks.Single().Price, Is.EqualTo(3000m), "Ручная пометка закрытия не изменена");
+			Assert.That(db.ManualCloseAnnotations.Single().Price, Is.EqualTo(3000m), "Ручная пометка закрытия не изменена");
 
 			var bindingByExecId = db.TradeUserdata.ToDictionary(userdata => userdata.ExecId);
 			Assert.That(bindingByExecId["e1"].ConstructionId, Is.EqualTo(manualId), "Привязка колла сохранена");
@@ -692,12 +692,12 @@ public class ConstructionAssemblyServiceTests
 		// повторный инкремент пересчитывает остаток через read-модель.
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
-			db.ManualCloseMarks.Add(new ManualCloseMark
+			db.ManualCloseAnnotations.Add(new ManualCloseAnnotation
 			{
 				ConstructionId = constructionId,
 				Symbol = "ETHUSDT",
 				Price = 3000m,
-				MarkedAt = Now,
+				AnnotatedAt = Now,
 			});
 			db.SaveChanges();
 		}

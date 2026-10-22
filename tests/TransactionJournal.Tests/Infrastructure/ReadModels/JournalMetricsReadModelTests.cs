@@ -19,7 +19,7 @@ namespace TransactionJournal.Tests.Infrastructure.ReadModels;
 /// <summary>
 /// Проверки read-модели метрик журнала — композиции читающего слоя для экранов UI:
 /// метрики конструкций и итог по журналу вычисляются из текущих данных при каждом
-/// чтении, открытые остатки оцениваются свежими марками, а сбой марок делает итог
+/// чтении, открытые остатки оцениваются свежими котировками, а сбой котировок делает итог
 /// журнала неполным (null), не подменяя его частичной суммой и не затрагивая
 /// реализованные метрики.
 /// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
@@ -42,7 +42,7 @@ public class JournalMetricsReadModelTests
 
 	private string _databasePath = null!;
 	private JournalMetricsReadModel _readModel = null!;
-	private ScriptedMarkSource _markSource = null!;
+	private ScriptedQuoteSource _quoteSource = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -63,8 +63,8 @@ public class JournalMetricsReadModelTests
 			db.SaveChanges();
 		}
 
-		_markSource = new ScriptedMarkSource();
-		_readModel = new JournalMetricsReadModel(CreateOptions(), _markSource, _markSource);
+		_quoteSource = new ScriptedQuoteSource();
+		_readModel = new JournalMetricsReadModel(CreateOptions(), _quoteSource, _quoteSource);
 	}
 
 	[TestCleanup]
@@ -109,7 +109,7 @@ public class JournalMetricsReadModelTests
 		var scalperMetrics = metrics.Constructions.Single(m => m.ConstructionId == scalper);
 		Assert.That(scalperMetrics.TotalPnL, Is.EqualTo(118m));
 		Assert.That(metrics.TotalPnL, Is.EqualTo(118m));
-		Assert.That(metrics.HasMarkFailure, Is.False);
+		Assert.That(metrics.HasQuoteFailure, Is.False);
 
 		// Разбивка не содержит корректировку +20: корректировки входят только
 		// в итог журнала, реализованный и нереализованный агрегаты складываются
@@ -124,7 +124,7 @@ public class JournalMetricsReadModelTests
 	public async Task TryIfJournalBreakdownSumsConstructions()
 	{
 		// Arrange: закрытая позиция даёт реализованный PnL 98 (100 − 2 комиссии),
-		// открытый остаток с маркой 42500 даёт реализованный −1 и нереализованный +50.
+		// открытый остаток с котировкой 42500 даёт реализованный −1 и нереализованный +50.
 		var scalper = await CreateConstructionAsync("Скальп BTC", 1000m);
 		var swing = await CreateConstructionAsync("Длинный BTC", 1000m);
 		await AddLinearTradeAsync("exec-buy-1", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
@@ -132,7 +132,7 @@ public class JournalMetricsReadModelTests
 		await BindAsync(scalper, "exec-buy-1", "exec-sell-1");
 		await AddLinearTradeAsync("exec-buy-2", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 12, 0));
 		await BindAsync(swing, "exec-buy-2");
-		_markSource.FreshMarks[LinearSymbol] = (42500m, FetchedAt);
+		_quoteSource.FreshQuotes[LinearSymbol] = (42500m, FetchedAt);
 
 		// Act
 		var metrics = await _readModel.ReadAsync();
@@ -151,7 +151,7 @@ public class JournalMetricsReadModelTests
 	public async Task TryIfJournalAggregatesIncludeArchivedConstruction()
 	{
 		// Arrange: скальп переведён в архив после закрытия позиции (реализованный 98),
-		// активная конструкция держит открытый остаток с маркой (−1 и +50).
+		// активная конструкция держит открытый остаток с котировкой (−1 и +50).
 		var archived = await CreateConstructionAsync("Архив скальпа", 1000m, ConstructionStatus.Archived);
 		var active = await CreateConstructionAsync("Длинный BTC", 1000m);
 		await AddLinearTradeAsync("exec-buy-a", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
@@ -159,7 +159,7 @@ public class JournalMetricsReadModelTests
 		await BindAsync(archived, "exec-buy-a", "exec-sell-a");
 		await AddLinearTradeAsync("exec-buy-o", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 12, 0));
 		await BindAsync(active, "exec-buy-o");
-		_markSource.FreshMarks[LinearSymbol] = (42500m, FetchedAt);
+		_quoteSource.FreshQuotes[LinearSymbol] = (42500m, FetchedAt);
 
 		// Act
 		var metrics = await _readModel.ReadAsync();
@@ -182,28 +182,28 @@ public class JournalMetricsReadModelTests
 		Assert.That(metrics.Constructions, Is.Empty);
 		Assert.That(metrics.Positions, Is.Empty);
 		Assert.That(metrics.TotalPnL, Is.EqualTo(0m));
-		Assert.That(metrics.HasMarkFailure, Is.False);
+		Assert.That(metrics.HasQuoteFailure, Is.False);
 	}
 
 	[TestMethod]
-	[Description("Открытый остаток оценён свежей маркой: итог включает нереализованную часть с отметкой времени марок")]
+	[Description("Открытый остаток оценён свежей котировкой: итог включает нереализованную часть с отметкой времени котировок")]
 	public async Task TryIfOpenResidualValuedByFreshMark()
 	{
 		// Arrange: конструкция с открытым остатком — покупка 0.1 по 42000 с комиссией 1.
 		var construction = await CreateConstructionAsync("Длинный BTC", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await BindAsync(construction, "exec-buy");
-		_markSource.FreshMarks[LinearSymbol] = (42500m, FetchedAt);
+		_quoteSource.FreshQuotes[LinearSymbol] = (42500m, FetchedAt);
 
 		// Act
 		var metrics = await _readModel.ReadAsync();
 
 		// Assert: нереализованная оценка (42500 − 42000) × 0.1 = 50 входит в итог
-		// вместе с комиссией: −1 + 50 = 49; отметка времени марок возвращается.
+		// вместе с комиссией: −1 + 50 = 49; отметка времени котировок возвращается.
 		// Traceability: openspec:analytics/performance#scenario-open-residual-valued-at-request
 		Assert.That(metrics.TotalPnL, Is.EqualTo(49m));
-		Assert.That(metrics.MarksAsOf, Is.EqualTo(FetchedAt));
-		Assert.That(metrics.HasMarkFailure, Is.False);
+		Assert.That(metrics.QuotesAsOf, Is.EqualTo(FetchedAt));
+		Assert.That(metrics.HasQuoteFailure, Is.False);
 	}
 
 	[TestMethod]
@@ -214,8 +214,8 @@ public class JournalMetricsReadModelTests
 		var construction = await CreateConstructionAsync("Частичное закрытие", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await BindAsync(construction, "exec-buy");
-		var marks = new ManualCloseMarkService(CreateOptions());
-		await marks.AddAsync(
+		var quotes = new ManualCloseAnnotationService(CreateOptions());
+		await quotes.AddAsync(
 			construction, LinearSymbol, new DateTimeOffset(2023, 12, 29, 10, 0, 0, TimeSpan.Zero), 43000m, quantity: 0.04m);
 
 		// Act
@@ -235,33 +235,33 @@ public class JournalMetricsReadModelTests
 	}
 
 	[TestMethod]
-	[Description("Сбой марок делает итог журнала неполным: реализованные метрики возвращаются как есть")]
+	[Description("Сбой котировок делает итог журнала неполным: реализованные метрики возвращаются как есть")]
 	public async Task TryIfMarkFailureMakesJournalTotalIncomplete()
 	{
-		// Arrange: открытый остаток без доступной свежей марки — тикеры недоступны.
+		// Arrange: открытый остаток без доступной свежей котировки — тикеры недоступны.
 		var construction = await CreateConstructionAsync("Длинный BTC", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await BindAsync(construction, "exec-buy");
-		_markSource.FailFresh = true;
+		_quoteSource.FailFresh = true;
 
 		// Act
 		var metrics = await _readModel.ReadAsync();
 
 		// Assert: итог журнала неполный (null), нереализованная часть и отметка времени
-		// марок деградировали, реализованный результат (−1 комиссия) читается как есть.
+		// котировок деградировали, реализованный результат (−1 комиссия) читается как есть.
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-unrealized-only
 		// Traceability: change:add-ui-screens/design#d4
 		Assert.That(metrics.TotalPnL, Is.Null);
-		Assert.That(metrics.MarksAsOf, Is.Null);
-		Assert.That(metrics.HasMarkFailure, Is.True);
+		Assert.That(metrics.QuotesAsOf, Is.Null);
+		Assert.That(metrics.HasQuoteFailure, Is.True);
 		Assert.That(metrics.Constructions.Single().RealizedPnL, Is.EqualTo(-1m));
 	}
 
 	[TestMethod]
-	[Description("Сбой марок одной конструкции гасит нереализованный агрегат журнала, реализованный остаётся суммой")]
+	[Description("Сбой котировок одной конструкции гасит нереализованный агрегат журнала, реализованный остаётся суммой")]
 	public async Task TryIfAnyConstructionMarkFailureNullsJournalUnrealizedOnly()
 	{
-		// Arrange: у конструкции с BTC свежая марка есть, у конструкции с ETH — нет:
+		// Arrange: у конструкции с BTC свежая котировка есть, у конструкции с ETH — нет:
 		// сбой одной конструкции должен погасить нереализованный агрегат журнала.
 		var btc = await CreateConstructionAsync("Длинный BTC", 1000m);
 		var eth = await CreateConstructionAsync("Длинный ETH", 1000m);
@@ -270,7 +270,7 @@ public class JournalMetricsReadModelTests
 		await BindAsync(btc, "exec-btc");
 		await AddLinearTradeAsync("exec-eth", "Buy", "0.1", "3000", "1", ExecMs(2023, 12, 28, 10, 0), "ETHUSDT");
 		await BindAsync(eth, "exec-eth");
-		_markSource.FreshMarks[LinearSymbol] = (42500m, FetchedAt);
+		_quoteSource.FreshQuotes[LinearSymbol] = (42500m, FetchedAt);
 
 		// Act
 		var metrics = await _readModel.ReadAsync();
@@ -278,9 +278,9 @@ public class JournalMetricsReadModelTests
 		// Assert: нереализованный агрегат и итог отсутствуют — частичная сумма
 		// по отмеченной конструкции не подменяет их; реализованный остаётся
 		// суммой по всем конструкциям: (−1) + (−1) = −2.
-		// Требование: сбой марок хотя бы одной конструкции гасит нереализованную часть.
+		// Требование: сбой котировок хотя бы одной конструкции гасит нереализованную часть.
 		// Traceability: openspec:analytics/performance#scenario-journal-unrealized-null-on-any-mark-failure
-		Assert.That(metrics.HasMarkFailure, Is.True);
+		Assert.That(metrics.HasQuoteFailure, Is.True);
 		Assert.That(metrics.UnrealizedPnL, Is.Null);
 		Assert.That(metrics.TotalPnL, Is.Null);
 		Assert.That(metrics.RealizedPnL, Is.EqualTo(-2m));
@@ -306,9 +306,9 @@ public class JournalMetricsReadModelTests
 		await AddOptionTradeAsync("exec-near", NearCallSymbol, "Buy", "1", "3000", ExecMs(2026, 10, 10, 10, 0));
 		await AddOptionTradeAsync("exec-far", FarCallSymbol, "Buy", "2", "15000", ExecMs(2026, 10, 10, 11, 0));
 		await BindAsync(construction, "exec-near", "exec-far");
-		_markSource.FreshOptionMarks[NearCallSymbol] = new InstrumentMarkSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
-		_markSource.FreshOptionMarks[FarCallSymbol] = new InstrumentMarkSnapshot(FarCallSymbol, 15000m, LifetimeNow, 110000m, -1.0m);
-		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 2900m, theta: -2.0m, receivedAt: LifetimeNow.AddHours(-25));
+		_quoteSource.FreshOptionQuotes[NearCallSymbol] = new InstrumentQuoteSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
+		_quoteSource.FreshOptionQuotes[FarCallSymbol] = new InstrumentQuoteSnapshot(FarCallSymbol, 15000m, LifetimeNow, 110000m, -1.0m);
+		await AddMarketSnapshotAsync(NearCallSymbol, quotePrice: 2900m, theta: -2.0m, receivedAt: LifetimeNow.AddHours(-25));
 		var readModel = CreateReadModel(new FixedTimeProvider(LifetimeNow));
 
 		// Act: читаем метрики журнала.
@@ -362,9 +362,9 @@ public class JournalMetricsReadModelTests
 		await SeedOptionInstrumentAsync(NearCallSymbol, "Call", ExecMs(2026, 10, 28, 8, 0));
 		await AddOptionTradeAsync("exec-near", NearCallSymbol, "Buy", "1", "3000", ExecMs(2026, 10, 10, 10, 0));
 		await BindAsync(construction, "exec-near");
-		_markSource.FreshOptionMarks[NearCallSymbol] = new InstrumentMarkSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
-		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 3100m, theta: -9m, receivedAt: LifetimeNow.AddHours(-2));
-		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 2900m, theta: -2m, receivedAt: LifetimeNow.AddHours(-25));
+		_quoteSource.FreshOptionQuotes[NearCallSymbol] = new InstrumentQuoteSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
+		await AddMarketSnapshotAsync(NearCallSymbol, quotePrice: 3100m, theta: -9m, receivedAt: LifetimeNow.AddHours(-2));
+		await AddMarketSnapshotAsync(NearCallSymbol, quotePrice: 2900m, theta: -2m, receivedAt: LifetimeNow.AddHours(-25));
 		var readModel = CreateReadModel(new FixedTimeProvider(LifetimeNow));
 
 		// Act: читаем метрики журнала.
@@ -394,9 +394,9 @@ public class JournalMetricsReadModelTests
 		await SeedOptionInstrumentAsync(NearCallSymbol, "Call", ExecMs(2026, 10, 28, 8, 0));
 		await AddOptionTradeAsync("exec-near", NearCallSymbol, "Buy", "1", "3000", ExecMs(2026, 10, 10, 10, 0));
 		await BindAsync(construction, "exec-near");
-		_markSource.FreshOptionMarks[NearCallSymbol] = new InstrumentMarkSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
-		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 2950m, theta: null, receivedAt: LifetimeNow.AddHours(-25));
-		await AddMarketSnapshotAsync(NearCallSymbol, markPrice: 2900m, theta: -1.8m, receivedAt: LifetimeNow.AddHours(-30));
+		_quoteSource.FreshOptionQuotes[NearCallSymbol] = new InstrumentQuoteSnapshot(NearCallSymbol, 3000m, LifetimeNow, 80000m, -2.5m);
+		await AddMarketSnapshotAsync(NearCallSymbol, quotePrice: 2950m, theta: null, receivedAt: LifetimeNow.AddHours(-25));
+		await AddMarketSnapshotAsync(NearCallSymbol, quotePrice: 2900m, theta: -1.8m, receivedAt: LifetimeNow.AddHours(-30));
 		var readModel = CreateReadModel(new FixedTimeProvider(LifetimeNow));
 
 		// Act: читаем метрики журнала.
@@ -431,7 +431,7 @@ public class JournalMetricsReadModelTests
 		var metrics = await readModel.ReadAsync();
 
 		// Assert: остаток суток вычислен без рыночных данных, слагаемые саммари
-		// от тикеров отсутствуют, сбой марок признан, предупреждение называет
+		// от тикеров отсутствуют, сбой котировок признан, предупреждение называет
 		// распад неизвестным.
 		var constructionMetrics = metrics.Constructions.Single(item => item.ConstructionId == construction);
 		Assert.That(constructionMetrics.Lifetime, Is.Not.Null);
@@ -440,7 +440,7 @@ public class JournalMetricsReadModelTests
 		Assert.That(summary!.DaysToNearestExpiry, Is.EqualTo(9));
 		Assert.That(summary.NetDailyDecayUsdt, Is.Null);
 		Assert.That(summary.TotalTimeValueUsdt, Is.Null);
-		Assert.That(metrics.HasMarkFailure, Is.True);
+		Assert.That(metrics.HasQuoteFailure, Is.True);
 		Assert.That(constructionMetrics.RiskWarningsCount, Is.EqualTo(1));
 		Assert.That(
 			constructionMetrics.RiskWarnings.Single(item => item.Reason == ConstructionRiskReason.ExpiryApproaching).Text,
@@ -502,7 +502,7 @@ public class JournalMetricsReadModelTests
 
 	/// <summary>Собирает read-модель метрик журнала над фиксированными часами чтения.</summary>
 	private JournalMetricsReadModel CreateReadModel(TimeProvider timeProvider) =>
-		new(CreateOptions(), _markSource, _markSource, timeProvider);
+		new(CreateOptions(), _quoteSource, _quoteSource, timeProvider);
 
 	/// <summary>Сохраняет спецификацию опциона в справочнике сырых записей синхронизации с каноническим временем доставки.</summary>
 	private async Task SeedOptionInstrumentAsync(string symbol, string optionsType, long deliveryTimeMs)
@@ -536,13 +536,13 @@ public class JournalMetricsReadModelTests
 	}
 
 	/// <summary>Пишет строку истории рыночных снимков с тетой (или без неё) и моментом получения — материал прироста распада.</summary>
-	private async Task AddMarketSnapshotAsync(string symbol, decimal markPrice, decimal? theta, DateTimeOffset receivedAt)
+	private async Task AddMarketSnapshotAsync(string symbol, decimal quotePrice, decimal? theta, DateTimeOffset receivedAt)
 	{
 		using var db = new JournalDbContext(CreateOptions());
 		db.InstrumentMarketSnapshots.Add(new InstrumentMarketSnapshot
 		{
 			Symbol = symbol,
-			MarkPrice = markPrice,
+			QuotePrice = quotePrice,
 			UnderlyingPrice = 80000m,
 			Theta = theta,
 			ReceivedAt = receivedAt,
@@ -577,40 +577,40 @@ public class JournalMetricsReadModelTests
 		new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
 	/// <summary>
-	/// Сценарный источник марок: свежие и последние марки выдаются из словарей,
+	/// Сценарный источник котировок: свежие и последние котировки выдаются из словарей,
 	/// режим сбоя имитирует недоступность публичных тикеров ошибкой сети.
 	/// Опционные тикеры идут отдельным словарём с индексной ценой и тетой —
-	/// расширенный снимок <see cref="IFreshInstrumentMarkSource"/>.
+	/// расширенный снимок <see cref="IFreshInstrumentQuoteSource"/>.
 	/// </summary>
-	private sealed class ScriptedMarkSource : IFreshInstrumentMarkSource, IInstrumentMarkSource
+	private sealed class ScriptedQuoteSource : IFreshInstrumentQuoteSource, IInstrumentQuoteSource
 	{
-		public Dictionary<string, (decimal Price, DateTimeOffset ReceivedAt)> FreshMarks { get; } = new();
+		public Dictionary<string, (decimal Price, DateTimeOffset ReceivedAt)> FreshQuotes { get; } = new();
 
 		/// <summary>Свежие тикеры опционов с индексной ценой и тетой — материал метрик времени жизни.</summary>
-		public Dictionary<string, InstrumentMarkSnapshot> FreshOptionMarks { get; } = new(StringComparer.Ordinal);
+		public Dictionary<string, InstrumentQuoteSnapshot> FreshOptionQuotes { get; } = new(StringComparer.Ordinal);
 
 		public bool FailFresh { get; set; }
 
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default)
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default)
 		{
 			if (FailFresh)
 			{
 				throw new HttpRequestException("публичные тикеры недоступны");
 			}
 
-			if (FreshOptionMarks.TryGetValue(symbol, out var optionMark))
+			if (FreshOptionQuotes.TryGetValue(symbol, out var optionQuote))
 			{
-				return Task.FromResult<InstrumentMarkSnapshot?>(optionMark);
+				return Task.FromResult<InstrumentQuoteSnapshot?>(optionQuote);
 			}
 
-			return FreshMarks.TryGetValue(symbol, out var mark)
-				? Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, mark.Price, mark.ReceivedAt))
-				: Task.FromResult<InstrumentMarkSnapshot?>(null);
+			return FreshQuotes.TryGetValue(symbol, out var quote)
+				? Task.FromResult<InstrumentQuoteSnapshot?>(new InstrumentQuoteSnapshot(symbol, quote.Price, quote.ReceivedAt))
+				: Task.FromResult<InstrumentQuoteSnapshot?>(null);
 		}
 
-		public Task<decimal?> GetLastMarkAsync(string symbol, CancellationToken cancellationToken = default)
+		public Task<decimal?> GetLastQuoteAsync(string symbol, CancellationToken cancellationToken = default)
 		{
-			return Task.FromResult<decimal?>(FreshMarks.TryGetValue(symbol, out var mark) ? mark.Price : null);
+			return Task.FromResult<decimal?>(FreshQuotes.TryGetValue(symbol, out var quote) ? quote.Price : null);
 		}
 	}
 

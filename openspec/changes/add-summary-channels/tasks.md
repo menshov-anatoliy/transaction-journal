@@ -8,8 +8,8 @@
 ## 2. Telegram-шлюз
 
 - [ ] 2.1 `TelegramGateway` поверх Bot API long-polling (отдельный task с cancellationToken, корректный shutdown); порт `ISummaryChannel`; настройка токена бота и chat id. Проверить: интеграционный тест на тестовом токене/эхо, shutdown не зависает.
-- [ ] 2.2 Команды: `/summary` — полный формат всегда; `/status` — шаблонный ответ (синхронизация, марки, число живых подсказок, режим последнего изложения, окно, валидность корпуса); все прочие команды игнорируются. Проверить: `requirement-delivery-telegram-read-only`, `requirement-delivery-status-command`, `scenario-delivery-corpus-error-in-summary`.
-- [ ] 2.3 Пропуск прохода при недоступности марок с диагностикой, без сборки и доставки. Проверить: `requirement-delivery-market-unavailable-skip`.
+- [ ] 2.2 Команды: `/summary` — полный формат всегда; `/status` — шаблонный ответ (синхронизация, котировки, число живых подсказок, режим последнего изложения, окно, валидность корпуса); все прочие команды игнорируются. Проверить: `requirement-delivery-telegram-read-only`, `requirement-delivery-status-command`, `scenario-delivery-corpus-error-in-summary`.
+- [ ] 2.3 Пропуск прохода при недоступности котировок с диагностикой, без сборки и доставки. Проверить: `requirement-delivery-market-unavailable-skip`.
 
 ## 3. Сборщик сводки
 

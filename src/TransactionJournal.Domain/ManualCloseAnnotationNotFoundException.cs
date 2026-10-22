@@ -4,16 +4,16 @@ namespace TransactionJournal.Domain;
 /// Ручная пометка закрытия с указанным идентификатором не найдена:
 /// править или удалять несуществующую пометку нельзя.
 /// </summary>
-public sealed class ManualCloseMarkNotFoundException : Exception
+public sealed class ManualCloseAnnotationNotFoundException : Exception
 {
 	/// <summary>Идентификатор пометки, которая не найдена.</summary>
-	public long MarkId { get; }
+	public long AnnotationId { get; }
 
 	/// <summary>Создаёт исключение для несуществующей ручной пометки закрытия.</summary>
-	/// <param name="markId">Идентификатор пометки, которой нет в журнале.</param>
-	public ManualCloseMarkNotFoundException(long markId)
-		: base($"Ручная пометка закрытия с идентификатором {markId} не найдена.")
+	/// <param name="annotationId">Идентификатор пометки, которой нет в журнале.</param>
+	public ManualCloseAnnotationNotFoundException(long annotationId)
+		: base($"Ручная пометка закрытия с идентификатором {annotationId} не найдена.")
 	{
-		MarkId = markId;
+		AnnotationId = annotationId;
 	}
 }

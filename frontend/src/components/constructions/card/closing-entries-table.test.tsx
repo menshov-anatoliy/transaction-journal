@@ -14,7 +14,7 @@ import { ClosingEntriesTable } from "./closing-entries-table";
 // Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
 // Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity
 
-function renderTable(entries: ConstructionCardClosingEntry[], onEditMark: (input: unknown) => void = () => undefined) {
+function renderTable(entries: ConstructionCardClosingEntry[], onEditAnnotation: (input: unknown) => void = () => undefined) {
 	const warnings: ConstructionCardClosingWarning[] = [];
 	render(
 		<TooltipProvider delayDuration={0}>
@@ -22,30 +22,30 @@ function renderTable(entries: ConstructionCardClosingEntry[], onEditMark: (input
 				entries={entries}
 				warnings={warnings}
 				actionsPending={false}
-				onEditMark={onEditMark as never}
-				onDeleteMark={() => undefined}
+				onEditAnnotation={onEditAnnotation as never}
+				onDeleteAnnotation={() => undefined}
 			/>
 		</TooltipProvider>,
 	);
 }
 
 /** Частичная ручная пометка: закрыла 0.3 из 0.5 путовой ноги. */
-const partialMark: ConstructionCardClosingEntry = {
+const partialAnnotation: ConstructionCardClosingEntry = {
 	closedAt: "2026-10-15T13:30:00+00:00",
 	kind: "manual-mark",
 	symbol: "ETH-28MAR-1600-P",
 	quantity: -0.3,
 	price: 100,
 	amountUsdt: -30,
-	manualMarkId: 21,
+	manualAnnotationId: 21,
 };
 
 describe("таблица закрывающих записей: правка ручной пометки", () => {
 	it("предзаполняет количество значением записи и сохраняет частичность при правке", async () => {
 		// Arrange: раскрытая форма правки частичной пометки; замер команды правки.
 		const user = userEvent.setup();
-		const onEditMark = vi.fn();
-		renderTable([partialMark], onEditMark);
+		const onEditAnnotation = vi.fn();
+		renderTable([partialAnnotation], onEditAnnotation);
 		await user.click(screen.getByRole("button", { name: "править" }));
 
 		// Assert: поле количества предзаполнено применённым количеством записи.
@@ -53,24 +53,24 @@ describe("таблица закрывающих записей: правка р�
 		expect(quantityInput.value).toBe("0.3");
 
 		// Act: правим только цену — количество не трогаем.
-		const priceInput = screen.getByPlaceholderText("пусто — последняя марка");
+		const priceInput = screen.getByPlaceholderText("пусто — последняя котировка");
 		await user.clear(priceInput);
 		await user.type(priceInput, "95");
 		await user.click(screen.getByRole("button", { name: "Сохранить пометку" }));
 
 		// Assert: правка сохранила заданное количество — частичная пометка не
 		// превратилась в закрытие всего остатка.
-		expect(onEditMark).toHaveBeenCalledWith({
-			markId: 21,
-			mark: { symbol: "ETH-28MAR-1600-P", markedAt: expect.any(String), price: 95, quantity: 0.3 },
+		expect(onEditAnnotation).toHaveBeenCalledWith({
+			annotationId: 21,
+			annotation: { symbol: "ETH-28MAR-1600-P", annotatedAt: expect.any(String), price: 95, quantity: 0.3 },
 		});
 	});
 
 	it("пустое количество возвращает пометку к закрытию всего остатка", async () => {
 		// Arrange: раскрытая форма правки частичной пометки.
 		const user = userEvent.setup();
-		const onEditMark = vi.fn();
-		renderTable([partialMark], onEditMark);
+		const onEditAnnotation = vi.fn();
+		renderTable([partialAnnotation], onEditAnnotation);
 		await user.click(screen.getByRole("button", { name: "править" }));
 
 		// Act: владелец очищает количество — остаток закрывается целиком.
@@ -79,9 +79,9 @@ describe("таблица закрывающих записей: правка р�
 
 		// Assert: null-количество ушло в команду — семантика формы создания:
 		// незаданное количество закрывает весь остаток.
-		expect(onEditMark).toHaveBeenCalledWith({
-			markId: 21,
-			mark: { symbol: "ETH-28MAR-1600-P", markedAt: expect.any(String), price: 100, quantity: null },
+		expect(onEditAnnotation).toHaveBeenCalledWith({
+			annotationId: 21,
+			annotation: { symbol: "ETH-28MAR-1600-P", annotatedAt: expect.any(String), price: 100, quantity: null },
 		});
 	});
 });
@@ -99,7 +99,7 @@ describe("таблица закрывающих записей: подсказк
 	it("даёт подсказку колонке «Сумма» с назначением без метода", async () => {
 		// Arrange: таблица закрывающих записей под провайдером подсказок.
 		const user = userEvent.setup();
-		renderTable([partialMark]);
+		renderTable([partialAnnotation]);
 
 		// Act: наведение на заголовок колонки суммы.
 		await user.hover(screen.getByText("Сумма"));
@@ -119,7 +119,7 @@ describe("таблица закрывающих записей: подсказк
 	it("не даёт подсказки колонке времени", async () => {
 		// Arrange: таблица закрывающих записей под провайдером подсказок.
 		const user = userEvent.setup();
-		renderTable([partialMark]);
+		renderTable([partialAnnotation]);
 
 		// Act: наведение на заголовок колонки времени.
 		await user.hover(screen.getByText("Время"));
@@ -134,7 +134,7 @@ describe("таблица закрывающих записей: подсказк
 	it("даёт подсказку колонке «Детали» с разделами количества и цены", async () => {
 		// Arrange: таблица закрывающих записей под провайдером подсказок.
 		const user = userEvent.setup();
-		renderTable([partialMark]);
+		renderTable([partialAnnotation]);
 
 		// Act: наведение на заголовок колонки деталей.
 		await user.hover(screen.getByText("Детали"));

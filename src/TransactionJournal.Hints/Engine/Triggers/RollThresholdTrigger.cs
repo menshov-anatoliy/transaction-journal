@@ -7,7 +7,7 @@ using TransactionJournal.Hints.Ports;
 /// ac-27 «Порог смещения для ролла»: среди купленных опционов конструкции
 /// есть нога, для которой цена ушла от страйка в неблагоприятную сторону не
 /// менее порога процентов (кол — цена ниже страйка, пут — выше). Берётся
-/// максимальное неблагоприятное смещение; марка спота обязательна.
+/// максимальное неблагоприятное смещение; котировка спота обязательна.
 /// Traceability: openspec:hints/engine-pass#requirement-engine-v1-trigger-set
 /// </summary>
 public sealed class RollThresholdTrigger : IHintTrigger
@@ -36,7 +36,7 @@ public sealed class RollThresholdTrigger : IHintTrigger
 		}
 
 		var baseCoin = legs[0].BaseCoin;
-		if (ConstructionLegs.TrySpot(input.Marks, baseCoin, out var spot) == false)
+		if (ConstructionLegs.TrySpot(input.Quotes, baseCoin, out var spot) == false)
 		{
 			return TriggerOutcome.NotFired();
 		}

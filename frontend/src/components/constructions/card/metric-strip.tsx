@@ -181,7 +181,7 @@ export function ConstructionMetricStrip({
 					>
 						<MetricHint tooltip={METRIC_TOOLTIPS.totalPnl}>
 							{metrics.totalPnL === null ? (
-								// Итог без нереализованной части неполный — признак сбоя марок.
+								// Итог без нереализованной части неполный — признак сбоя котировок.
 								<span className="text-text-muted" title="Общий P&L неполный: нереализованная часть не оценена из-за сбоя котировок">
 									неполный (сбой котировок)
 								</span>
@@ -208,19 +208,19 @@ export function ConstructionMetricStrip({
 					</Metric>
 					<Metric
 						label="стоимость"
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.markValue ?? 0)}`}
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.quoteValue ?? 0)}`}
 					>
 						<MetricHint tooltip={METRIC_TOOLTIPS.constructionValue}>
 							{card.hasOpenResidual === false ? (
 								<span className="text-text-muted" title="Открытых остатков нет — стоимости нет">
 									{DASH}
 								</span>
-							) : metrics.markValue === null ? (
+							) : metrics.quoteValue === null ? (
 								<span className="text-text-muted" title="Провайдер котировок недоступен — стоимость не оценена">
 									сбой котировок
 								</span>
 							) : (
-								formatSignedAmount(metrics.markValue)
+								formatSignedAmount(metrics.quoteValue)
 							)}
 						</MetricHint>
 					</Metric>
@@ -247,7 +247,7 @@ export function ConstructionMetricStrip({
 						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.unrealizedPnL ?? 0)}`}
 					>
 						<MetricHint tooltip={METRIC_TOOLTIPS.unrealizedPnl}>
-							{card.hasMarkFailure ? (
+							{card.hasQuoteFailure ? (
 								<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
 									сбой котировок
 								</span>
@@ -268,7 +268,7 @@ export function ConstructionMetricStrip({
 					    метрик не снабжаются. */}
 					{/* Traceability: openspec:ui/screens#scenario-dates-skip-tooltip */}
 					<Metric label="котировки на" valueClassName={VALUE_PART}>
-						{card.hasMarkFailure ? (
+						{card.hasQuoteFailure ? (
 							<span className="text-text-muted" title="Провайдер котировок недоступен — время получения котировок неизвестно">
 								сбой котировок
 							</span>
@@ -277,7 +277,7 @@ export function ConstructionMetricStrip({
 								не нужны
 							</span>
 						) : (
-							(card.marksAsOf === null ? DASH : formatMoment(card.marksAsOf))
+							(card.quotesAsOf === null ? DASH : formatMoment(card.quotesAsOf))
 						)}
 					</Metric>
 					{/* «Период» — метрика времени: даты и времена подсказками
@@ -488,7 +488,7 @@ export function ConstructionMetricStrip({
 									    слоя (лока и размера ноги) исключена. */}
 									{/* Traceability: openspec:ui/screens#scenario-dispute-list-expands-shows-links */}
 									{close.disputed && (
-										<span data-slot="synthetic-close-disputed-mark" className="text-[11px] tracking-[0.3px]">
+										<span data-slot="synthetic-close-disputed-badge" className="text-[11px] tracking-[0.3px]">
 											оспорена
 										</span>
 									)}
@@ -572,9 +572,9 @@ export function ConstructionMetricStrip({
 						plannedProfit: card.profitUsdt,
 						realized: metrics.realizedPnL,
 						unrealized: metrics.unrealizedPnL,
-						quotesDegraded: card.hasMarkFailure,
+						quotesDegraded: card.hasQuoteFailure,
 						// Открытые остатки карточки из read-модели: без них сбой
-						// марок не делает индикатор неполным.
+						// котировок не делает индикатор неполным.
 						// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 						hasOpenResidual: card.hasOpenResidual,
 						// Пара «число + статус» из контракта API: конечный риск

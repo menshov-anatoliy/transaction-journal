@@ -153,7 +153,7 @@ public sealed class PositionFifoEngine
 	{
 		PositionFifoEntryKind.Trade => 0,
 		PositionFifoEntryKind.ExpiryClosing => 1,
-		PositionFifoEntryKind.ManualMark => 2,
+		PositionFifoEntryKind.ManualAnnotation => 2,
 		_ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Неизвестный вид записи потока позиции."),
 	};
 

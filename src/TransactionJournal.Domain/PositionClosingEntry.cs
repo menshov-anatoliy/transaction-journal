@@ -15,7 +15,7 @@ public enum PositionClosingKind
 	OtmExpiry,
 
 	/// <summary>Ручная пометка закрытия пользователя — пользовательская закрывающая запись.</summary>
-	ManualMark,
+	ManualAnnotation,
 }
 
 /// <summary>
@@ -48,8 +48,8 @@ public sealed record PositionClosingEntry
 
 	/// <summary>
 	/// Эффективная цена закрытия: внутренняя стоимость delivery, ноль OTM-экспирации,
-	/// цена пользователя у ручной пометки либо последняя известная марка, когда цена
-	/// не задана. null — марка инструмента пока неизвестна.
+	/// цена пользователя у ручной пометки либо последняя известная котировка, когда цена
+	/// не задана. null — котировка инструмента пока неизвестна.
 	/// </summary>
 	public required decimal? Price { get; init; }
 

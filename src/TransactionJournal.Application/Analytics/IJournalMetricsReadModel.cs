@@ -13,7 +13,7 @@ public interface IJournalMetricsReadModel
 {
 	/// <summary>
 	/// Читает метрики журнала из текущих данных: метрики позиций и конструкций,
-	/// итог по журналу, отметку времени марок и признак сбоя марок.
+	/// итог по журналу, отметку времени котировок и признак сбоя котировок.
 	/// </summary>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <exception cref="Materialization.TradeMaterializationException">Сырая запись исполнения повреждена или конфликтует с другой записью того же execId.</exception>

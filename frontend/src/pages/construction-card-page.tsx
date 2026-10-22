@@ -3,7 +3,7 @@ import * as React from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, Coins, Pencil, ShieldAlert, TrendingUp } from "lucide-react";
 import { fetchConstructionCard } from "@/lib/api/construction-card";
-import { applyHint, dismissHint, fetchConstructionHintsPanel, markHintSeen } from "@/lib/api/hints";
+import { applyHint, dismissHint, fetchConstructionHintsPanel, recordHintSeen } from "@/lib/api/hints";
 import { ConstructionStatusChip } from "@/components/constructions/construction-status-chip";
 import { useCardCommands } from "@/components/constructions/card/use-card-commands";
 import { ConstructionMetricStrip } from "@/components/constructions/card/metric-strip";
@@ -171,9 +171,9 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 		commands.constructionComment,
 		commands.positionComment,
 		commands.tradeComment,
-		commands.addCloseMark,
-		commands.editCloseMark,
-		commands.deleteCloseMark,
+		commands.addCloseAnnotation,
+		commands.editCloseAnnotation,
+		commands.deleteCloseAnnotation,
 		commands.returnTrade,
 		commands.moveTrade,
 		commands.createManualTrade,
@@ -271,8 +271,8 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 					<PositionsTable
 						constructionId={constructionId}
 						positions={card.positions}
-						markPending={commands.addCloseMark.isPending}
-						onAddCloseMark={(mark) => commands.addCloseMark.mutateAsync(mark)}
+						annotationPending={commands.addCloseAnnotation.isPending}
+						onAddCloseAnnotation={(annotation) => commands.addCloseAnnotation.mutateAsync(annotation)}
 						onSaveComment={(input) => commands.positionComment.mutate(input)}
 					/>
 
@@ -297,9 +297,9 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 					<ClosingEntriesTable
 						entries={card.closingEntries}
 						warnings={card.closingWarnings}
-						actionsPending={commands.editCloseMark.isPending || commands.deleteCloseMark.isPending}
-						onEditMark={(input) => commands.editCloseMark.mutate(input)}
-						onDeleteMark={(markId) => commands.deleteCloseMark.mutate(markId)}
+						actionsPending={commands.editCloseAnnotation.isPending || commands.deleteCloseAnnotation.isPending}
+						onEditAnnotation={(input) => commands.editCloseAnnotation.mutate(input)}
+						onDeleteAnnotation={(annotationId) => commands.deleteCloseAnnotation.mutate(annotationId)}
 					/>
 
 					<AdjustmentsTable
@@ -706,7 +706,7 @@ function ConstructionHintsArea({ constructionId }: { constructionId: number }) {
 		for (const group of panelQuery.data.liveGroups) {
 			for (const hint of group.hints) {
 				if (hint.firstSeenAt === null) {
-					void markHintSeen(hint.id);
+					void recordHintSeen(hint.id);
 				}
 			}
 		}

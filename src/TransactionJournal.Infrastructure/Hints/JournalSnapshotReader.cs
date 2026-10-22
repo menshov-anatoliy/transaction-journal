@@ -165,7 +165,7 @@ public sealed class JournalSnapshotReader : IJournalSnapshotReader
 		RealizedPnL = position.RealizedPnL,
 		UnrealizedPnL = position.UnrealizedPnL,
 		AverageOpenPrice = position.AverageOpenPrice,
-		MarkPrice = position.MarkPrice,
+		QuotePrice = position.QuotePrice,
 		OpenedAt = position.OpenedAt,
 		ClosedAt = position.ClosedAt,
 	};

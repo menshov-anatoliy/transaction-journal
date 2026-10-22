@@ -81,19 +81,19 @@ export function useCardCommands(constructionId: number) {
 		onSuccess: invalidate,
 	});
 
-	const addCloseMark = useMutation({
-		mutationFn: (mark: cardApi.ManualCloseMarkInput) => cardApi.addManualCloseMark(constructionId, mark),
+	const addCloseAnnotation = useMutation({
+		mutationFn: (annotation: cardApi.ManualCloseAnnotationInput) => cardApi.addManualCloseAnnotation(constructionId, annotation),
 		onSuccess: invalidate,
 	});
 
-	const editCloseMark = useMutation({
-		mutationFn: (input: { markId: number; mark: cardApi.ManualCloseMarkInput }) =>
-			cardApi.editManualCloseMark(input.markId, input.mark),
+	const editCloseAnnotation = useMutation({
+		mutationFn: (input: { annotationId: number; annotation: cardApi.ManualCloseAnnotationInput }) =>
+			cardApi.editManualCloseAnnotation(input.annotationId, input.annotation),
 		onSuccess: invalidate,
 	});
 
-	const deleteCloseMark = useMutation({
-		mutationFn: (markId: number) => cardApi.deleteManualCloseMark(markId),
+	const deleteCloseAnnotation = useMutation({
+		mutationFn: (annotationId: number) => cardApi.deleteManualCloseAnnotation(annotationId),
 		onSuccess: invalidate,
 	});
 
@@ -189,9 +189,9 @@ export function useCardCommands(constructionId: number) {
 		constructionComment,
 		positionComment,
 		tradeComment,
-		addCloseMark,
-		editCloseMark,
-		deleteCloseMark,
+		addCloseAnnotation,
+		editCloseAnnotation,
+		deleteCloseAnnotation,
 		returnTrade,
 		moveTrade,
 		createManualTrade: createManualTradeCommand,

@@ -647,7 +647,7 @@ function SyncStatus({ variant = "desktop" }: { variant?: "desktop" | "mobile" })
  * реализованный и нереализованный P&L обязателен на любом экране. Данные
  * читаются из общего с экраном «Конструкции» кэша React Query (один ключ —
  * один запрос), поэтому дублирующих обращений к API не появляется, а
- * детальная сводка с отметкой времени марок и счётчиками остаётся в шапке
+ * детальная сводка с отметкой времени котировок и счётчиками остаётся в шапке
  * списка. Токены каркаса: итог 14/600 $accentStrong, разбивка 11
  * $textMuted, признак сбоя — деструктивный цвет дизайн-системы.
  */
@@ -664,7 +664,7 @@ function JournalTotal() {
 			) : (
 				<>
 					{/*
-						Итог всегда виден; при сбое марок он помечается неполным,
+						Итог всегда виден; при сбое котировок он помечается неполным,
 						нереализованная часть получает признак сбоя, реализованная
 						часть не исчезает.
 					*/}
@@ -672,7 +672,7 @@ function JournalTotal() {
 					<span className="text-sm font-semibold text-accent-strong">
 						{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
 					</span>
-					{summary.hasMarkFailure && <span className="text-[11px] text-text-muted">неполный</span>}
+					{summary.hasQuoteFailure && <span className="text-[11px] text-text-muted">неполный</span>}
 					<span className="text-[11px] text-text-muted">
 						{`реализов. ${formatSignedAmount(summary.realizedPnL)} / нереализов. `}
 						<span className={summary.unrealizedPnL === null ? "text-destructive" : undefined}>

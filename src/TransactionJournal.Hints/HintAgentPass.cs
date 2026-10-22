@@ -9,9 +9,9 @@ using TransactionJournal.Hints.Ports;
 /// Каркас прохода агента подсказок. Проход детерминирован: отбор подсказок
 /// делает код по ключам триггеров корпуса, LLM не участвует. Фазы прохода
 /// выполняются в строгом порядке: снимок корпуса → гашение выведенных правил →
-/// снимок журнала → гашение закрытых субъектов → рыночные марки → оценка
+/// снимок журнала → гашение закрытых субъектов → рыночные котировки → оценка
 /// триггеров с дедуп-окном; невалидный корпус ломает проход до любых чтений,
-/// недоступность марок пропускает проход целиком. Новая подсказка подавляется
+/// недоступность котировок пропускает проход целиком. Новая подсказка подавляется
 /// записью текущего окна «правило × субъект (+ период)» с любым живым
 /// статусом; ушедшее условие, закрытый субъект и выведенное правило гасят
 /// записи в expired.
@@ -24,7 +24,7 @@ public sealed class HintAgentPass : IHintPassRunner
 
 	private readonly IJournalSnapshotReader _journalSnapshotReader;
 
-	private readonly IMarkSource _markSource;
+	private readonly IQuoteSource _quoteSource;
 
 	private readonly IHintStore _hintStore;
 
@@ -35,7 +35,7 @@ public sealed class HintAgentPass : IHintPassRunner
 	/// <summary>Создаёт проход над портами окружения агента.</summary>
 	/// <param name="corpusLoader">Загрузчик корпуса правил — предусловие валидности прохода.</param>
 	/// <param name="journalSnapshotReader">Порт журнал-снапшота.</param>
-	/// <param name="markSource">Порт рыночных марок.</param>
+	/// <param name="quoteSource">Порт рыночных котировок.</param>
 	/// <param name="hintStore">Порт хранения подсказок.</param>
 	/// <param name="clock">Часы окружения — источник as-of прохода.</param>
 	/// <param name="triggerRegistry">Реестр триггеров; null — полный набор машинных триггеров v1.</param>
@@ -43,20 +43,20 @@ public sealed class HintAgentPass : IHintPassRunner
 	public HintAgentPass(
 		RulesCorpusLoader corpusLoader,
 		IJournalSnapshotReader journalSnapshotReader,
-		IMarkSource markSource,
+		IQuoteSource quoteSource,
 		IHintStore hintStore,
 		IClock clock,
 		HintTriggerRegistry? triggerRegistry = null)
 	{
 		_corpusLoader = corpusLoader ?? throw new ArgumentNullException(nameof(corpusLoader));
 		_journalSnapshotReader = journalSnapshotReader ?? throw new ArgumentNullException(nameof(journalSnapshotReader));
-		_markSource = markSource ?? throw new ArgumentNullException(nameof(markSource));
+		_quoteSource = quoteSource ?? throw new ArgumentNullException(nameof(quoteSource));
 		_hintStore = hintStore ?? throw new ArgumentNullException(nameof(hintStore));
 		_clock = clock ?? throw new ArgumentNullException(nameof(clock));
 		_triggerRegistry = triggerRegistry ?? new HintTriggerRegistry();
 	}
 
-	/// <summary>Выполняет проход агента над текущими журналом, марками и корпусом.</summary>
+	/// <summary>Выполняет проход агента над текущими журналом, котировками и корпусом.</summary>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	/// <returns>Итог прохода с исходом и счётчиками записей.</returns>
 	public async Task<HintPassResult> RunAsync(CancellationToken cancellationToken = default)
@@ -107,7 +107,7 @@ public sealed class HintAgentPass : IHintPassRunner
 		// Traceability: openspec:hints/hint-lifecycle#requirement-hint-expiry-on-subject-close-and-retirement
 		expiredHints += await ExpireClosedSubjectsAsync(snapshot, cancellationToken).ConfigureAwait(false);
 
-		// Марки нужны открытым остаткам открытых конструкций и спотам базовых
+		// Котировки нужны открытым остаткам открытых конструкций и спотам базовых
 		// активов их опционных ног (условия ролла, распада и ITM сравнивают
 		// спот со страйками) — минимальный набор символов прохода; спот базового
 		// актива берётся линейным фьючерсом «{база}USDT» по конвенции парсера.
@@ -127,12 +127,12 @@ public sealed class HintAgentPass : IHintPassRunner
 			.Distinct(StringComparer.Ordinal)
 			.ToArray();
 
-		// Фаза 3: рыночные марки. Недоступность источника пропускает проход
+		// Фаза 3: рыночные котировки. Недоступность источника пропускает проход
 		// с диагностикой — подсказки на неполных данных не выпускаются.
 		// Гашения фаз 1–2 не зависят от рынка и остаются в силе.
 		// Traceability: openspec:hints/engine-pass#requirement-engine-market-unavailable-skips-pass
-		var marks = await _markSource.GetMarksAsync(symbols, cancellationToken).ConfigureAwait(false);
-		if (marks.IsAvailable == false)
+		var quotes = await _quoteSource.GetQuotesAsync(symbols, cancellationToken).ConfigureAwait(false);
+		if (quotes.IsAvailable == false)
 		{
 			return new HintPassResult
 			{
@@ -140,7 +140,7 @@ public sealed class HintAgentPass : IHintPassRunner
 				AsOf = asOf,
 				CreatedHints = 0,
 				ExpiredHints = expiredHints,
-				Diagnostics = [marks.FailureReason!],
+				Diagnostics = [quotes.FailureReason!],
 			};
 		}
 
@@ -170,7 +170,7 @@ public sealed class HintAgentPass : IHintPassRunner
 				var input = new TriggerEvaluationInput
 				{
 					Snapshot = snapshot,
-					Marks = marks,
+					Quotes = quotes,
 					Card = card,
 					AsOf = asOf,
 				};
@@ -191,7 +191,7 @@ public sealed class HintAgentPass : IHintPassRunner
 					var input = new TriggerEvaluationInput
 					{
 						Snapshot = snapshot,
-						Marks = marks,
+						Quotes = quotes,
 						Card = card,
 						AsOf = asOf,
 						Construction = construction,
@@ -362,7 +362,7 @@ public sealed class HintAgentPass : IHintPassRunner
 	};
 }
 
-/// <summary>Исход прохода агента: завершён, пропущен из-за марок или сломан корпусом.</summary>
+/// <summary>Исход прохода агента: завершён, пропущен из-за котировок или сломан корпусом.</summary>
 public enum HintPassOutcome
 {
 	/// <summary>Проход завершён: триггеры оценены, дедуп применён, записи сохранены.</summary>

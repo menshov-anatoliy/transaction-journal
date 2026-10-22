@@ -21,8 +21,8 @@ namespace TransactionJournal.Tests.Infrastructure.ReadModels;
 /// Интеграционные проверки read-модели экрана «Конструкции» на стыке с метриками
 /// аналитики: строки списка соединяют заголовки хранилища (имя, ручной статус,
 /// капитал) с метриками журнала, архивные конструкции скрыты из строк и счётчика
-/// сводки, итог и отметка марок проходят из аналитики без пересчёта, а сбой
-/// марок провайдера доходит до данных экрана признаком.
+/// сводки, итог и отметка котировок проходят из аналитики без пересчёта, а сбой
+/// котировок провайдера доходит до данных экрана признаком.
 /// Traceability: openspec:ui/screens#requirement-construction-list-screen
 /// </summary>
 [TestClass]
@@ -228,8 +228,8 @@ public class ConstructionListReadModelTests
 			Header("Календарь сентябрь", ConstructionStatus.Open, 3000m),
 			Header("Контртренд ETH", ConstructionStatus.Open, null));
 		SetupMetrics(null,
-			MetricsOf(1, 20m, 30m) with { MarkValue = 90m, CapitalUsagePercent = 3m },
-			MetricsOf(2, 0m, 0m) with { MarkValue = -40m });
+			MetricsOf(1, 20m, 30m) with { QuoteValue = 90m, CapitalUsagePercent = 3m },
+			MetricsOf(2, 0m, 0m) with { QuoteValue = -40m });
 
 		// Act: читаем данные экрана.
 		var data = await _readModel.ReadAsync();
@@ -237,10 +237,10 @@ public class ConstructionListReadModelTests
 		// Assert: строка с капиталом несёт стоимость и занятость; строка без
 		// капитала сохраняет стоимость, занятость остаётся незаданной.
 		var withCapital = data.Items.Single(item => item.ConstructionId == 1);
-		Assert.That(withCapital.MarkValue, Is.EqualTo(90m));
+		Assert.That(withCapital.QuoteValue, Is.EqualTo(90m));
 		Assert.That(withCapital.CapitalUsagePercent, Is.EqualTo(3m));
 		var withoutCapital = data.Items.Single(item => item.ConstructionId == 2);
-		Assert.That(withoutCapital.MarkValue, Is.EqualTo(-40m));
+		Assert.That(withoutCapital.QuoteValue, Is.EqualTo(-40m));
 		Assert.That(withoutCapital.CapitalUsagePercent, Is.Null);
 	}
 
@@ -307,8 +307,8 @@ public class ConstructionListReadModelTests
 				TotalPnL = 221.12m,
 				RealizedPnL = 274.32m,
 				UnrealizedPnL = -53.2m,
-				MarksAsOf = null,
-				HasMarkFailure = false,
+				QuotesAsOf = null,
+				HasQuoteFailure = false,
 			});
 
 		// Act: читаем данные экрана.
@@ -384,36 +384,36 @@ public class ConstructionListReadModelTests
 	}
 
 	[TestMethod]
-	[Description("Сбой марок на заглушке провайдера доходит до данных экрана: нереализованная оценка и итог деградируют")]
+	[Description("Сбой котировок на заглушке провайдера доходит до данных экрана: нереализованная оценка и итог деградируют")]
 	public async Task TryIfMarkFailurePassesFromProviderStubToScreenData()
 	{
 		// Arrange: конструкция с открытым остатком — покупка 0.1 BTC по 42000
-		// с комиссией 1; заглушка провайдера марок имитирует недоступность
+		// с комиссией 1; заглушка провайдера котировок имитирует недоступность
 		// публичных тикеров ошибкой сети.
 		await SeedAsync(Header("Длинный BTC", ConstructionStatus.Open, 1000m));
 		await SeedLinearInstrumentAsync();
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await new TradeBindingService(CreateOptions()).BindBatchAsync(1, ["exec-buy"]);
-		var metrics = new JournalMetricsReadModel(CreateOptions(), new FailingMarkSource());
+		var metrics = new JournalMetricsReadModel(CreateOptions(), new FailingQuoteSource());
 		var readModel = new ConstructionListReadModel(CreateOptions(), metrics);
 
 		// Act: чтение данных экрана «Конструкции» при сбойном провайдере.
 		var data = await readModel.ReadAsync();
 
-		// Assert: сбой марок доходит до данных списка — нереализованная оценка
+		// Assert: сбой котировок доходит до данных списка — нереализованная оценка
 		// и итог строки null, итог журнала неполный, нереализованный агрегат
-		// погашен, отметка времени марок неизвестна с признаком сбоя;
+		// погашен, отметка времени котировок неизвестна с признаком сбоя;
 		// реализованный агрегат (−1 комиссия) остаётся суммой по всем конструкциям.
-		// Требование: сбой марок показывается признаком в нереализованных
+		// Требование: сбой котировок показывается признаком в нереализованных
 		// столбцах, реализованные величины остаются видимыми.
 		// Traceability: openspec:ui/screens#scenario-list-marks-failure-indicated
 		// Traceability: openspec:analytics/performance#scenario-journal-unrealized-null-on-any-mark-failure
 		// Traceability: change:add-ui-screens/design#d4
-		Assert.That(data.HasMarkFailure, Is.True);
+		Assert.That(data.HasQuoteFailure, Is.True);
 		Assert.That(data.TotalPnL, Is.Null);
 		Assert.That(data.RealizedPnL, Is.EqualTo(-1m));
 		Assert.That(data.UnrealizedPnL, Is.Null);
-		Assert.That(data.MarksAsOf, Is.Null);
+		Assert.That(data.QuotesAsOf, Is.Null);
 		var row = data.Items.Single();
 		Assert.That(row.UnrealizedPnL, Is.Null);
 		Assert.That(row.TotalPnL, Is.Null);
@@ -510,12 +510,12 @@ public class ConstructionListReadModelTests
 		new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
 	/// <summary>
-	/// Заглушка провайдера марок для сценария сбоя: свежая марка всегда недоступна —
+	/// Заглушка провайдера котировок для сценария сбоя: свежая котировка всегда недоступна —
 	/// сеть до публичных тикеров не доходит, аналитика деградирует оценкой, а не ошибкой.
 	/// </summary>
-	private sealed class FailingMarkSource : IFreshInstrumentMarkSource
+	private sealed class FailingQuoteSource : IFreshInstrumentQuoteSource
 	{
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
 			throw new HttpRequestException("публичные тикеры недоступны");
 	}
 
@@ -531,8 +531,8 @@ public class ConstructionListReadModelTests
 				// Разбивка списком не читается: слагаемые согласованы с итогом.
 				RealizedPnL = totalPnL ?? 0m,
 				UnrealizedPnL = totalPnL is null ? null : 0m,
-				MarksAsOf = null,
-				HasMarkFailure = totalPnL is null,
+				QuotesAsOf = null,
+				HasQuoteFailure = totalPnL is null,
 			});
 
 	/// <summary>Метрики конструкции с простыми значениями: корректировки нулевые, итог — сумма слагаемых.</summary>

@@ -95,7 +95,7 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				item.TotalPnLPercent,
 				item.OpenedAt,
 				item.ClosedAt,
-				item.MarkValue,
+				item.QuoteValue,
 				item.CapitalUsagePercent,
 				item.RealRiskUsdt,
 				// Худший исход проходит из метрик рядом с реальным риском:
@@ -117,7 +117,7 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 		}
 
 		// Счётчик сводки описывает видимые конструкции: сколько в списке и сколько
-		// из них открыты — числа сходятся со строками таблицы. Признак сбоя марок
+		// из них открыты — числа сходятся со строками таблицы. Признак сбоя котировок
 		// проходит из аналитики без пересчёта: ему принадлежит решение, была ли
 		// недоступна оценка нереализованной части.
 		// Список упорядочен по смыслу чтения, а не по ключу хранилища: сначала
@@ -135,12 +135,12 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 		return new ConstructionListData(
 			metrics.TotalPnL,
 			// Разбивка проходит из метрик журнала без пересчёта — тем же жестом,
-			// что итог, отметка марок и признак сбоя.
+			// что итог, отметка котировок и признак сбоя.
 			// Traceability: openspec:ui/screens#scenario-list-summary-shows-pnl-breakdown
 			metrics.RealizedPnL,
 			metrics.UnrealizedPnL,
-			metrics.MarksAsOf,
-			metrics.HasMarkFailure,
+			metrics.QuotesAsOf,
+			metrics.HasQuoteFailure,
 			orderedItems.Count,
 			orderedItems.Count(item => item.Status == ConstructionStatus.Open),
 			orderedItems);

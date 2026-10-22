@@ -14,7 +14,7 @@ using TransactionJournal.Domain.Materialization;
 /// </summary>
 public interface IChatMarketReader
 {
-	/// <summary>Читает снимок фьючерсного рынка по базовому активу: марка, бид-аск, открытый интерес, ставка фандинга.</summary>
+	/// <summary>Читает снимок фьючерсного рынка по базовому активу: котировка, бид-аск, открытый интерес, ставка фандинга.</summary>
 	/// <param name="baseCoin">Базовый актив, например BTC или ETH.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
 	Task<ChatMarketSnapshot> ReadSnapshotAsync(string baseCoin, CancellationToken cancellationToken = default);
@@ -37,7 +37,7 @@ public sealed record ChatMarketSnapshot
 	/// <summary>Базовый актив снимка.</summary>
 	public required string BaseCoin { get; init; }
 
-	/// <summary>Отметка as-of данных снимка: момент ответа биржи, а при деградации — момент получения кэшированной марки.</summary>
+	/// <summary>Отметка as-of данных снимка: момент ответа биржи, а при деградации — момент получения кэшированной котировки.</summary>
 	public required DateTimeOffset AsOf { get; init; }
 
 	/// <summary>Источник доступен и снимку можно доверять как рыночным данным.</summary>
@@ -49,8 +49,8 @@ public sealed record ChatMarketSnapshot
 	/// <summary>Символ запрошенного фьючерса; null — тикер не получен.</summary>
 	public string? Symbol { get; init; }
 
-	/// <summary>Марка фьючерса; null — биржа значения не отдала.</summary>
-	public decimal? MarkPrice { get; init; }
+	/// <summary>Котировка фьючерса; null — биржа значения не отдала.</summary>
+	public decimal? QuotePrice { get; init; }
 
 	/// <summary>Лучшая цена покупки; null — биржа значения не отдала.</summary>
 	public decimal? Bid1Price { get; init; }
@@ -83,7 +83,7 @@ public sealed record ChatOptionBoard
 	/// <summary>Базовый актив доски.</summary>
 	public required string BaseCoin { get; init; }
 
-	/// <summary>Отметка as-of данных доски: момент ответа биржи, а при деградации — момент получения самой старой кэшированной марки.</summary>
+	/// <summary>Отметка as-of данных доски: момент ответа биржи, а при деградации — момент получения самой старой кэшированной котировки.</summary>
 	public required DateTimeOffset AsOf { get; init; }
 
 	/// <summary>Источник доступен и доске можно доверять как рыночным данным.</summary>
@@ -92,7 +92,7 @@ public sealed record ChatOptionBoard
 	/// <summary>Причина недоступности источника; null — источник доступен.</summary>
 	public string? UnavailableReason { get; init; }
 
-	/// <summary>Марка базового актива — якорь окрестности ATM; null — биржа значения не отдала.</summary>
+	/// <summary>Котировка базового актива — якорь окрестности ATM; null — биржа значения не отдала.</summary>
 	public decimal? UnderlyingPrice { get; init; }
 
 	/// <summary>Число инструментов в ответе биржи до отбора в проекцию.</summary>
@@ -117,11 +117,11 @@ public sealed record ChatOptionQuote
 	/// <summary>Тип опциона из символа: колл или пут.</summary>
 	public required OptionType Type { get; init; }
 
-	/// <summary>Марка опциона; null — биржа значения не отдала.</summary>
-	public decimal? MarkPrice { get; init; }
+	/// <summary>Котировка опциона; null — биржа значения не отдала.</summary>
+	public decimal? QuotePrice { get; init; }
 
-	/// <summary>Подразумеваемая волатильность марки; null — биржа значения не отдала.</summary>
-	public decimal? MarkIv { get; init; }
+	/// <summary>Подразумеваемая волатильность котировки; null — биржа значения не отдала.</summary>
+	public decimal? QuoteIv { get; init; }
 
 	/// <summary>Дельта опциона; null — биржа значения не отдала.</summary>
 	public decimal? Delta { get; init; }

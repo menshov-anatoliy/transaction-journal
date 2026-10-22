@@ -35,7 +35,7 @@ public sealed class ChatTools
 	/// <summary>Имя инструмента проекции доски опционов.</summary>
 	public const string GetOptionBoardToolName = "get_option_board";
 
-	/// <summary>Относительная полуширина окна проекции доски вокруг марки базового актива, доли.</summary>
+	/// <summary>Относительная полуширина окна проекции доски вокруг котировки базового актива, доли.</summary>
 	private const decimal BoardWindowShare = 0.20m;
 
 	/// <summary>Максимум страйков одной экспирации в проекции доски — ближайшие к якорю окном.</summary>
@@ -103,7 +103,7 @@ public sealed class ChatTools
 		{
 			functions.Add(AIFunctionFactory.Create(
 				GetMarketSnapshotAsync,
-				new AIFunctionFactoryOptions { Name = GetMarketSnapshotToolName, Description = "Возвращает снимок фьючерсного рынка по базовому активу: марка, бид-аск, открытый интерес, ставка фандинга.", ConfigureParameterBinding = TraceBinding(traceRecorder) }));
+				new AIFunctionFactoryOptions { Name = GetMarketSnapshotToolName, Description = "Возвращает снимок фьючерсного рынка по базовому активу: котировка, бид-аск, открытый интерес, ставка фандинга.", ConfigureParameterBinding = TraceBinding(traceRecorder) }));
 			functions.Add(AIFunctionFactory.Create(
 				GetOptionBoardAsync,
 				new AIFunctionFactoryOptions { Name = GetOptionBoardToolName, Description = "Возвращает компактную проекцию доски опционов по базовому активу: страйки с IV, греками, открытым интересом и бид-аском.", ConfigureParameterBinding = TraceBinding(traceRecorder) }));
@@ -167,7 +167,7 @@ public sealed class ChatTools
 	/// <summary>
 	/// Читает снимок фьючерсного рынка по базовому активу: одно чтение порта —
 	/// один биржевой запрос; недоступность биржи отдаётся структурированным
-	/// «недоступно» с причиной и последней кэшированной маркой с её as-of.
+	/// «недоступно» с причиной и последней кэшированной котировкой с её as-of.
 	// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
 	// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 	/// </summary>
@@ -188,7 +188,7 @@ public sealed class ChatTools
 		traceRecorder?.Record(
 			GetMarketSnapshotToolName,
 			CompactArguments(new { baseCoin }),
-			snapshot.IsAvailable || snapshot.MarkPrice is not null ? snapshot.AsOf : null);
+			snapshot.IsAvailable || snapshot.QuotePrice is not null ? snapshot.AsOf : null);
 
 		var markdown = new StringBuilder();
 		if (snapshot.IsAvailable)
@@ -198,9 +198,9 @@ public sealed class ChatTools
 			markdown.AppendLine(snapshot.Symbol is { } symbol
 				? $"- Инструмент: {symbol}"
 				: $"- Инструмент {snapshot.BaseCoin}USDT: биржа тикер не отдала");
-			markdown.AppendLine(snapshot.MarkPrice is { } mark
-				? $"- Марка: {Num(mark)} USDT"
-				: "- Марка: нет данных");
+			markdown.AppendLine(snapshot.QuotePrice is { } quote
+				? $"- Котировка: {Num(quote)} USDT"
+				: "- Котировка: нет данных");
 			if (snapshot.Bid1Price is { } bid)
 			{
 				markdown.AppendLine($"- Бид/аск: {Num(bid)} / {NumOpt(snapshot.Ask1Price)} (объёмы {NumOpt(snapshot.Bid1Size)} / {NumOpt(snapshot.Ask1Size)})");
@@ -219,21 +219,21 @@ public sealed class ChatTools
 		else
 		{
 			// Недоступность биржи — структурированный ответ с причиной и последней
-			// кэшированной маркой с её as-of: ассистент обязан пометить устаревшие
+			// кэшированной котировкой с её as-of: ассистент обязан пометить устаревшие
 			// данные и не давать рыночно-зависимых рекомендаций, отвечая по журналу
 			// и корпусу.
 			// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
-			if (snapshot.MarkPrice is { } cachedMark)
+			if (snapshot.QuotePrice is { } cachedQuote)
 			{
 				markdown.AppendLine($"# Снимок фьючерсного рынка {snapshot.BaseCoin} — биржа недоступна");
 				markdown.AppendLine();
 				markdown.AppendLine($"Причина: {snapshot.UnavailableReason ?? "неизвестна"}");
 				markdown.AppendLine();
-				markdown.AppendLine($"Последняя кэшированная марка {AsOfTag(snapshot.AsOf)}:");
+				markdown.AppendLine($"Последняя кэшированная котировка {AsOfTag(snapshot.AsOf)}:");
 				markdown.AppendLine(snapshot.Symbol is { } symbol
 					? $"- Инструмент: {symbol}"
 					: $"- Инструмент {snapshot.BaseCoin}USDT");
-				markdown.AppendLine($"- Марка: {Num(cachedMark)} USDT");
+				markdown.AppendLine($"- Котировка: {Num(cachedQuote)} USDT");
 			}
 			else
 			{
@@ -241,7 +241,7 @@ public sealed class ChatTools
 				markdown.AppendLine();
 				markdown.AppendLine($"Причина: {snapshot.UnavailableReason ?? "неизвестна"}");
 				markdown.AppendLine();
-				markdown.AppendLine($"Кэшированной марки {snapshot.BaseCoin}USDT в кэше марок нет.");
+				markdown.AppendLine($"Кэшированной котировки {snapshot.BaseCoin}USDT в кэше котировок нет.");
 			}
 		}
 
@@ -251,10 +251,10 @@ public sealed class ChatTools
 	/// <summary>
 	/// Читает доску опционов по базовому активу и отдаёт компактную проекцию:
 	/// строка на страйк с колонками колла и пута — IV, греки, открытый интерес,
-	/// бид-аск. Окно проекции — страйки в пределах ±20% от марки базового
+	/// бид-аск. Окно проекции — страйки в пределах ±20% от котировки базового
 	/// актива, максимум 21 ближайший страйк на экспирацию; отсечённые страйки
 	/// объявляются в шапке, сырые данные биржи не отдаются. Недоступность биржи
-	/// деградирует в последнюю кэшированную проекцию марок с её as-of.
+	/// деградирует в последнюю кэшированную проекцию котировок с её as-of.
 	// Traceability: openspec:chats/sources#scenario-sources-option-board-projection
 	// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 	/// </summary>
@@ -269,7 +269,7 @@ public sealed class ChatTools
 		ArgumentException.ThrowIfNullOrWhiteSpace(baseCoin);
 		var board = await _marketReader.ReadOptionBoardAsync(baseCoin, cancellationToken).ConfigureAwait(false);
 
-		// As-of следа тот же, что у снимка: живая доска или кэшированные марки
+		// As-of следа тот же, что у снимка: живая доска или кэшированные котировки
 		// дают as-of данных, пустой кэш при недоступной бирже — null.
 		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 		traceRecorder?.Record(
@@ -287,8 +287,8 @@ public sealed class ChatTools
 		markdown.AppendLine();
 		var anchor = board.UnderlyingPrice;
 		markdown.AppendLine(anchor is { } anchorPrice
-			? $"- Окно проекции: страйки ±20% от марки базового актива {Num(anchorPrice)} USDT, максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию"
-			: $"- Окно проекции: страйки вокруг медианы доски (марка базового актива биржей не отдана), максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию");
+			? $"- Окно проекции: страйки ±20% от котировки базового актива {Num(anchorPrice)} USDT, максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию"
+			: $"- Окно проекции: страйки вокруг медианы доски (котировка базового актива биржей не отдана), максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию");
 		markdown.AppendLine($"- Инструментов в ответе биржи: {board.TotalTickerCount}, в проекции: {board.Quotes.Count}");
 		markdown.AppendLine();
 		if (board.Quotes.Count == 0)
@@ -305,17 +305,17 @@ public sealed class ChatTools
 		return markdown.ToString();
 	}
 
-	#region Деградация в кэш марок
+	#region Деградация в кэш котировок
 
 	/// <summary>
 	/// Рендерит недоступную доску: причина сбоя биржи и последняя кэшированная
-	/// проекция марок с её as-of — кэш хранит только последние известные цены
-	/// опционов, поэтому таблица деградации показывает страйк и марки колла/пута,
+	/// проекция котировок с её as-of — кэш хранит только последние известные цены
+	/// опционов, поэтому таблица деградации показывает страйк и котировки колла/пута,
 	/// без IV, греков и бид-аска; ассистент обязан пометить устаревший as-of и
 	/// не давать рыночно-зависимых рекомендаций.
 	// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 	/// </summary>
-	/// <param name="board">Недоступная доска с кэшированными марками актива.</param>
+	/// <param name="board">Недоступная доска с кэшированными котировками актива.</param>
 	/// <returns>Markdown-ответ инструмента при недоступности биржи.</returns>
 	private static string RenderUnavailableBoard(ChatOptionBoard board)
 	{
@@ -326,16 +326,16 @@ public sealed class ChatTools
 		markdown.AppendLine();
 		if (board.Quotes.Count == 0)
 		{
-			markdown.AppendLine($"Кэшированных марок опционов {board.BaseCoin} в кэше марок нет {AsOfTag(board.AsOf)}.");
+			markdown.AppendLine($"Кэшированных котировок опционов {board.BaseCoin} в кэше котировок нет {AsOfTag(board.AsOf)}.");
 			return markdown.ToString();
 		}
 
-		markdown.AppendLine($"Последняя кэшированная проекция марок {AsOfTag(board.AsOf)}:");
+		markdown.AppendLine($"Последняя кэшированная проекция котировок {AsOfTag(board.AsOf)}:");
 		markdown.AppendLine();
 		var anchor = board.UnderlyingPrice;
 		markdown.AppendLine(anchor is { } anchorPrice
-			? $"- Окно проекции: страйки ±20% от последней кэшированной марки базового актива {Num(anchorPrice)} USDT, максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию"
-			: $"- Окно проекции: страйки вокруг медианы доски (марка базового актива в кэше отсутствует), максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию");
+			? $"- Окно проекции: страйки ±20% от последней кэшированной котировки базового актива {Num(anchorPrice)} USDT, максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию"
+			: $"- Окно проекции: страйки вокруг медианы доски (котировка базового актива в кэше отсутствует), максимум {MaxStrikesPerExpiry} ближайших страйков на экспирацию");
 		markdown.AppendLine($"- Котировок в кэше: {board.Quotes.Count}");
 		markdown.AppendLine();
 		foreach (var expiryGroup in board.Quotes.GroupBy(quote => quote.Expiry).OrderBy(group => group.Key))
@@ -346,7 +346,7 @@ public sealed class ChatTools
 		return markdown.ToString();
 	}
 
-	/// <summary>Таблица кэшированных марок одной экспирации: строка на страйк, только марки колла и пута.</summary>
+	/// <summary>Таблица кэшированных котировок одной экспирации: строка на страйк, только котировки колла и пута.</summary>
 	private static void AppendCachedExpirySection(
 		StringBuilder markdown,
 		DateOnly expiry,
@@ -356,7 +356,7 @@ public sealed class ChatTools
 		var byStrike = quotes.ToLookup(quote => quote.Strike);
 		var strikes = byStrike.Select(group => group.Key).ToArray();
 
-		// Якорь окна тот же, что у живой доски: кэшированная марка перпа, без неё —
+		// Якорь окна тот же, что у живой доски: кэшированная котировка перпа, без неё —
 		// медиана страйков экспирации.
 		var anchor = boardAnchor ?? MedianStrike(strikes);
 		var selected = SelectWindowStrikes(strikes, anchor);
@@ -368,13 +368,13 @@ public sealed class ChatTools
 			markdown.AppendLine($"Показаны {selected.Count} из {strikes.Length} страйков экспирации — ближайшие к якорю окна.");
 		}
 
-		markdown.AppendLine("| Страйк | Колл марка | Пут марка |");
+		markdown.AppendLine("| Страйк | Колл котировка | Пут котировка |");
 		markdown.AppendLine("|---|---|---|");
 		foreach (var strike in selected)
 		{
 			var call = byStrike[strike].FirstOrDefault(quote => quote.Type == OptionType.Call);
 			var put = byStrike[strike].FirstOrDefault(quote => quote.Type == OptionType.Put);
-			markdown.AppendLine($"| {Num(strike)} | {NumOpt(call?.MarkPrice)} | {NumOpt(put?.MarkPrice)} |");
+			markdown.AppendLine($"| {Num(strike)} | {NumOpt(call?.QuotePrice)} | {NumOpt(put?.QuotePrice)} |");
 		}
 
 		markdown.AppendLine();
@@ -394,7 +394,7 @@ public sealed class ChatTools
 		var byStrike = quotes.ToLookup(quote => quote.Strike);
 		var strikes = byStrike.Select(group => group.Key).ToArray();
 
-		// Якорь окна: марка базового актива; без неё — медиана страйков самой
+		// Якорь окна: котировка базового актива; без неё — медиана страйков самой
 		// экспирации, чтобы проекция оставалась детерминированной и компактной.
 		var anchor = boardAnchor ?? MedianStrike(strikes);
 		var selected = SelectWindowStrikes(strikes, anchor);
@@ -457,7 +457,7 @@ public sealed class ChatTools
 
 	/// <summary>Ячейка подразумеваемой волатильности в процентах; значения нет — прочерк.</summary>
 	private static string Iv(ChatOptionQuote? quote) =>
-		quote?.MarkIv is { } iv ? $"{Num(iv * 100)}%" : "—";
+		quote?.QuoteIv is { } iv ? $"{Num(iv * 100)}%" : "—";
 
 	/// <summary>Ячейка грекa; значения нет — прочерк.</summary>
 	private static string Greek(decimal? value) => value is { } present ? Num(present) : "—";

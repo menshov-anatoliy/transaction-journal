@@ -20,23 +20,23 @@ namespace TransactionJournal.Tests.Infrastructure.UseCases;
 /// и несуществующую пометку.
 /// </summary>
 [TestClass]
-public class ManualCloseMarkServiceTests
+public class ManualCloseAnnotationServiceTests
 {
 	private string _databasePath = null!;
-	private ManualCloseMarkService _markService = null!;
+	private ManualCloseAnnotationService _markService = null!;
 	private ConstructionService _constructionService = null!;
 
 	[TestInitialize]
 	public void Initialize()
 	{
 		// Каждая проверка работает со своей пустой базой во временной папке.
-		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-mark-tests-{Guid.NewGuid():N}.db");
+		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-quote-tests-{Guid.NewGuid():N}.db");
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			db.Database.Migrate();
 		}
 
-		_markService = new ManualCloseMarkService(CreateOptions());
+		_markService = new ManualCloseAnnotationService(CreateOptions());
 		_constructionService = new ConstructionService(CreateOptions());
 	}
 
@@ -63,27 +63,27 @@ public class ManualCloseMarkServiceTests
 	{
 		// Arrange: конструкция с позицией без биржевых записей закрытия.
 		var construction = await _constructionService.CreateAsync("Диапазон BTC", 500m);
-		var markedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
+		var annotatedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
 
 		// Act: добавляем две пометки — с ценой пользователя и без цены.
-		var withPrice = await _markService.AddAsync(construction.Id, "BTCUSDT", markedAt, 42100.55m);
-		var withoutPrice = await _markService.AddAsync(construction.Id, "ETHUSDT", markedAt.AddDays(1));
+		var withPrice = await _markService.AddAsync(construction.Id, "BTCUSDT", annotatedAt, 42100.55m);
+		var withoutPrice = await _markService.AddAsync(construction.Id, "ETHUSDT", annotatedAt.AddDays(1));
 
 		// Assert: обе пометки возвращаются конструкцией с полным набором атрибутов;
-		// незаданная цена хранится null — производный слой подставит последнюю марку
+		// незаданная цена хранится null — производный слой подставит последнюю котировку
 		// при чтении, а не в момент добавления.
-		// Требование: цена пометки задаётся пользователем, по умолчанию — последняя марка.
+		// Требование: цена пометки задаётся пользователем, по умолчанию — последняя котировка.
 		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
-		var marks = await _markService.ListAsync(construction.Id);
-		Assert.That(marks.Select(mark => mark.Id).ToArray(),
+		var quotes = await _markService.ListAsync(construction.Id);
+		Assert.That(quotes.Select(quote => quote.Id).ToArray(),
 			Is.EqualTo(new[] { withPrice.Id, withoutPrice.Id }));
-		Assert.That(marks[0].ConstructionId, Is.EqualTo(construction.Id));
-		Assert.That(marks[0].Symbol, Is.EqualTo("BTCUSDT"));
-		Assert.That(marks[0].MarkedAt, Is.EqualTo(markedAt));
-		Assert.That(marks[0].Price, Is.EqualTo(42100.55m));
-		Assert.That(marks[1].Symbol, Is.EqualTo("ETHUSDT"));
-		Assert.That(marks[1].MarkedAt, Is.EqualTo(markedAt.AddDays(1)));
-		Assert.That(marks[1].Price, Is.Null);
+		Assert.That(quotes[0].ConstructionId, Is.EqualTo(construction.Id));
+		Assert.That(quotes[0].Symbol, Is.EqualTo("BTCUSDT"));
+		Assert.That(quotes[0].AnnotatedAt, Is.EqualTo(annotatedAt));
+		Assert.That(quotes[0].Price, Is.EqualTo(42100.55m));
+		Assert.That(quotes[1].Symbol, Is.EqualTo("ETHUSDT"));
+		Assert.That(quotes[1].AnnotatedAt, Is.EqualTo(annotatedAt.AddDays(1)));
+		Assert.That(quotes[1].Price, Is.Null);
 	}
 
 	[TestMethod]
@@ -92,21 +92,21 @@ public class ManualCloseMarkServiceTests
 	{
 		// Arrange: пометка с первоначальными атрибутами.
 		var construction = await _constructionService.CreateAsync("Диапазон BTC", 500m);
-		var mark = await _markService.AddAsync(
+		var quote = await _markService.AddAsync(
 			construction.Id, "BTCUSDT", new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42100m);
 
 		// Act: свободно правим инструмент, время, цену и количество.
 		var editedAt = new DateTimeOffset(2023, 12, 31, 9, 30, 0, TimeSpan.Zero);
-		await _markService.EditAsync(mark.Id, "ETHUSDT", editedAt, null, null);
+		await _markService.EditAsync(quote.Id, "ETHUSDT", editedAt, null, null);
 
 		// Assert: пометка хранит новые атрибуты; правка не ограничена и не требует
 		// синхронных правок производных — позиции пересчитаются при чтении.
 		// Требование: ручная пометка свободно правится.
 		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
 		var edited = (await _markService.ListAsync(construction.Id)).Single();
-		Assert.That(edited.Id, Is.EqualTo(mark.Id));
+		Assert.That(edited.Id, Is.EqualTo(quote.Id));
 		Assert.That(edited.Symbol, Is.EqualTo("ETHUSDT"));
-		Assert.That(edited.MarkedAt, Is.EqualTo(editedAt));
+		Assert.That(edited.AnnotatedAt, Is.EqualTo(editedAt));
 		Assert.That(edited.Price, Is.Null);
 	}
 
@@ -116,20 +116,20 @@ public class ManualCloseMarkServiceTests
 	{
 		// Arrange: конструкция и время пометки.
 		var construction = await _constructionService.CreateAsync("Частичное закрытие", 500m);
-		var markedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
+		var annotatedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
 
 		// Act: добавляем пометку с количеством и пометку без него.
-		var partial = await _markService.AddAsync(construction.Id, "BTCUSDT", markedAt, 42100m, quantity: 0.05m);
-		var whole = await _markService.AddAsync(construction.Id, "ETHUSDT", markedAt.AddDays(1));
+		var partial = await _markService.AddAsync(construction.Id, "BTCUSDT", annotatedAt, 42100m, quantity: 0.05m);
+		var whole = await _markService.AddAsync(construction.Id, "ETHUSDT", annotatedAt.AddDays(1));
 
 		// Assert: заданное количество сохраняется, незаданное хранится null —
 		// производный слой закроет весь остаток на момент пометки.
 		// Требование: пометка имеет опциональное количество.
 		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
 		// Traceability: change:manual-journal-management/design#d6
-		var marks = await _markService.ListAsync(construction.Id);
-		Assert.That(marks.Single(mark => mark.Id == partial.Id).Quantity, Is.EqualTo(0.05m));
-		Assert.That(marks.Single(mark => mark.Id == whole.Id).Quantity, Is.Null);
+		var quotes = await _markService.ListAsync(construction.Id);
+		Assert.That(quotes.Single(quote => quote.Id == partial.Id).Quantity, Is.EqualTo(0.05m));
+		Assert.That(quotes.Single(quote => quote.Id == whole.Id).Quantity, Is.Null);
 	}
 
 	[TestMethod]
@@ -138,14 +138,14 @@ public class ManualCloseMarkServiceTests
 	{
 		// Arrange: пометка с частичным количеством.
 		var construction = await _constructionService.CreateAsync("Диапазон BTC", 500m);
-		var mark = await _markService.AddAsync(
+		var quote = await _markService.AddAsync(
 			construction.Id, "BTCUSDT", new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42100m, quantity: 0.05m);
 
 		// Act: правим количество на другую часть, затем возвращаем null.
 		var editedAt = new DateTimeOffset(2023, 12, 31, 9, 30, 0, TimeSpan.Zero);
-		await _markService.EditAsync(mark.Id, "BTCUSDT", editedAt, 42100m, 0.02m);
+		await _markService.EditAsync(quote.Id, "BTCUSDT", editedAt, 42100m, 0.02m);
 		var narrowed = (await _markService.ListAsync(construction.Id)).Single();
-		await _markService.EditAsync(mark.Id, "BTCUSDT", editedAt, 42100m, null);
+		await _markService.EditAsync(quote.Id, "BTCUSDT", editedAt, 42100m, null);
 		var cleared = (await _markService.ListAsync(construction.Id)).Single();
 
 		// Assert: правка свободна в обе стороны — количество меняется и снимается.
@@ -174,10 +174,10 @@ public class ManualCloseMarkServiceTests
 	{
 		// Arrange: пометка без количества.
 		var construction = await _constructionService.CreateAsync("Диапазон BTC", 500m);
-		var mark = await _markService.AddAsync(construction.Id, "BTCUSDT", DateTimeOffset.UtcNow, 42100m);
+		var quote = await _markService.AddAsync(construction.Id, "BTCUSDT", DateTimeOffset.UtcNow, 42100m);
 
 		// Act: отрицательное количество не является частью остатка.
-		await _markService.EditAsync(mark.Id, "BTCUSDT", DateTimeOffset.UtcNow, 42100m, -1m);
+		await _markService.EditAsync(quote.Id, "BTCUSDT", DateTimeOffset.UtcNow, 42100m, -1m);
 	}
 
 	[TestMethod]
@@ -186,17 +186,17 @@ public class ManualCloseMarkServiceTests
 	{
 		// Arrange: конструкция с одной пометкой.
 		var construction = await _constructionService.CreateAsync("Диапазон BTC", 500m);
-		var mark = await _markService.AddAsync(
+		var quote = await _markService.AddAsync(
 			construction.Id, "BTCUSDT", new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42100m);
 
 		// Act: удаляем пометку.
-		await _markService.DeleteAsync(mark.Id);
+		await _markService.DeleteAsync(quote.Id);
 
 		// Assert: пометок у конструкции не осталось — удаление свободно, без аудита
 		// и ограничений MVP.
 		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
-		var marks = await _markService.ListAsync(construction.Id);
-		Assert.That(marks, Is.Empty);
+		var quotes = await _markService.ListAsync(construction.Id);
+		Assert.That(quotes, Is.Empty);
 	}
 
 	[TestMethod]
@@ -222,7 +222,7 @@ public class ManualCloseMarkServiceTests
 
 	[TestMethod]
 	[Description("Правка несуществующей пометки отказывает")]
-	[ExpectedException(typeof(ManualCloseMarkNotFoundException))]
+	[ExpectedException(typeof(ManualCloseAnnotationNotFoundException))]
 	public async Task ThrowOnEditUnknownMark()
 	{
 		// Arrange — Act: правка пометки, которой нет.
@@ -231,7 +231,7 @@ public class ManualCloseMarkServiceTests
 
 	[TestMethod]
 	[Description("Удаление несуществующей пометки отказывает")]
-	[ExpectedException(typeof(ManualCloseMarkNotFoundException))]
+	[ExpectedException(typeof(ManualCloseAnnotationNotFoundException))]
 	public async Task ThrowOnDeleteUnknownMark()
 	{
 		// Arrange — Act: удаление пометки, которой нет.
@@ -253,7 +253,7 @@ public class ManualCloseMarkServiceTests
 	public void ThrowOnNullOptions()
 	{
 		// Arrange — Act — Assert
-		new ManualCloseMarkService(null!);
+		new ManualCloseAnnotationService(null!);
 	}
 
 	#region Помощники

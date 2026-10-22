@@ -1,4 +1,4 @@
-﻿import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, RouterProvider, createMemoryRouter } from "react-router";
@@ -66,8 +66,8 @@ const frameOverview: ConstructionsOverview = {
 		totalPnL: 0,
 		realizedPnL: 0,
 		unrealizedPnL: 0,
-		marksAsOf: null,
-		hasMarkFailure: false,
+		quotesAsOf: null,
+		hasQuoteFailure: false,
 		constructionCount: 1,
 		openCount: 1,
 	},

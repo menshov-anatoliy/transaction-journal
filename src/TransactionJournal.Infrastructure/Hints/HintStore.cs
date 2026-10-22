@@ -127,8 +127,8 @@ public sealed class HintStore : IHintStore
 		return true;
 	}
 
-	/// <inheritdoc cref="IHintStore.MarkFirstSeenAsync" />
-	public async Task MarkFirstSeenAsync(
+	/// <inheritdoc cref="IHintStore.RecordFirstSeenAsync" />
+	public async Task RecordFirstSeenAsync(
 		long id,
 		DateTimeOffset seenAt,
 		CancellationToken cancellationToken = default)

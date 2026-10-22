@@ -74,9 +74,9 @@ public sealed class HintDisplayReadModel : IHintDisplayReadModel
 	public Task<bool> DismissAsync(long hintId, CancellationToken cancellationToken = default) =>
 		_hintStore.TryTransitionAsync(hintId, HintStatus.Dismissed, cancellationToken);
 
-	/// <inheritdoc cref="IHintDisplayReadModel.MarkSeenAsync" />
-	public Task MarkSeenAsync(long hintId, DateTimeOffset seenAt, CancellationToken cancellationToken = default) =>
-		_hintStore.MarkFirstSeenAsync(hintId, seenAt, cancellationToken);
+	/// <inheritdoc cref="IHintDisplayReadModel.RecordSeenAsync" />
+	public Task RecordSeenAsync(long hintId, DateTimeOffset seenAt, CancellationToken cancellationToken = default) =>
+		_hintStore.RecordFirstSeenAsync(hintId, seenAt, cancellationToken);
 
 	/// <summary>
 	/// Собирает панель субъекта: живые new-записи группируются по справочнику

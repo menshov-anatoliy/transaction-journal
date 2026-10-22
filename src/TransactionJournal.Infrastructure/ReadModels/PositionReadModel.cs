@@ -27,26 +27,26 @@ public sealed class PositionReadModel
 	private const int ExpiryRank = 1;
 
 	/// <summary>Ранг ручной пометки: fallback-запись уступает биржевой записи того же момента.</summary>
-	private const int ManualMarkRank = 2;
+	private const int ManualAnnotationRank = 2;
 
 	private readonly DbContextOptions<JournalDbContext> _options;
 
-	private readonly IInstrumentMarkSource? _markSource;
+	private readonly IInstrumentQuoteSource? _quoteSource;
 
 	private readonly TimeProvider _timeProvider;
 
 	/// <summary>Создаёт read-модель над опциями контекста журнала; база развёрнута миграциями.</summary>
 	/// <param name="options">Опции EF-контекста журнала.</param>
-	/// <param name="markSource">Источник последних марок для ручных пометок без цены; null — цена остаётся неизвестной.</param>
+	/// <param name="quoteSource">Источник последних котировок для ручных пометок без цены; null — цена остаётся неизвестной.</param>
 	/// <param name="timeProvider">Поставщик момента «сейчас» для вывода OTM-закрывающих; по умолчанию системные часы.</param>
 	/// <exception cref="ArgumentNullException">Опции не заданы.</exception>
 	public PositionReadModel(
 		DbContextOptions<JournalDbContext> options,
-		IInstrumentMarkSource? markSource = null,
+		IInstrumentQuoteSource? quoteSource = null,
 		TimeProvider? timeProvider = null)
 	{
 		_options = options ?? throw new ArgumentNullException(nameof(options));
-		_markSource = markSource;
+		_quoteSource = quoteSource;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
@@ -129,7 +129,7 @@ public sealed class PositionReadModel
 			.Where(userdata => userdata.ConstructionId != null)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
-		var marks = await db.ManualCloseMarks
+		var quotes = await db.ManualCloseAnnotations
 			.AsNoTracking()
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
@@ -195,19 +195,19 @@ public sealed class PositionReadModel
 				entry.ClosedAt, entry.SourceKey, MapKind(entry.Kind), entry.Quantity, entry.EffectivePrice));
 		}
 
-		foreach (var mark in marks)
+		foreach (var quote in quotes)
 		{
-			if (scopeIds.Contains(mark.ConstructionId) == false)
+			if (scopeIds.Contains(quote.ConstructionId) == false)
 			{
 				continue;
 			}
 
 			// Цена пометки без пользовательского значения подставляется последней известной
-			// маркой инструмента при чтении; без источника марок цена остаётся неизвестной.
+			// котировкой инструмента при чтении; без источника котировок цена остаётся неизвестной.
 			// Traceability: openspec:domain/constructions#scenario-manual-mark-default-last-mark
-			var price = mark.Price ?? await ResolveLastMarkAsync(mark.Symbol, cancellationToken).ConfigureAwait(false);
-			Append(timelines, mark.ConstructionId, mark.Symbol,
-				new ManualMarkEvent(mark.MarkedAt, ManualSourceKey(mark.Id), price, mark.Quantity));
+			var price = quote.Price ?? await ResolveLastQuoteAsync(quote.Symbol, cancellationToken).ConfigureAwait(false);
+			Append(timelines, quote.ConstructionId, quote.Symbol,
+				new ManualAnnotationEvent(quote.AnnotatedAt, ManualSourceKey(quote.Id), price, quote.Quantity));
 		}
 
 		var positions = new List<PositionSnapshot>();
@@ -255,10 +255,10 @@ public sealed class PositionReadModel
 						});
 						break;
 
-					case ManualMarkEvent markEvent:
+					case ManualAnnotationEvent annotationEvent:
 						if (residual == 0m)
 						{
-							warnings.Add(CreateWarning(key, markEvent.At, PositionClosingKind.ManualMark, markEvent.SourceKey));
+							warnings.Add(CreateWarning(key, annotationEvent.At, PositionClosingKind.ManualAnnotation, annotationEvent.SourceKey));
 							break;
 						}
 
@@ -268,7 +268,7 @@ public sealed class PositionReadModel
 						// закрывающей записи противоположен остатку.
 						// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
 						// Traceability: change:manual-journal-management/design#d6
-						var quantity = markEvent.Quantity is { } requested
+						var quantity = annotationEvent.Quantity is { } requested
 							? -Math.Sign(residual) * Math.Min(Math.Abs(requested), Math.Abs(residual))
 							: -residual;
 						residual += quantity;
@@ -276,11 +276,11 @@ public sealed class PositionReadModel
 						{
 							ConstructionId = key.ConstructionId,
 							Symbol = key.Symbol,
-							Kind = PositionClosingKind.ManualMark,
-							ClosedAt = markEvent.At,
+							Kind = PositionClosingKind.ManualAnnotation,
+							ClosedAt = annotationEvent.At,
 							Quantity = quantity,
-							Price = markEvent.Price,
-							SourceKey = markEvent.SourceKey,
+							Price = annotationEvent.Price,
+							SourceKey = annotationEvent.SourceKey,
 						});
 						break;
 				}
@@ -346,7 +346,7 @@ public sealed class PositionReadModel
 	};
 
 	/// <summary>Строит ключ источника ручной пометки в едином потоке закрывающих записей.</summary>
-	private static string ManualSourceKey(long markId) => $"manual:{markId}";
+	private static string ManualSourceKey(long annotationId) => $"manual:{annotationId}";
 
 	/// <summary>
 	/// Строит ключ события-сделки в хронологии позиции: execId биржевой записи,
@@ -371,10 +371,10 @@ public sealed class PositionReadModel
 		SourceKey = sourceKey,
 	};
 
-	/// <summary>Запрашивает последнюю известную марку инструмента у источника марок; без источника марка неизвестна.</summary>
-	private async Task<decimal?> ResolveLastMarkAsync(string symbol, CancellationToken cancellationToken)
+	/// <summary>Запрашивает последнюю известную котировку инструмента у источника котировок; без источника котировка неизвестна.</summary>
+	private async Task<decimal?> ResolveLastQuoteAsync(string symbol, CancellationToken cancellationToken)
 	{
-		return _markSource == null ? null : await _markSource.GetLastMarkAsync(symbol, cancellationToken).ConfigureAwait(false);
+		return _quoteSource == null ? null : await _quoteSource.GetLastQuoteAsync(symbol, cancellationToken).ConfigureAwait(false);
 	}
 
 	/// <summary>Событие хронологии позиции: момент, ранг устойчивости и ключ источника.</summary>
@@ -389,8 +389,8 @@ public sealed class PositionReadModel
 		: TimelineEvent(At, ExpiryRank, SourceKey);
 
 	/// <summary>Ручная пометка закрытия: незаданное количество закрывает весь остаток на момент применения, заданное клэмпится остатком.</summary>
-	private sealed record ManualMarkEvent(DateTimeOffset At, string SourceKey, decimal? Price, decimal? Quantity)
-		: TimelineEvent(At, ManualMarkRank, SourceKey);
+	private sealed record ManualAnnotationEvent(DateTimeOffset At, string SourceKey, decimal? Price, decimal? Quantity)
+		: TimelineEvent(At, ManualAnnotationRank, SourceKey);
 
 	#endregion
 }

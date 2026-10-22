@@ -21,7 +21,7 @@ namespace TransactionJournal.Tests.Infrastructure.UseCases;
 /// Проверки read-модели позиций на стыке с сырым хранилищем синхронизации
 /// и пользовательскими записями домена: чистый остаток вычисляется из сделок
 /// и закрывающих записей при чтении, ручные пометки вливаются в единый поток
-/// закрывающих записей с ценой пользователя или последней маркой, а избыточные
+/// закрывающих записей с ценой пользователя или последней котировкой, а избыточные
 /// записи отражаются предупреждениями, не переворачивая позицию.
 /// </summary>
 [TestClass]
@@ -43,7 +43,7 @@ public class PositionReadModelTests
 	private string _databasePath = null!;
 	private ConstructionService _constructionService = null!;
 	private TradeBindingService _bindingService = null!;
-	private ManualCloseMarkService _markService = null!;
+	private ManualCloseAnnotationService _markService = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -58,7 +58,7 @@ public class PositionReadModelTests
 
 		_constructionService = new ConstructionService(CreateOptions());
 		_bindingService = new TradeBindingService(CreateOptions());
-		_markService = new ManualCloseMarkService(CreateOptions());
+		_markService = new ManualCloseAnnotationService(CreateOptions());
 	}
 
 	[TestCleanup]
@@ -383,8 +383,8 @@ public class PositionReadModelTests
 		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
 		await AddLinearTradesAsync(("exec-linear-buy", "Buy", "0.01", ExecMs(2023, 12, 28, 10, 0)));
 		await _bindingService.BindAsync(construction.Id, "exec-linear-buy");
-		var markedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
-		var mark = await _markService.AddAsync(construction.Id, LinearSymbol, markedAt, 42100m);
+		var annotatedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
+		var quote = await _markService.AddAsync(construction.Id, LinearSymbol, annotatedAt, 42100m);
 
 		// Act: читаем позиции.
 		var readModel = new PositionReadModel(CreateOptions());
@@ -399,59 +399,59 @@ public class PositionReadModelTests
 		Assert.That(position.Residual, Is.EqualTo(0m));
 		Assert.That(position.IsOpen, Is.False);
 		var entry = result.ClosingEntries.Single();
-		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
-		Assert.That(entry.ClosedAt, Is.EqualTo(markedAt));
+		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.ManualAnnotation));
+		Assert.That(entry.ClosedAt, Is.EqualTo(annotatedAt));
 		Assert.That(entry.Quantity, Is.EqualTo(-0.01m));
 		Assert.That(entry.Price, Is.EqualTo(42100m));
-		Assert.That(entry.SourceKey, Is.EqualTo($"manual:{mark.Id}"));
+		Assert.That(entry.SourceKey, Is.EqualTo($"manual:{quote.Id}"));
 		Assert.That(result.Warnings, Is.Empty);
 	}
 
 	[TestMethod]
-	[Description("Ручная пометка без цены по умолчанию берёт последнюю известную марку")]
+	[Description("Ручная пометка без цены по умолчанию берёт последнюю известную котировку")]
 	public async Task TryIfManualMarkTakesLastMarkPriceByDefault()
 	{
-		// Arrange: позиция закрыта пометкой без цены; источник марок знает последнюю
-		// марку инструмента.
+		// Arrange: позиция закрыта пометкой без цены; источник котировок знает последнюю
+		// котировку инструмента.
 		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
 		await AddLinearTradesAsync(("exec-linear-buy", "Buy", "0.01", ExecMs(2023, 12, 28, 10, 0)));
 		await _bindingService.BindAsync(construction.Id, "exec-linear-buy");
 		await _markService.AddAsync(
 			construction.Id, LinearSymbol, new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero));
-		var markSource = Mock.Of<IInstrumentMarkSource>(source =>
-			source.GetLastMarkAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()) == Task.FromResult<decimal?>(42123.45m));
+		var quoteSource = Mock.Of<IInstrumentQuoteSource>(source =>
+			source.GetLastQuoteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()) == Task.FromResult<decimal?>(42123.45m));
 
-		// Act: читаем позиции с источником марок.
-		var readModel = new PositionReadModel(CreateOptions(), markSource);
+		// Act: читаем позиции с источником котировок.
+		var readModel = new PositionReadModel(CreateOptions(), quoteSource);
 		var result = await readModel.ListAsync();
 
-		// Assert: цена пометки — последняя известная марка инструмента, подставленная
+		// Assert: цена пометки — последняя известная котировка инструмента, подставленная
 		// при чтении.
-		// Требование: незаданная цена пометки по умолчанию — последняя марка.
+		// Требование: незаданная цена пометки по умолчанию — последняя котировка.
 		// Traceability: openspec:domain/constructions#scenario-manual-mark-default-last-mark
 		var entry = result.ClosingEntries.Single();
-		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
+		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.ManualAnnotation));
 		Assert.That(entry.Price, Is.EqualTo(42123.45m));
 	}
 
 	[TestMethod]
-	[Description("Цена пользователя побеждает последнюю марку")]
+	[Description("Цена пользователя побеждает последнюю котировку")]
 	public async Task TryIfManualMarkUserPriceWinsOverLastMark()
 	{
-		// Arrange: пометка с ценой пользователя; источник марок вернул бы другую цену.
+		// Arrange: пометка с ценой пользователя; источник котировок вернул бы другую цену.
 		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
 		await AddLinearTradesAsync(("exec-linear-buy", "Buy", "0.01", ExecMs(2023, 12, 28, 10, 0)));
 		await _bindingService.BindAsync(construction.Id, "exec-linear-buy");
 		await _markService.AddAsync(
 			construction.Id, LinearSymbol, new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 41000m);
-		var markSource = Mock.Of<IInstrumentMarkSource>(source =>
-			source.GetLastMarkAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()) == Task.FromResult<decimal?>(99999m));
+		var quoteSource = Mock.Of<IInstrumentQuoteSource>(source =>
+			source.GetLastQuoteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()) == Task.FromResult<decimal?>(99999m));
 
-		// Act: читаем позиции с источником марок.
-		var readModel = new PositionReadModel(CreateOptions(), markSource);
+		// Act: читаем позиции с источником котировок.
+		var readModel = new PositionReadModel(CreateOptions(), quoteSource);
 		var result = await readModel.ListAsync();
 
-		// Assert: цена пометки — пользовательская, марка не подменяет её.
+		// Assert: цена пометки — пользовательская, котировка не подменяет её.
 		// Требование: цена пометки задаётся пользователем.
 		// Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
 		var entry = result.ClosingEntries.Single();
@@ -575,14 +575,14 @@ public class PositionReadModelTests
 		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
 		await AddLinearTradesAsync(("exec-linear-buy", "Buy", "0.01", ExecMs(2023, 12, 28, 10, 0)));
 		await _bindingService.BindAsync(construction.Id, "exec-linear-buy");
-		var mark = await _markService.AddAsync(
+		var quote = await _markService.AddAsync(
 			construction.Id, LinearSymbol, new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero), 42100m);
 		var readModel = new PositionReadModel(CreateOptions());
 		var closed = await readModel.ListAsync();
 		Assert.That(closed.Positions.Single().IsOpen, Is.False);
 
 		// Act: удаляем пометку и читаем позиции снова.
-		await _markService.DeleteAsync(mark.Id);
+		await _markService.DeleteAsync(quote.Id);
 		var reopened = await readModel.ListAsync();
 
 		// Assert: позиция снова открыта с прежним остатком — закрывающая запись
@@ -607,8 +607,8 @@ public class PositionReadModelTests
 			("exec-buy", "Buy", "0.01", ExecMs(2023, 12, 28, 10, 0)),
 			("exec-sell", "Sell", "0.01", ExecMs(2023, 12, 28, 11, 0)));
 		await _bindingService.BindBatchAsync(construction.Id, new[] { "exec-buy", "exec-sell" });
-		var markedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
-		var mark = await _markService.AddAsync(construction.Id, LinearSymbol, markedAt, 42000m);
+		var annotatedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
+		var quote = await _markService.AddAsync(construction.Id, LinearSymbol, annotatedAt, 42000m);
 
 		// Act: читаем позиции.
 		var readModel = new PositionReadModel(CreateOptions());
@@ -625,9 +625,9 @@ public class PositionReadModelTests
 		var warning = result.Warnings.Single();
 		Assert.That(warning.ConstructionId, Is.EqualTo(construction.Id));
 		Assert.That(warning.Symbol, Is.EqualTo(LinearSymbol));
-		Assert.That(warning.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
-		Assert.That(warning.ClosedAt, Is.EqualTo(markedAt));
-		Assert.That(warning.SourceKey, Is.EqualTo($"manual:{mark.Id}"));
+		Assert.That(warning.Kind, Is.EqualTo(PositionClosingKind.ManualAnnotation));
+		Assert.That(warning.ClosedAt, Is.EqualTo(annotatedAt));
+		Assert.That(warning.SourceKey, Is.EqualTo($"manual:{quote.Id}"));
 	}
 
 	[TestMethod]
@@ -639,8 +639,8 @@ public class PositionReadModelTests
 		var construction = await _constructionService.CreateAsync("Колл BTC", 700m);
 		await AddOptionTradeAsync("exec-call-buy", "Buy", "0.0001", "100");
 		await _bindingService.BindAsync(construction.Id, "exec-call-buy");
-		var markedAt = new DateTimeOffset(2023, 12, 29, 7, 0, 0, TimeSpan.Zero);
-		await _markService.AddAsync(construction.Id, CallSymbol, markedAt, 50m);
+		var annotatedAt = new DateTimeOffset(2023, 12, 29, 7, 0, 0, TimeSpan.Zero);
+		await _markService.AddAsync(construction.Id, CallSymbol, annotatedAt, 50m);
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			db.RawDeliveries.Add(Delivery(deliveryPrice: "46000", strike: "45000", fee: "0", deliveryRpl: "0.09"));
@@ -661,7 +661,7 @@ public class PositionReadModelTests
 		Assert.That(position.Residual, Is.EqualTo(0m));
 		Assert.That(position.IsOpen, Is.False);
 		var entry = result.ClosingEntries.Single();
-		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
+		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.ManualAnnotation));
 		Assert.That(entry.Quantity, Is.EqualTo(-0.0001m));
 		Assert.That(entry.Price, Is.EqualTo(50m));
 		var warning = result.Warnings.Single();

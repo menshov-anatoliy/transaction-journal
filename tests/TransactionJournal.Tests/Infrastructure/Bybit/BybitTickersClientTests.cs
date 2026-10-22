@@ -14,7 +14,7 @@ namespace TransactionJournal.Tests.Infrastructure.Bybit;
 /// Проверки публичного клиента тикеров против зафиксированных HTTP-ответов из официальной
 /// документации Bybit: запрос уходит к публичному эндпоинту тикеров без заголовков
 /// аутентификации и без API-ключа торгового аккаунта, а тело ответа разбирается
-/// в типизированные марки инструментов.
+/// в типизированные котировки инструментов.
 /// </summary>
 [TestClass]
 public class BybitTickersClientTests
@@ -34,17 +34,17 @@ public class BybitTickersClientTests
 	}
 
 	[TestMethod]
-	[Description("Тикеры разбирают зафиксированные ответы option и linear в марки без заголовков аутентификации")]
+	[Description("Тикеры разбирают зафиксированные ответы option и linear в котировки без заголовков аутентификации")]
 	public async Task TryIfTickersParseRecordedResponsesIntoMarksWithoutAuthentication()
 	{
 		// Arrange: два зафиксированных ответа официальной документации — тикер опциона
-		// с маркой 24.77 и тикер линейного контракта с маркой 27739.74; оба эндпоинт
-		// отдаёт без аутентификации. Провайдер марок работает без API-ключа.
+		// с котировкой 24.77 и тикер линейного контракта с котировкой 27739.74; оба эндпоинт
+		// отдаёт без аутентификации. Провайдер котировок работает без API-ключа.
 		// Traceability: openspec:analytics/performance#scenario-public-tickers-no-auth
 		_handler.EnqueueJson(LoadFixture("tickers-option.json"));
 		_handler.EnqueueJson(LoadFixture("tickers-linear.json"));
 
-		// Act: запрашиваем марки конкретных инструментов обеих категорий.
+		// Act: запрашиваем котировки конкретных инструментов обеих категорий.
 		var optionTickers = await _client.GetTickersAsync(new BybitTickerQuery
 		{
 			Category = "option",
@@ -65,7 +65,7 @@ public class BybitTickersClientTests
 			$"{TestBaseUrl}/v5/market/tickers?category=linear&symbol=BTCUSDT"));
 
 		// Assert: в запросах нет ни одного заголовка аутентификации торгового аккаунта —
-		// сценарий «марки получаются без аутентификации».
+		// сценарий «котировки получаются без аутентификации».
 		// Traceability: openspec:analytics/performance#scenario-public-tickers-no-auth
 		foreach (var request in _handler.Requests)
 		{
@@ -76,7 +76,7 @@ public class BybitTickersClientTests
 			Assert.That(request.Headers.Contains("X-BAPI-SIGN-TYPE"), Is.False);
 		}
 
-		// Assert: строковые числа марок разобраны инвариантной культурой.
+		// Assert: строковые числа котировок разобраны инвариантной культурой.
 		var option = optionTickers.Single();
 		Assert.That(option.Symbol, Is.EqualTo("BTC-29DEC23-25000-C"));
 		Assert.That(option.MarkPrice, Is.EqualTo(24.77m));
@@ -126,7 +126,7 @@ public class BybitTickersClientTests
 		});
 
 		// Assert: чужие категории полей у опциона пусты — поля опциональны,
-		// поведение потребителя марки от их появления не меняется.
+		// поведение потребителя котировки от их появления не меняется.
 		Assert.Multiple(() =>
 		{
 			Assert.That(option.FundingRate, Is.Null);

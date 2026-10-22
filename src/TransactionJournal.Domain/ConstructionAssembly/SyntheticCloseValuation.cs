@@ -31,7 +31,7 @@ public sealed record SyntheticCloseValuation
 
 	/// <summary>
 	/// Поток записей закрываемой ноги — её сделки входа из потока позиции.
-	/// Марки и прочие закрывающие записи расчётом лока не читаются:
+	/// Котировки и прочие закрывающие записи расчётом лока не читаются:
 	/// паритетный лок к экспирации от котировок не зависит.
 	/// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-locked-value-marks-failure-independent
 	/// </summary>

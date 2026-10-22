@@ -33,32 +33,32 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 	private const int ExpiryRank = 1;
 
 	/// <summary>Ранг ручной пометки: fallback-запись уступает биржевой записи того же момента.</summary>
-	private const int ManualMarkRank = 2;
+	private const int ManualAnnotationRank = 2;
 
 	private readonly DbContextOptions<JournalDbContext> _options;
 
-	private readonly IFreshInstrumentMarkSource _freshMarkSource;
+	private readonly IFreshInstrumentQuoteSource _freshQuoteSource;
 
-	private readonly IInstrumentMarkSource? _lastMarkSource;
+	private readonly IInstrumentQuoteSource? _lastQuoteSource;
 
 	/// <summary>Поставщик времени чтения: граница длительности конструкций и возраст снимков истории.</summary>
 	private readonly TimeProvider _timeProvider;
 
 	/// <summary>Создаёт read-модель над опциями контекста журнала; база развёрнута миграциями.</summary>
 	/// <param name="options">Опции EF-контекста журнала.</param>
-	/// <param name="freshMarkSource">Источник свежих марок для оценки нереализованного PnL открытых остатков.</param>
-	/// <param name="lastMarkSource">Источник последних марок для ручных пометок без цены; null — цена остаётся неизвестной.</param>
+	/// <param name="freshQuoteSource">Источник свежих котировок для оценки нереализованного PnL открытых остатков.</param>
+	/// <param name="lastQuoteSource">Источник последних котировок для ручных пометок без цены; null — цена остаётся неизвестной.</param>
 	/// <param name="timeProvider">Поставщик времени чтения; по умолчанию системный.</param>
-	/// <exception cref="ArgumentNullException">Опции или источник свежих марок не заданы.</exception>
+	/// <exception cref="ArgumentNullException">Опции или источник свежих котировок не заданы.</exception>
 	public JournalMetricsReadModel(
 		DbContextOptions<JournalDbContext> options,
-		IFreshInstrumentMarkSource freshMarkSource,
-		IInstrumentMarkSource? lastMarkSource = null,
+		IFreshInstrumentQuoteSource freshQuoteSource,
+		IInstrumentQuoteSource? lastQuoteSource = null,
 		TimeProvider? timeProvider = null)
 	{
 		_options = options ?? throw new ArgumentNullException(nameof(options));
-		_freshMarkSource = freshMarkSource ?? throw new ArgumentNullException(nameof(freshMarkSource));
-		_lastMarkSource = lastMarkSource;
+		_freshQuoteSource = freshQuoteSource ?? throw new ArgumentNullException(nameof(freshQuoteSource));
+		_lastQuoteSource = lastQuoteSource;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
@@ -89,9 +89,9 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			.Where(userdata => userdata.ConstructionId != null)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
-		var marks = await db.ManualCloseMarks
+		var quotes = await db.ManualCloseAnnotations
 			.AsNoTracking()
-			.OrderBy(mark => mark.Id)
+			.OrderBy(quote => quote.Id)
 			.ToListAsync(cancellationToken)
 			.ConfigureAwait(false);
 		// Ручные сделки — второе сырьё метрик: читаются тем же чтением, что и биржевые
@@ -155,17 +155,17 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 				entry.ClosedAt, ExpiryRank, PositionFifoEntryKind.ExpiryClosing, entry.SourceKey, entry.Quantity, entry.EffectivePrice, entry.Fee));
 		}
 
-		foreach (var mark in marks)
+		foreach (var quote in quotes)
 		{
 			// Цена пометки без пользовательского значения подставляется последней известной
-			// маркой инструмента при чтении; без источника марок цена остаётся неизвестной.
+			// котировкой инструмента при чтении; без источника котировок цена остаётся неизвестной.
 			// Количество пометки передаётся потоку как есть: незаданное закроет весь
 			// остаток, заданное клэмпится остатком при применении.
 			// Traceability: openspec:domain/constructions#scenario-manual-mark-default-last-mark
 			// Traceability: change:manual-journal-management/design#d6
-			var price = mark.Price ?? await ResolveLastMarkAsync(mark.Symbol, cancellationToken).ConfigureAwait(false) ?? 0m;
-			Append(streams, mark.ConstructionId, mark.Symbol, new StreamEvent(
-				mark.MarkedAt, ManualMarkRank, PositionFifoEntryKind.ManualMark, ManualSourceKey(mark.Id), mark.Quantity, price, 0m));
+			var price = quote.Price ?? await ResolveLastQuoteAsync(quote.Symbol, cancellationToken).ConfigureAwait(false) ?? 0m;
+			Append(streams, quote.ConstructionId, quote.Symbol, new StreamEvent(
+				quote.AnnotatedAt, ManualAnnotationRank, PositionFifoEntryKind.ManualAnnotation, ManualSourceKey(quote.Id), quote.Quantity, price, 0m));
 		}
 
 		var positionCalculator = new PositionMetricsCalculator();
@@ -182,11 +182,11 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			}
 		}
 
-		// Нереализованная часть открытых остатков оценивается свежими марками на момент
-		// запроса тем же обращением к провайдеру, что и марка позиции; сбой деградирует
-		// только нереализованные величины и отметку времени марок.
+		// Нереализованная часть открытых остатков оценивается свежими котировками на момент
+		// запроса тем же обращением к провайдеру, что и котировка позиции; сбой деградирует
+		// только нереализованные величины и отметку времени котировок.
 		// Traceability: openspec:analytics/performance#requirement-unrealized-pnl-current-marks
-		var evaluation = await new UnrealizedPnlMarkEvaluator(_freshMarkSource)
+		var evaluation = await new UnrealizedPnlQuoteEvaluator(_freshQuoteSource)
 			.EvaluateAsync(positionMetrics, cancellationToken)
 			.ConfigureAwait(false);
 
@@ -215,7 +215,7 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 				lifetimeByConstruction.GetValueOrDefault(construction.Id)))
 			.ToList();
 
-		// Итог по журналу — сумма итогов конструкций: сбой марок хотя бы одной конструкции
+		// Итог по журналу — сумма итогов конструкций: сбой котировок хотя бы одной конструкции
 		// делает итог неполным (null), не подменяя его частичной суммой.
 		// Traceability: openspec:ui/screens#scenario-journal-total-always-visible
 		var totals = constructionMetrics.Select(metrics => metrics.TotalPnL).ToList();
@@ -223,7 +223,7 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 
 		// Разбивка итога по журналу: реализованная часть — сумма по всем конструкциям,
 		// включая архивные, и доступна всегда; нереализованная гаснет в null при сбое
-		// марок хотя бы одной конструкции — то же правило, что у итога. Внешние
+		// котировок хотя бы одной конструкции — то же правило, что у итога. Внешние
 		// корректировки PnL в разбивку не входят: они живут только в итоге.
 		// Traceability: openspec:analytics/performance#requirement-journal-pnl-aggregates
 		var realizedPnL = constructionMetrics.Sum(metrics => metrics.RealizedPnL);
@@ -238,8 +238,8 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			TotalPnL = totalPnL,
 			RealizedPnL = realizedPnL,
 			UnrealizedPnL = unrealizedPnL,
-			MarksAsOf = evaluation.MarksAsOf,
-			HasMarkFailure = evaluation.HasMarkFailure,
+			QuotesAsOf = evaluation.QuotesAsOf,
+			HasQuoteFailure = evaluation.HasQuoteFailure,
 		};
 	}
 
@@ -280,7 +280,7 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 					entries.Add(ToFifoEntry(streamEvent, streamEvent.Quantity.Value));
 					break;
 
-				case PositionFifoEntryKind.ManualMark:
+				case PositionFifoEntryKind.ManualAnnotation:
 					// Незаданное количество пометки закрывает весь остаток на её момент;
 					// заданное клэмпится остатком — закрывается запрошенная часть,
 					// позиция остаётся открытой на разницу.
@@ -291,11 +291,11 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 						continue;
 					}
 
-					var markQuantity = streamEvent.Quantity is { } requested
+					var annotationQuantity = streamEvent.Quantity is { } requested
 						? -Math.Sign(residual) * Math.Min(Math.Abs(requested), Math.Abs(residual))
 						: -residual;
-					entries.Add(ToFifoEntry(streamEvent, markQuantity));
-					residual += markQuantity;
+					entries.Add(ToFifoEntry(streamEvent, annotationQuantity));
+					residual += annotationQuantity;
 					break;
 
 				default:
@@ -334,7 +334,7 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 	}
 
 	/// <summary>Строит ключ источника ручной пометки в едином потоке позиции.</summary>
-	private static string ManualSourceKey(long markId) => $"manual:{markId}";
+	private static string ManualSourceKey(long annotationId) => $"manual:{annotationId}";
 
 	/// <summary>
 	/// Строит ключ события-сделки в потоке позиции: execId биржевой записи, ключ
@@ -345,10 +345,10 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		? $"manual:{trade.ManualTradeId?.ToString(CultureInfo.InvariantCulture)}"
 		: trade.ExecId!;
 
-	/// <summary>Запрашивает последнюю известную марку инструмента у источника марок; без источника марка неизвестна.</summary>
-	private async Task<decimal?> ResolveLastMarkAsync(string symbol, CancellationToken cancellationToken)
+	/// <summary>Запрашивает последнюю известную котировку инструмента у источника котировок; без источника котировка неизвестна.</summary>
+	private async Task<decimal?> ResolveLastQuoteAsync(string symbol, CancellationToken cancellationToken)
 	{
-		return _lastMarkSource == null ? null : await _lastMarkSource.GetLastMarkAsync(symbol, cancellationToken).ConfigureAwait(false);
+		return _lastQuoteSource == null ? null : await _lastQuoteSource.GetLastQuoteAsync(symbol, cancellationToken).ConfigureAwait(false);
 	}
 
 	/// <summary>
@@ -429,7 +429,7 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			inputs.Add(construction.Id, new OptionLifetimeInput
 			{
 				Legs = legs,
-				Marks = evaluation.Marks,
+				Quotes = evaluation.Quotes,
 				SnapshotHistory = snapshotHistory,
 			});
 		}
@@ -472,9 +472,9 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		// здесь же — как и клиентским выбором вычислителя: опорой остаётся
 		// ближайшая известная тета давностью не менее суток.
 		var sql = $"""
-			SELECT "w"."Id", "w"."Symbol", "w"."MarkPrice", "w"."UnderlyingPrice", "w"."Theta", "w"."ReceivedAt"
+			SELECT "w"."Id", "w"."Symbol", "w"."QuotePrice", "w"."UnderlyingPrice", "w"."Theta", "w"."ReceivedAt"
 			FROM (
-				SELECT "i"."Id", "i"."Symbol", "i"."MarkPrice", "i"."UnderlyingPrice", "i"."Theta", "i"."ReceivedAt",
+				SELECT "i"."Id", "i"."Symbol", "i"."QuotePrice", "i"."UnderlyingPrice", "i"."Theta", "i"."ReceivedAt",
 					ROW_NUMBER() OVER (
 						PARTITION BY "i"."Symbol"
 						ORDER BY "i"."ReceivedAt" DESC, "i"."Id" DESC) AS "BaselineRank"

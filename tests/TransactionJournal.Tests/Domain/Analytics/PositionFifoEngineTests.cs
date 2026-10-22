@@ -110,7 +110,7 @@ public class PositionFifoEngineTests
 		{
 			Trade(0, "exec-buy-1", 1m, 100m),
 			Trade(10, "exec-sell-1", -0.5m, 110m),
-			Closing(20, "manual:1", PositionFifoEntryKind.ManualMark, -0.5m, 90m),
+			Closing(20, "manual:1", PositionFifoEntryKind.ManualAnnotation, -0.5m, 90m),
 		};
 
 		// Act
@@ -383,7 +383,7 @@ public class PositionFifoEngineTests
 		var entries = new[]
 		{
 			Trade(0, "exec-buy-1", 0.5m, 120m),
-			Closing(20, "manual:1", PositionFifoEntryKind.ManualMark, -0.5m, 90m),
+			Closing(20, "manual:1", PositionFifoEntryKind.ManualAnnotation, -0.5m, 90m),
 		};
 
 		// Act

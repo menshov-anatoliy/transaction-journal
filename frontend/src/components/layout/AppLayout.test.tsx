@@ -93,8 +93,8 @@ function makeOverview(summary: Partial<ConstructionsSummary> = {}): Construction
 			totalPnL: 214.32,
 			realizedPnL: 156.1,
 			unrealizedPnL: 58.22,
-			marksAsOf: "2026-10-10T12:00:00+00:00",
-			hasMarkFailure: false,
+			quotesAsOf: "2026-10-10T12:00:00+00:00",
+			hasQuoteFailure: false,
 			constructionCount: 3,
 			openCount: 2,
 			...summary,
@@ -948,7 +948,7 @@ describe("сегмент контекста", () => {
 });
 
 // Итог журнала в сегменте страницы топбара: разбивка на реализованный и
-// нереализованный P&L обязательна на любом экране, при сбое марок гаснет
+// нереализованный P&L обязательна на любом экране, при сбое котировок гаснет
 // только нереализованная часть; детальная сводка остаётся в шапке списка.
 // Traceability: openspec:ui/screens#scenario-journal-total-always-visible
 // Traceability: openspec:ui/screens#scenario-frame-marks-failure-degrades-unrealized-only
@@ -959,7 +959,7 @@ describe("итог журнала в топбаре", () => {
 		renderLayout();
 
 		// Assert: итог живёт в топбаре (banner) и несёт обе части разбивки;
-		// детальные счётчики и отметка марок остаются сводке списка.
+		// детальные счётчики и отметка котировок остаются сводке списка.
 		const banner = screen.getByRole("banner");
 		expect(await within(banner).findByText("+214.32 USDT")).toBeInTheDocument();
 		const total = within(banner).getByTestId("journal-total");
@@ -974,11 +974,11 @@ describe("итог журнала в топбаре", () => {
 		expect(within(screen.getByRole("banner")).getByTestId("journal-total")).toHaveTextContent("+214.32 USDT");
 	});
 
-	it("при сбое марок помечает итог неполным, нереализованный P&L — признаком сбоя, реализованный остаётся", async () => {
+	it("при сбое котировок помечает итог неполным, нереализованный P&L — признаком сбоя, реализованный остаётся", async () => {
 		// Arrange: провайдер котировок не оценил остатки — нереализованная
 		// часть и итог непостроены, реализованный P&L известен.
 		constructionsApi.fetchConstructionsOverview.mockResolvedValue(
-			makeOverview({ totalPnL: null, unrealizedPnL: null, marksAsOf: null, hasMarkFailure: true }),
+			makeOverview({ totalPnL: null, unrealizedPnL: null, quotesAsOf: null, hasQuoteFailure: true }),
 		);
 		renderLayout();
 

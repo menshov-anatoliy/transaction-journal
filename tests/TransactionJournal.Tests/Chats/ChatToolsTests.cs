@@ -15,7 +15,7 @@ namespace TransactionJournal.Tests.Chats;
 /// инструменты выбранных категорий закрытого справочника, карточка правила
 /// читается полным текстом только по id, доска опционов отдаётся компактной
 /// проекцией вместо сырых данных, а недоступность биржи отдаётся
-/// структурированным «недоступно» с последней кэшированной проекцией марок
+/// структурированным «недоступно» с последней кэшированной проекцией котировок
 /// и её as-of.
 /// </summary>
 [TestClass]
@@ -206,7 +206,7 @@ public sealed class ChatToolsTests
 	}
 
 	[TestMethod]
-	[Description("Снимок рынка рендерится markdown с маркой, фандингом и as-of отметкой")]
+	[Description("Снимок рынка рендерится markdown с котировкой, фандингом и as-of отметкой")]
 	public async Task GetMarketSnapshotAsync_RendersMarkdownSnapshot()
 	{
 		// Arrange: порт отвечает доступным снимком перпа BTCUSDT.
@@ -219,7 +219,7 @@ public sealed class ChatToolsTests
 				AsOf = FixedNow,
 				IsAvailable = true,
 				Symbol = "BTCUSDT",
-				MarkPrice = 108975.4m,
+				QuotePrice = 108975.4m,
 				Bid1Price = 108970m,
 				Ask1Price = 108980m,
 				OpenInterest = 74033.459m,
@@ -234,7 +234,7 @@ public sealed class ChatToolsTests
 		Assert.That(markdown, Does.Contain("Снимок фьючерсного рынка BTC"));
 		Assert.That(markdown, Does.Contain("as-of: 2030-01-01 12:00:00 UTC"));
 		Assert.That(markdown, Does.Contain("BTCUSDT"));
-		Assert.That(markdown, Does.Contain("Марка: 108975.4 USDT"));
+		Assert.That(markdown, Does.Contain("Котировка: 108975.4 USDT"));
 		Assert.That(markdown, Does.Contain("Ставка фандинга: 0.0001"));
 		Assert.That(markdown, Does.Contain("Открытый интерес: 74033.459 BTC"));
 	}
@@ -244,7 +244,7 @@ public sealed class ChatToolsTests
 	public async Task GetOptionBoardAsync_RendersCompactProjection()
 	{
 		// Arrange: доска с двумя экспирациями; страйк 135000 лежит вне окна
-		// ±20% от марки 106000 и не должен попасть в проекцию.
+		// ±20% от котировки 106000 и не должен попасть в проекцию.
 		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadOptionBoardAsync("BTC", It.IsAny<CancellationToken>()))
@@ -257,12 +257,12 @@ public sealed class ChatToolsTests
 				TotalTickerCount = 9,
 				Quotes =
 				[
-					Quote("BTC-26DEC25-95000-C", new DateOnly(2025, 12, 26), 95000m, OptionType.Call, mark: 5160.25m, iv: 0.4865m, delta: 0.6211m, openInterest: 4210m, bid: 5100.5m, ask: 5220m),
-					Quote("BTC-26DEC25-95000-P", new DateOnly(2025, 12, 26), 95000m, OptionType.Put, mark: 626.10m, iv: 0.5260m, delta: -0.3701m, openInterest: 9120m, bid: 620m, ask: 632.5m),
-					Quote("BTC-26DEC25-106000-C", new DateOnly(2025, 12, 26), 106000m, OptionType.Call, mark: 4215.75m, iv: 0.4598m, delta: 0.5044m, openInterest: 15340m, bid: 4180m, ask: 4255.5m),
-					Quote("BTC-26DEC25-135000-C", new DateOnly(2025, 12, 26), 135000m, OptionType.Call, mark: 318.40m, iv: 0.6257m, delta: 0.1502m, openInterest: 820m, bid: 310m, ask: 325.5m),
-					Quote("BTC-27MAR26-100000-C", new DateOnly(2026, 3, 27), 100000m, OptionType.Call, mark: 10035.60m, iv: 0.5064m, delta: 0.5801m, openInterest: 6600m, bid: 9950m, ask: 10120.5m),
-					Quote("BTC-27MAR26-100000-P", new DateOnly(2026, 3, 27), 100000m, OptionType.Put, mark: 3855.15m, iv: 0.5458m, delta: -0.4122m, openInterest: 5110m, bid: 3810m, ask: 3905.5m),
+					Quote("BTC-26DEC25-95000-C", new DateOnly(2025, 12, 26), 95000m, OptionType.Call, quote: 5160.25m, iv: 0.4865m, delta: 0.6211m, openInterest: 4210m, bid: 5100.5m, ask: 5220m),
+					Quote("BTC-26DEC25-95000-P", new DateOnly(2025, 12, 26), 95000m, OptionType.Put, quote: 626.10m, iv: 0.5260m, delta: -0.3701m, openInterest: 9120m, bid: 620m, ask: 632.5m),
+					Quote("BTC-26DEC25-106000-C", new DateOnly(2025, 12, 26), 106000m, OptionType.Call, quote: 4215.75m, iv: 0.4598m, delta: 0.5044m, openInterest: 15340m, bid: 4180m, ask: 4255.5m),
+					Quote("BTC-26DEC25-135000-C", new DateOnly(2025, 12, 26), 135000m, OptionType.Call, quote: 318.40m, iv: 0.6257m, delta: 0.1502m, openInterest: 820m, bid: 310m, ask: 325.5m),
+					Quote("BTC-27MAR26-100000-C", new DateOnly(2026, 3, 27), 100000m, OptionType.Call, quote: 10035.60m, iv: 0.5064m, delta: 0.5801m, openInterest: 6600m, bid: 9950m, ask: 10120.5m),
+					Quote("BTC-27MAR26-100000-P", new DateOnly(2026, 3, 27), 100000m, OptionType.Put, quote: 3855.15m, iv: 0.5458m, delta: -0.4122m, openInterest: 5110m, bid: 3810m, ask: 3905.5m),
 				],
 			});
 		var tools = CreateTools(market.Object);
@@ -270,11 +270,11 @@ public sealed class ChatToolsTests
 		// Act: строим markdown-проекцию доски.
 		var markdown = await tools.GetOptionBoardAsync("BTC");
 
-		// Assert: окно объявлено с якорем-маркой, счётчики сырых и проекционных
+		// Assert: окно объявлено с якорем-котировкой, счётчики сырых и проекционных
 		// котировок разделены.
 		// Traceability: openspec:chats/sources#scenario-sources-option-board-projection
 		Assert.That(markdown, Does.Contain("Доска опционов BTC"));
-		Assert.That(markdown, Does.Contain("Окно проекции: страйки ±20% от марки базового актива 106000 USDT"));
+		Assert.That(markdown, Does.Contain("Окно проекции: страйки ±20% от котировки базового актива 106000 USDT"));
 		Assert.That(markdown, Does.Contain("Инструментов в ответе биржи: 9, в проекции: 6"));
 
 		// Assert: строка на страйк — колл и пут одного страйка в одной строке
@@ -314,20 +314,20 @@ public sealed class ChatToolsTests
 		var markdown = await tools.GetOptionBoardAsync("BTC");
 
 		// Assert: ответ помечен недоступностью с причиной; кэш пуст — таблицы
-		// проекции нет, инструмент объявляет отсутствие кэшированных марок.
+		// проекции нет, инструмент объявляет отсутствие кэшированных котировок.
 		// Traceability: openspec:chats/sources#requirement-sources-degradation-cached-asof
 		Assert.That(markdown, Does.Contain("биржа недоступна"));
 		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
-		Assert.That(markdown, Does.Contain("Кэшированных марок опционов BTC в кэше марок нет"));
+		Assert.That(markdown, Does.Contain("Кэшированных котировок опционов BTC в кэше котировок нет"));
 		Assert.That(markdown, Does.Not.Contain("Страйк"));
 	}
 
 	[TestMethod]
-	[Description("Недоступность биржи с кэшем деградирует снимок в последнюю кэшированную марку с её as-of")]
+	[Description("Недоступность биржи с кэшем деградирует снимок в последнюю кэшированную котировку с её as-of")]
 	public async Task GetMarketSnapshotAsync_UnavailableWithCache_RendersCachedMarkWithItsAsOf()
 	{
-		// Arrange: порт отвечает недоступностью с последней кэшированной маркой
-		// перпа и as-of момента её получения из кэша марок.
+		// Arrange: порт отвечает недоступностью с последней кэшированной котировкой
+		// перпа и as-of момента её получения из кэша котировок.
 		var cachedAt = new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero);
 		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
@@ -339,29 +339,29 @@ public sealed class ChatToolsTests
 				IsAvailable = false,
 				UnavailableReason = "Bybit API ответил ошибкой: retCode=10001.",
 				Symbol = "BTCUSDT",
-				MarkPrice = 106000m,
+				QuotePrice = 106000m,
 			});
 		var tools = CreateTools(market.Object);
 
 		// Act: строим ответ инструмента.
 		var markdown = await tools.GetMarketSnapshotAsync("BTC");
 
-		// Assert: недоступность с причиной и последняя кэшированная марка с as-of
+		// Assert: недоступность с причиной и последняя кэшированная котировка с as-of
 		// кэша — ассистент обязан пометить устаревшие данные и не давать
 		// рыночно-зависимых рекомендаций.
 		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(markdown, Does.Contain("Снимок фьючерсного рынка BTC — биржа недоступна"));
 		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
-		Assert.That(markdown, Does.Contain("Последняя кэшированная марка (as-of: 2029-12-31 10:00:00 UTC):"));
+		Assert.That(markdown, Does.Contain("Последняя кэшированная котировка (as-of: 2029-12-31 10:00:00 UTC):"));
 		Assert.That(markdown, Does.Contain("Инструмент: BTCUSDT"));
-		Assert.That(markdown, Does.Contain("Марка: 106000 USDT"));
+		Assert.That(markdown, Does.Contain("Котировка: 106000 USDT"));
 	}
 
 	[TestMethod]
-	[Description("Недоступность биржи без кэшированной марки отвечает «кэш пуст» вместо проекции")]
+	[Description("Недоступность биржи без кэшированной котировки отвечает «кэш пуст» вместо проекции")]
 	public async Task GetMarketSnapshotAsync_UnavailableWithoutCache_SaysNoCachedMark()
 	{
-		// Arrange: порт отвечает недоступностью без марки — кэш провайдера пуст.
+		// Arrange: порт отвечает недоступностью без котировки — кэш провайдера пуст.
 		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
 			.Setup(reader => reader.ReadSnapshotAsync("BTC", It.IsAny<CancellationToken>()))
@@ -377,18 +377,18 @@ public sealed class ChatToolsTests
 		// Act: строим ответ инструмента.
 		var markdown = await tools.GetMarketSnapshotAsync("BTC");
 
-		// Assert: деградировать нечем — инструмент объявляет отсутствие кэшированной марки.
+		// Assert: деградировать нечем — инструмент объявляет отсутствие кэшированной котировки.
 		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(markdown, Does.Contain("биржа недоступна"));
-		Assert.That(markdown, Does.Contain("Кэшированной марки BTCUSDT в кэше марок нет"));
+		Assert.That(markdown, Does.Contain("Кэшированной котировки BTCUSDT в кэше котировок нет"));
 	}
 
 	[TestMethod]
-	[Description("Недоступность биржи с кэшем деградирует доску в таблицу кэшированных марок с её as-of")]
+	[Description("Недоступность биржи с кэшем деградирует доску в таблицу кэшированных котировок с её as-of")]
 	public async Task GetOptionBoardAsync_UnavailableWithCache_RendersCachedMarksTableWithItsAsOf()
 	{
-		// Arrange: порт отвечает недоступностью с кэшированными марками двух
-		// опционов и якорем из кэшированной марки перпа.
+		// Arrange: порт отвечает недоступностью с кэшированными котировками двух
+		// опционов и якорем из кэшированной котировки перпа.
 		var cachedAt = new DateTimeOffset(2029, 12, 31, 10, 0, 0, TimeSpan.Zero);
 		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
@@ -403,8 +403,8 @@ public sealed class ChatToolsTests
 				TotalTickerCount = 2,
 				Quotes =
 				[
-					Quote("BTC-26DEC25-95000-C", new DateOnly(2025, 12, 26), 95000m, OptionType.Call, mark: 5160.25m),
-					Quote("BTC-26DEC25-95000-P", new DateOnly(2025, 12, 26), 95000m, OptionType.Put, mark: 626.10m),
+					Quote("BTC-26DEC25-95000-C", new DateOnly(2025, 12, 26), 95000m, OptionType.Call, quote: 5160.25m),
+					Quote("BTC-26DEC25-95000-P", new DateOnly(2025, 12, 26), 95000m, OptionType.Put, quote: 626.10m),
 				],
 			});
 		var tools = CreateTools(market.Object);
@@ -412,16 +412,16 @@ public sealed class ChatToolsTests
 		// Act: строим ответ инструмента.
 		var markdown = await tools.GetOptionBoardAsync("BTC");
 
-		// Assert: недоступность с причиной и кэшированная проекция марок с as-of
-		// кэша; кэш хранит только марки — таблица деградации без IV, греков и
+		// Assert: недоступность с причиной и кэшированная проекция котировок с as-of
+		// кэша; кэш хранит только котировки — таблица деградации без IV, греков и
 		// бид-аска; сырых данных биржи в ответе нет.
 		// Traceability: openspec:chats/sources#scenario-sources-market-down-cached-projection
 		Assert.That(markdown, Does.Contain("Доска опционов BTC — биржа недоступна"));
 		Assert.That(markdown, Does.Contain("Причина: Bybit API ответил ошибкой: retCode=10001."));
-		Assert.That(markdown, Does.Contain("Последняя кэшированная проекция марок (as-of: 2029-12-31 10:00:00 UTC):"));
-		Assert.That(markdown, Does.Contain("Окно проекции: страйки ±20% от последней кэшированной марки базового актива 106000 USDT"));
+		Assert.That(markdown, Does.Contain("Последняя кэшированная проекция котировок (as-of: 2029-12-31 10:00:00 UTC):"));
+		Assert.That(markdown, Does.Contain("Окно проекции: страйки ±20% от последней кэшированной котировки базового актива 106000 USDT"));
 		Assert.That(markdown, Does.Contain("Котировок в кэше: 2"));
-		Assert.That(markdown, Does.Contain("| Страйк | Колл марка | Пут марка |"));
+		Assert.That(markdown, Does.Contain("| Страйк | Колл котировка | Пут котировка |"));
 		Assert.That(markdown, Does.Contain("| 95000 | 5160.25 | 626.1 |"));
 		Assert.That(markdown, Does.Contain("Экспирация 2025-12-26"));
 		Assert.That(markdown, Does.Not.Contain("Колл IV"));
@@ -441,7 +441,7 @@ public sealed class ChatToolsTests
 				AsOf = FixedNow,
 				IsAvailable = true,
 				Symbol = "BTCUSDT",
-				MarkPrice = 108975.4m,
+				QuotePrice = 108975.4m,
 			});
 		var tools = CreateTools(market.Object);
 
@@ -484,7 +484,7 @@ public sealed class ChatToolsTests
 		DateOnly expiry,
 		decimal strike,
 		OptionType type,
-		decimal? mark = null,
+		decimal? quote = null,
 		decimal? iv = null,
 		decimal? delta = null,
 		decimal? openInterest = null,
@@ -495,8 +495,8 @@ public sealed class ChatToolsTests
 		Expiry = expiry,
 		Strike = strike,
 		Type = type,
-		MarkPrice = mark,
-		MarkIv = iv,
+		QuotePrice = quote,
+		QuoteIv = iv,
 		Delta = delta,
 		Gamma = delta is null ? null : 0.0000389m,
 		Vega = delta is null ? null : 161.2205m,

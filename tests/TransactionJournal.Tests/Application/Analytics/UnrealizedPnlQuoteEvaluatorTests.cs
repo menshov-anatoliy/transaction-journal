@@ -14,16 +14,16 @@ namespace TransactionJournal.Tests.Analytics;
 
 /// <summary>
 /// Проверки оценщика нереализованного PnL: открытые остатки оцениваются свежей
-/// маркой инструмента на момент запроса и несут отметку времени марок, общая
+/// котировкой инструмента на момент запроса и несут отметку времени котировок, общая
 /// оценка позиции собирается из реализованной и нереализованной частей, закрытые
-/// позиции марок не требуют вовсе, а сбой тикеров деградирует только в null
+/// позиции котировок не требуют вовсе, а сбой тикеров деградирует только в null
 /// нереализованной части, общего PnL, стоимости, процента изменения цены
 /// и отметки времени — реализованные метрики, комиссии, даты и проценты
 /// возвращаются без изменений. Негативные проверки
-/// отклоняют незаданные метрики и отсутствующий источник марок.
+/// отклоняют незаданные метрики и отсутствующий источник котировок.
 /// </summary>
 [TestClass]
-public class UnrealizedPnlMarkEvaluatorTests
+public class UnrealizedPnlQuoteEvaluatorTests
 {
 	private const string LongSymbol = "BTC-29DEC23-45000-C";
 
@@ -41,39 +41,39 @@ public class UnrealizedPnlMarkEvaluatorTests
 	/// <summary>Текущий момент проверок: 1 января 2026 года 12:00 UTC.</summary>
 	private static readonly DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
 
-	private Mock<IFreshInstrumentMarkSource> _markSource = null!;
+	private Mock<IFreshInstrumentQuoteSource> _quoteSource = null!;
 
-	private UnrealizedPnlMarkEvaluator _evaluator = null!;
+	private UnrealizedPnlQuoteEvaluator _evaluator = null!;
 
 	private ConstructionMetricsCalculator _constructionCalculator = null!;
 
 	[TestInitialize]
 	public void Initialize()
 	{
-		// Источник марок подменяется моком: оценщик проверяется без сети и базы,
+		// Источник котировок подменяется моком: оценщик проверяется без сети и базы,
 		// каждая проверка получает свежие экземпляры без состояния.
-		_markSource = new Mock<IFreshInstrumentMarkSource>(MockBehavior.Strict);
-		_evaluator = new UnrealizedPnlMarkEvaluator(_markSource.Object);
+		_quoteSource = new Mock<IFreshInstrumentQuoteSource>(MockBehavior.Strict);
+		_evaluator = new UnrealizedPnlQuoteEvaluator(_quoteSource.Object);
 		_constructionCalculator = new ConstructionMetricsCalculator();
 	}
 
 	[TestMethod]
-	[Description("Открытый остаток оценён маркой на момент запроса с отметкой времени марок")]
+	[Description("Открытый остаток оценён котировкой на момент запроса с отметкой времени котировок")]
 	public async Task TryIfOpenResidualIsValuedAtMarkOnRequest()
 	{
 		// Arrange: длинный остаток 0.5 со средней 120, короткий остаток 1 со средней
-		// 100 и закрытая позиция; свежие марки приходят по своим инструментам —
+		// 100 и закрытая позиция; свежие котировки приходят по своим инструментам —
 		// BTC в 12:00, ETH в 12:01.
-		// Требование: нереализованный PnL оценён по последней марке инструмента на
-		// момент запроса, вместе с оценкой возвращается отметка времени марок.
+		// Требование: нереализованный PnL оценён по последней котировке инструмента на
+		// момент запроса, вместе с оценкой возвращается отметка времени котировок.
 		// Traceability: openspec:analytics/performance#scenario-open-residual-valued-at-request
 		// Traceability: openspec:analytics/performance#scenario-open-position-average-and-mark
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 130m, At(120)));
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(ShortSymbol, 90m, At(121)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(LongSymbol, 130m, At(120)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(ShortSymbol, 90m, At(121)));
 		var positions = new[]
 		{
 			OpenPosition(LongSymbol, FirstConstructionId, 0.5m, 120m, 12.5m),
@@ -84,36 +84,36 @@ public class UnrealizedPnlMarkEvaluatorTests
 		// Act
 		var evaluation = await _evaluator.EvaluateAsync(positions);
 
-		// Assert: длинный остаток оценён маркой вверх (130 − 120) × 0.5 = 5,
+		// Assert: длинный остаток оценён котировкой вверх (130 − 120) × 0.5 = 5,
 		// короткий — вниз (90 − 100) × (−1) = 10; знак задаёт знаковый остаток.
 		var longPosition = evaluation.Positions.Single(position => position.Symbol == LongSymbol);
-		Assert.That(longPosition.MarkPrice, Is.EqualTo(130m));
+		Assert.That(longPosition.QuotePrice, Is.EqualTo(130m));
 		Assert.That(longPosition.UnrealizedPnL, Is.EqualTo(5m));
 		var shortPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
-		Assert.That(shortPosition.MarkPrice, Is.EqualTo(90m));
+		Assert.That(shortPosition.QuotePrice, Is.EqualTo(90m));
 		Assert.That(shortPosition.UnrealizedPnL, Is.EqualTo(10m));
-		// Стоимость строится из той же марки: 130 × 0.5 = 65 и 90 × (−1) = −90.
-		Assert.That(longPosition.MarkValue, Is.EqualTo(65m));
-		Assert.That(shortPosition.MarkValue, Is.EqualTo(-90m));
+		// Стоимость строится из той же котировки: 130 × 0.5 = 65 и 90 × (−1) = −90.
+		Assert.That(longPosition.QuoteValue, Is.EqualTo(65m));
+		Assert.That(shortPosition.QuoteValue, Is.EqualTo(-90m));
 
 		// Assert: общий PnL открытых позиций собран из реализованной и
-		// нереализованной частей; закрытая позиция осталась без марки и
+		// нереализованной частей; закрытая позиция осталась без котировки и
 		// нереализованной части, её инструмент у тикеров не запрашивался.
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
 		Assert.That(longPosition.TotalPnL, Is.EqualTo(17.5m));
 		Assert.That(shortPosition.TotalPnL, Is.EqualTo(7.5m));
 		var closedPosition = evaluation.Positions.Single(position => position.Symbol == ClosedSymbol);
-		Assert.That(closedPosition.MarkPrice, Is.Null);
+		Assert.That(closedPosition.QuotePrice, Is.Null);
 		Assert.That(closedPosition.UnrealizedPnL, Is.EqualTo(0m));
 		Assert.That(closedPosition.TotalPnL, Is.EqualTo(9.97m));
-		_markSource.Verify(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()), Times.Once);
-		_markSource.Verify(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()), Times.Once);
-		_markSource.VerifyNoOtherCalls();
+		_quoteSource.Verify(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()), Times.Once);
+		_quoteSource.Verify(source => source.GetFreshQuoteAsync(ShortSymbol, It.IsAny<CancellationToken>()), Times.Once);
+		_quoteSource.VerifyNoOtherCalls();
 
-		// Assert: отметка времени марок — старейшая из полученных марок (12:00),
+		// Assert: отметка времени котировок — старейшая из полученных котировок (12:00),
 		// сбоя нет.
-		Assert.That(evaluation.MarksAsOf, Is.EqualTo(At(120)));
-		Assert.That(evaluation.HasMarkFailure, Is.False);
+		Assert.That(evaluation.QuotesAsOf, Is.EqualTo(At(120)));
+		Assert.That(evaluation.HasQuoteFailure, Is.False);
 
 		// Assert: оценка втекает в итог конструкции — нереализованная часть
 		// суммируется с реализованной и даёт свои проценты от капитала.
@@ -126,20 +126,20 @@ public class UnrealizedPnlMarkEvaluatorTests
 	}
 
 	[TestMethod]
-	[Description("Стоимость открытой позиции — нетто-величина марки и знакового остатка со знаком")]
+	[Description("Стоимость открытой позиции — нетто-величина котировки и знакового остатка со знаком")]
 	public async Task TryIfMarkValueIsNetOfMarkAndResidual()
 	{
-		// Arrange: длинный остаток 2 при марке 120 и короткий остаток −3 при марке
-		// 50; средние цены равны маркам, чтобы нереализованная часть не мешала.
-		// Требование: стоимость открытой позиции — «марка × знаковый остаток»:
+		// Arrange: длинный остаток 2 при котировке 120 и короткий остаток −3 при котировке
+		// 50; средние цены равны котировкам, чтобы нереализованная часть не мешала.
+		// Требование: стоимость открытой позиции — «котировка × знаковый остаток»:
 		// лонг даёт положительную стоимость, шорт — отрицательную.
 		// Traceability: openspec:analytics/performance#scenario-open-position-net-mark-value
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 120m, At(120)));
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(ShortSymbol, 50m, At(121)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(LongSymbol, 120m, At(120)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(ShortSymbol, 50m, At(121)));
 		var positions = new[]
 		{
 			OpenPosition(LongSymbol, FirstConstructionId, 2m, 120m, 0m),
@@ -150,22 +150,22 @@ public class UnrealizedPnlMarkEvaluatorTests
 		var evaluation = await _evaluator.EvaluateAsync(positions);
 
 		// Assert: 120 × 2 = 240 и 50 × (−3) = −150 — знак несёт знаковый остаток.
-		Assert.That(evaluation.Positions.Single(position => position.Symbol == LongSymbol).MarkValue, Is.EqualTo(240m));
-		Assert.That(evaluation.Positions.Single(position => position.Symbol == ShortSymbol).MarkValue, Is.EqualTo(-150m));
+		Assert.That(evaluation.Positions.Single(position => position.Symbol == LongSymbol).QuoteValue, Is.EqualTo(240m));
+		Assert.That(evaluation.Positions.Single(position => position.Symbol == ShortSymbol).QuoteValue, Is.EqualTo(-150m));
 	}
 
 	[TestMethod]
-	[Description("Закрытая позиция и сбой марки оставляют стоимость null")]
+	[Description("Закрытая позиция и сбой котировки оставляют стоимость null")]
 	public async Task TryIfClosedPositionAndMarkFailureLeaveNoMarkValue()
 	{
 		// Arrange: закрытая позиция с нулевым остатком и открытый остаток ETH;
-		// марка ETH недоступна — биржа отвечает ошибкой.
-		// Требование: закрытая позиция стоимости не имеет; сбой марок гасит
+		// котировка ETH недоступна — биржа отвечает ошибкой.
+		// Требование: закрытая позиция стоимости не имеет; сбой котировок гасит
 		// стоимость открытой ноги, не трогая реализованные метрики.
 		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-mark-value
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-mark-value
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(ShortSymbol, It.IsAny<CancellationToken>()))
 			.ThrowsAsync(new BybitApiException(10001, "params error"));
 		var positions = new[]
 		{
@@ -177,12 +177,12 @@ public class UnrealizedPnlMarkEvaluatorTests
 		var evaluation = await _evaluator.EvaluateAsync(positions);
 
 		// Assert: обе стоимости null, реализованный результат открытой позиции
-		// остался без изменений, сбой марки отмечен.
-		Assert.That(evaluation.Positions.Single(position => position.Symbol == LongSymbol).MarkValue, Is.Null);
+		// остался без изменений, сбой котировки отмечен.
+		Assert.That(evaluation.Positions.Single(position => position.Symbol == LongSymbol).QuoteValue, Is.Null);
 		var openPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
-		Assert.That(openPosition.MarkValue, Is.Null);
+		Assert.That(openPosition.QuoteValue, Is.Null);
 		Assert.That(openPosition.RealizedPnL, Is.EqualTo(-2.5m));
-		Assert.That(evaluation.HasMarkFailure, Is.True);
+		Assert.That(evaluation.HasQuoteFailure, Is.True);
 	}
 
 	[TestMethod]
@@ -190,40 +190,40 @@ public class UnrealizedPnlMarkEvaluatorTests
 	public async Task TryIfPriceChangePercentFollowsMarkAndResidualSign()
 	{
 		// Arrange: длинный и короткий остатки со средней ценой остатка 100;
-		// первая волна марок — 110 у обоих инструментов, вторая — 95 у лонга
+		// первая волна котировок — 110 у обоих инструментов, вторая — 95 у лонга
 		// и 90 у шорта.
-		// Требование: процент изменения цены открытого остатка — движение марки
+		// Требование: процент изменения цены открытого остатка — движение котировки
 		// от средней цены остатка, приведённое к направлению позиции: плюс всегда
 		// означает движение цены «в прибыль».
 		// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
 		// Traceability: openspec:analytics/performance#scenario-long-remainder-price-change-follows-mark
 		// Traceability: openspec:analytics/performance#scenario-short-remainder-price-change-sign-flipped
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 110m, At(120)));
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(ShortSymbol, 110m, At(121)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(LongSymbol, 110m, At(120)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(ShortSymbol, 110m, At(121)));
 		var positions = new[]
 		{
 			OpenPosition(LongSymbol, FirstConstructionId, 1m, 100m, 0m),
 			OpenPosition(ShortSymbol, FirstConstructionId, -1m, 100m, 0m),
 		};
 
-		// Act: первая волна марок — цена ушла от средней вверх.
+		// Act: первая волна котировок — цена ушла от средней вверх.
 		var upEvaluation = await _evaluator.EvaluateAsync(positions);
 
 		// Assert: рост цены лонгу в прибыль: +10%; шорту — против: −10%.
 		Assert.That(upEvaluation.Positions.Single(position => position.Symbol == LongSymbol).PriceChangePercent, Is.EqualTo(10m));
 		Assert.That(upEvaluation.Positions.Single(position => position.Symbol == ShortSymbol).PriceChangePercent, Is.EqualTo(-10m));
 
-		// Act: вторая волна марок — цена ушла от средней вниз.
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 95m, At(130)));
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(ShortSymbol, 90m, At(131)));
+		// Act: вторая волна котировок — цена ушла от средней вниз.
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(LongSymbol, 95m, At(130)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(ShortSymbol, 90m, At(131)));
 		var downEvaluation = await _evaluator.EvaluateAsync(positions);
 
 		// Assert: падение цены лонгу в убыток: −5%; шорту — в прибыль: +10%.
@@ -232,17 +232,17 @@ public class UnrealizedPnlMarkEvaluatorTests
 	}
 
 	[TestMethod]
-	[Description("Закрытая позиция и сбой марок оставляют процент изменения цены null")]
+	[Description("Закрытая позиция и сбой котировок оставляют процент изменения цены null")]
 	public async Task TryIfClosedPositionAndMarkFailureLeaveNoPriceChangePercent()
 	{
-		// Arrange: закрытая позиция и открытый остаток ETH; марка ETH недоступна —
+		// Arrange: закрытая позиция и открытый остаток ETH; котировка ETH недоступна —
 		// биржа отвечает ошибкой.
-		// Требование: закрытая позиция процента не имеет; сбой марок гасит процент
+		// Требование: закрытая позиция процента не имеет; сбой котировок гасит процент
 		// открытой ноги, не трогая реализованные метрики и комиссии.
 		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-price-change
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-price-change
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(ShortSymbol, It.IsAny<CancellationToken>()))
 			.ThrowsAsync(new BybitApiException(10001, "params error"));
 		var positions = new[]
 		{
@@ -254,27 +254,27 @@ public class UnrealizedPnlMarkEvaluatorTests
 		var evaluation = await _evaluator.EvaluateAsync(positions);
 
 		// Assert: оба процента null, реализованный результат и комиссии открытой
-		// позиции остались живыми, сбой марки отмечен.
+		// позиции остались живыми, сбой котировки отмечен.
 		Assert.That(evaluation.Positions.Single(position => position.Symbol == LongSymbol).PriceChangePercent, Is.Null);
 		var openPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
 		Assert.That(openPosition.PriceChangePercent, Is.Null);
 		Assert.That(openPosition.RealizedPnL, Is.EqualTo(-2.5m));
 		Assert.That(openPosition.AccumulatedFees, Is.EqualTo(0.03m));
-		Assert.That(evaluation.HasMarkFailure, Is.True);
+		Assert.That(evaluation.HasQuoteFailure, Is.True);
 	}
 
 	[TestMethod]
-	[Description("Сбой марок обнуляет только нереализованную часть и отметку времени")]
+	[Description("Сбой котировок обнуляет только нереализованную часть и отметку времени")]
 	public async Task TryIfMarkFailureNullsOnlyUnrealizedPart()
 	{
 		// Arrange: закрытая позиция с результатом 9.97, открытый остаток ETH и
-		// корректировка +20; биржа отвечает ошибкой конверта на запрос марки ETH.
+		// корректировка +20; биржа отвечает ошибкой конверта на запрос котировки ETH.
 		// Требование: при недоступности тикеров нереализованный PnL и отметка
-		// времени марок — null с признаком ошибки, реализованный PnL, комиссии,
+		// времени котировок — null с признаком ошибки, реализованный PnL, комиссии,
 		// даты и проценты возвращаются без изменений.
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-unrealized-only
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(ShortSymbol, It.IsAny<CancellationToken>()))
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(ShortSymbol, It.IsAny<CancellationToken>()))
 			.ThrowsAsync(new BybitApiException(10001, "params error"));
 		var positions = new[]
 		{
@@ -288,18 +288,18 @@ public class UnrealizedPnlMarkEvaluatorTests
 		var metrics = _constructionCalculator.Calculate(
 			FirstConstructionId, 1000m, evaluation.Positions, adjustments, Now);
 
-		// Assert: открытый остаток остался без марки и оценки, отметка времени
-		// марок — null с признаком сбоя. Марка позиции деградировала в null
-		// вместе с нереализованным PnL — часть сценария средней и марки
+		// Assert: открытый остаток остался без котировки и оценки, отметка времени
+		// котировок — null с признаком сбоя. Котировка позиции деградировала в null
+		// вместе с нереализованным PnL — часть сценария средней и котировки
 		// открытой позиции; общий PnL остался null вместе с ними.
 		// Traceability: openspec:analytics/performance#scenario-open-position-average-and-mark
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-mark-failure
 		var openPosition = evaluation.Positions.Single(position => position.Symbol == ShortSymbol);
-		Assert.That(openPosition.MarkPrice, Is.Null);
+		Assert.That(openPosition.QuotePrice, Is.Null);
 		Assert.That(openPosition.UnrealizedPnL, Is.Null);
 		Assert.That(openPosition.TotalPnL, Is.Null);
-		Assert.That(evaluation.MarksAsOf, Is.Null);
-		Assert.That(evaluation.HasMarkFailure, Is.True);
+		Assert.That(evaluation.QuotesAsOf, Is.Null);
+		Assert.That(evaluation.HasQuoteFailure, Is.True);
 
 		// Assert: реализованный PnL, корректировки, даты и их проценты не
 		// изменились; нереализованная часть и итог деградировали в null.
@@ -320,13 +320,13 @@ public class UnrealizedPnlMarkEvaluatorTests
 	[Description("Недоступность сети до тикеров деградирует так же, как ошибка биржи")]
 	public async Task TryIfNetworkFailureNullsUnrealizedPart()
 	{
-		// Arrange: открытый остаток; источник марок падает сетевой ошибкой —
+		// Arrange: открытый остаток; источник котировок падает сетевой ошибкой —
 		// сеть до публичных тикеров не дошла.
 		// Требование: недоступность тикеров в момент запроса — деградация оценки,
 		// а не сбой чтения метрик.
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-unrealized-only
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
 			.ThrowsAsync(new HttpRequestException("Соединение не установлено"));
 		var positions = new[] { OpenPosition(LongSymbol, FirstConstructionId, 0.5m, 120m, 12.5m) };
 
@@ -336,22 +336,22 @@ public class UnrealizedPnlMarkEvaluatorTests
 		// Assert: остаток без оценки, отметка времени — null с признаком сбоя.
 		var openPosition = evaluation.Positions.Single();
 		Assert.That(openPosition.UnrealizedPnL, Is.Null);
-		Assert.That(openPosition.MarkPrice, Is.Null);
-		Assert.That(evaluation.MarksAsOf, Is.Null);
-		Assert.That(evaluation.HasMarkFailure, Is.True);
+		Assert.That(openPosition.QuotePrice, Is.Null);
+		Assert.That(evaluation.QuotesAsOf, Is.Null);
+		Assert.That(evaluation.HasQuoteFailure, Is.True);
 	}
 
 	[TestMethod]
 	[Description("Таймаут тикеров деградирует в null нереализованной части")]
 	public async Task TryIfTimeoutNullsUnrealizedPart()
 	{
-		// Arrange: открытый остаток; запрос марки истёк по таймауту — тикеры
+		// Arrange: открытый остаток; запрос котировки истёк по таймауту — тикеры
 		// недоступны в момент запроса.
 		// Требование: таймаут — та же деградация, отмена по токену под неё
 		// не попадает.
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-unrealized-only
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
 			.ThrowsAsync(new TaskCanceledException("Таймаут запроса", new TimeoutException()));
 		var positions = new[] { OpenPosition(LongSymbol, FirstConstructionId, 0.5m, 120m, 12.5m) };
 
@@ -360,23 +360,23 @@ public class UnrealizedPnlMarkEvaluatorTests
 
 		// Assert: оценка деградировала без подъёма ошибки наружу.
 		Assert.That(evaluation.Positions.Single().UnrealizedPnL, Is.Null);
-		Assert.That(evaluation.MarksAsOf, Is.Null);
-		Assert.That(evaluation.HasMarkFailure, Is.True);
+		Assert.That(evaluation.QuotesAsOf, Is.Null);
+		Assert.That(evaluation.HasQuoteFailure, Is.True);
 	}
 
 	[TestMethod]
-	[Description("Марка без инструмента деградирует в null только нереализованной части")]
+	[Description("Котировка без инструмента деградирует в null только нереализованной части")]
 	public async Task TryIfMissingInstrumentMarkDegradesUnrealizedOnly()
 	{
-		// Arrange: открытый остаток; биржа не отдала марку инструмента либо
+		// Arrange: открытый остаток; биржа не отдала котировку инструмента либо
 		// инструмент неизвестен справочнику — источнику оценки не из чего
 		// построиться.
-		// Требование: без марки нереализованная часть и отметка времени — null
+		// Требование: без котировки нереализованная часть и отметка времени — null
 		// с признаком ошибки, остальные метрики позиции не трогаются.
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-unrealized-only
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync((InstrumentMarkSnapshot?)null);
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync((InstrumentQuoteSnapshot?)null);
 		var positions = new[] { OpenPosition(LongSymbol, FirstConstructionId, 0.5m, 120m, 12.5m) };
 
 		// Act
@@ -387,11 +387,11 @@ public class UnrealizedPnlMarkEvaluatorTests
 		var openPosition = evaluation.Positions.Single();
 		Assert.That(openPosition.RealizedPnL, Is.EqualTo(12.5m));
 		Assert.That(openPosition.AverageOpenPrice, Is.EqualTo(120m));
-		Assert.That(openPosition.MarkPrice, Is.Null);
+		Assert.That(openPosition.QuotePrice, Is.Null);
 		Assert.That(openPosition.UnrealizedPnL, Is.Null);
 		Assert.That(openPosition.TotalPnL, Is.Null);
-		Assert.That(evaluation.MarksAsOf, Is.Null);
-		Assert.That(evaluation.HasMarkFailure, Is.True);
+		Assert.That(evaluation.QuotesAsOf, Is.Null);
+		Assert.That(evaluation.HasQuoteFailure, Is.True);
 	}
 
 	[TestMethod]
@@ -399,14 +399,14 @@ public class UnrealizedPnlMarkEvaluatorTests
 	public async Task TryIfTotalPnLCombinesRealizedAndUnrealizedParts()
 	{
 		// Arrange: длинный открытый остаток 0.5 со средней 120 и реализованным 12.5;
-		// марка 130 даёт нереализованную оценку (130 − 120) × 0.5 = 5.
+		// котировка 130 даёт нереализованную оценку (130 − 120) × 0.5 = 5.
 		// Требование: общий PnL открытой позиции равен сумме реализованного PnL
 		// и нереализованной оценки; у закрытой позиции общий PnL равен
-		// реализованному и марок не требует вовсе.
+		// реализованному и котировок не требует вовсе.
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 130m, At(120)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(LongSymbol, 130m, At(120)));
 		var positions = new[]
 		{
 			OpenPosition(LongSymbol, FirstConstructionId, 0.5m, 120m, 12.5m),
@@ -423,18 +423,18 @@ public class UnrealizedPnlMarkEvaluatorTests
 		Assert.That(openPosition.TotalPnL, Is.EqualTo(17.5m));
 		var closedPosition = evaluation.Positions.Single(position => position.Symbol == ClosedSymbol);
 		Assert.That(closedPosition.TotalPnL, Is.EqualTo(9.97m));
-		_markSource.Verify(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()), Times.Once);
-		_markSource.VerifyNoOtherCalls();
+		_quoteSource.Verify(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()), Times.Once);
+		_quoteSource.VerifyNoOtherCalls();
 	}
 
 	[TestMethod]
-	[Description("Закрытые позиции не запрашивают марок: отметки времени нет без сбоя")]
+	[Description("Закрытые позиции не запрашивают котировок: отметки времени нет без сбоя")]
 	public async Task TryIfClosedPositionsRequireNoMarks()
 	{
 		// Arrange: только закрытые позиции — нереализованной части нет ни у одной,
 		// тикеры не запрашиваются вовсе.
 		// Требование: закрытая позиция не имеет нереализованной части и не требует
-		// марок; отметка времени марок не нужна.
+		// котировок; отметка времени котировок не нужна.
 		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-unrealized
 		var positions = new[]
 		{
@@ -447,23 +447,23 @@ public class UnrealizedPnlMarkEvaluatorTests
 
 		// Assert: позиции не тронуты, сетевых обращений нет, сбоя нет.
 		Assert.That(evaluation.Positions.All(position => position.UnrealizedPnL == 0m), Is.True);
-		Assert.That(evaluation.MarksAsOf, Is.Null);
-		Assert.That(evaluation.HasMarkFailure, Is.False);
-		_markSource.VerifyNoOtherCalls();
+		Assert.That(evaluation.QuotesAsOf, Is.Null);
+		Assert.That(evaluation.HasQuoteFailure, Is.False);
+		_quoteSource.VerifyNoOtherCalls();
 	}
 
 	[TestMethod]
-	[Description("Марка инструмента запрашивается один раз на все позиции с ним")]
+	[Description("Котировка инструмента запрашивается один раз на все позиции с ним")]
 	public async Task TryIfSingleSymbolIsFetchedOnceForAllItsPositions()
 	{
 		// Arrange: два открытых остатка одного инструмента в разных конструкциях —
-		// марка инструмента общая.
-		// Требование: марка позиции и оценка нереализованной части берутся тем же
+		// котировка инструмента общая.
+		// Требование: котировка позиции и оценка нереализованной части берутся тем же
 		// запросом к тикерам, без повторных обращений на тот же инструмент.
 		// Traceability: change:add-analytics/design#d1
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new InstrumentMarkSnapshot(LongSymbol, 130m, At(120)));
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new InstrumentQuoteSnapshot(LongSymbol, 130m, At(120)));
 		var positions = new[]
 		{
 			OpenPosition(LongSymbol, FirstConstructionId, 0.5m, 120m, 12.5m),
@@ -473,14 +473,14 @@ public class UnrealizedPnlMarkEvaluatorTests
 		// Act
 		var evaluation = await _evaluator.EvaluateAsync(positions);
 
-		// Assert: один запрос на инструмент, оба остатка оценены той же маркой:
+		// Assert: один запрос на инструмент, оба остатка оценены той же котировкой:
 		// первый (130 − 120) × 0.5 = 5, второй (130 − 125) × (−0.2) = −1.
-		_markSource.Verify(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()), Times.Once);
-		_markSource.VerifyNoOtherCalls();
+		_quoteSource.Verify(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()), Times.Once);
+		_quoteSource.VerifyNoOtherCalls();
 		Assert.That(evaluation.Positions[0].UnrealizedPnL, Is.EqualTo(5m));
 		Assert.That(evaluation.Positions[1].UnrealizedPnL, Is.EqualTo(-1m));
-		Assert.That(evaluation.MarksAsOf, Is.EqualTo(At(120)));
-		Assert.That(evaluation.HasMarkFailure, Is.False);
+		Assert.That(evaluation.QuotesAsOf, Is.EqualTo(At(120)));
+		Assert.That(evaluation.HasQuoteFailure, Is.False);
 	}
 
 	[TestMethod]
@@ -488,11 +488,11 @@ public class UnrealizedPnlMarkEvaluatorTests
 	[ExpectedException(typeof(OperationCanceledException))]
 	public async Task ThrowOnCancelledEvaluationPropagates()
 	{
-		// Arrange: открытый остаток; источник марок отменён по токену пользователя.
+		// Arrange: открытый остаток; источник котировок отменён по токену пользователя.
 		// Отмена — не сбой тикеров: она поднимается вызывающему коду, а не
 		// превращается в деградацию нереализованной части.
-		_markSource
-			.Setup(source => source.GetFreshMarkAsync(LongSymbol, It.IsAny<CancellationToken>()))
+		_quoteSource
+			.Setup(source => source.GetFreshQuoteAsync(LongSymbol, It.IsAny<CancellationToken>()))
 			.ThrowsAsync(new OperationCanceledException());
 		var positions = new[] { OpenPosition(LongSymbol, FirstConstructionId, 0.5m, 120m, 12.5m) };
 
@@ -510,12 +510,12 @@ public class UnrealizedPnlMarkEvaluatorTests
 	}
 
 	[TestMethod]
-	[Description("Оценщик без источника марок не создаётся")]
+	[Description("Оценщик без источника котировок не создаётся")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnMissingMarkSource()
 	{
 		// Arrange — Act — Assert
-		new UnrealizedPnlMarkEvaluator(null!);
+		new UnrealizedPnlQuoteEvaluator(null!);
 	}
 
 	#region Помощники
@@ -539,14 +539,14 @@ public class UnrealizedPnlMarkEvaluatorTests
 		AverageEntryPrice = null,
 		AverageClosePrice = null,
 		TotalPnL = null,
-		MarkPrice = null,
+		QuotePrice = null,
 		UnrealizedPnL = null,
 		OpenedAt = At(10),
 		ClosedAt = null,
 		Duration = null,
 	};
 
-	/// <summary>Строит метрики закрытой позиции: нулевой остаток и нереализованный ноль без марки.</summary>
+	/// <summary>Строит метрики закрытой позиции: нулевой остаток и нереализованный ноль без котировки.</summary>
 	private static PositionMetrics ClosedPosition(string symbol, long constructionId, decimal realizedPnL) => new()
 	{
 		ConstructionId = constructionId,
@@ -558,7 +558,7 @@ public class UnrealizedPnlMarkEvaluatorTests
 		AverageEntryPrice = null,
 		AverageClosePrice = null,
 		TotalPnL = realizedPnL,
-		MarkPrice = null,
+		QuotePrice = null,
 		UnrealizedPnL = 0m,
 		OpenedAt = At(0),
 		ClosedAt = At(30),

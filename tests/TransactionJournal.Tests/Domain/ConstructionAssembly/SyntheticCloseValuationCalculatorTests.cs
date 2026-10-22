@@ -14,7 +14,7 @@ namespace TransactionJournal.Tests.Domain.ConstructionAssembly;
 /// <summary>
 /// Проверки расчёта паритетного лока «зафиксировано синтетикой»: формула
 /// кейса XAUT 15.10.2026 (≈ +35.7 USDT), количество-взвешенная стоимость
-/// входа по нескольким сделкам ноги и вычисление при недоступных марках.
+/// входа по нескольким сделкам ноги и вычисление при недоступных котировках.
 /// Негативные проверки отклоняют незаданные входы и поток ноги без сделок
 /// входа.
 /// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-locked-value-to-expiry
@@ -123,13 +123,13 @@ public class SyntheticCloseValuationCalculatorTests
 	}
 
 	[TestMethod]
-	[Description("Величина лока вычисляется при недоступных марках — деградация затрагивает только нереализованные метрики")]
-	// Сбой источника свежих марок не влияет на паритетный лок: строка
+	[Description("Величина лока вычисляется при недоступных котировках — деградация затрагивает только нереализованные метрики")]
+	// Сбой источника свежих котировок не влияет на паритетный лок: строка
 	// вычисляется, метрики деградируют, а не падают.
 	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-locked-value-marks-failure-independent
 	public async Task TryIfLockedValueComputesWhenMarksUnavailable()
 	{
-		// Arrange: полный состав кейса XAUT и падающий источник марок.
+		// Arrange: полный состав кейса XAUT и падающий источник котировок.
 		var openCall = new PositionFifoEntry { At = OpenTime(), Kind = PositionFifoEntryKind.Trade, SourceKey = "open-call", Quantity = 0.5m, Price = 12m, Fee = 0.6m };
 		var openPut = new PositionFifoEntry { At = OpenTime(), Kind = PositionFifoEntryKind.Trade, SourceKey = "open-put", Quantity = 0.5m, Price = 139m, Fee = 1.5m };
 		var positions = new List<PositionMetrics>
@@ -139,13 +139,13 @@ public class SyntheticCloseValuationCalculatorTests
 		};
 
 		// Act: пересбор метрик при сбое котировок и расчёт лока той же связки.
-		var evaluation = await new UnrealizedPnlMarkEvaluator(new FailingMarkSource())
+		var evaluation = await new UnrealizedPnlQuoteEvaluator(new FailingQuoteSource())
 			.EvaluateAsync(positions);
 		var locked = SyntheticCloseValuationCalculator.CalculateToExpiry(XautLink(), XautValuation());
 
 		// Assert: лок вычислен точно, деградация коснулась только нереализованных метрик.
 		Assert.That(locked, Is.EqualTo(35.697m));
-		Assert.That(evaluation.HasMarkFailure, Is.True);
+		Assert.That(evaluation.HasQuoteFailure, Is.True);
 		Assert.That(evaluation.Positions.Select(position => position.UnrealizedPnL), Has.All.Null);
 	}
 
@@ -184,7 +184,7 @@ public class SyntheticCloseValuationCalculatorTests
 		{
 			ClosedLegEntries =
 			[
-				new PositionFifoEntry { At = OpenTime(), Kind = PositionFifoEntryKind.ManualMark, SourceKey = "put-note", Quantity = 0.5m, Price = 139m, Fee = 0m },
+				new PositionFifoEntry { At = OpenTime(), Kind = PositionFifoEntryKind.ManualAnnotation, SourceKey = "put-note", Quantity = 0.5m, Price = 139m, Fee = 0m },
 			],
 		};
 
@@ -192,10 +192,10 @@ public class SyntheticCloseValuationCalculatorTests
 			() => SyntheticCloseValuationCalculator.CalculateToExpiry(XautLink(), valuation));
 	}
 
-	/// <summary>Заглушка сбоя: свежая марка всегда недоступна — сеть до публичных тикеров не доходит.</summary>
-	private sealed class FailingMarkSource : IFreshInstrumentMarkSource
+	/// <summary>Заглушка сбоя: свежая котировка всегда недоступна — сеть до публичных тикеров не доходит.</summary>
+	private sealed class FailingQuoteSource : IFreshInstrumentQuoteSource
 	{
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
 			throw new HttpRequestException("публичные тикеры недоступны");
 	}
 }

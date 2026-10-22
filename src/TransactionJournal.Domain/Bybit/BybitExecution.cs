@@ -111,7 +111,7 @@ public sealed class BybitExecution
 	[JsonPropertyName("tradeIv")]
 	public decimal? TradeIv { get; init; }
 
-	/// <summary>Подразумеваемая волатильность марки; только для категории option.</summary>
+	/// <summary>Подразумеваемая волатильность котировки; только для категории option.</summary>
 	[JsonPropertyName("markIv")]
 	public decimal? MarkIv { get; init; }
 

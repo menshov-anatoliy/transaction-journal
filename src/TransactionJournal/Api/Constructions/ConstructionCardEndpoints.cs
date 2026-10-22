@@ -196,20 +196,20 @@ public static class ConstructionCardEndpoints
 					errorPrefix: "Удаление не выполнено");
 			});
 
-			// Последняя известная марка инструмента — предзаполнение формы пометки
-		// закрытия: SPA спрашивает величину при открытии формы, пустая марка
+			// Последняя известная котировка инструмента — предзаполнение формы пометки
+		// закрытия: SPA спрашивает величину при открытии формы, пустая котировка
 		// оставляет цену домену.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 		group.MapGet("/{constructionId:long}/positions/{symbol}/last-mark", async (
 			long constructionId,
 			string symbol,
-			IInstrumentMarkSource markSource,
+			IInstrumentQuoteSource quoteSource,
 			CancellationToken cancellationToken) =>
 		{
 			try
 			{
-				var mark = await markSource.GetLastMarkAsync(symbol, cancellationToken);
-				return Results.Json(new LastInstrumentMarkResponse(mark));
+				var quote = await quoteSource.GetLastQuoteAsync(symbol, cancellationToken);
+				return Results.Json(new LastInstrumentQuoteResponse(quote));
 			}
 			catch (Exception exception) when (exception is ArgumentException)
 			{
@@ -227,41 +227,41 @@ public static class ConstructionCardEndpoints
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 		group.MapPost("/{constructionId:long}/close-marks", async (
 			long constructionId,
-			AddManualCloseMarkRequest request,
-			IManualCloseMarkService marks,
+			AddManualCloseAnnotationRequest request,
+			IManualCloseAnnotationService quotes,
 			CancellationToken cancellationToken) =>
 		{
 			return await RunMarkCommand(
-				() => marks.AddAsync(constructionId, request.Symbol, request.MarkedAt, request.Price, request.Quantity, cancellationToken),
+				() => quotes.AddAsync(constructionId, request.Symbol, request.AnnotatedAt, request.Price, request.Quantity, cancellationToken),
 				errorPrefix: "Пометка закрытия не поставлена");
 		});
 
 		// Правка ручной пометки из таблицы закрывающих записей: инструмент,
 		// время, цена и количество правятся свободно, пустая цена возвращает
-		// пометку к последней марке при чтении, пустое количество — к закрытию
+		// пометку к последней котировке при чтении, пустое количество — к закрытию
 		// всего остатка.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-		api.MapPut("/close-marks/{markId:long}", async (
-			long markId,
-			EditManualCloseMarkRequest request,
-			IManualCloseMarkService marks,
+		api.MapPut("/close-marks/{annotationId:long}", async (
+			long annotationId,
+			EditManualCloseAnnotationRequest request,
+			IManualCloseAnnotationService quotes,
 			CancellationToken cancellationToken) =>
 		{
 			return await RunMarkCommand(
-				() => marks.EditAsync(markId, request.Symbol, request.MarkedAt, request.Price, request.Quantity, cancellationToken),
+				() => quotes.EditAsync(annotationId, request.Symbol, request.AnnotatedAt, request.Price, request.Quantity, cancellationToken),
 				errorPrefix: "Правка пометки не выполнена");
 		});
 
 		// Удаление ручной пометки — позиция возвращается в открытое состояние
 		// ближайшим чтением.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-		api.MapDelete("/close-marks/{markId:long}", async (
-			long markId,
-			IManualCloseMarkService marks,
+		api.MapDelete("/close-marks/{annotationId:long}", async (
+			long annotationId,
+			IManualCloseAnnotationService quotes,
 			CancellationToken cancellationToken) =>
 		{
 			return await RunMarkCommand(
-				() => marks.DeleteAsync(markId, cancellationToken),
+				() => quotes.DeleteAsync(annotationId, cancellationToken),
 				errorPrefix: "Удаление пометки не выполнено");
 		});
 
@@ -699,8 +699,8 @@ public static class ConstructionCardEndpoints
 		SerializeUnit(data.ProfitUnit),
 		data.Comment,
 		data.HasOpenResidual,
-		data.HasMarkFailure,
-		data.MarksAsOf,
+		data.HasQuoteFailure,
+		data.QuotesAsOf,
 		// Метрики карточки публикуют реальный риск со статусом состояния:
 		// индикатору карточки нужна граница конечного риска, величина
 		// и состояние проходят из метрик аналитики.
@@ -714,7 +714,7 @@ public static class ConstructionCardEndpoints
 			data.Metrics.RealizedPnLPercent,
 			data.Metrics.UnrealizedPnLPercent,
 			data.Metrics.AdjustmentsPnLPercent,
-			data.Metrics.MarkValue,
+			data.Metrics.QuoteValue,
 			data.Metrics.CapitalUsagePercent,
 			data.Metrics.RealRiskUsdt,
 			// Худший исход публикуется рядом с реальным риском: знаковая
@@ -758,7 +758,7 @@ public static class ConstructionCardEndpoints
 			position.ClosedAt,
 			position.IsOpen,
 			position.Comment,
-			position.MarkValue,
+			position.QuoteValue,
 			position.PriceChangePercent,
 			position.SyntheticResidual,
 			position.OtherResidual,
@@ -801,7 +801,7 @@ public static class ConstructionCardEndpoints
 			entry.Quantity,
 			entry.Price,
 			entry.AmountUsdt,
-			entry.ManualMarkId)).ToArray(),
+			entry.ManualAnnotationId)).ToArray(),
 		data.ClosingWarnings.Select(warning => new ConstructionCardClosingWarningResponse(
 			SerializeClosingKind(warning.Kind),
 			warning.Symbol,
@@ -925,7 +925,7 @@ public static class ConstructionCardEndpoints
 	{
 		PositionClosingKind.Delivery => "delivery",
 		PositionClosingKind.OtmExpiry => "otm-expiry",
-		PositionClosingKind.ManualMark => "manual-mark",
+		PositionClosingKind.ManualAnnotation => "manual-mark",
 		_ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
 	};
 
@@ -951,8 +951,8 @@ public static class ConstructionCardEndpoints
 /// <param name="ProfitUnit">Единица ввода профита — первоисточник; null, когда профит не задан.</param>
 /// <param name="Comment">Комментарий конструкции в Markdown; null — комментария нет.</param>
 /// <param name="HasOpenResidual">У конструкции есть открытый остаток.</param>
-/// <param name="HasMarkFailure">Сбой котировок оставил нереализованную оценку непостроенной.</param>
-/// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое или без остатков.</param>
+/// <param name="HasQuoteFailure">Сбой котировок оставил нереализованную оценку непостроенной.</param>
+/// <param name="QuotesAsOf">Отметка времени котировок оценки; null при сбое или без остатков.</param>
 /// <param name="Metrics">Метрики: итог с разбивкой, стоимость, занятость и период.</param>
 /// <param name="Positions">Строки таблицы позиций.</param>
 /// <param name="Trades">Строки таблицы сделок.</param>
@@ -981,8 +981,8 @@ public sealed record ConstructionCardResponse(
 	string? ProfitUnit,
 	string? Comment,
 	bool HasOpenResidual,
-	bool HasMarkFailure,
-	DateTimeOffset? MarksAsOf,
+	bool HasQuoteFailure,
+	DateTimeOffset? QuotesAsOf,
 	ConstructionCardMetricsResponse Metrics,
 	IReadOnlyList<ConstructionCardPositionResponse> Positions,
 	IReadOnlyList<ConstructionCardTradeResponse> Trades,
@@ -994,14 +994,14 @@ public sealed record ConstructionCardResponse(
 
 /// <summary>Метрики карточки: сводка kstrip с периодом и длительностью.</summary>
 /// <param name="RealizedPnL">Реализованный PnL конструкции.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое марок.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое котировок.</param>
 /// <param name="AdjustmentsPnL">Сумма внешних корректировок PnL.</param>
-/// <param name="TotalPnL">Итог конструкции; null при сбое марок.</param>
+/// <param name="TotalPnL">Итог конструкции; null при сбое котировок.</param>
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
 /// <param name="RealizedPnLPercent">Реализованный PnL в процентах; null без базы.</param>
 /// <param name="UnrealizedPnLPercent">Нереализованный PnL в процентах; null без базы или при сбое.</param>
 /// <param name="AdjustmentsPnLPercent">Корректировки в процентах; null без базы.</param>
-/// <param name="MarkValue">Стоимость открытых остатков по маркам; null без остатков или при сбое.</param>
+/// <param name="QuoteValue">Стоимость открытых остатков по котировкам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
 /// <param name="WorstCaseUsdt">Худший исход в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
@@ -1036,7 +1036,7 @@ public sealed record ConstructionCardMetricsResponse(
 	decimal? RealizedPnLPercent,
 	decimal? UnrealizedPnLPercent,
 	decimal? AdjustmentsPnLPercent,
-	decimal? MarkValue,
+	decimal? QuoteValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
 	decimal? WorstCaseUsdt,
@@ -1056,23 +1056,23 @@ public sealed record ConstructionCardMetricsResponse(
 /// <param name="AverageClosePrice">Средняя цена закрытия; null без закрывающих частей.</param>
 /// <param name="RealizedPnL">Реализованный PnL позиции.</param>
 /// <param name="RealizedPnLPercent">Реализованный PnL процентом от капитала; null без базы.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое марок, у закрытой — null.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое котировок, у закрытой — null.</param>
 /// <param name="UnrealizedPnLPercent">Нереализованный PnL процентом; null вместе с ним.</param>
-/// <param name="TotalPnL">Общий PnL позиции; null при сбое марок у открытой.</param>
+/// <param name="TotalPnL">Общий PnL позиции; null при сбое котировок у открытой.</param>
 /// <param name="TotalPnLPercent">Общий PnL процентом; null без базы.</param>
 /// <param name="AccumulatedFees">Накопленные комиссии со знаком.</param>
 /// <param name="OpenedAt">Время открытия — первая запись позиции.</param>
 /// <param name="ClosedAt">Время закрытия; null, пока открыта.</param>
 /// <param name="IsOpen">Позиция открыта — остаток не нулевой.</param>
 /// <param name="Comment">Комментарий позиции в Markdown; null — комментария нет.</param>
-/// <param name="MarkValue">Стоимость остатка по марке; null у закрытой и при сбое марок.</param>
+/// <param name="QuoteValue">Стоимость остатка по котировке; null у закрытой и при сбое котировок.</param>
 /// <param name="PriceChangePercent">Изменение цены остатка в процентах; null у закрытой и при сбое.</param>
 /// <param name="SyntheticResidual">Часть остатка, уведённая неоспоренными синтетическими связками; null без неоспоренного синтетического содержимого.</param>
 /// <param name="OtherResidual">Прочий остаток линейной ноги — остаток минус синтетическая часть; null вместе с синтетической частью.</param>
 /// <param name="DaysToExpiry">Остаток полных суток до экспирации открытой опционной ноги; null у закрытой позиции и фьючерсной ноги.</param>
 /// <param name="DailyDecayUsdt">Дневной распад ноги, USDT/день со знаком остатка; null без тикеров, у закрытой и фьючерсной ног.</param>
 /// <param name="IntrinsicValueUsdt">Внутренняя стоимость ноги на чистый остаток; материал тултипа состава, null без индексной цены.</param>
-/// <param name="TimeValueUsdt">Временная стоимость ноги на чистый остаток; материал тултипа состава, null без индексной цены или марки.</param>
+/// <param name="TimeValueUsdt">Временная стоимость ноги на чистый остаток; материал тултипа состава, null без индексной цены или котировки.</param>
 /// <param name="DecayDayAgoUsdt">Распад ноги на снимке суточной давности; материал динамики «вчера → сегодня», null без снимка истории.</param>
 /// <param name="SyntheticClosedQuantity">Сумма количеств действующих синтетических связок по символу ноги; null — действующих связок по символу нет.</param>
 /// <param name="SyntheticOpenQuantity">Открытая после синтетического закрытия часть ноги — остаток минус закрытое синтетикой, без клэмпа; null вместе с закрытым.</param>
@@ -1103,7 +1103,7 @@ public sealed record ConstructionCardPositionResponse(
 	DateTimeOffset? ClosedAt,
 	bool IsOpen,
 	string? Comment,
-	decimal? MarkValue,
+	decimal? QuoteValue,
 	decimal? PriceChangePercent,
 	decimal? SyntheticResidual,
 	decimal? OtherResidual,
@@ -1172,9 +1172,9 @@ public sealed record ConstructionCardTradeResponse(
 /// <param name="Kind">Вид записи: delivery, otm-expiry или manual-mark.</param>
 /// <param name="Symbol">Инструмент закрываемой позиции.</param>
 /// <param name="Quantity">Знаковое количество, обнулившее остаток.</param>
-/// <param name="Price">Эффективная цена закрытия; null при неизвестной марке.</param>
+/// <param name="Price">Эффективная цена закрытия; null при неизвестной котировке.</param>
 /// <param name="AmountUsdt">Сумма закрытия со знаком; null при неизвестной цене.</param>
-/// <param name="ManualMarkId">Ключ ручной пометки для правки и удаления; null у биржевых записей.</param>
+/// <param name="ManualAnnotationId">Ключ ручной пометки для правки и удаления; null у биржевых записей.</param>
 public sealed record ConstructionCardClosingEntryResponse(
 	DateTimeOffset ClosedAt,
 	string Kind,
@@ -1182,7 +1182,7 @@ public sealed record ConstructionCardClosingEntryResponse(
 	decimal Quantity,
 	decimal? Price,
 	decimal? AmountUsdt,
-	long? ManualMarkId);
+	long? ManualAnnotationId);
 
 /// <summary>Предупреждение об избыточной закрывающей записи.</summary>
 /// <param name="Kind">Вид избыточной записи: delivery, otm-expiry или manual-mark.</param>
@@ -1243,23 +1243,23 @@ public sealed record DeleteConstructionRequest(bool MakeBackup = true);
 /// <param name="Text">Текст комментария в Markdown; null или пробелы снимают комментарий.</param>
 public sealed record SetCommentRequest(string? Text);
 
-/// <summary>Последняя известная марка инструмента для предзаполнения формы пометки.</summary>
-/// <param name="Mark">Марка инструмента; null — марка неизвестна, цену задаст домен при чтении.</param>
-public sealed record LastInstrumentMarkResponse(decimal? Mark);
+/// <summary>Последняя известная котировка инструмента для предзаполнения формы пометки.</summary>
+/// <param name="Quote">Котировка инструмента; null — котировка неизвестна, цену задаст домен при чтении.</param>
+public sealed record LastInstrumentQuoteResponse(decimal? Quote);
 
 /// <summary>Запрос постановки ручной пометки закрытия.</summary>
 /// <param name="Symbol">Инструмент закрываемой позиции.</param>
-/// <param name="MarkedAt">Время пометки — место записи в хронологии.</param>
-/// <param name="Price">Цена закрытия; null — последняя марка при чтении.</param>
+/// <param name="AnnotatedAt">Время пометки — место записи в хронологии.</param>
+/// <param name="Price">Цена закрытия; null — последняя котировка при чтении.</param>
 /// <param name="Quantity">Количество закрываемой позиции; null — весь остаток на момент пометки.</param>
-public sealed record AddManualCloseMarkRequest(string Symbol, DateTimeOffset MarkedAt, decimal? Price, decimal? Quantity);
+public sealed record AddManualCloseAnnotationRequest(string Symbol, DateTimeOffset AnnotatedAt, decimal? Price, decimal? Quantity);
 
 /// <summary>Запрос правки ручной пометки закрытия.</summary>
 /// <param name="Symbol">Инструмент закрываемой позиции.</param>
-/// <param name="MarkedAt">Время пометки — место записи в хронологии.</param>
-/// <param name="Price">Цена закрытия; null — последняя марка при чтении.</param>
+/// <param name="AnnotatedAt">Время пометки — место записи в хронологии.</param>
+/// <param name="Price">Цена закрытия; null — последняя котировка при чтении.</param>
 /// <param name="Quantity">Количество закрываемой позиции; null — весь остаток на момент пометки.</param>
-public sealed record EditManualCloseMarkRequest(string Symbol, DateTimeOffset MarkedAt, decimal? Price, decimal? Quantity);
+public sealed record EditManualCloseAnnotationRequest(string Symbol, DateTimeOffset AnnotatedAt, decimal? Price, decimal? Quantity);
 
 /// <summary>Цель переноса сделки: активная конструкция без текущей.</summary>
 /// <param name="ConstructionId">Идентификатор целевой конструкции.</param>

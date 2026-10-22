@@ -40,7 +40,7 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 	public DbSet<PositionComment> PositionComments => Set<PositionComment>();
 
 	/// <summary>Ручные пометки закрытия позиций — пользовательские закрывающие записи.</summary>
-	public DbSet<ManualCloseMark> ManualCloseMarks => Set<ManualCloseMark>();
+	public DbSet<ManualCloseAnnotation> ManualCloseAnnotations => Set<ManualCloseAnnotation>();
 
 	/// <summary>Ручные сделки — сырьё журнала, внесённое пользователем без синхронизации.</summary>
 	public DbSet<ManualTrade> ManualTrades => Set<ManualTrade>();
@@ -51,8 +51,8 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 	/// <summary>Записи оспаривания синтетических связок — ручные данные логического слоя.</summary>
 	public DbSet<SyntheticCloseDispute> SyntheticCloseDisputes => Set<SyntheticCloseDispute>();
 
-	/// <summary>Кэш последних известных марок инструментов — провайдер марок аналитики.</summary>
-	public DbSet<InstrumentMark> InstrumentMarks => Set<InstrumentMark>();
+	/// <summary>Кэш последних известных котировок инструментов — провайдер котировок аналитики.</summary>
+	public DbSet<InstrumentQuote> InstrumentQuotes => Set<InstrumentQuote>();
 
 	/// <summary>Append-only история рыночных снимков инструментов — материал прироста распада.</summary>
 	public DbSet<InstrumentMarketSnapshot> InstrumentMarketSnapshots => Set<InstrumentMarketSnapshot>();
@@ -172,10 +172,10 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 			.HasForeignKey(comment => comment.ConstructionId)
 			.OnDelete(DeleteBehavior.Cascade);
 
-		modelBuilder.Entity<ManualCloseMark>()
-			.HasOne(mark => mark.Construction)
+		modelBuilder.Entity<ManualCloseAnnotation>()
+			.HasOne(quote => quote.Construction)
 			.WithMany()
-			.HasForeignKey(mark => mark.ConstructionId)
+			.HasForeignKey(quote => quote.ConstructionId)
 			.OnDelete(DeleteBehavior.Cascade);
 
 		// Ручная сделка — сырьё журнала: ConstructionId = null означает «Входящие»,
@@ -221,14 +221,14 @@ public sealed class JournalDbContext(DbContextOptions<JournalDbContext> options)
 
 		#endregion
 
-		#region Кэш марок аналитики
+		#region Кэш котировок аналитики
 
-		// Символ уникален: марка одного инструмента хранится одной строкой, новое
-		// получение марки обновляет её, а не плодит историю — кэш хранит именно
-		// последнюю известную марку со временем получения.
+		// Символ уникален: котировка одного инструмента хранится одной строкой, новое
+		// получение котировки обновляет её, а не плодит историю — кэш хранит именно
+		// последнюю известную котировку со временем получения.
 		// Traceability: openspec:analytics/performance#requirement-mark-provider
-		modelBuilder.Entity<InstrumentMark>()
-			.HasIndex(mark => mark.Symbol)
+		modelBuilder.Entity<InstrumentQuote>()
+			.HasIndex(quote => quote.Symbol)
 			.IsUnique();
 
 		#endregion

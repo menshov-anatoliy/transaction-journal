@@ -43,7 +43,7 @@ public sealed class ConstructionMetricsCalculator
 	/// последней позиции; длительность открытой конструкции считается от первой
 	/// сделки до переданного текущего момента. Реальный риск — наихудший результат
 	/// открытых остатков на экспирации — выводится из структуры ног и средних цен
-	/// открытых остатков и от текущих марок не зависит; в метрики он переносится
+	/// открытых остатков и от текущих котировок не зависит; в метрики он переносится
 	/// вместе со статусом, различающим конечный, неограниченный и нерассчитанный
 	/// риск, без изменения расчёта результата конструкции. Рядом публикуется
 	/// худший исход — реализованный результат плюс неклэмпированный минимум
@@ -110,12 +110,12 @@ public sealed class ConstructionMetricsCalculator
 		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-mark-value
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-mark-value
 		var openResiduals = positionList.Where(position => position.Residual != 0m).ToList();
-		decimal? markValue = openResiduals.Count == 0 || openResiduals.Any(position => position.MarkValue == null)
+		decimal? quoteValue = openResiduals.Count == 0 || openResiduals.Any(position => position.QuoteValue == null)
 			? null
-			: openResiduals.Sum(position => position.MarkValue.GetValueOrDefault());
+			: openResiduals.Sum(position => position.QuoteValue.GetValueOrDefault());
 
 		// Реальный риск — наихудший результат открытых остатков на экспирации:
-		// выводится из структуры ног и средних цен остатков, текущие марки на
+		// выводится из структуры ног и средних цен остатков, текущие котировки на
 		// метрику не влияют, поэтому сбой котировок её не задевает. В метрики
 		// проходит состояние рядом с величиной: отсутствие числа перестаёт быть
 		// двусмысленным — неограниченный хвост и неполные исходные данные
@@ -151,7 +151,7 @@ public sealed class ConstructionMetricsCalculator
 		// Traceability: openspec:analytics/option-lifetime#requirement-expiry-warning-two-weeks
 		var lifetimeEvaluation = lifetime == null
 			? null
-			: _lifetimeMetricsCalculator.Calculate(lifetime.Legs, lifetime.Marks, lifetime.SnapshotHistory);
+			: _lifetimeMetricsCalculator.Calculate(lifetime.Legs, lifetime.Quotes, lifetime.SnapshotHistory);
 		var expiryDiagnostics = (lifetimeEvaluation?.ExpiryWarnings ?? [])
 			.Select(ConstructionRiskDiagnostic.FromExpiryWarning)
 			.ToList();
@@ -178,7 +178,7 @@ public sealed class ConstructionMetricsCalculator
 		// значением служит стоимость конструкции: знак стоимости сохраняется.
 		// Traceability: openspec:analytics/performance#scenario-capital-usage-computed-when-capital-set
 		// Traceability: openspec:analytics/performance#scenario-capital-usage-absent-without-capital
-		var capitalUsagePercent = Percent(markValue);
+		var capitalUsagePercent = Percent(quoteValue);
 
 		// Даты выводятся из записей позиций: открытие — время первой сделки (первая
 		// запись самой ранней позиции), закрытие — момент обнуления последней
@@ -201,7 +201,7 @@ public sealed class ConstructionMetricsCalculator
 			UnrealizedPnL = unrealizedPnL,
 			AdjustmentsPnL = adjustmentsPnL,
 			TotalPnL = totalPnL,
-			MarkValue = markValue,
+			QuoteValue = quoteValue,
 			RealRiskUsdt = realRisk.Usdt,
 			RealRiskStatus = realRisk.Status,
 			WorstCaseUsdt = worstCaseUsdt,

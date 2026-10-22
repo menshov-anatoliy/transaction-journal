@@ -5,9 +5,9 @@ namespace TransactionJournal.Application.Analytics;
 
 /// <summary>
 /// Вычислитель метрик времени жизни открытых опционных ног и конструкции из
-/// фактических биржевых данных. По каждой открытой ноге раскладывает марку на
+/// фактических биржевых данных. По каждой открытой ноге раскладывает котировку на
 /// внутреннюю стоимость (max(0, underlying − strike) у колла, зеркально у пута)
-/// и временную (марка минус внутренняя) — на контракт и на чистый остаток,
+/// и временную (котировка минус внутренняя) — на контракт и на чистый остаток,
 /// считает дневной распад биржевой тетой на остаток и остаток полных суток до
 /// экспирации floor((deliveryTime − now) / 24 ч) по UTC. Прирост распада —
 /// фактическая разность тет с ближайшим снимком истории суточной давности,
@@ -19,7 +19,7 @@ namespace TransactionJournal.Application.Analytics;
 /// по одной записи на инструмент, чисто временное, без условия «в зоне
 /// страйка»; фьючерсные ноги в метриках не участвуют. Недоступность тикеров —
 /// деградация прочерком, а не ошибка: остаток суток вычисляется и без них.
-/// Калькулятор чистый: хранилище не читает и марок не запрашивает — свежие
+/// Калькулятор чистый: хранилище не читает и котировок не запрашивает — свежие
 /// тикеры и история снимков передаются на вход, время берётся у
 /// <see cref="TimeProvider"/>.
 // Traceability: openspec:analytics/option-lifetime#requirement-leg-intrinsic-time-value
@@ -59,17 +59,17 @@ public sealed class OptionLifetimeMetricsCalculator
 	/// зависит от проходов агента подсказок.
 	/// </summary>
 	/// <param name="legs">Открытые опционные ноги конструкции с разбором символа из справочника инструментов.</param>
-	/// <param name="marks">Свежие снимки тикеров по символам: марка, индексная цена и тета; у отсутствующего символа рыночных величин не будет.</param>
+	/// <param name="quotes">Свежие снимки тикеров по символам: котировка, индексная цена и тета; у отсутствующего символа рыночных величин не будет.</param>
 	/// <param name="snapshotHistory">История рыночных снимков — материал прироста распада; проверяется давность каждого снимка.</param>
 	/// <returns>Метрики ног, саммари конструкции и предупреждения об экспирации.</returns>
 	/// <exception cref="ArgumentNullException">Ноги, снимки тикеров или история не заданы.</exception>
 	public OptionLifetimeEvaluation Calculate(
 		IEnumerable<OptionLegLifetimeInput> legs,
-		IReadOnlyDictionary<string, InstrumentMarkSnapshot> marks,
+		IReadOnlyDictionary<string, InstrumentQuoteSnapshot> quotes,
 		IEnumerable<InstrumentMarketSnapshot> snapshotHistory)
 	{
 		ArgumentNullException.ThrowIfNull(legs);
-		ArgumentNullException.ThrowIfNull(marks);
+		ArgumentNullException.ThrowIfNull(quotes);
 		ArgumentNullException.ThrowIfNull(snapshotHistory);
 
 		var now = _timeProvider.GetUtcNow();
@@ -88,7 +88,7 @@ public sealed class OptionLifetimeMetricsCalculator
 				continue;
 			}
 
-			var metrics = CalculateLeg(leg, marks, historyBySymbol[leg.Symbol], now);
+			var metrics = CalculateLeg(leg, quotes, historyBySymbol[leg.Symbol], now);
 			legMetrics.Add(metrics);
 
 			// Предупреждение чисто временное: порог отсчитывается от остатка полных
@@ -129,27 +129,27 @@ public sealed class OptionLifetimeMetricsCalculator
 	/// </summary>
 	private OptionLegLifetimeMetrics CalculateLeg(
 		OptionLegLifetimeInput leg,
-		IReadOnlyDictionary<string, InstrumentMarkSnapshot> marks,
+		IReadOnlyDictionary<string, InstrumentQuoteSnapshot> quotes,
 		IEnumerable<InstrumentMarketSnapshot> history,
 		DateTimeOffset now)
 	{
-		marks.TryGetValue(leg.Symbol, out var mark);
+		quotes.TryGetValue(leg.Symbol, out var quote);
 
-		// Стоимости раскладываются только из пары «индексная цена — марка»:
+		// Стоимости раскладываются только из пары «индексная цена — котировка»:
 		// внутренняя — превышение цены над страйком по типу опциона, временная —
-		// остаток марки, обе далее масштабируются чистым остатком со знаком.
+		// остаток котировки, обе далее масштабируются чистым остатком со знаком.
 		// Traceability: openspec:analytics/option-lifetime#requirement-leg-intrinsic-time-value
 		// Traceability: openspec:analytics/option-lifetime#scenario-leg-value-scaled-by-residual
 		decimal? intrinsicPerContract = null;
 		decimal? timeValuePerContract = null;
 		decimal? intrinsicUsdt = null;
 		decimal? timeValueUsdt = null;
-		if (mark != null && mark.UnderlyingPrice is { } underlyingPrice)
+		if (quote != null && quote.UnderlyingPrice is { } underlyingPrice)
 		{
 			intrinsicPerContract = leg.Type == OptionType.Call
 				? Math.Max(underlyingPrice - leg.Strike, 0m)
 				: Math.Max(leg.Strike - underlyingPrice, 0m);
-			timeValuePerContract = mark.MarkPrice - intrinsicPerContract.Value;
+			timeValuePerContract = quote.QuotePrice - intrinsicPerContract.Value;
 			intrinsicUsdt = intrinsicPerContract.Value * leg.Residual;
 			timeValueUsdt = timeValuePerContract.Value * leg.Residual;
 		}
@@ -160,7 +160,7 @@ public sealed class OptionLifetimeMetricsCalculator
 		decimal? dailyDecayUsdt = null;
 		decimal? decayDayAgoUsdt = null;
 		decimal? decayAccelerationUsdt = null;
-		if (mark?.Theta is { } thetaNow)
+		if (quote?.Theta is { } thetaNow)
 		{
 			dailyDecayUsdt = thetaNow * leg.Residual;
 

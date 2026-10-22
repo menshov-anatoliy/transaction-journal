@@ -67,7 +67,7 @@ public class DomainStorageTests
 			Assert.That(tables, Does.Contain("PnLAdjustments"));
 			Assert.That(tables, Does.Contain("TradeUserdata"));
 			Assert.That(tables, Does.Contain("PositionComments"));
-			Assert.That(tables, Does.Contain("ManualCloseMarks"));
+			Assert.That(tables, Does.Contain("ManualCloseAnnotations"));
 		}
 	}
 
@@ -268,12 +268,12 @@ public class DomainStorageTests
 				Symbol = "ETHUSDT",
 				Text = "Закрыто переносом",
 			});
-			db.ManualCloseMarks.Add(new ManualCloseMark
+			db.ManualCloseAnnotations.Add(new ManualCloseAnnotation
 			{
 				ConstructionId = construction.Id,
 				Symbol = "ETHUSDT",
 				Price = 3100m,
-				MarkedAt = DateTimeOffset.UtcNow,
+				AnnotatedAt = DateTimeOffset.UtcNow,
 			});
 			db.TradeUserdata.Add(new TradeUserdata { ExecId = "exec-inbox" });
 			db.SaveChanges();
@@ -293,7 +293,7 @@ public class DomainStorageTests
 		{
 			Assert.That(db.Constructions.Count(), Is.EqualTo(0));
 			Assert.That(db.PositionComments.Count(), Is.EqualTo(0));
-			Assert.That(db.ManualCloseMarks.Count(), Is.EqualTo(0));
+			Assert.That(db.ManualCloseAnnotations.Count(), Is.EqualTo(0));
 			Assert.That(db.TradeUserdata.Count(), Is.EqualTo(1));
 			Assert.That(db.TradeUserdata.Single().ExecId, Is.EqualTo("exec-inbox"));
 		}

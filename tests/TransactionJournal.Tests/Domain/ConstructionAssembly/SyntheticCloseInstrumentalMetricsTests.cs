@@ -27,8 +27,8 @@ public class SyntheticCloseInstrumentalMetricsTests
 	/// <summary>Текущий момент пересбора метрик — после последней сделки кейса.</summary>
 	private static readonly DateTimeOffset Now = new(2026, 10, 15, 15, 0, 0, TimeSpan.Zero);
 
-	/// <summary>Момент получения марок стаба — фиксированный для детерминизма.</summary>
-	private static readonly DateTimeOffset MarksReceivedAt = new(2026, 10, 15, 15, 1, 0, TimeSpan.Zero);
+	/// <summary>Момент получения котировок стаба — фиксированный для детерминизма.</summary>
+	private static readonly DateTimeOffset QuotesReceivedAt = new(2026, 10, 15, 15, 1, 0, TimeSpan.Zero);
 
 	/// <summary>Описатель сделки кейса: материализованная сделка с ценой и комиссией.</summary>
 	private sealed record CaseTrade(
@@ -114,25 +114,25 @@ public class SyntheticCloseInstrumentalMetricsTests
 		};
 	}
 
-	/// <summary>Стаб источника марок кейса: XAUTUSDT → 4300, пут → 250, колл → 5.</summary>
-	private sealed class StubMarkSource : IFreshInstrumentMarkSource
+	/// <summary>Стаб источника котировок кейса: XAUTUSDT → 4300, пут → 250, колл → 5.</summary>
+	private sealed class StubQuoteSource : IFreshInstrumentQuoteSource
 	{
-		private static readonly IReadOnlyDictionary<string, decimal> Marks = new Dictionary<string, decimal>(StringComparer.Ordinal)
+		private static readonly IReadOnlyDictionary<string, decimal> Quotes = new Dictionary<string, decimal>(StringComparer.Ordinal)
 		{
 			[XautPerp] = 4300m,
 			[XautPut4400] = 250m,
 			[XautCall4400] = 5m,
 		};
 
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-			Task.FromResult<InstrumentMarkSnapshot?>(
-				Marks.TryGetValue(symbol, out var markPrice)
-					? new InstrumentMarkSnapshot(symbol, markPrice, MarksReceivedAt)
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+			Task.FromResult<InstrumentQuoteSnapshot?>(
+				Quotes.TryGetValue(symbol, out var quotePrice)
+					? new InstrumentQuoteSnapshot(symbol, quotePrice, QuotesReceivedAt)
 					: null);
 	}
 
 	[TestMethod]
-	[Description("Распознанная связка не меняет инструментальные метрики: без марок строки совпадают с базовыми")]
+	[Description("Распознанная связка не меняет инструментальные метрики: без котировок строки совпадают с базовыми")]
 	// Логический слой — распознавание связки и расчёт лока — не вносит записей
 	// в потоки позиций: метрики позиций и конструкции равны побайтово.
 	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-instrumental-metrics-untouched
@@ -186,15 +186,15 @@ public class SyntheticCloseInstrumentalMetricsTests
 	}
 
 	[TestMethod]
-	[Description("Распознанная связка не меняет инструментальные метрики и при доступных марках")]
+	[Description("Распознанная связка не меняет инструментальные метрики и при доступных котировках")]
 	// С оценёнными нереализованными частями равенство сохраняется: лок не
-	// зависит от марок и не перестраивает оценку позиций.
+	// зависит от котировок и не перестраивает оценку позиций.
 	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-instrumental-metrics-untouched
 	// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-locked-value-marks-failure-independent
 	public async Task TryIfInstrumentalMetricsMatchWithMarksAvailable()
 	{
-		// Arrange: базовый прогон с оценкой открытых остатков по маркам.
-		var evaluator = new UnrealizedPnlMarkEvaluator(new StubMarkSource());
+		// Arrange: базовый прогон с оценкой открытых остатков по котировкам.
+		var evaluator = new UnrealizedPnlQuoteEvaluator(new StubQuoteSource());
 		var baselinePositions = PositionMetricsOf(StreamsOf(CaseTrades()));
 		var baselineEvaluation = await evaluator.EvaluateAsync(baselinePositions);
 		var baselineConstruction = ConstructionMetricsOf(baselineEvaluation.Positions);
@@ -210,16 +210,16 @@ public class SyntheticCloseInstrumentalMetricsTests
 		var afterEvaluation = await evaluator.EvaluateAsync(afterPositions);
 		var afterConstruction = ConstructionMetricsOf(afterEvaluation.Positions);
 
-		// Assert: слой сработал, лок не изменился от наличия марок.
+		// Assert: слой сработал, лок не изменился от наличия котировок.
 		Assert.That(links, Has.Count.EqualTo(1));
 		Assert.That(locked, Is.EqualTo(35.697m));
 
 		// Нереализованные части оценены и идентичны в обоих прогонах.
-		Assert.That(baselineEvaluation.HasMarkFailure, Is.False);
+		Assert.That(baselineEvaluation.HasQuoteFailure, Is.False);
 		Assert.That(afterEvaluation.Positions.Select(position => position.UnrealizedPnL), Has.All.Not.Null);
 		Assert.That(afterEvaluation.Positions, Is.EqualTo(baselineEvaluation.Positions));
 
-		// Итог конструкции с марками совпадает со значением без логического слоя.
+		// Итог конструкции с котировками совпадает со значением без логического слоя.
 		// Коллекция предупреждений в записи метрик сравнивается по ссылке:
 		// скалярные величины сверяются записью целиком, перечень — по содержанию.
 		Assert.That(afterConstruction with { RiskWarnings = [] }, Is.EqualTo(baselineConstruction with { RiskWarnings = [] }));

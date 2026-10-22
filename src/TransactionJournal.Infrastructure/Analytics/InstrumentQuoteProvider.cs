@@ -8,20 +8,20 @@ using TransactionJournal.Domain;
 namespace TransactionJournal.Infrastructure.Analytics;
 
 /// <summary>
-/// Провайдер марок инструментов: публичный эндпоинт тикеров без аутентификации
-/// и кэш последней известной марки в хранилище журнала. Свежая марка запрашивается
+/// Провайдер котировок инструментов: публичный эндпоинт тикеров без аутентификации
+/// и кэш последней известной котировки в хранилище журнала. Свежая котировка запрашивается
 /// у биржи по символу и тут же штампуется временем получения; каждая успешная
 /// выборка дополнительно дописывает append-only строку истории рыночных снимков
 /// с индексной ценой и тетой ответа — материал прироста распада. Читающие слои
-/// берут последнюю известную марку из кэша без сетевого запроса — так ручная
+/// берут последнюю известную котировку из кэша без сетевого запроса — так ручная
 /// пометка закрытия без цены получает дефолт, а оценка нереализованного PnL —
-/// марку на момент запроса. Каждый вызов создаёт собственный короткоживущий
+/// котировку на момент запроса. Каждый вызов создаёт собственный короткоживущий
 /// контекст, поэтому провайдер безопасен в длительных сессиях Blazor Server.
 // Traceability: openspec:analytics/performance#requirement-mark-provider
 // Traceability: openspec:analytics/option-lifetime#requirement-market-snapshot-history
 // Traceability: change:add-analytics/design#d2
 /// </summary>
-public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstrumentMarkSource
+public sealed class InstrumentQuoteProvider : IInstrumentQuoteSource, IFreshInstrumentQuoteSource
 {
 	private readonly DbContextOptions<JournalDbContext> _options;
 	private readonly BybitTickersClient _tickersClient;
@@ -29,10 +29,10 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 
 	/// <summary>Создаёт провайдер над опциями контекста журнала и клиентом публичных тикеров; база развёрнута миграциями.</summary>
 	/// <param name="options">Опции EF-контекста журнала.</param>
-	/// <param name="tickersClient">Клиент публичного эндпоинта тикеров — источник свежих марок.</param>
-	/// <param name="timeProvider">Поставщик времени для штамповки момента получения марки; по умолчанию системный.</param>
+	/// <param name="tickersClient">Клиент публичного эндпоинта тикеров — источник свежих котировок.</param>
+	/// <param name="timeProvider">Поставщик времени для штамповки момента получения котировки; по умолчанию системный.</param>
 	/// <exception cref="ArgumentNullException">Опции или клиент тикеров не заданы.</exception>
-	public InstrumentMarkProvider(
+	public InstrumentQuoteProvider(
 		DbContextOptions<JournalDbContext> options,
 		BybitTickersClient tickersClient,
 		TimeProvider? timeProvider = null)
@@ -42,12 +42,12 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 		_timeProvider = timeProvider ?? TimeProvider.System;
 	}
 
-	#region Свежая марка
+	#region Свежая котировка
 
 	/// <summary>
-	/// Запрашивает свежую марку инструмента у публичного эндпоинта тикеров и
+	/// Запрашивает свежую котировку инструмента у публичного эндпоинта тикеров и
 	/// штампует ею кэш: в хранилище сохраняются и цена, и время её получения,
-	/// поэтому строка кэша всегда несёт последнюю известную марку с моментом
+	/// поэтому строка кэша всегда несёт последнюю известную котировку с моментом
 	/// её получения. Каждая успешная выборка дополнительно дописывает строку
 	/// в append-only историю рыночных снимков — с индексной ценой и тетой
 	/// ответа тикера; у не-опционов биржа поля не отдаёт и в снимок пишется
@@ -56,10 +56,10 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 	/// </summary>
 	/// <param name="symbol">Символ инструмента, например BTCUSDT или BTC-29DEC23-25000-C.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	/// <returns>Свежая марка со временем получения и nullable-полями теты и индексной цены; null — инструмент неизвестен справочнику или биржа не отдала марку.</returns>
+	/// <returns>Свежая котировка со временем получения и nullable-полями теты и индексной цены; null — инструмент неизвестен справочнику или биржа не отдала котировку.</returns>
 	/// <exception cref="ArgumentException">Инструмент не задан или состоит из пробелов.</exception>
 	/// <exception cref="BybitApiException">Биржа ответила ошибкой после всех повторов; решение о деградации остаётся за вызывающим слоем.</exception>
-	public async Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default)
+	public async Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
 
@@ -90,11 +90,11 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 			Symbol = symbol,
 		}, cancellationToken).ConfigureAwait(false);
 		var ticker = tickers.FirstOrDefault(ticker => string.Equals(ticker.Symbol, symbol, StringComparison.Ordinal));
-		var markPrice = ticker?.MarkPrice;
-		if (markPrice == null)
+		var quotePrice = ticker?.MarkPrice;
+		if (quotePrice == null)
 		{
-			// Биржа не отдала марку инструмента — кэш не трогаем, последняя известная
-			// марка остаётся прежней.
+			// Биржа не отдала котировку инструмента — кэш не трогаем, последняя известная
+			// котировка остаётся прежней.
 			return null;
 		}
 
@@ -103,26 +103,26 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 		var receivedAt = _timeProvider.GetUtcNow();
 		using (var db = new JournalDbContext(_options))
 		{
-			var cached = await db.InstrumentMarks
-				.FirstOrDefaultAsync(mark => mark.Symbol == symbol, cancellationToken)
+			var cached = await db.InstrumentQuotes
+				.FirstOrDefaultAsync(quote => quote.Symbol == symbol, cancellationToken)
 				.ConfigureAwait(false);
 			if (cached == null)
 			{
-				db.InstrumentMarks.Add(new InstrumentMark
+				db.InstrumentQuotes.Add(new InstrumentQuote
 				{
 					Symbol = symbol,
-					MarkPrice = markPrice.Value,
+					QuotePrice = quotePrice.Value,
 					ReceivedAt = receivedAt,
 				});
 			}
 			else
 			{
-				cached.MarkPrice = markPrice.Value;
+				cached.QuotePrice = quotePrice.Value;
 				cached.ReceivedAt = receivedAt;
 			}
 
 			// Каждая успешная выборка тикеров дописывает append-only строку истории
-			// рыночных снимков: марку, индексную цену и тету ответа с моментом
+			// рыночных снимков: котировку, индексную цену и тету ответа с моментом
 			// получения — той же записью, что и штамп кэша. Пустой ответ биржи и
 			// сбой тикеров историю не пополняют: материал прироста распада
 			// появляется только из фактических ответов биржи.
@@ -130,7 +130,7 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 			db.InstrumentMarketSnapshots.Add(new InstrumentMarketSnapshot
 			{
 				Symbol = symbol,
-				MarkPrice = markPrice.Value,
+				QuotePrice = quotePrice.Value,
 				UnderlyingPrice = ticker!.UnderlyingPrice,
 				Theta = ticker!.Theta,
 				ReceivedAt = receivedAt,
@@ -139,39 +139,39 @@ public sealed class InstrumentMarkProvider : IInstrumentMarkSource, IFreshInstru
 			await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 		}
 
-		return new InstrumentMarkSnapshot(symbol, markPrice.Value, receivedAt, ticker!.UnderlyingPrice, ticker!.Theta);
+		return new InstrumentQuoteSnapshot(symbol, quotePrice.Value, receivedAt, ticker!.UnderlyingPrice, ticker!.Theta);
 	}
 
 	#endregion
 
-	#region Последняя известная марка
+	#region Последняя известная котировка
 
 	/// <summary>
-	/// Возвращает последнюю известную марку инструмента из кэша провайдера —
+	/// Возвращает последнюю известную котировку инструмента из кэша провайдера —
 	/// без сетевого запроса. Служит дефолтом цены ручной пометки закрытия,
-	/// когда пользователь не задал цену: read-модель позиций подставляет марку
-	/// при чтении. Марка неизвестна, пока провайдер не получил ни одной свежей
-	/// марки инструмента.
+	/// когда пользователь не задал цену: read-модель позиций подставляет котировку
+	/// при чтении. Котировка неизвестна, пока провайдер не получил ни одной свежей
+	/// котировки инструмента.
 	/// </summary>
-	/// <param name="symbol">Инструмент, марка которого нужна.</param>
+	/// <param name="symbol">Инструмент, котировка которого нужна.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	/// <returns>Последняя известная марка или null, если марка ещё не известна.</returns>
+	/// <returns>Последняя известная котировка или null, если котировка ещё не известна.</returns>
 	/// <exception cref="ArgumentException">Инструмент не задан или состоит из пробелов.</exception>
-	public async Task<decimal?> GetLastMarkAsync(string symbol, CancellationToken cancellationToken = default)
+	public async Task<decimal?> GetLastQuoteAsync(string symbol, CancellationToken cancellationToken = default)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
 
 		// Дефолт ручной пометки читает кэш: пользователь вправе задать цену явно,
-		// а возраст последней известной марки показывается по её штампу времени.
+		// а возраст последней известной котировки показывается по её штампу времени.
 		// Traceability: openspec:analytics/performance#scenario-last-known-mark-serves-manual-default
 		using var db = new JournalDbContext(_options);
-		var markPrice = await db.InstrumentMarks
+		var quotePrice = await db.InstrumentQuotes
 			.AsNoTracking()
-			.Where(mark => mark.Symbol == symbol)
-			.Select(mark => (decimal?)mark.MarkPrice)
+			.Where(quote => quote.Symbol == symbol)
+			.Select(quote => (decimal?)quote.QuotePrice)
 			.FirstOrDefaultAsync(cancellationToken)
 			.ConfigureAwait(false);
-		return markPrice;
+		return quotePrice;
 	}
 
 	#endregion

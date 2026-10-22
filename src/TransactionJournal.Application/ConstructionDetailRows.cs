@@ -15,25 +15,25 @@ namespace TransactionJournal.Application;
 /// <param name="Residual">Чистый остаток: положителен для длинной, отрицателен для короткой; ноль — закрыта.</param>
 /// <param name="AverageEntryPrice">Средняя цена входа — количество-взвешенная цена всех открывающих частей FIFO-потока; null, если открывающих частей нет.</param>
 /// <param name="AverageClosePrice">Средняя цена закрытия — количество-взвешенная цена всех закрывающих частей потока; null, если закрывающих частей нет.</param>
-/// <param name="RealizedPnL">Реализованный PnL — FIFO-результат встречных частей минус комиссии записей; виден всегда, в том числе при сбое марок.</param>
+/// <param name="RealizedPnL">Реализованный PnL — FIFO-результат встречных частей минус комиссии записей; виден всегда, в том числе при сбое котировок.</param>
 /// <param name="RealizedPnLPercent">Реализованный P&L процентом от выделенного капитала конструкции; null при нулевом капитале.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL открытой позиции — оценка марками на момент запроса; null при сбое марок, у закрытой позиции нереализованной части нет.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL открытой позиции — оценка котировками на момент запроса; null при сбое котировок, у закрытой позиции нереализованной части нет.</param>
 /// <param name="UnrealizedPnLPercent">Нереализованный P&L процентом от выделенного капитала конструкции; null вместе с нереализованным P&L или при нулевом капитале.</param>
-/// <param name="TotalPnL">Общий PnL позиции: реализованный плюс нереализованная оценка; null у открытой позиции при сбое марок.</param>
+/// <param name="TotalPnL">Общий PnL позиции: реализованный плюс нереализованная оценка; null у открытой позиции при сбое котировок.</param>
 /// <param name="TotalPnLPercent">Общий P&L процентом от выделенного капитала конструкции; null вместе с общим P&L или при нулевом капитале.</param>
 /// <param name="AccumulatedFees">Накопленные комиссии записей позиции: уплаченные складываются, rebate снижает сумму.</param>
 /// <param name="OpenedAt">Время открытия — время первой записи позиции.</param>
 /// <param name="ClosedAt">Время закрытия — момент обнуления остатка; null, пока позиция открыта.</param>
 /// <param name="IsOpen">Позиция открыта, пока остаток не нулевой.</param>
 /// <param name="Comment">Комментарий позиции по ключу «конструкция × инструмент»; null — комментария нет.</param>
-/// <param name="MarkValue">Стоимость открытого остатка по текущей марке — нетто-величина «марка × знаковый остаток» со знаком; null у закрытой позиции и при сбое марок.</param>
-/// <param name="PriceChangePercent">Процент изменения цены открытого остатка — движение марки от средней цены остатка, приведённое к направлению позиции: плюс — движение «в прибыль»; null у закрытой позиции и при сбое марок.</param>
+/// <param name="QuoteValue">Стоимость открытого остатка по текущей котировке — нетто-величина «котировка × знаковый остаток» со знаком; null у закрытой позиции и при сбое котировок.</param>
+/// <param name="PriceChangePercent">Процент изменения цены открытого остатка — движение котировки от средней цены остатка, приведённое к направлению позиции: плюс — движение «в прибыль»; null у закрытой позиции и при сбое котировок.</param>
 /// <param name="SyntheticResidual">Часть остатка линейной ноги, уведённая неоспоренными синтетическими связками — знаковая сумма их линейных сделок; null, когда неоспоренного синтетического содержимого у ноги нет.</param>
 /// <param name="OtherResidual">Прочий остаток линейной ноги — остаток минус синтетическая часть; null вместе с синтетической частью.</param>
 /// <param name="DaysToExpiry">Остаток полных суток до экспирации открытой опционной ноги; null у закрытой позиции, фьючерсной ноги и ног с неразобранным символом.</param>
 /// <param name="DailyDecayUsdt">Дневной распад открытой опционной ноги, USDT/день со знаком остатка; null без тикеров, у закрытой и фьючерсной ног.</param>
 /// <param name="IntrinsicValueUsdt">Внутренняя стоимость открытой опционной ноги на чистый остаток, USDT; материал тултипа состава, null без индексной цены.</param>
-/// <param name="TimeValueUsdt">Временная стоимость открытой опционной ноги на чистый остаток, USDT; материал тултипа состава, null без индексной цены или марки.</param>
+/// <param name="TimeValueUsdt">Временная стоимость открытой опционной ноги на чистый остаток, USDT; материал тултипа состава, null без индексной цены или котировки.</param>
 /// <param name="DecayDayAgoUsdt">Распад ноги на снимке суточной давности, приведённый к текущему остатку; материал динамики «вчера → сегодня», null без снимка истории.</param>
 /// <param name="SyntheticClosedQuantity">Сумма количеств действующих синтетических связок по символу ноги; null — действующих связок по символу нет.</param>
 /// <param name="SyntheticOpenQuantity">Открытая после синтетического закрытия часть ноги — остаток минус закрытое синтетикой, без клэмпа; null вместе с закрытым.</param>
@@ -42,11 +42,11 @@ namespace TransactionJournal.Application;
 // с процентом от капитала, общий P&L с процентом, комиссии и времена.
 // Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
 // Раздельные части выводятся колонками «Реализ. P&L» и «Нереализ. P&L»:
-// реализованная часть видна всегда, нереализованная деградирует вместе с марками.
+// реализованная часть видна всегда, нереализованная деградирует вместе с котировками.
 // Traceability: openspec:ui/screens#scenario-detail-position-pnl-parts
 // Стоимость и процент изменения цены открытого остатка проходят из метрик
-// позиции и деградируют вместе с марками: закрытая позиция — null, сбой
-// марок — null при живых реализованных величинах.
+// позиции и деградируют вместе с котировками: закрытая позиция — null, сбой
+// котировок — null при живых реализованных величинах.
 // Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
 // Остаток линейной ноги распадается на «синтетику / прочий остаток» по
 // неоспоренным связкам: 0.30 синтетического хеджа и 0.04 скальпов видны
@@ -78,7 +78,7 @@ public sealed record ConstructionPositionRow(
 	DateTimeOffset? ClosedAt,
 	bool IsOpen,
 	string? Comment,
-	decimal? MarkValue = null,
+	decimal? QuoteValue = null,
 	decimal? PriceChangePercent = null,
 	decimal? SyntheticResidual = null,
 	decimal? OtherResidual = null,
@@ -129,9 +129,9 @@ public sealed record ConstructionTradeRow(
 /// <param name="Kind">Вид записи: delivery, экспирация OTM или ручная пометка.</param>
 /// <param name="Symbol">Инструмент закрываемой позиции.</param>
 /// <param name="Quantity">Знаковое количество, обнулившее остаток на момент применения.</param>
-/// <param name="Price">Эффективная цена закрытия; null — марка инструмента неизвестна.</param>
+/// <param name="Price">Эффективная цена закрытия; null — котировка инструмента неизвестна.</param>
 /// <param name="AmountUsdt">Сумма закрытия — денежный поток записи со знаком; null при неизвестной цене.</param>
-/// <param name="ManualMarkId">Идентификатор ручной пометки для правки и удаления из таблицы; null у биржевых записей.</param>
+/// <param name="ManualAnnotationId">Идентификатор ручной пометки для правки и удаления из таблицы; null у биржевых записей.</param>
 public sealed record ConstructionClosingEntryRow(
 	DateTimeOffset ClosedAt,
 	PositionClosingKind Kind,
@@ -139,7 +139,7 @@ public sealed record ConstructionClosingEntryRow(
 	decimal Quantity,
 	decimal? Price,
 	decimal? AmountUsdt,
-	long? ManualMarkId = null);
+	long? ManualAnnotationId = null);
 
 /// <summary>
 /// Строка таблицы внешних корректировок PnL деталей конструкции.
@@ -190,7 +190,7 @@ public sealed record SyntheticCloseRow(
 
 /// <summary>
 /// Данные экрана деталей конструкции: заголовок с комментарием, сводка метрик
-/// с периодом и отметкой марок и четыре таблицы записей — позиции, сделки,
+/// с периодом и отметкой котировок и четыре таблицы записей — позиции, сделки,
 /// закрывающие записи и внешние корректировки PnL. Пустая таблица передаётся
 /// пустым списком — экран показывает явное сообщение об отсутствии записей.
 /// </summary>
@@ -206,9 +206,9 @@ public sealed record SyntheticCloseRow(
 /// <param name="ProfitUnit">Единица ввода профита — первоисточник параметра; null, когда профит не задан.</param>
 /// <param name="Comment">Комментарий конструкции; null — комментария нет.</param>
 /// <param name="Metrics">Метрики конструкции: итог, разбивка, проценты, период и длительность.</param>
-/// <param name="HasOpenResidual">У конструкции есть открытый остаток — марки нужны её нереализованной оценке.</param>
-/// <param name="HasMarkFailure">Сбой марок оставил нереализованную оценку конструкции непостроенной.</param>
-/// <param name="MarksAsOf">Отметка времени марок оценки из аналитики журнала.</param>
+/// <param name="HasOpenResidual">У конструкции есть открытый остаток — котировки нужны её нереализованной оценке.</param>
+/// <param name="HasQuoteFailure">Сбой котировок оставил нереализованную оценку конструкции непостроенной.</param>
+/// <param name="QuotesAsOf">Отметка времени котировок оценки из аналитики журнала.</param>
 /// <param name="Positions">Строки таблицы позиций: открытые раньше закрытых, внутри — CALL, PUT, прочие, затем тикер и экспирация.</param>
 /// <param name="Trades">Строки таблицы сделок в хронологическом порядке.</param>
 /// <param name="ClosingEntries">Строки таблицы закрывающих записей в хронологическом порядке.</param>
@@ -244,8 +244,8 @@ public sealed record ConstructionDetailData(
 	string? Comment,
 	ConstructionMetrics Metrics,
 	bool HasOpenResidual,
-	bool HasMarkFailure,
-	DateTimeOffset? MarksAsOf,
+	bool HasQuoteFailure,
+	DateTimeOffset? QuotesAsOf,
 	IReadOnlyList<ConstructionPositionRow> Positions,
 	IReadOnlyList<ConstructionTradeRow> Trades,
 	IReadOnlyList<ConstructionClosingEntryRow> ClosingEntries,

@@ -298,13 +298,13 @@ function pnlBreakdownText(summary: ConstructionsSummary): string {
 	}`;
 }
 
-/** Подпись котировок строки итога: деградации общие с десктопной сводкой, отметку времени марок форматирует инстанс. */
-function quotesNoteText(summary: ConstructionsSummary, formatMarksTime: (marksAsOf: string) => string): string {
-	return summary.hasMarkFailure
+/** Подпись котировок строки итога: деградации общие с десктопной сводкой, отметку времени котировок форматирует инстанс. */
+function quotesNoteText(summary: ConstructionsSummary, formatQuotesTime: (quotesAsOf: string) => string): string {
+	return summary.hasQuoteFailure
 		? "котировки: сбой котировок"
-		: summary.marksAsOf === null
+		: summary.quotesAsOf === null
 			? "котировки: нет открытых остатков"
-			: formatMarksTime(summary.marksAsOf);
+			: formatQuotesTime(summary.quotesAsOf);
 }
 
 /*
@@ -329,7 +329,7 @@ function MobileSummaryBlock({ summary }: { summary: ConstructionsOverview["summa
 
 	// Котировки — сегмент строки разбивки; при норме показывается только
 	// время (формат мастера iGlhI), сбои повторяют тексты десктопной сводки.
-	const quotesNote = quotesNoteText(summary, (marksAsOf) => `котировки ${formatClock(marksAsOf)}`);
+	const quotesNote = quotesNoteText(summary, (quotesAsOf) => `котировки ${formatClock(quotesAsOf)}`);
 
 	return (
 		<div
@@ -385,16 +385,16 @@ function ConstructionsHeader({
 }) {
 	const summary = overview?.summary;
 	// Подпись котировок — сегмент одной строки итога: деградация видима всегда,
-	// при норме вместо неё отметка времени марок.
+	// при норме вместо неё отметка времени котировок.
 	const quotesNote =
 		summary === undefined
 			? null
-			: quotesNoteText(summary, (marksAsOf) => `котировки на ${formatMoment(marksAsOf)}`);
+			: quotesNoteText(summary, (quotesAsOf) => `котировки на ${formatMoment(quotesAsOf)}`);
 
 	return (
 		<header className="flex flex-col gap-2">
 			{/* Детальная сводка раздела: итог с разбивкой и отметка времени
-			    марок; компактный итог на любом экране живёт в топбаре каркаса
+			    котировок; компактный итог на любом экране живёт в топбаре каркаса
 			    и читает тот же кэш обзора. Счётчики конструкций — рядом с
 			    титулом тулбара, в строке итога их нет. */}
 			{/* Шапка итога — одна строка по мастеру ud07u design.pen (после
@@ -417,7 +417,7 @@ function ConstructionsHeader({
 					<p className="text-[20px] font-semibold text-accent-strong">
 						<MetricHint tooltip={METRIC_TOOLTIPS.journalTotal}>
 							{summary.totalPnL === null ? "недоступен" : `${formatSignedAmount(summary.totalPnL)} USDT`}
-							{summary.totalPnL === null && summary.hasMarkFailure ? " (неполный: сбой котировок)" : ""}
+							{summary.totalPnL === null && summary.hasQuoteFailure ? " (неполный: сбой котировок)" : ""}
 						</MetricHint>
 					</p>
 					<p className="text-[12.5px] text-text-secondary">{pnlBreakdownText(summary)}</p>

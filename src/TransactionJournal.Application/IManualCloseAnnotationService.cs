@@ -11,14 +11,14 @@ namespace TransactionJournal.Application;
 // Ручная пометка закрытия ставится из строки позиции и сопровождается
 // предупреждением об избыточной записи — мутации идут через доменный контракт.
 // Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
-public interface IManualCloseMarkService
+public interface IManualCloseAnnotationService
 {
-	/// <summary>Добавляет ручную пометку закрытия позиции конструкции; цена null подставляется последней маркой при чтении.</summary>
+	/// <summary>Добавляет ручную пометку закрытия позиции конструкции; цена null подставляется последней котировкой при чтении.</summary>
 	/// <param name="quantity">Количество закрываемой позиции; null — весь остаток на момент пометки.</param>
-	Task<ManualCloseMark> AddAsync(
+	Task<ManualCloseAnnotation> AddAsync(
 		long constructionId,
 		string symbol,
-		DateTimeOffset markedAt,
+		DateTimeOffset annotatedAt,
 		decimal? price = null,
 		decimal? quantity = null,
 		CancellationToken cancellationToken = default);
@@ -26,18 +26,18 @@ public interface IManualCloseMarkService
 	/// <summary>Свободно правит инструмент, время, цену и количество ручной пометки закрытия.</summary>
 	/// <param name="quantity">Новое количество; null — закрыть весь остаток на момент пометки.</param>
 	Task EditAsync(
-		long markId,
+		long annotationId,
 		string symbol,
-		DateTimeOffset markedAt,
+		DateTimeOffset annotatedAt,
 		decimal? price,
 		decimal? quantity,
 		CancellationToken cancellationToken = default);
 
 	/// <summary>Удаляет ручную пометку закрытия — позиция возвращается в открытое состояние ближайшим чтением.</summary>
-	Task DeleteAsync(long markId, CancellationToken cancellationToken = default);
+	Task DeleteAsync(long annotationId, CancellationToken cancellationToken = default);
 
 	/// <summary>Возвращает ручные пометки конструкции в хронологическом порядке.</summary>
-	Task<IReadOnlyList<ManualCloseMark>> ListAsync(
+	Task<IReadOnlyList<ManualCloseAnnotation>> ListAsync(
 		long constructionId,
 		CancellationToken cancellationToken = default);
 }

@@ -16,8 +16,8 @@ export interface ConstructionsSummary {
 	readonly totalPnL: number | null;
 	readonly realizedPnL: number;
 	readonly unrealizedPnL: number | null;
-	readonly marksAsOf: string | null;
-	readonly hasMarkFailure: boolean;
+	readonly quotesAsOf: string | null;
+	readonly hasQuoteFailure: boolean;
 	readonly constructionCount: number;
 	readonly openCount: number;
 }
@@ -37,7 +37,7 @@ export interface ConstructionRow {
 	readonly adjustmentsPnL: number;
 	readonly totalPnL: number | null;
 	readonly totalPnLPercent: number | null;
-	readonly markValue: number | null;
+	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
 	// Реальный риск открытых остатков идёт парой «величина + статус»: число
 	// выдаётся только конечному риску, null при неограниченном хвосте или
@@ -103,7 +103,7 @@ export interface ConstructionPreview {
 	readonly adjustmentsPnL: number;
 	readonly totalPnL: number | null;
 	readonly totalPnLPercent: number | null;
-	readonly markValue: number | null;
+	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
 	// Реальный риск открытых остатков идёт парой «величина + статус»: число
 	// только при конечном риске, null при неограниченном хвосте или неполных
@@ -118,8 +118,8 @@ export interface ConstructionPreview {
 	readonly worstCaseUsdt: number | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
-	readonly marksAsOf: string | null;
-	readonly hasMarkFailure: boolean;
+	readonly quotesAsOf: string | null;
+	readonly hasQuoteFailure: boolean;
 	readonly counts: ConstructionPreviewCounts;
 	// Счётчик предупреждений превью — тот же источник, что у бейджа строки:
 	// число и перечень идут одним вызовом вычислителя, расхождение исключено.

@@ -13,7 +13,7 @@ namespace TransactionJournal.Tests.Analytics;
 /// <summary>
 /// Проверки калькулятора метрик позиции: агрегаты выводятся из сделок и
 /// закрывающих записей самой позиции, закрытая позиция не имеет нереализованной
-/// части, средней цены остатка и марки, но имеет средние цены входа и закрытия,
+/// части, средней цены остатка и котировки, но имеет средние цены входа и закрытия,
 /// направление по первой записи и общий PnL, равный реализованному, а
 /// переоткрытие позиции сдвигает её даты под текущий состав записей без следов
 /// прежнего расчёта. Негативные проверки отклоняют пустой и незаданный поток
@@ -47,7 +47,7 @@ public class PositionMetricsCalculatorTests
 		var entries = new[]
 		{
 			Trade(30, "exec-sell-1", -1.5m, 115m, 0.01m),
-			Closing(40, "manual:1", PositionFifoEntryKind.ManualMark, -0.5m, 90m),
+			Closing(40, "manual:1", PositionFifoEntryKind.ManualAnnotation, -0.5m, 90m),
 			Trade(0, "exec-buy-1", 1m, 100m, 0.02m),
 			Trade(10, "exec-buy-2", 1m, 120m, 0.03m),
 		};
@@ -66,13 +66,13 @@ public class PositionMetricsCalculatorTests
 	}
 
 	[TestMethod]
-	[Description("Закрытая позиция не имеет нереализованной части, средней цены и марки")]
+	[Description("Закрытая позиция не имеет нереализованной части, средней цены и котировки")]
 	public void TryIfClosedPositionHasNoUnrealizedPart()
 	{
 		// Arrange: покупка и продажа закрывают позицию встречными сделками;
-		// закрывающих марок расчёт не требует вовсе.
+		// закрывающих котировок расчёт не требует вовсе.
 		// Требование: при нулевом остатке нереализованный PnL равен нулю и не
-		// требует марок, средняя цена и марка закрытой позиции не вычисляются.
+		// требует котировок, средняя цена и котировка закрытой позиции не вычисляются.
 		// Traceability: openspec:analytics/performance#scenario-closed-position-has-no-unrealized
 		var entries = new[]
 		{
@@ -84,13 +84,13 @@ public class PositionMetricsCalculatorTests
 		var metrics = _calculator.Calculate(ConstructionId, Symbol, entries);
 
 		// Assert: реализованный PnL 10 − 0.03; нереализованная часть — ровно ноль,
-		// средней цены и марки у закрытой позиции нет; дата закрытия — момент
+		// средней цены и котировки у закрытой позиции нет; дата закрытия — момент
 		// обнуления остатка, длительность — между открытием и закрытием.
 		Assert.That(metrics.Residual, Is.EqualTo(0m));
 		Assert.That(metrics.RealizedPnL, Is.EqualTo(9.97m));
 		Assert.That(metrics.UnrealizedPnL, Is.EqualTo(0m));
 		Assert.That(metrics.AverageOpenPrice, Is.Null);
-		Assert.That(metrics.MarkPrice, Is.Null);
+		Assert.That(metrics.QuotePrice, Is.Null);
 		Assert.That(metrics.ClosedAt, Is.EqualTo(At(10)));
 		Assert.That(metrics.Duration, Is.EqualTo(TimeSpan.FromMinutes(10)));
 	}
@@ -102,7 +102,7 @@ public class PositionMetricsCalculatorTests
 		// Arrange: две покупки и частичная продажа оставляют открытый остаток;
 		// средняя цена выводится из непокрытых FIFO-слоёв.
 		// Требование: у позиции с ненулевым остатком средняя цена — из непокрытых
-		// слоёв; нереализованная оценка марками подключается слоем марок отдельно.
+		// слоёв; нереализованная оценка котировками подключается слоем котировок отдельно.
 		// Traceability: openspec:analytics/performance#requirement-position-metrics
 		// Traceability: openspec:analytics/performance#scenario-open-position-average-and-mark
 		var entries = new[]
@@ -117,12 +117,12 @@ public class PositionMetricsCalculatorTests
 
 		// Assert: продажа закрыла 1@100 (+15) и 0.5@120 (−2.5); остаток 0.5 по 120.
 		// Позиция открыта: даты закрытия и длительности нет, нереализованная оценка
-		// ждёт слой марок и остаётся null.
+		// ждёт слой котировок и остаётся null.
 		Assert.That(metrics.Residual, Is.EqualTo(0.5m));
 		Assert.That(metrics.RealizedPnL, Is.EqualTo(12.5m));
 		Assert.That(metrics.AverageOpenPrice, Is.EqualTo(120m));
 		Assert.That(metrics.UnrealizedPnL, Is.Null);
-		Assert.That(metrics.MarkPrice, Is.Null);
+		Assert.That(metrics.QuotePrice, Is.Null);
 		Assert.That(metrics.OpenedAt, Is.EqualTo(At(0)));
 		Assert.That(metrics.ClosedAt, Is.Null);
 		Assert.That(metrics.Duration, Is.Null);
@@ -199,7 +199,7 @@ public class PositionMetricsCalculatorTests
 		// встречной сделкой.
 		// Требование: закрытая позиция имеет среднюю цену входа и, при наличии
 		// закрывающих частей, среднюю цену закрытия; общий PnL равен реализованному
-		// и марок не требует.
+		// и котировок не требует.
 		// Traceability: openspec:analytics/performance#scenario-position-average-entry-from-opening-parts
 		// Traceability: openspec:analytics/performance#scenario-position-average-close-from-closing-parts
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
@@ -221,12 +221,12 @@ public class PositionMetricsCalculatorTests
 	}
 
 	[TestMethod]
-	[Description("Общий PnL открытой позиции остаётся null до слоя марок")]
+	[Description("Общий PnL открытой позиции остаётся null до слоя котировок")]
 	public void TryIfOpenPositionTotalPnLStaysNullBeforeMarks()
 	{
 		// Arrange: открытый остаток 0.5@120 после частичной продажи — позиция
-		// ждёт нереализованную оценку слоем марок.
-		// Требование: у открытой позиции общий PnL собирается слоем марок и до
+		// ждёт нереализованную оценку слоем котировок.
+		// Требование: у открытой позиции общий PnL собирается слоем котировок и до
 		// него остаётся null; средние цены входа и закрытия при этом заполнены.
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
 		var entries = new[]
@@ -239,7 +239,7 @@ public class PositionMetricsCalculatorTests
 		var metrics = _calculator.Calculate(ConstructionId, Symbol, entries);
 
 		// Assert: общий PnL — null, вход по 100 и закрытие открывшейся части
-		// по 110 на месте; нереализованная часть тоже ждёт слой марок.
+		// по 110 на месте; нереализованная часть тоже ждёт слой котировок.
 		Assert.That(metrics.TotalPnL, Is.Null);
 		Assert.That(metrics.UnrealizedPnL, Is.Null);
 		Assert.That(metrics.AverageEntryPrice, Is.EqualTo(100m));

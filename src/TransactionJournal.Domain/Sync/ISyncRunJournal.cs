@@ -22,7 +22,7 @@ public interface ISyncRunJournal
 	/// <param name="cancellationToken">Токен отмены синхронизации.</param>
 	/// <exception cref="ArgumentNullException">Запуск не задан.</exception>
 	/// <exception cref="InvalidOperationException">Строка запуска не найдена в журнале.</exception>
-	Task MarkSucceededAsync(SyncRun run, CancellationToken cancellationToken = default);
+	Task RecordSucceededAsync(SyncRun run, CancellationToken cancellationToken = default);
 
 	/// <summary>Закрывает запуск ошибкой: статус Failed, текст ошибки и момент завершения.</summary>
 	/// <param name="run">Дескриптор запуска, полученный из <see cref="StartAsync"/>.</param>
@@ -31,7 +31,7 @@ public interface ISyncRunJournal
 	/// <exception cref="ArgumentNullException">Запуск не задан.</exception>
 	/// <exception cref="ArgumentException">Текст ошибки пуст или не задан.</exception>
 	/// <exception cref="InvalidOperationException">Строка запуска не найдена в журнале.</exception>
-	Task MarkFailedAsync(SyncRun run, string error, CancellationToken cancellationToken = default);
+	Task RecordFailedAsync(SyncRun run, string error, CancellationToken cancellationToken = default);
 
 	/// <summary>
 	/// Сохраняет предупреждения завершённого запуска в его строке: перечень пропущенных

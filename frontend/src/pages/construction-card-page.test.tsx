@@ -31,8 +31,8 @@ const card: ConstructionCard = {
 	profitUnit: "usdt",
 	comment: "## стреддл",
 	hasOpenResidual: true,
-	hasMarkFailure: false,
-	marksAsOf: "2026-06-20T14:30:00+00:00",
+	hasQuoteFailure: false,
+	quotesAsOf: "2026-06-20T14:30:00+00:00",
 	metrics: {
 		realizedPnL: 60.25,
 		unrealizedPnL: 40.25,
@@ -42,7 +42,7 @@ const card: ConstructionCard = {
 		realizedPnLPercent: 2,
 		unrealizedPnLPercent: 1.34,
 		adjustmentsPnLPercent: 0.17,
-		markValue: 500,
+		quoteValue: 500,
 		capitalUsagePercent: 16.7,
 		realRiskUsdt: 45,
 		worstCaseUsdt: 15.25,
@@ -72,7 +72,7 @@ const card: ConstructionCard = {
 			closedAt: null,
 			isOpen: true,
 			comment: "ножка **входа**",
-			markValue: 300,
+			quoteValue: 300,
 			priceChangePercent: 5,
 			syntheticResidual: null,
 			otherResidual: null,
@@ -108,7 +108,7 @@ const card: ConstructionCard = {
 			quantity: -0.5,
 			price: 3520,
 			amountUsdt: -1760,
-			manualMarkId: 21,
+			manualAnnotationId: 21,
 		},
 	],
 	closingWarnings: [
@@ -137,7 +137,7 @@ const constructionPanel: HintPanel = {
 const overview: ConstructionsOverview = {
 	summary: {
 		totalPnL: 105.5, realizedPnL: 60.25, unrealizedPnL: 40.25,
-		marksAsOf: null, hasMarkFailure: false, constructionCount: 1, openCount: 1,
+		quotesAsOf: null, hasQuoteFailure: false, constructionCount: 1, openCount: 1,
 	},
 	items: [],
 };
@@ -160,10 +160,10 @@ const cardApi = vi.hoisted(() => ({
 	setConstructionComment: vi.fn(),
 	setPositionComment: vi.fn(),
 	setTradeComment: vi.fn(),
-	fetchLastInstrumentMark: vi.fn(),
-	addManualCloseMark: vi.fn(),
-	editManualCloseMark: vi.fn(),
-	deleteManualCloseMark: vi.fn(),
+	fetchLastInstrumentQuote: vi.fn(),
+	addManualCloseAnnotation: vi.fn(),
+	editManualCloseAnnotation: vi.fn(),
+	deleteManualCloseAnnotation: vi.fn(),
 	fetchMoveTargets: vi.fn(),
 	returnTradeToInbox: vi.fn(),
 	moveTrade: vi.fn(),
@@ -498,31 +498,31 @@ describe("карточка конструкции: действия и ввод"
 		await waitFor(() => expect(cardApi.moveTrade).toHaveBeenCalledWith("exec-1", 8));
 	});
 
-	// Сбой предзаполнения марки виден, неверная цена не отправляется как null.
+	// Сбой предзаполнения котировки виден, неверная цена не отправляется как null.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-	it("ThrowOnMarkLookupFailureAndInvalidPrice", async () => {
-		cardApi.fetchLastInstrumentMark.mockRejectedValue(new Error("биржа недоступна"));
+	it("ThrowOnQuoteLookupFailureAndInvalidPrice", async () => {
+		cardApi.fetchLastInstrumentQuote.mockRejectedValue(new Error("биржа недоступна"));
 		const user = userEvent.setup();
 		renderCardPage();
 		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
-		expect(await screen.findByText(/Последняя марка недоступна: биржа недоступна/)).toHaveAttribute("role", "alert");
+		expect(await screen.findByText(/Последняя котировка недоступна: биржа недоступна/)).toHaveAttribute("role", "alert");
 		await user.type(screen.getByLabelText("цена закрытия"), "ошибка");
 		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
 		expect(screen.getByText(/Введите корректную цену/)).toHaveAttribute("role", "alert");
-		expect(cardApi.addManualCloseMark).not.toHaveBeenCalled();
+		expect(cardApi.addManualCloseAnnotation).not.toHaveBeenCalled();
 	});
 
-	// Для ручной пометки сохраняется полная точность предзаполненной марки.
+	// Для ручной пометки сохраняется полная точность предзаполненной котировки.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-	it("TryIfManualMarkPreservesPricePrecision", async () => {
-		cardApi.fetchLastInstrumentMark.mockResolvedValue(0.00012345);
-		cardApi.addManualCloseMark.mockResolvedValue(undefined);
+	it("TryIfManualAnnotationPreservesPricePrecision", async () => {
+		cardApi.fetchLastInstrumentQuote.mockResolvedValue(0.00012345);
+		cardApi.addManualCloseAnnotation.mockResolvedValue(undefined);
 		const user = userEvent.setup();
 		renderCardPage();
 		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
 		await waitFor(() => expect(screen.getByLabelText("цена закрытия")).toHaveValue("0.00012345"));
 		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
-		await waitFor(() => expect(cardApi.addManualCloseMark).toHaveBeenCalledWith(7,
+		await waitFor(() => expect(cardApi.addManualCloseAnnotation).toHaveBeenCalledWith(7,
 			expect.objectContaining({ symbol: "ETH-28JUN24-3200-C", price: 0.00012345 })));
 		// Форма скрывается только после успешной постановки пометки.
 		expect(screen.queryByLabelText("цена закрытия")).toBeNull();
@@ -531,14 +531,14 @@ describe("карточка конструкции: действия и ввод"
 
 	// Запоздавшая котировка не перезаписывает цену, которую владелец уже ввёл.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-	it("TryIfManualPriceSurvivesLateMarkResponse", async () => {
-		let resolveMark: (price: number) => void = () => {};
-		cardApi.fetchLastInstrumentMark.mockReturnValue(new Promise<number>((resolve) => { resolveMark = resolve; }));
+	it("TryIfManualPriceSurvivesLateQuoteResponse", async () => {
+		let resolveQuote: (price: number) => void = () => {};
+		cardApi.fetchLastInstrumentQuote.mockReturnValue(new Promise<number>((resolve) => { resolveQuote = resolve; }));
 		const user = userEvent.setup();
 		renderCardPage();
 		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
 		await user.type(screen.getByLabelText("цена закрытия"), "17");
-		resolveMark(30);
+		resolveQuote(30);
 		await waitFor(() => expect(screen.getByLabelText("цена закрытия")).toHaveValue("17"));
 	});
 
@@ -548,12 +548,12 @@ describe("карточка конструкции: действия и ввод"
 	// внутренней стоимости позиции (180.4 на остатке 2 → 90.2 на контракт)
 	// и страйка символа.
 	// Traceability: openspec:ui/screens#scenario-mark-form-intrinsic-hint
-	it("TryIfCloseMarkFormShowsIntrinsicHintForItmLeg", async () => {
+	it("TryIfCloseAnnotationFormShowsIntrinsicHintForItmLeg", async () => {
 		const user = userEvent.setup();
 		renderCardPage();
 		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
 		const hint = await screen.findByText("внутренняя стоимость на расчётной цене");
-		expect(hint.closest('[data-slot="mark-intrinsic-hint"]')?.textContent).toContain("|3290.2 − 3200| = 90.2 USDT");
+		expect(hint.closest('[data-slot="annotation-intrinsic-hint"]')?.textContent).toContain("|3290.2 − 3200| = 90.2 USDT");
 	});
 
 	// Сценарий «Частичная пометка оставляет остаток» на стороне формы:
@@ -561,9 +561,9 @@ describe("карточка конструкции: действия и ввод"
 	// ведёт остаток после частичного закрытия; незаданное количество остаётся
 	// null — весь остаток.
 	// Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity
-	it("TryIfCloseMarkFormSendsPartialQuantity", async () => {
-		cardApi.fetchLastInstrumentMark.mockResolvedValue(30);
-		cardApi.addManualCloseMark.mockResolvedValue(undefined);
+	it("TryIfCloseAnnotationFormSendsPartialQuantity", async () => {
+		cardApi.fetchLastInstrumentQuote.mockResolvedValue(30);
+		cardApi.addManualCloseAnnotation.mockResolvedValue(undefined);
 		const user = userEvent.setup();
 		renderCardPage();
 		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
@@ -572,7 +572,7 @@ describe("карточка конструкции: действия и ввод"
 		await user.type(quantity, "0.5");
 		expect(screen.getByText("частичное закрытие — останется 1.5")).toBeTruthy();
 		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
-		await waitFor(() => expect(cardApi.addManualCloseMark).toHaveBeenCalledWith(7,
+		await waitFor(() => expect(cardApi.addManualCloseAnnotation).toHaveBeenCalledWith(7,
 			expect.objectContaining({ symbol: "ETH-28JUN24-3200-C", price: 30, quantity: 0.5 })));
 	});
 
@@ -597,7 +597,7 @@ describe("карточка конструкции: действия и ввод"
 		await user.type(input, "Infinity");
 		await user.click(screen.getByRole("button", { name: "Сохранить пометку" }));
 		expect(screen.getByText(/Введите корректную цену, время и количество/)).toHaveAttribute("role", "alert");
-		expect(cardApi.editManualCloseMark).not.toHaveBeenCalled();
+		expect(cardApi.editManualCloseAnnotation).not.toHaveBeenCalled();
 	});
 
 	// При сохранении существующей корректировки без правок сумма не округляется.
@@ -814,7 +814,7 @@ describe("карточка конструкции", () => {
 
 describe("карточка конструкции: примитивы дизайн-системы", () => {
 	it("рендерит все 12 показателей сводки примитивом Metric в карточке мастера h69OG", async () => {
-		// Act: карточка открытой конструкции с оценёнными марками.
+		// Act: карточка открытой конструкции с оценёнными котировками.
 		renderCardPage();
 
 		// Assert: 12 инстансов Метрики — M1–M9 мастера «Сводка метрик» (h69OG)

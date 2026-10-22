@@ -67,15 +67,15 @@ public class JournalDbContextMigrationTests
 			Assert.That(tables, Does.Contain("SyncRuns"));
 			Assert.That(tables, Does.Contain("SyncStates"));
 			Assert.That(tables, Does.Contain("Constructions"));
-			Assert.That(tables, Does.Contain("ManualCloseMarks"));
+			Assert.That(tables, Does.Contain("ManualCloseAnnotations"));
 
-			// Кэш последних известных марок — единственное новое хранилище аналитики:
+			// Кэш последних известных котировок — единственное новое хранилище аналитики:
 			// развернулся вместе с остальной схемой журнала.
 			// Traceability: openspec:analytics/performance#requirement-mark-provider
-			Assert.That(tables, Does.Contain("InstrumentMarks"));
+			Assert.That(tables, Does.Contain("InstrumentQuotes"));
 
 			// История рыночных снимков разворачивается штатным Migrate() на пустой
-			// базе: провайдер марок дописывает строки с первой же успешной выборки,
+			// базе: провайдер котировок дописывает строки с первой же успешной выборки,
 			// историю невозможно восстановить задним числом.
 			// Traceability: openspec:analytics/option-lifetime#requirement-market-snapshot-history
 			Assert.That(tables, Does.Contain("InstrumentMarketSnapshots"));
@@ -296,10 +296,10 @@ public class JournalDbContextMigrationTests
 			Assert.That(manualTradeNullableColumns, Does.Contain("ConstructionId"));
 
 			// Quantity nullable: null — весь остаток, заданное значение — частичное закрытие.
-			var manualCloseMarkNullableColumns = db.Database
-				.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ManualCloseMarks') WHERE \"notnull\" = 0 ORDER BY name")
+			var manualCloseAnnotationNullableColumns = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ManualCloseAnnotations') WHERE \"notnull\" = 0 ORDER BY name")
 				.ToList();
-			Assert.That(manualCloseMarkNullableColumns, Does.Contain("Quantity"));
+			Assert.That(manualCloseAnnotationNullableColumns, Does.Contain("Quantity"));
 		}
 	}
 
@@ -343,10 +343,10 @@ public class JournalDbContextMigrationTests
 			Assert.That(tables, Does.Not.Contain("ManualTrades"));
 			Assert.That(tables, Does.Not.Contain("SyntheticCloseManualLinks"));
 
-			var manualCloseMarkColumns = db.Database
-				.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ManualCloseMarks') ORDER BY name")
+			var manualCloseAnnotationColumns = db.Database
+				.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('ManualCloseAnnotations') ORDER BY name")
 				.ToList();
-			Assert.That(manualCloseMarkColumns, Does.Not.Contain("Quantity"));
+			Assert.That(manualCloseAnnotationColumns, Does.Not.Contain("Quantity"));
 		}
 
 		// Act: повторный накат всех миграций.

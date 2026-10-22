@@ -29,7 +29,7 @@ public class SyntheticCloseManualLinkLogicalLayerTests
 	private const string XautPut4400 = "XAUT-30OCT26-4400-P-USDT";
 	private const string XautPerp = "XAUTUSDT";
 
-	/// <summary>Момент получения марок стаба — фиксированный для детерминизма.</summary>
+	/// <summary>Момент получения котировок стаба — фиксированный для детерминизма.</summary>
 	private static readonly DateTimeOffset FetchedAt = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
 	private string _databasePath = null!;
@@ -210,7 +210,7 @@ public class SyntheticCloseManualLinkLogicalLayerTests
 
 	private ConstructionDetailReadModel CreateReadModel() => new(
 		CreateOptions(),
-		new JournalMetricsReadModel(CreateOptions(), new StubFreshMarkSource(4300m, FetchedAt)),
+		new JournalMetricsReadModel(CreateOptions(), new StubFreshQuoteSource(4300m, FetchedAt)),
 		new PositionReadModel(CreateOptions()));
 
 	private DbContextOptions<JournalDbContext> CreateOptions() =>
@@ -315,12 +315,12 @@ public class SyntheticCloseManualLinkLogicalLayerTests
 		new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
 	/// <summary>
-	/// Заглушка источника свежих марок: фиксированная марка со временем получения.
+	/// Заглушка источника свежих котировок: фиксированная котировка со временем получения.
 	/// </summary>
-	private sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt) : IFreshInstrumentMarkSource
+	private sealed class StubFreshQuoteSource(decimal quotePrice, DateTimeOffset receivedAt) : IFreshInstrumentQuoteSource
 	{
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-			Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, markPrice, receivedAt));
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+			Task.FromResult<InstrumentQuoteSnapshot?>(new InstrumentQuoteSnapshot(symbol, quotePrice, receivedAt));
 	}
 
 	#endregion

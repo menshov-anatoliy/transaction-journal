@@ -4,7 +4,7 @@ using TransactionJournal.Hints.Corpus;
 using TransactionJournal.Hints.Ports;
 
 /// <summary>
-/// Вход чистой функции триггера: снимок журнала, партия марок, карточка правила
+/// Вход чистой функции триггера: снимок журнала, партия котировок, карточка правила
 /// и отметка as-of прохода. Для правила конструкции вход дополнен конкретной
 /// открытой конструкцией — субъект итерации определяет каркас прохода по виду
 /// триггера, сама функция остаётся чистой относительно своих входов.
@@ -15,8 +15,8 @@ public sealed record TriggerEvaluationInput
 	/// <summary>Снимок журнала одного прохода: конструкции, позиции, хронология сделок.</summary>
 	public required JournalSnapshot Snapshot { get; init; }
 
-	/// <summary>Партия рыночных марок прохода; недоступный источник до триггеров не доходит.</summary>
-	public required MarkBatch Marks { get; init; }
+	/// <summary>Партия рыночных котировок прохода; недоступный источник до триггеров не доходит.</summary>
+	public required QuoteBatch Quotes { get; init; }
 
 	/// <summary>Карточка правила корпуса — источник порогов, шаблона и атрибуции.</summary>
 	public required RuleCard Card { get; init; }

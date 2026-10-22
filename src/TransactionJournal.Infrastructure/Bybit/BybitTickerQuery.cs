@@ -4,14 +4,14 @@ namespace TransactionJournal.Infrastructure.Bybit;
 /// <summary>
 /// Параметры запроса GET /v5/market/tickers — публичные тикеры инструментов категории
 /// linear/option; для категории option биржа требует фильтр symbol или baseCoin.
-/// Traceability: doc:docs/research/bybit-api.md#3-публичные-марки-tickers-без-аутентификации
+/// Traceability: doc:docs/research/bybit-api.md#3-публичные-котировки-tickers-без-аутентификации
 /// </summary>
 public sealed record BybitTickerQuery
 {
 	/// <summary>Торговая категория: linear или option; обязательный параметр эндпоинта.</summary>
 	public required string Category { get; init; }
 
-	/// <summary>Фильтр по символу инструмента; провайдер марок запрашивает конкретный инструмент.</summary>
+	/// <summary>Фильтр по символу инструмента; провайдер котировок запрашивает конкретный инструмент.</summary>
 	public string? Symbol { get; init; }
 
 	/// <summary>

@@ -194,7 +194,7 @@ public sealed class ChatContextReader : IChatContextReader
 				markdown.AppendLine(
 					$"  | {position.Symbol} | {Num(position.Residual)} | {(position.IsOpen ? "открыта" : "закрыта")}" +
 					$" | {NumOpt(position.AverageEntryPrice)} | {NumOpt(position.AverageClosePrice)}" +
-					$" | {Num(position.RealizedPnL)} | {NumOpt(position.UnrealizedPnL, UnavailableMarkText)} | {NumOpt(position.TotalPnL, UnavailableMarkText)}" +
+					$" | {Num(position.RealizedPnL)} | {NumOpt(position.UnrealizedPnL, UnavailableQuoteText)} | {NumOpt(position.TotalPnL, UnavailableQuoteText)}" +
 					$" | {Num(position.AccumulatedFees)} |");
 			}
 		}
@@ -206,12 +206,12 @@ public sealed class ChatContextReader : IChatContextReader
 		// Traceability: openspec:analytics/performance#scenario-construction-total-includes-adjustments
 		var m = detail.Metrics;
 		markdown.AppendLine(
-			$"- Результат: реализованный {Num(m.RealizedPnL)} USDT, нереализованный {NumOpt(m.UnrealizedPnL, UnavailableMarkText)}" +
-			$", корректировки {Num(m.AdjustmentsPnL)} USDT, итог {NumOpt(m.TotalPnL, UnavailableMarkText)} USDT" +
+			$"- Результат: реализованный {Num(m.RealizedPnL)} USDT, нереализованный {NumOpt(m.UnrealizedPnL, UnavailableQuoteText)}" +
+			$", корректировки {Num(m.AdjustmentsPnL)} USDT, итог {NumOpt(m.TotalPnL, UnavailableQuoteText)} USDT" +
 			$"{PercentTail(m.TotalPnLPercent)}");
-		if (detail.MarksAsOf is { } marksAsOf)
+		if (detail.QuotesAsOf is { } quotesAsOf)
 		{
-			markdown.AppendLine($"- Марки оценки: {Stamp(marksAsOf)}");
+			markdown.AppendLine($"- Котировки оценки: {Stamp(quotesAsOf)}");
 		}
 
 		markdown.AppendLine();
@@ -241,10 +241,10 @@ public sealed class ChatContextReader : IChatContextReader
 		markdown.AppendLine($"- Реализованный PnL журнала: {Num(metrics.RealizedPnL)} USDT");
 		markdown.AppendLine(metrics.UnrealizedPnL is { } unrealized
 			? $"- Нереализованный PnL журнала: {Num(unrealized)} USDT"
-			: $"- Нереализованный PnL журнала: недоступна ({UnavailableMarkText})");
+			: $"- Нереализованный PnL журнала: недоступна ({UnavailableQuoteText})");
 		markdown.AppendLine(metrics.TotalPnL is { } total
 			? $"- Итог по журналу: {Num(total)} USDT"
-			: "- Итог по журналу: неполный (сбой марок)");
+			: "- Итог по журналу: неполный (сбой котировок)");
 		markdown.AppendLine();
 	}
 
@@ -359,8 +359,8 @@ public sealed class ChatContextReader : IChatContextReader
 
 	#region Форматирование
 
-	/// <summary>Текст недоступной нереализованной оценки при сбое марок.</summary>
-	private const string UnavailableMarkText = "оценка недоступна: сбой марок";
+	/// <summary>Текст недоступной нереализованной оценки при сбое котировок.</summary>
+	private const string UnavailableQuoteText = "оценка недоступна: сбой котировок";
 
 	/// <summary>
 	/// Карточка корпуса — источник периодных лимитов риска журнала: та же

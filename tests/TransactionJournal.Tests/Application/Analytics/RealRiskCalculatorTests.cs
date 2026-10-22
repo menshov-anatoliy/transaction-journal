@@ -10,7 +10,7 @@ namespace TransactionJournal.Tests.Analytics;
 /// Проверки калькулятора реального риска: дебетовый вертикальный спред даёт
 /// нетто-дебет, группы разных экспираций суммируются консервативно,
 /// неограниченный худший случай и неполные исходные данные различаются
-/// состояниями типизированного результата, сбой марок на метрику не влияет,
+/// состояниями типизированного результата, сбой котировок на метрику не влияет,
 /// без открытых остатков риск конечен и нулевой, конструкция с хедж-перпом
 /// больше не деградирует в недоступность, хеджированный короткий перп даёт
 /// конечный риск с числовым совпадением и ручным расчётом, голый короткий
@@ -340,30 +340,30 @@ public class RealRiskCalculatorTests
 	}
 
 	[TestMethod]
-	[Description("Сбой марок не влияет на реальный риск")]
+	[Description("Сбой котировок не влияет на реальный риск")]
 	public void TryIfMarksFailureDoesNotChangeRealRisk()
 	{
 		// Arrange: один и тот же дебетовый спред в двух наборах — с оценёнными
-		// марками и без них (марочные поля null, как при сбое котировок).
+		// котировками и без них (марочные поля null, как при сбое котировок).
 		// Требование: результат выводится из структуры ног и средних цен остатков,
-		// а не из оценок марок.
+		// а не из оценок котировок.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
-		var withMarks = new[]
+		var withQuotes = new[]
 		{
-			OpenResidual("BTC-27DEC24-65000-C", 1m, 300m, markPrice: 320m, unrealizedPnL: 20m, markValue: 20m),
-			OpenResidual("BTC-27DEC24-70000-C", -1m, 150m, markPrice: 140m, unrealizedPnL: 10m, markValue: 10m),
+			OpenResidual("BTC-27DEC24-65000-C", 1m, 300m, quotePrice: 320m, unrealizedPnL: 20m, quoteValue: 20m),
+			OpenResidual("BTC-27DEC24-70000-C", -1m, 150m, quotePrice: 140m, unrealizedPnL: 10m, quoteValue: 10m),
 		};
-		var withoutMarks = new[]
+		var withoutQuotes = new[]
 		{
 			OpenResidual("BTC-27DEC24-65000-C", 1m, 300m),
 			OpenResidual("BTC-27DEC24-70000-C", -1m, 150m),
 		};
 
 		// Act
-		var evaluated = _calculator.CalculateResult(withMarks);
-		var failed = _calculator.CalculateResult(withoutMarks);
+		var evaluated = _calculator.CalculateResult(withQuotes);
+		var failed = _calculator.CalculateResult(withoutQuotes);
 
-		// Assert: сбой марок не меняет ни величину, ни состояние результата,
+		// Assert: сбой котировок не меняет ни величину, ни состояние результата,
 		// неклэмпированный платёж остатков остаётся −150.
 		Assert.That(evaluated, Is.EqualTo(RealRiskResult.Finite(150m, -150m)));
 		Assert.That(failed, Is.EqualTo(evaluated));
@@ -430,15 +430,15 @@ public class RealRiskCalculatorTests
 
 	/// <summary>
 	/// Строит метрики открытого остатка: знаковое количество и средняя цена
-	/// остатка заданы, марочные поля заполняются по желанию — как при сбое марок.
+	/// остатка заданы, марочные поля заполняются по желанию — как при сбое котировок.
 	/// </summary>
 	private static PositionMetrics OpenResidual(
 		string symbol,
 		decimal residual,
 		decimal averageOpenPrice,
-		decimal? markPrice = null,
+		decimal? quotePrice = null,
 		decimal? unrealizedPnL = null,
-		decimal? markValue = null) => new()
+		decimal? quoteValue = null) => new()
 	{
 		ConstructionId = ConstructionId,
 		Symbol = symbol,
@@ -449,9 +449,9 @@ public class RealRiskCalculatorTests
 		AverageEntryPrice = averageOpenPrice,
 		AverageClosePrice = null,
 		TotalPnL = unrealizedPnL,
-		MarkPrice = markPrice,
+		QuotePrice = quotePrice,
 		UnrealizedPnL = unrealizedPnL,
-		MarkValue = markValue,
+		QuoteValue = quoteValue,
 		OpenedAt = BaseAt,
 		ClosedAt = null,
 		Duration = null,
@@ -469,9 +469,9 @@ public class RealRiskCalculatorTests
 		AverageEntryPrice = null,
 		AverageClosePrice = null,
 		TotalPnL = null,
-		MarkPrice = null,
+		QuotePrice = null,
 		UnrealizedPnL = null,
-		MarkValue = null,
+		QuoteValue = null,
 		OpenedAt = BaseAt,
 		ClosedAt = null,
 		Duration = null,
@@ -489,7 +489,7 @@ public class RealRiskCalculatorTests
 		AverageEntryPrice = null,
 		AverageClosePrice = null,
 		TotalPnL = 9.97m,
-		MarkPrice = null,
+		QuotePrice = null,
 		UnrealizedPnL = 0m,
 		OpenedAt = BaseAt,
 		ClosedAt = BaseAt.AddMinutes(30),

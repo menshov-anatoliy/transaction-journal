@@ -72,13 +72,13 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 	public async Task TryIfAssistantUsedMarketTool_TracePersistedInMessage()
 	{
 		// Arrange: модель сначала вызывает снимок рынка, затем отвечает текстом;
-		// биржа отдаёт марку с фиксированным as-of.
+		// биржа отдаёт котировку с фиксированным as-of.
 		var chatClient = new FakeChatClient();
 		chatClient.Script =
 		[
 			[() => ToolCallFrame("call-1", ChatTools.GetMarketSnapshotToolName, "BTC")],
 			[
-				() => new ChatResponseUpdate(ChatRole.Assistant, "Марка BTC "),
+				() => new ChatResponseUpdate(ChatRole.Assistant, "Котировка BTC "),
 				() => new ChatResponseUpdate(ChatRole.Assistant, "108975.4 USDT."),
 			],
 		];
@@ -91,12 +91,12 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 				AsOf = FixedNow,
 				IsAvailable = true,
 				Symbol = "BTCUSDT",
-				MarkPrice = 108975.4m,
+				QuotePrice = 108975.4m,
 			});
 		var service = CreateService(chatClient, market, out _);
 
 		// Act: первое сообщение создаёт чат, ответ стримится до конца.
-		var userMessage = await service.AppendUserMessageAsync(null, Start(7), "Что с маркой BTC?");
+		var userMessage = await service.AppendUserMessageAsync(null, Start(7), "Что с котировкой BTC?");
 		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
 
 		// Assert: сообщение владельца без следа, ответ помощника — со следом:
@@ -106,7 +106,7 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 		var storedUser = messages.Single(message => message.Role == ChatMessageRole.User);
 		Assert.That(storedUser.SourceTrace, Is.Null);
 		var storedAssistant = messages.Single(message => message.Role == ChatMessageRole.Assistant);
-		Assert.That(storedAssistant.Text, Is.EqualTo("Марка BTC 108975.4 USDT."));
+		Assert.That(storedAssistant.Text, Is.EqualTo("Котировка BTC 108975.4 USDT."));
 		Assert.That(storedAssistant.SourceTrace, Is.Not.Null);
 		var trace = storedAssistant.SourceTrace!;
 		Assert.That(trace.RuleCards, Is.Empty);
@@ -511,7 +511,7 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 				ConstructionId = 7,
 				Sources = [ChatDataSource.BybitMarket],
 			},
-			"Что с маркой BTC?");
+			"Что с котировкой BTC?");
 
 		// Act: ответ помощника проходит конвейер.
 		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));
@@ -535,7 +535,7 @@ public sealed class ChatServiceTests : ChatDatabaseTests
 		var chatClient = new FakeChatClient();
 		chatClient.Script = [[() => new ChatResponseUpdate(ChatRole.Assistant, "Ответ по рынку.")]];
 		var service = CreateService(chatClient, new Mock<IChatMarketReader>(MockBehavior.Loose), out var contextReader);
-		var userMessage = await service.AppendUserMessageAsync(null, Start(7, [ChatDataSource.BybitMarket]), "Что с маркой BTC?");
+		var userMessage = await service.AppendUserMessageAsync(null, Start(7, [ChatDataSource.BybitMarket]), "Что с котировкой BTC?");
 
 		// Act: ответ помощника проходит конвейер.
 		_ = await CollectAsync(service.StreamAssistantAnswerAsync(userMessage.ChatId, userMessage));

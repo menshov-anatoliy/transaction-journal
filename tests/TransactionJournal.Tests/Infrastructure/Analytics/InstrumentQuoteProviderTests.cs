@@ -19,14 +19,14 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 namespace TransactionJournal.Tests.Infrastructure.Analytics;
 
 /// <summary>
-/// Проверки провайдера марок на стыке публичных тикеров и хранилища журнала:
-/// свежая марка штампует кэш ценой и временем получения, последняя известная
-/// марка служит дефолтом ручной пометки закрытия без цены пользователя, а сбои
-/// биржи не вытирают уже известную марку. Негативные проверки отказывают пустой
+/// Проверки провайдера котировок на стыке публичных тикеров и хранилища журнала:
+/// свежая котировка штампует кэш ценой и временем получения, последняя известная
+/// котировка служит дефолтом ручной пометки закрытия без цены пользователя, а сбои
+/// биржи не вытирают уже известную котировку. Негативные проверки отказывают пустой
 /// инструмент и конструирование без зависимостей.
 /// </summary>
 [TestClass]
-public class InstrumentMarkProviderTests
+public class InstrumentQuoteProviderTests
 {
 	private const string TestBaseUrl = "http://bybit-test.local";
 	private const string LinearSymbol = "BTCUSDT";
@@ -38,13 +38,13 @@ public class InstrumentMarkProviderTests
 	private ManualTimeProvider _clock = null!;
 	private ScriptedHttpMessageHandler _handler = null!;
 	private BybitTickersClient _tickersClient = null!;
-	private InstrumentMarkProvider _provider = null!;
+	private InstrumentQuoteProvider _provider = null!;
 
 	[TestInitialize]
 	public void Initialize()
 	{
 		// Каждая проверка работает со своей пустой базой во временной папке.
-		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-mark-cache-tests-{Guid.NewGuid():N}.db");
+		_databasePath = Path.Combine(Path.GetTempPath(), $"journal-quote-cache-tests-{Guid.NewGuid():N}.db");
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
 			db.Database.Migrate();
@@ -59,7 +59,7 @@ public class InstrumentMarkProviderTests
 			new HttpClient(_handler),
 			new BybitClientOptions { BaseUrl = TestBaseUrl },
 			timeProvider: _clock);
-		_provider = new InstrumentMarkProvider(CreateOptions(), _tickersClient, _clock);
+		_provider = new InstrumentQuoteProvider(CreateOptions(), _tickersClient, _clock);
 	}
 
 	[TestCleanup]
@@ -80,62 +80,62 @@ public class InstrumentMarkProviderTests
 	}
 
 	[TestMethod]
-	[Description("Свежая марка штампует кэш ценой и временем получения; новое получение обновляет ту же строку")]
+	[Description("Свежая котировка штампует кэш ценой и временем получения; новое получение обновляет ту же строку")]
 	public async Task TryIfFreshMarkStampesCacheWithPriceAndReceivedTime()
 	{
-		// Arrange: справочник знает линейный перп; биржа отдаёт марку 27739.74,
+		// Arrange: справочник знает линейный перп; биржа отдаёт котировку 27739.74,
 		// виртуальные часы стоят на старте.
 		var start = _clock.GetUtcNow();
 		_handler.EnqueueJson(TickersBody("27739.74"));
 
-		// Act: запрашиваем свежую марку инструмента.
-		var first = await _provider.GetFreshMarkAsync(LinearSymbol);
+		// Act: запрашиваем свежую котировку инструмента.
+		var first = await _provider.GetFreshQuoteAsync(LinearSymbol);
 
-		// Assert: марка вернулась со временем получения по часам провайдера,
+		// Assert: котировка вернулась со временем получения по часам провайдера,
 		// а кэш сохранил и цену, и штамп времени получения — сценарий
-		// «кэш марок штампуется временем».
+		// «кэш котировок штампуется временем».
 		// Traceability: openspec:analytics/performance#scenario-mark-cache-timestamped
 		Assert.That(first, Is.Not.Null);
 		Assert.That(first!.Symbol, Is.EqualTo(LinearSymbol));
-		Assert.That(first.MarkPrice, Is.EqualTo(27739.74m));
+		Assert.That(first.QuotePrice, Is.EqualTo(27739.74m));
 		Assert.That(first.ReceivedAt, Is.EqualTo(start));
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
-			var cached = await db.InstrumentMarks.SingleAsync();
+			var cached = await db.InstrumentQuotes.SingleAsync();
 			Assert.That(cached.Symbol, Is.EqualTo(LinearSymbol));
-			Assert.That(cached.MarkPrice, Is.EqualTo(27739.74m));
+			Assert.That(cached.QuotePrice, Is.EqualTo(27739.74m));
 			Assert.That(cached.ReceivedAt, Is.EqualTo(start));
 		}
 
-		// Act: время идёт, биржа отдаёт новую марку — кэш обновляется той же строкой.
+		// Act: время идёт, биржа отдаёт новую котировку — кэш обновляется той же строкой.
 		_clock.Advance(TimeSpan.FromMinutes(2));
 		var beforeSecondFetch = _clock.GetUtcNow();
 		_handler.EnqueueJson(TickersBody("28000.10"));
-		var second = await _provider.GetFreshMarkAsync(LinearSymbol);
+		var second = await _provider.GetFreshQuoteAsync(LinearSymbol);
 
 		// Assert: строка кэша одна, цена и штамп времени заменены на новые.
-		Assert.That(second!.MarkPrice, Is.EqualTo(28000.10m));
+		Assert.That(second!.QuotePrice, Is.EqualTo(28000.10m));
 		Assert.That(second.ReceivedAt, Is.GreaterThan(first.ReceivedAt));
 		Assert.That(second.ReceivedAt, Is.GreaterThanOrEqualTo(beforeSecondFetch));
 		using (var db = new JournalDbContext(CreateOptions()))
 		{
-			var cached = await db.InstrumentMarks.SingleAsync();
-			Assert.That(cached.MarkPrice, Is.EqualTo(28000.10m));
+			var cached = await db.InstrumentQuotes.SingleAsync();
+			Assert.That(cached.QuotePrice, Is.EqualTo(28000.10m));
 			Assert.That(cached.ReceivedAt, Is.EqualTo(second.ReceivedAt));
 		}
 	}
 
 	[TestMethod]
-	[Description("Свежий тикер опциона дописывает строку истории снимков: марка, индекс, тета, момент получения")]
+	[Description("Свежий тикер опциона дописывает строку истории снимков: котировка, индекс, тета, момент получения")]
 	public async Task TryIfFreshOptionTickerAppendsMarketSnapshotHistoryRow()
 	{
-		// Arrange: справочник знает опционный символ; биржа отдаёт марку, индексную
+		// Arrange: справочник знает опционный символ; биржа отдаёт котировку, индексную
 		// цену и тету, виртуальные часы стоят на старте.
 		var start = _clock.GetUtcNow();
 		_handler.EnqueueJson(OptionTickersBody("472.10", "103850.55", "-19.40"));
 
-		// Act: запрашиваем свежую марку опциона.
-		var fresh = await _provider.GetFreshMarkAsync(OptionSymbol);
+		// Act: запрашиваем свежую котировку опциона.
+		var fresh = await _provider.GetFreshQuoteAsync(OptionSymbol);
 
 		// Assert: возвращённый снимок несёт nullable-поля теты и индекса, а история
 		// рыночных снимков пополнилась строкой со всеми величинами и штампом
@@ -143,7 +143,7 @@ public class InstrumentMarkProviderTests
 		// Traceability: openspec:analytics/option-lifetime#scenario-snapshot-written-on-fresh-tickers
 		Assert.That(fresh, Is.Not.Null);
 		Assert.That(fresh!.Symbol, Is.EqualTo(OptionSymbol));
-		Assert.That(fresh.MarkPrice, Is.EqualTo(472.10m));
+		Assert.That(fresh.QuotePrice, Is.EqualTo(472.10m));
 		Assert.That(fresh.UnderlyingPrice, Is.EqualTo(103850.55m));
 		Assert.That(fresh.Theta, Is.EqualTo(-19.40m));
 		Assert.That(fresh.ReceivedAt, Is.EqualTo(start));
@@ -151,7 +151,7 @@ public class InstrumentMarkProviderTests
 		{
 			var snapshot = await db.InstrumentMarketSnapshots.SingleAsync();
 			Assert.That(snapshot.Symbol, Is.EqualTo(OptionSymbol));
-			Assert.That(snapshot.MarkPrice, Is.EqualTo(472.10m));
+			Assert.That(snapshot.QuotePrice, Is.EqualTo(472.10m));
 			Assert.That(snapshot.UnderlyingPrice, Is.EqualTo(103850.55m));
 			Assert.That(snapshot.Theta, Is.EqualTo(-19.40m));
 			Assert.That(snapshot.ReceivedAt, Is.EqualTo(start));
@@ -162,7 +162,7 @@ public class InstrumentMarkProviderTests
 		_clock.Advance(TimeSpan.FromHours(6));
 		var later = _clock.GetUtcNow();
 		_handler.EnqueueJson(OptionTickersBody("470.00", "103900.00", "-20.15"));
-		await _provider.GetFreshMarkAsync(OptionSymbol);
+		await _provider.GetFreshQuoteAsync(OptionSymbol);
 
 		// Assert: в истории две строки с разными моментами получения, первая не
 		// перезаписана — сценарий «история накапливается без очистки».
@@ -174,22 +174,22 @@ public class InstrumentMarkProviderTests
 				.OrderBy(snapshot => snapshot.ReceivedAt)
 				.ToList();
 			Assert.That(history, Has.Count.EqualTo(2));
-			Assert.That(history[0].MarkPrice, Is.EqualTo(472.10m));
-			Assert.That(history[1].MarkPrice, Is.EqualTo(470.00m));
+			Assert.That(history[0].QuotePrice, Is.EqualTo(472.10m));
+			Assert.That(history[1].QuotePrice, Is.EqualTo(470.00m));
 			Assert.That(history[1].Theta, Is.EqualTo(-20.15m));
 			Assert.That(history[1].ReceivedAt, Is.EqualTo(later));
 		}
 	}
 
 	[TestMethod]
-	[Description("Свежая марка линейного перпа тоже дописывает историю снимков: индекс и тета пусты")]
+	[Description("Свежая котировка линейного перпа тоже дописывает историю снимков: индекс и тета пусты")]
 	public async Task TryIfFreshLinearMarkAppendsSnapshotWithoutOptionFields()
 	{
-		// Arrange: биржа отдаёт только марку линейного перпа — поля опциона пустые.
+		// Arrange: биржа отдаёт только котировку линейного перпа — поля опциона пустые.
 		_handler.EnqueueJson(TickersBody("27739.74"));
 
-		// Act: запрашиваем свежую марку.
-		var fresh = await _provider.GetFreshMarkAsync(LinearSymbol);
+		// Act: запрашиваем свежую котировку.
+		var fresh = await _provider.GetFreshQuoteAsync(LinearSymbol);
 
 		// Assert: снимок в истории дописан с пустыми nullable-полями индекса и
 		// теты: строка фиксирует сам факт выборки любого инструмента провайдера,
@@ -201,129 +201,129 @@ public class InstrumentMarkProviderTests
 		using var db = new JournalDbContext(CreateOptions());
 		var snapshot = await db.InstrumentMarketSnapshots.SingleAsync();
 		Assert.That(snapshot.Symbol, Is.EqualTo(LinearSymbol));
-		Assert.That(snapshot.MarkPrice, Is.EqualTo(27739.74m));
+		Assert.That(snapshot.QuotePrice, Is.EqualTo(27739.74m));
 		Assert.That(snapshot.UnderlyingPrice, Is.Null);
 		Assert.That(snapshot.Theta, Is.Null);
 	}
 
 	[TestMethod]
-	[Description("Пустой ответ биржи не пополняет историю снимков и сохраняет кэш последней марки")]
+	[Description("Пустой ответ биржи не пополняет историю снимков и сохраняет кэш последней котировки")]
 	public async Task TryIfMissingExchangeMarkLeavesHistoryAndCacheIntact()
 	{
 		// Arrange: одна успешная выборка уже создала строку истории и штамп кэша;
-		// следующий ответ биржи — пустая марка опционного инструмента.
+		// следующий ответ биржи — пустая котировка опционного инструмента.
 		_handler.EnqueueJson(OptionTickersBody("472.10", "103850.55", "-19.40"));
-		await _provider.GetFreshMarkAsync(OptionSymbol);
-		_handler.EnqueueJson(OptionMissingMarkBody());
+		await _provider.GetFreshQuoteAsync(OptionSymbol);
+		_handler.EnqueueJson(OptionMissingQuoteBody());
 
-		// Act: запрашиваем свежую марку — биржа значения не отдала.
-		var fresh = await _provider.GetFreshMarkAsync(OptionSymbol);
+		// Act: запрашиваем свежую котировку — биржа значения не отдала.
+		var fresh = await _provider.GetFreshQuoteAsync(OptionSymbol);
 
-		// Assert: свежей марки нет, история не пополнилась, а кэш хранит последнюю
-		// известную марку — сценарий «сбой тикеров не пополняет историю».
+		// Assert: свежей котировки нет, история не пополнилась, а кэш хранит последнюю
+		// известную котировку — сценарий «сбой тикеров не пополняет историю».
 		// Traceability: openspec:analytics/option-lifetime#scenario-snapshot-not-written-on-failure
 		Assert.That(fresh, Is.Null);
-		Assert.That(await _provider.GetLastMarkAsync(OptionSymbol), Is.EqualTo(472.10m));
+		Assert.That(await _provider.GetLastQuoteAsync(OptionSymbol), Is.EqualTo(472.10m));
 		using var db = new JournalDbContext(CreateOptions());
 		var history = await db.InstrumentMarketSnapshots.ToListAsync();
 		Assert.That(history, Has.Count.EqualTo(1));
-		Assert.That(history.Single().MarkPrice, Is.EqualTo(472.10m));
+		Assert.That(history.Single().QuotePrice, Is.EqualTo(472.10m));
 	}
 
 	[TestMethod]
-	[Description("Последняя известная марка из кэша служит дефолтом ручной пометки закрытия без цены")]
+	[Description("Последняя известная котировка из кэша служит дефолтом ручной пометки закрытия без цены")]
 	public async Task TryIfLastKnownMarkServesAsManualCloseMarkDefault()
 	{
-		// Arrange: кэш провайдера уже несёт марку 27739.74; у конструкции — позиция
+		// Arrange: кэш провайдера уже несёт котировку 27739.74; у конструкции — позиция
 		// линейного перпа и ручная пометка закрытия без цены пользователя.
 		_handler.EnqueueJson(TickersBody("27739.74"));
-		await _provider.GetFreshMarkAsync(LinearSymbol);
+		await _provider.GetFreshQuoteAsync(LinearSymbol);
 		var construction = await new ConstructionService(CreateOptions()).CreateAsync("Диапазон BTC", 1000m);
 		await AddLinearTradeAsync("exec-buy-1", "Buy", "0.01");
 		await new TradeBindingService(CreateOptions()).BindAsync(construction.Id, "exec-buy-1");
-		await new ManualCloseMarkService(CreateOptions()).AddAsync(
+		await new ManualCloseAnnotationService(CreateOptions()).AddAsync(
 			construction.Id, LinearSymbol, new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero));
 
-		// Act: читаем позиции с провайдером марок в роли источника дефолта.
+		// Act: читаем позиции с провайдером котировок в роли источника дефолта.
 		var readModel = new PositionReadModel(CreateOptions(), _provider);
 		var result = await readModel.ListAsync();
 
-		// Assert: ручная пометка закрыла позицию ценой последней известной марки
-		// из кэша провайдера — сценарий «последняя известная марка служит дефолтом
+		// Assert: ручная пометка закрыла позицию ценой последней известной котировки
+		// из кэша провайдера — сценарий «последняя известная котировка служит дефолтом
 		// ручной пометки». Дефолт читается из кэша: новых сетевых запросов нет.
 		// Traceability: openspec:analytics/performance#scenario-last-known-mark-serves-manual-default
 		var entry = result.ClosingEntries.Single();
-		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
+		Assert.That(entry.Kind, Is.EqualTo(PositionClosingKind.ManualAnnotation));
 		Assert.That(entry.Price, Is.EqualTo(27739.74m));
 		var position = result.Positions.Single();
 		Assert.That(position.Residual, Is.EqualTo(0m));
 		Assert.That(position.IsOpen, Is.False);
 		Assert.That(_handler.Requests, Has.Count.EqualTo(1));
-		Assert.That(await _provider.GetLastMarkAsync(LinearSymbol), Is.EqualTo(27739.74m));
+		Assert.That(await _provider.GetLastQuoteAsync(LinearSymbol), Is.EqualTo(27739.74m));
 	}
 
 	[TestMethod]
-	[Description("Свежая марка неизвестного справочнику инструмента не запрашивается и не кэшируется")]
+	[Description("Свежая котировка неизвестного справочнику инструмента не запрашивается и не кэшируется")]
 	public async Task TryIfFreshMarkSkipsRequestForUnknownSymbol()
 	{
 		// Arrange: справочник не знает ETHUSDT — категорию запроса тикеров не построить.
 
-		// Act: запрашиваем свежую марку и последнюю известную.
-		var fresh = await _provider.GetFreshMarkAsync("ETHUSDT");
-		var last = await _provider.GetLastMarkAsync("ETHUSDT");
+		// Act: запрашиваем свежую котировку и последнюю известную.
+		var fresh = await _provider.GetFreshQuoteAsync("ETHUSDT");
+		var last = await _provider.GetLastQuoteAsync("ETHUSDT");
 
-		// Assert: обе марки неизвестны, сетевых запросов не было, кэш пуст.
+		// Assert: обе котировки неизвестны, сетевых запросов не было, кэш пуст.
 		Assert.That(fresh, Is.Null);
 		Assert.That(last, Is.Null);
 		Assert.That(_handler.Requests, Is.Empty);
 		using var db = new JournalDbContext(CreateOptions());
-		Assert.That(await db.InstrumentMarks.CountAsync(), Is.EqualTo(0));
+		Assert.That(await db.InstrumentQuotes.CountAsync(), Is.EqualTo(0));
 	}
 
 	[TestMethod]
-	[Description("Биржа без марки не трогает кэш: последняя известная марка остаётся прежней")]
+	[Description("Биржа без котировки не трогает кэш: последняя известная котировка остаётся прежней")]
 	public async Task TryIfMissingExchangeMarkLeavesCacheIntact()
 	{
-		// Arrange: кэш уже несёт марку, а биржа отвечает пустой маркой инструмента.
+		// Arrange: кэш уже несёт котировку, а биржа отвечает пустой котировкой инструмента.
 		_handler.EnqueueJson(TickersBody("27739.74"));
-		await _provider.GetFreshMarkAsync(LinearSymbol);
-		_handler.EnqueueJson(MissingMarkBody());
+		await _provider.GetFreshQuoteAsync(LinearSymbol);
+		_handler.EnqueueJson(MissingQuoteBody());
 
-		// Act: запрашиваем свежую марку — биржа значения не отдала.
-		var fresh = await _provider.GetFreshMarkAsync(LinearSymbol);
+		// Act: запрашиваем свежую котировку — биржа значения не отдала.
+		var fresh = await _provider.GetFreshQuoteAsync(LinearSymbol);
 
-		// Assert: свежей марки нет, но последняя известная марка в кэше не изменилась.
+		// Assert: свежей котировки нет, но последняя известная котировка в кэше не изменилась.
 		Assert.That(fresh, Is.Null);
-		Assert.That(await _provider.GetLastMarkAsync(LinearSymbol), Is.EqualTo(27739.74m));
+		Assert.That(await _provider.GetLastQuoteAsync(LinearSymbol), Is.EqualTo(27739.74m));
 	}
 
 	[TestMethod]
-	[Description("Ошибка тикеров поднимается наружу, не вытирая последнюю известную марку из кэша")]
+	[Description("Ошибка тикеров поднимается наружу, не вытирая последнюю известную котировку из кэша")]
 	[ExpectedException(typeof(BybitApiException))]
 	public void ThrowOnTickersFailureKeepsLastKnownMarkInCache()
 	{
-		// Arrange: кэш уже несёт марку; следующий ответ биржи — ошибка конверта retCode.
+		// Arrange: кэш уже несёт котировку; следующий ответ биржи — ошибка конверта retCode.
 		_handler.EnqueueJson(TickersBody("27739.74"));
-		_provider.GetFreshMarkAsync(LinearSymbol).GetAwaiter().GetResult();
+		_provider.GetFreshQuoteAsync(LinearSymbol).GetAwaiter().GetResult();
 		_handler.EnqueueJson("""{"retCode":10001,"retMsg":"params error","result":{}}""");
 
 		// Act — ошибка биржи поднимается вызывающему слою: решение о деградации
 		// остаётся за ним, а не за провайдером.
 		try
 		{
-			_provider.GetFreshMarkAsync(LinearSymbol).GetAwaiter().GetResult();
+			_provider.GetFreshQuoteAsync(LinearSymbol).GetAwaiter().GetResult();
 		}
 		catch (BybitApiException)
 		{
-			// Assert: сбой не вытер кэш — последняя известная марка по-прежнему
+			// Assert: сбой не вытер кэш — последняя известная котировка по-прежнему
 			// доступна читающим слоям без сети.
-			Assert.That(_provider.GetLastMarkAsync(LinearSymbol).GetAwaiter().GetResult(), Is.EqualTo(27739.74m));
+			Assert.That(_provider.GetLastQuoteAsync(LinearSymbol).GetAwaiter().GetResult(), Is.EqualTo(27739.74m));
 			throw;
 		}
 	}
 
 	[TestMethod]
-	[Description("Свежая марка без инструмента отклоняется до запроса к бирже")]
+	[Description("Свежая котировка без инструмента отклоняется до запроса к бирже")]
 	[DataRow("")]
 	[DataRow(" ")]
 	[ExpectedException(typeof(ArgumentException))]
@@ -332,7 +332,7 @@ public class InstrumentMarkProviderTests
 		// Act — пустой инструмент прерывается аргумент-исключением.
 		try
 		{
-			_provider.GetFreshMarkAsync(symbol).GetAwaiter().GetResult();
+			_provider.GetFreshQuoteAsync(symbol).GetAwaiter().GetResult();
 		}
 		catch (ArgumentException)
 		{
@@ -343,14 +343,14 @@ public class InstrumentMarkProviderTests
 	}
 
 	[TestMethod]
-	[Description("Свежая марка без самого инструмента отклоняется до запроса к бирже")]
+	[Description("Свежая котировка без самого инструмента отклоняется до запроса к бирже")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnFreshMarkNotProvided()
 	{
 		// Act — отсутствие инструмента прерывается до сетевого вызова.
 		try
 		{
-			_provider.GetFreshMarkAsync(null!).GetAwaiter().GetResult();
+			_provider.GetFreshQuoteAsync(null!).GetAwaiter().GetResult();
 		}
 		catch (ArgumentNullException)
 		{
@@ -361,7 +361,7 @@ public class InstrumentMarkProviderTests
 	}
 
 	[TestMethod]
-	[Description("Последняя известная марка без инструмента отклоняется без обращения к базе")]
+	[Description("Последняя известная котировка без инструмента отклоняется без обращения к базе")]
 	[DataRow("")]
 	[DataRow(" ")]
 	[ExpectedException(typeof(ArgumentException))]
@@ -370,7 +370,7 @@ public class InstrumentMarkProviderTests
 		// Act — пустой инструмент прерывается аргумент-исключением.
 		try
 		{
-			_provider.GetLastMarkAsync(symbol).GetAwaiter().GetResult();
+			_provider.GetLastQuoteAsync(symbol).GetAwaiter().GetResult();
 		}
 		catch (ArgumentException)
 		{
@@ -381,14 +381,14 @@ public class InstrumentMarkProviderTests
 	}
 
 	[TestMethod]
-	[Description("Последняя известная марка без самого инструмента отклоняется без обращения к базе")]
+	[Description("Последняя известная котировка без самого инструмента отклоняется без обращения к базе")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	public void ThrowOnLastMarkNotProvided()
 	{
 		// Act — отсутствие инструмента прерывается до обращения к базе.
 		try
 		{
-			_provider.GetLastMarkAsync(null!).GetAwaiter().GetResult();
+			_provider.GetLastQuoteAsync(null!).GetAwaiter().GetResult();
 		}
 		catch (ArgumentNullException)
 		{
@@ -408,7 +408,7 @@ public class InstrumentMarkProviderTests
 		// Act — отсутствие обязательной зависимости прерывается аргумент-исключением.
 		var options = skipOptions ? null! : CreateOptions();
 		var client = skipClient ? null! : _tickersClient;
-		new InstrumentMarkProvider(options, client);
+		new InstrumentQuoteProvider(options, client);
 	}
 
 	#region Помощники
@@ -455,21 +455,21 @@ public class InstrumentMarkProviderTests
 		await db.SaveChangesAsync();
 	}
 
-	/// <summary>Успешный ответ тикеров с маркой линейного перпа.</summary>
-	private static string TickersBody(string markPrice) =>
-		"{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"category\":\"linear\",\"list\":[{\"symbol\":\"BTCUSDT\",\"markPrice\":\"" + markPrice + "\"}]}}";
+	/// <summary>Успешный ответ тикеров с котировкой линейного перпа.</summary>
+	private static string TickersBody(string quotePrice) =>
+		"{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"category\":\"linear\",\"list\":[{\"symbol\":\"BTCUSDT\",\"markPrice\":\"" + quotePrice + "\"}]}}";
 
-	/// <summary>Успешный ответ тикеров опциона: марка, индексная цена и тета; пустая строка — значения нет.</summary>
-	private static string OptionTickersBody(string markPrice, string underlyingPrice, string theta) =>
+	/// <summary>Успешный ответ тикеров опциона: котировка, индексная цена и тета; пустая строка — значения нет.</summary>
+	private static string OptionTickersBody(string quotePrice, string underlyingPrice, string theta) =>
 		"{\"retCode\":0,\"retMsg\":\"OK\",\"result\":{\"category\":\"option\",\"list\":[{\"symbol\":\"" + OptionSymbol
-		+ "\",\"markPrice\":\"" + markPrice + "\",\"underlyingPrice\":\"" + underlyingPrice + "\",\"theta\":\"" + theta + "\"}]}}";
+		+ "\",\"markPrice\":\"" + quotePrice + "\",\"underlyingPrice\":\"" + underlyingPrice + "\",\"theta\":\"" + theta + "\"}]}}";
 
-	/// <summary>Успешный ответ тикеров с пустой маркой инструмента: биржа значения не отдала.</summary>
-	private static string MissingMarkBody() =>
+	/// <summary>Успешный ответ тикеров с пустой котировкой инструмента: биржа значения не отдала.</summary>
+	private static string MissingQuoteBody() =>
 		"""{"retCode":0,"retMsg":"OK","result":{"category":"linear","list":[{"symbol":"BTCUSDT","markPrice":""}]}}""";
 
-	/// <summary>Успешный ответ тикеров опциона с пустой маркой: биржа значения не отдала.</summary>
-	private static string OptionMissingMarkBody() =>
+	/// <summary>Успешный ответ тикеров опциона с пустой котировкой: биржа значения не отдала.</summary>
+	private static string OptionMissingQuoteBody() =>
 		"""{"retCode":0,"retMsg":"OK","result":{"category":"option","list":[{"symbol":"BTC-25JUN27-106000-P-USDT","markPrice":""}]}}""";
 
 	#endregion

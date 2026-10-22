@@ -7,7 +7,7 @@ namespace TransactionJournal.Domain.Bybit;
 /// базовый актив, расчётная валюта и время delivery, которым справочник журнала доверяет
 /// больше, чем разбору строки символа. Фильтры цены/лота остаются в сыром JSON записи.
 /// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
-/// Traceability: doc:docs/research/bybit-api.md#3-публичные-марки-tickers-без-аутентификации
+/// Traceability: doc:docs/research/bybit-api.md#3-публичные-котировки-tickers-без-аутентификации
 /// </summary>
 public sealed class BybitInstrumentInfo
 {

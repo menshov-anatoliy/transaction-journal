@@ -51,22 +51,22 @@ Traceability ID: scenario-delivery-no-catch-up
 
 Traceability ID: requirement-delivery-market-unavailable-skip
 
-#### Scenario: Сбой марок отменяет доставку
+#### Scenario: Сбой котировок отменяет доставку
 Traceability ID: scenario-delivery-mark-failure-skip
-- **WHEN** марки недоступны в момент планового прохода
+- **WHEN** котировки недоступны в момент планового прохода
 - **THEN** сводка не собирается и не доставляется
 - **AND** диагностика причины фиксируется
 
 ### Requirement: /status — шаблонный ответ о свежести без LLM
 
-Команда `/status` SHALL отвечать всегда шаблонно, без LLM: время последней синхронизации журнала, время рыночных марок, число живых подсказок, состояние LLM последнего прохода (изложение/шаблон), положение относительно окна активности и валидность корпуса ([#34](https://github.com/menshov-anatoliy/transaction-journal/issues/34)).
+Команда `/status` SHALL отвечать всегда шаблонно, без LLM: время последней синхронизации журнала, время рыночных котировок, число живых подсказок, состояние LLM последнего прохода (изложение/шаблон), положение относительно окна активности и валидность корпуса ([#34](https://github.com/menshov-anatoliy/transaction-journal/issues/34)).
 
 Traceability ID: requirement-delivery-status-command
 
 #### Scenario: /status показывает состояние агента
 Traceability ID: scenario-delivery-status-reports-agent
 - **WHEN** владелец присылает `/status`
-- **THEN** ответ перечисляет свежесть журнала и марок, число живых подсказок, режим последнего изложения, положение в окне и валидность корпуса
+- **THEN** ответ перечисляет свежесть журнала и котировок, число живых подсказок, режим последнего изложения, положение в окне и валидность корпуса
 
 #### Scenario: Ошибка корпуса видна в /summary
 Traceability ID: scenario-delivery-corpus-error-in-summary

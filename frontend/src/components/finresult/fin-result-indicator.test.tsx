@@ -252,7 +252,7 @@ describe("полный индикатор", () => {
 	// оценки ликвидации и худшего исхода показывается в истинных положениях.
 	// Traceability: openspec:ui/screens#scenario-finresult-marker-not-clamped
 	it("показывает маркер левее границы в истинном положении", () => {
-		// Act: устаревшая марка опустила итог до −150 при худшем исходе −70.
+		// Act: устаревшая котировка опустила итог до −150 при худшем исходе −70.
 		const { container } = renderIndicator(<FullFinResultIndicator
 				input={{
 					plannedRisk: 300,
@@ -500,9 +500,9 @@ describe("состояние риска в представлениях", () => 
 		expect(container.querySelector('[data-part="fill-main"]')).not.toBeNull();
 	});
 
-	// Сбой марок не скрывает предупреждение о состоянии риска.
+	// Сбой котировок не скрывает предупреждение о состоянии риска.
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
-	it("сбой марок не скрывает состояние риска", () => {
+	it("сбой котировок не скрывает состояние риска", () => {
 		// Act: нереализованная часть недоступна, статус unbounded сохранён.
 		renderIndicator(<FullFinResultIndicator input={{ ...CASE_UNBOUNDED, realized: -250, quotesDegraded: true }} />);
 

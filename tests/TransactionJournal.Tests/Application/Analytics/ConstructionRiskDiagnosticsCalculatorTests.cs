@@ -400,7 +400,7 @@ public class ConstructionRiskDiagnosticsCalculatorTests
 		AverageEntryPrice = null,
 		AverageClosePrice = null,
 		TotalPnL = null,
-		MarkPrice = null,
+		QuotePrice = null,
 		UnrealizedPnL = null,
 		OpenedAt = BaseAt,
 		ClosedAt = null,

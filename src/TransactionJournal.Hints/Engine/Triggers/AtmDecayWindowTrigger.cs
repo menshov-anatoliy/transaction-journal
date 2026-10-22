@@ -33,7 +33,7 @@ public sealed class AtmDecayWindowTrigger : IHintTrigger
 		}
 
 		var baseCoin = legs[0].BaseCoin;
-		if (ConstructionLegs.TrySpot(input.Marks, baseCoin, out var spot) == false)
+		if (ConstructionLegs.TrySpot(input.Quotes, baseCoin, out var spot) == false)
 		{
 			return TriggerOutcome.NotFired();
 		}

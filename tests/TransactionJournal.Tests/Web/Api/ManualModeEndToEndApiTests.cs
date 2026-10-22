@@ -23,7 +23,7 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 /// FIFO, реализованный результат и индикатор финрезультата считаются из
 /// ручного сырья теми же формулами, что и из биржевого. Фабрика поднимает
 /// реальный хост Program на временной базе SQLite; публичный канал тикеров
-/// подменён стабильными марками — обращения к сети в прогоне отсутствуют.
+/// подменён стабильными котировками — обращения к сети в прогоне отсутствуют.
 /// </summary>
 [TestClass]
 public sealed class ManualModeEndToEndApiTests
@@ -37,8 +37,8 @@ public sealed class ManualModeEndToEndApiTests
 	/// <summary>Колл той же доски — встречный опцион ручной связки.</summary>
 	private const string CallSymbol = "XAUT-01DEC28-4400-C";
 
-	/// <summary>Момент получения марок стаба — фиксированный для детерминизма.</summary>
-	private static readonly DateTimeOffset MarksReceivedAt = new(2028, 11, 20, 9, 0, 0, TimeSpan.Zero);
+	/// <summary>Момент получения котировок стаба — фиксированный для детерминизма.</summary>
+	private static readonly DateTimeOffset QuotesReceivedAt = new(2028, 11, 20, 9, 0, 0, TimeSpan.Zero);
 
 	/// <summary>
 	/// Каноническое время доставки доски — 08:00 UTC 01.12.2028; пометки закрытия
@@ -65,13 +65,13 @@ public sealed class ManualModeEndToEndApiTests
 	public async Task TryIfManualModeLifecycleOnCleanDatabaseComputesMetricsAndIndicators()
 	{
 		// Arrange: хост на чистой базе; справочник сеется напрямую — известные
-		// символы разрешаются без сети, ключи биржи не заданы; источник марок
+		// символы разрешаются без сети, ключи биржи не заданы; источник котировок
 		// подменён стабильными величинами, чтобы прогон не выходил в сеть.
 		await using var factory = new SectionApiFactory(services =>
 		{
-			var marks = new ManualModeMarkSource();
-			services.ReplaceFreshInstrumentMarkSource(marks);
-			services.ReplaceInstrumentMarkSource(marks);
+			var quotes = new ManualModeQuoteSource();
+			services.ReplaceFreshInstrumentQuoteSource(quotes);
+			services.ReplaceInstrumentQuoteSource(quotes);
 		});
 		using var client = factory.CreateClient();
 		await MigrateAsync(factory);
@@ -113,8 +113,8 @@ public sealed class ManualModeEndToEndApiTests
 		Assert.That(putBefore["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(-1.5m));
 		Assert.That(callBefore["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(-2.1m));
 		Assert.That(perpBefore["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(-0.1m));
-		Assert.That(card["hasMarkFailure"]!.GetValue<bool>(), Is.False);
-		Assert.That(card["marksAsOf"], Is.Not.Null);
+		Assert.That(card["hasQuoteFailure"]!.GetValue<bool>(), Is.False);
+		Assert.That(card["quotesAsOf"], Is.Not.Null);
 
 		// Act: инкрементальная сборка из «Входящих» на чисто ручной базе —
 		// биржевых исполнений нет, команда ничего не создаёт и ручные данные
@@ -166,8 +166,8 @@ public sealed class ManualModeEndToEndApiTests
 		// актива 4300. Пометки датированы моментом доставки: биржевых записей
 		// закрытия в ручном режиме нет, авто-закрытие OTM не вмешивается,
 		// потому что к наступлению доставки остатки уже нулевые.
-		await AddCloseMarkAsync(client, constructionId, PerpSymbol, ExpiryAt, UnderlyingAtExpiry, quantity: null);
-		await AddCloseMarkAsync(client, constructionId, PutSymbol, ExpiryAt, IntrinsicPutValue(), quantity: 0.3m);
+		await AddCloseAnnotationAsync(client, constructionId, PerpSymbol, ExpiryAt, UnderlyingAtExpiry, quantity: null);
+		await AddCloseAnnotationAsync(client, constructionId, PutSymbol, ExpiryAt, IntrinsicPutValue(), quantity: 0.3m);
 
 		// Assert: частичная пометка закрывает 0.3 путовой ноги, позиция
 		// остаётся открытой на 0.2; перп закрыт полностью.
@@ -185,8 +185,8 @@ public sealed class ManualModeEndToEndApiTests
 
 		// Act: остатки гасятся полными пометками с внутренней стоимостью:
 		// пут 0.2 по 100, колл вне денег — по нулевой внутренней стоимости.
-		await AddCloseMarkAsync(client, constructionId, PutSymbol, ExpiryAt.AddMinutes(5), IntrinsicPutValue(), quantity: null);
-		await AddCloseMarkAsync(client, constructionId, CallSymbol, ExpiryAt.AddMinutes(10), 0m, quantity: null);
+		await AddCloseAnnotationAsync(client, constructionId, PutSymbol, ExpiryAt.AddMinutes(5), IntrinsicPutValue(), quantity: null);
+		await AddCloseAnnotationAsync(client, constructionId, CallSymbol, ExpiryAt.AddMinutes(10), 0m, quantity: null);
 
 		// Assert: все позиции закрыты; FIFO и реализованный результат посчитаны
 		// из ручного сырья: пут −(19.5 + 1.5) = −21, колл −(1.4 + 3.6 + 0.7) = −5.7,
@@ -213,7 +213,7 @@ public sealed class ManualModeEndToEndApiTests
 		var closingEntries = card["closingEntries"]!.AsArray();
 		Assert.That(closingEntries, Has.Count.EqualTo(4));
 		Assert.That(closingEntries.Select(node => node!["kind"]!.GetValue<string>()), Has.All.EqualTo("manual-mark"));
-		Assert.That(closingEntries.Select(node => node["manualMarkId"]), Has.None.Null);
+		Assert.That(closingEntries.Select(node => node["manualAnnotationId"]), Has.None.Null);
 		Assert.That(closingEntries.Where(node => node!["symbol"]!.GetValue<string>() == PutSymbol)
 			.Select(node => node["quantity"]!.GetValue<decimal>()), Is.EquivalentTo(new decimal[] { -0.3m, -0.2m }));
 		Assert.That(closingEntries.Single(node => node!["symbol"]!.GetValue<string>() == PerpSymbol)!["quantity"]!.GetValue<decimal>(), Is.EqualTo(-0.2m));
@@ -230,7 +230,7 @@ public sealed class ManualModeEndToEndApiTests
 		Assert.That(metrics["totalPnL"]!.GetValue<decimal>(), Is.EqualTo(13.2m));
 		Assert.That(metrics["totalPnLPercent"]!.GetValue<decimal>(), Is.EqualTo(1.32m));
 		Assert.That(metrics["closedAt"], Is.Not.Null);
-		Assert.That(card["hasMarkFailure"]!.GetValue<bool>(), Is.False);
+		Assert.That(card["hasQuoteFailure"]!.GetValue<bool>(), Is.False);
 
 		// Связка пережила закрытие: лок и логический слой на месте.
 		Assert.That(card["syntheticCloses"]!.AsArray(), Has.Count.EqualTo(1));
@@ -242,7 +242,7 @@ public sealed class ManualModeEndToEndApiTests
 		Assert.That(summary!["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(13.2m));
 		Assert.That(summary["unrealizedPnL"]!.GetValue<decimal>(), Is.EqualTo(0m));
 		Assert.That(summary["totalPnL"]!.GetValue<decimal>(), Is.EqualTo(13.2m));
-		Assert.That(summary["hasMarkFailure"]!.GetValue<bool>(), Is.False);
+		Assert.That(summary["hasQuoteFailure"]!.GetValue<bool>(), Is.False);
 		Assert.That(summary["constructionCount"]!.GetValue<int>(), Is.EqualTo(1));
 		var row = overview["items"]!.AsArray().Single()!;
 		Assert.That(row["constructionId"]!.GetValue<long>(), Is.EqualTo(constructionId));
@@ -291,7 +291,7 @@ public sealed class ManualModeEndToEndApiTests
 			Symbol = PerpSymbol,
 			Category = "linear",
 			PayloadJson = """{"symbol":"XAUTUSDT","contractType":"LinearPerpetual","status":"Trading","baseCoin":"XAUT","quoteCoin":"USDT","settleCoin":"USDT","deliveryTime":"0","optionsType":""}""",
-			FetchedAt = MarksReceivedAt,
+			FetchedAt = QuotesReceivedAt,
 		});
 		db.SaveChanges();
 	}
@@ -302,7 +302,7 @@ public sealed class ManualModeEndToEndApiTests
 		Symbol = symbol,
 		Category = "option",
 		PayloadJson = $$"""{"symbol":"{{symbol}}","baseCoin":"{{symbol.Split('-')[0]}}","quoteCoin":"USDT","settleCoin":"USDT","status":"Trading","optionsType":"{{optionsType}}","deliveryTime":"{{ExpiryAt.ToUnixTimeMilliseconds()}}","deliveryFeeRate":"0.00015"}""",
-		FetchedAt = MarksReceivedAt,
+		FetchedAt = QuotesReceivedAt,
 	};
 
 	/// <summary>
@@ -343,18 +343,18 @@ public sealed class ManualModeEndToEndApiTests
 	/// Ставит ручную пометку закрытия через контракт API; незаданное количество
 	/// закрывает весь остаток, заданное клэмпится остатком.
 	/// </summary>
-	private static async Task AddCloseMarkAsync(
+	private static async Task AddCloseAnnotationAsync(
 		HttpClient client,
 		long constructionId,
 		string symbol,
-		DateTimeOffset markedAt,
+		DateTimeOffset annotatedAt,
 		decimal price,
 		decimal? quantity)
 	{
 		var response = await client.PostAsJsonAsync($"/api/v1/constructions/{constructionId}/close-marks", new
 		{
 			symbol,
-			markedAt,
+			annotatedAt,
 			price,
 			quantity,
 		});
@@ -382,38 +382,38 @@ public sealed class ManualModeEndToEndApiTests
 		card["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == symbol)!;
 
 	/// <summary>
-	/// Стабильный источник марок ручного режима: марки публичного канала тикеров
+	/// Стабильный источник котировок ручного режима: котировки публичного канала тикеров
 	/// подменены расчётными величинами экспирации кейса — базовый актив 4300,
 	/// пут в деньгах 100, колл вне денег 0; обращения к сети отсутствуют.
 	/// </summary>
-	private sealed class ManualModeMarkSource : IFreshInstrumentMarkSource, IInstrumentMarkSource
+	private sealed class ManualModeQuoteSource : IFreshInstrumentQuoteSource, IInstrumentQuoteSource
 	{
-		/// <summary>Свежая марка инструмента — расчётная величина кейса.</summary>
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default)
+		/// <summary>Свежая котировка инструмента — расчётная величина кейса.</summary>
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default)
 		{
-			decimal? mark = symbol switch
+			decimal? quote = symbol switch
 			{
 				PerpSymbol => UnderlyingAtExpiry,
 				PutSymbol => IntrinsicPutValue(),
 				CallSymbol => 0m,
 				_ => null,
 			};
-			return Task.FromResult<InstrumentMarkSnapshot?>(mark is { } price
-				? new InstrumentMarkSnapshot(symbol, price, MarksReceivedAt)
+			return Task.FromResult<InstrumentQuoteSnapshot?>(quote is { } price
+				? new InstrumentQuoteSnapshot(symbol, price, QuotesReceivedAt)
 				: null);
 		}
 
-		/// <summary>Последняя известная марка — та же расчётная величина кейса.</summary>
-		public Task<decimal?> GetLastMarkAsync(string symbol, CancellationToken cancellationToken = default)
+		/// <summary>Последняя известная котировка — та же расчётная величина кейса.</summary>
+		public Task<decimal?> GetLastQuoteAsync(string symbol, CancellationToken cancellationToken = default)
 		{
-			decimal? mark = symbol switch
+			decimal? quote = symbol switch
 			{
 				PerpSymbol => UnderlyingAtExpiry,
 				PutSymbol => IntrinsicPutValue(),
 				CallSymbol => 0m,
 				_ => null,
 			};
-			return Task.FromResult(mark);
+			return Task.FromResult(quote);
 		}
 	}
 

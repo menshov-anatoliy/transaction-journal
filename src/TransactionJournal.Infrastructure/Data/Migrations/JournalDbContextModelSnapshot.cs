@@ -71,37 +71,13 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.ToTable("Constructions");
                 });
 
-            modelBuilder.Entity("TransactionJournal.Domain.Data.InstrumentMark", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal>("MarkPrice")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("ReceivedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Symbol")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Symbol")
-                        .IsUnique();
-
-                    b.ToTable("InstrumentMarks");
-                });
-
             modelBuilder.Entity("TransactionJournal.Domain.Data.InstrumentMarketSnapshot", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<decimal>("MarkPrice")
+                    b.Property<decimal>("QuotePrice")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("ReceivedAt")
@@ -124,17 +100,41 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.ToTable("InstrumentMarketSnapshots");
                 });
 
-            modelBuilder.Entity("TransactionJournal.Domain.Data.ManualCloseMark", b =>
+            modelBuilder.Entity("TransactionJournal.Domain.Data.InstrumentQuote", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<long>("ConstructionId")
+                    b.Property<decimal>("QuotePrice")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Symbol")
+                        .IsUnique();
+
+                    b.ToTable("InstrumentQuotes");
+                });
+
+            modelBuilder.Entity("TransactionJournal.Domain.Data.ManualCloseAnnotation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateTimeOffset>("MarkedAt")
+                    b.Property<DateTimeOffset>("AnnotatedAt")
                         .HasColumnType("TEXT");
+
+                    b.Property<long>("ConstructionId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<decimal?>("Price")
                         .HasColumnType("TEXT");
@@ -150,7 +150,7 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
 
                     b.HasIndex("ConstructionId");
 
-                    b.ToTable("ManualCloseMarks");
+                    b.ToTable("ManualCloseAnnotations");
                 });
 
             modelBuilder.Entity("TransactionJournal.Domain.Data.ManualTrade", b =>
@@ -556,7 +556,7 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                     b.ToTable("Hints");
                 });
 
-            modelBuilder.Entity("TransactionJournal.Domain.Data.ManualCloseMark", b =>
+            modelBuilder.Entity("TransactionJournal.Domain.Data.ManualCloseAnnotation", b =>
                 {
                     b.HasOne("TransactionJournal.Domain.Data.Construction", "Construction")
                         .WithMany()

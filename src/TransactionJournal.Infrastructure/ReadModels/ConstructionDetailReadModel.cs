@@ -24,7 +24,7 @@ namespace TransactionJournal.Infrastructure.ReadModels;
 public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 {
 	/// <summary>Префикс ключа источника ручной пометки в едином потоке закрывающих записей.</summary>
-	private const string ManualMarkKeyPrefix = "manual:";
+	private const string ManualAnnotationKeyPrefix = "manual:";
 
 	private readonly DbContextOptions<JournalDbContext> _options;
 
@@ -81,9 +81,9 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		var closing = await ReadClosingEntriesAsync(constructionId, cancellationToken).ConfigureAwait(false);
 		var adjustments = await ReadAdjustmentsAsync(db, constructionId, cancellationToken).ConfigureAwait(false);
 
-		// Открытый остаток требует марок своей нереализованной оценке: без него
-		// марки не нужны, с ним null нереализованной части означает сбой марок.
-		// Сводка сопровождает нереализованные величины отметкой времени марок.
+		// Открытый остаток требует котировок своей нереализованной оценке: без него
+		// котировки не нужны, с ним null нереализованной части означает сбой котировок.
+		// Сводка сопровождает нереализованные величины отметкой времени котировок.
 		// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
 		var hasOpenResidual = positions.Any(position => position.IsOpen);
 		// Величины риска и профита сводки вычисляются обеими единицами чистым
@@ -106,7 +106,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			adjustedMetrics,
 			hasOpenResidual,
 			hasOpenResidual && constructionMetrics.UnrealizedPnL is null,
-			metrics.MarksAsOf,
+			metrics.QuotesAsOf,
 			positions,
 			trades.Rows,
 			closing.Rows,
@@ -258,9 +258,9 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 					commentsBySymbol.GetValueOrDefault(position.Symbol),
 					// Стоимость и процент изменения цены открытого остатка проходят
 					// из метрик позиции как есть: их деградация при закрытом остатке
-					// и сбое марок уже решена слоем марок.
+					// и сбое котировок уже решена слоем котировок.
 					// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
-					MarkValue: position.MarkValue,
+					QuoteValue: position.QuoteValue,
 					PriceChangePercent: position.PriceChangePercent,
 					SyntheticResidual: syntheticResidual,
 					OtherResidual: otherResidual,
@@ -644,7 +644,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 					entry.Quantity,
 					entry.Price,
 					entry.Price is null ? null : -entry.Quantity * entry.Price.Value,
-					ManualMarkIdOf(entry)))
+					ManualAnnotationIdOf(entry)))
 				.ToList(),
 			result.Warnings.ToList());
 	}
@@ -653,16 +653,16 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// Извлекает идентификатор ручной пометки из ключа источника «manual:{id}»
 	/// единого потока закрывающих записей; у биржевых записей идентификатора нет.
 	/// </summary>
-	private static long? ManualMarkIdOf(PositionClosingEntry entry)
+	private static long? ManualAnnotationIdOf(PositionClosingEntry entry)
 	{
-		if (entry.Kind != PositionClosingKind.ManualMark
-			|| entry.SourceKey.StartsWith(ManualMarkKeyPrefix, StringComparison.Ordinal) == false)
+		if (entry.Kind != PositionClosingKind.ManualAnnotation
+			|| entry.SourceKey.StartsWith(ManualAnnotationKeyPrefix, StringComparison.Ordinal) == false)
 		{
 			return null;
 		}
 
-		return long.TryParse(entry.SourceKey[ManualMarkKeyPrefix.Length..], CultureInfo.InvariantCulture, out var markId)
-			? markId
+		return long.TryParse(entry.SourceKey[ManualAnnotationKeyPrefix.Length..], CultureInfo.InvariantCulture, out var annotationId)
+			? annotationId
 			: null;
 	}
 

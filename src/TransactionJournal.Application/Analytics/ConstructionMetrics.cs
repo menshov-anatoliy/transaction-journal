@@ -26,7 +26,7 @@ public sealed record ConstructionMetrics
 
 	/// <summary>
 	/// Нереализованный PnL — сумма нереализованных оценок позиций; null, пока
-	/// хотя бы одна открытая позиция не оценена марками: недоступная оценка
+	/// хотя бы одна открытая позиция не оценена котировками: недоступная оценка
 	/// обнуляет только нереализованную часть, не затрагивая остальные метрики.
 	// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-unrealized-only
 	/// </summary>
@@ -45,11 +45,11 @@ public sealed record ConstructionMetrics
 	/// <summary>
 	/// Текущая стоимость конструкции в USDT — сумма стоимостей её открытых
 	/// позиций; null без открытых остатков и пока хоть один открытый остаток
-	/// не оценен марками: недоступная стоимость обнуляет только её и занятость
+	/// не оценен котировками: недоступная стоимость обнуляет только её и занятость
 	/// капитала, остальные метрики не меняются.
 	// Traceability: openspec:analytics/performance#requirement-mark-value-of-position-and-construction
 	/// </summary>
-	public decimal? MarkValue { get; init; }
+	public decimal? QuoteValue { get; init; }
 
 	/// <summary>
 	/// Реальный риск конструкции в USDT — наихудший результат её открытых
@@ -59,7 +59,7 @@ public sealed record ConstructionMetrics
 	/// (нетто-короткая позиция по коллам группы) или символ открытого остатка
 	/// не разобран, — причина отсутствия числа различима статусом
 	/// <see cref="RealRiskStatus"/>. Метрика выводится из структуры ног и
-	/// средних цен открытых остатков и от текущих марок не зависит.
+	/// средних цен открытых остатков и от текущих котировок не зависит.
 	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 	// Traceability: change:fix-finresult-indicator-real-risk/design#d1
 	/// </summary>
@@ -88,7 +88,7 @@ public sealed record ConstructionMetrics
 	/// результат; без открытых остатков равен реализованному результату.
 	/// Число есть только при конечном риске, статус переиспользуется у
 	/// <see cref="RealRiskStatus"/>; метрика выводится из структуры ног и
-	/// средних цен остатков и от текущих марок не зависит.
+	/// средних цен остатков и от текущих котировок не зависит.
 	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 	/// </summary>
 	public decimal? WorstCaseUsdt { get; init; }
@@ -98,7 +98,7 @@ public sealed record ConstructionMetrics
 	/// «Реализованный результат» конструкции плюс сумма величин «зафиксировано
 	/// синтетикой» действующих связок (оспоренные распознанные не входят, ручные
 	/// входят наравне с распознанными). Величина выводится при чтении поверх уже
-	/// готовых метрик и строк связок read-моделью деталей, от марок не зависит
+	/// готовых метрик и строк связок read-моделью деталей, от котировок не зависит
 	/// и существует только при наличии действующих связок: null — отсутствие,
 	/// а не ноль. От <see cref="WorstCaseUsdt"/> отличается источником: худший
 	/// исход — инструментальная оценка из средних цен остатков, сводная —

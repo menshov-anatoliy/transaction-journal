@@ -13,7 +13,7 @@ using Assert = NUnit.Framework.Assert;
 /// Проверки самоописательности записи и определения субъекта: правка карточки
 /// между проходами не искажает уже созданную запись; журнальное правило даёт
 /// субъект «журнал», правило конструкции — субъект со ссылкой на конструкцию;
-/// недоступность марок пропускает проход без записей.
+/// недоступность котировок пропускает проход без записей.
 /// </summary>
 [TestClass]
 public class HintAgentPassRecordAndSubjectTests
@@ -59,7 +59,7 @@ public class HintAgentPassRecordAndSubjectTests
 	}
 
 	[TestMethod]
-	[Description("Недоступность источника марок пропускает проход без записей и с диагностикой")]
+	[Description("Недоступность источника котировок пропускает проход без записей и с диагностикой")]
 	// Подсказки на неполных данных не выпускаются: хранилище не трогается,
 	// причина уходит в диагностику прохода.
 	// Traceability: openspec:hints/engine-pass#requirement-engine-market-unavailable-skips-pass
@@ -82,10 +82,10 @@ public class HintAgentPassRecordAndSubjectTests
 						HintPassHarness.Construction(capital: 1000m, profitValue: 10m, profitUnit: TargetUnit.Percent, totalPnL: 120m),
 					],
 				});
-			var markSource = new Mock<IMarkSource>();
-			markSource
-				.Setup(source => source.GetMarksAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-				.ReturnsAsync(MarkBatch.Unavailable("Источник рыночных марок недоступен."));
+			var quoteSource = new Mock<IQuoteSource>();
+			quoteSource
+				.Setup(source => source.GetQuotesAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+				.ReturnsAsync(QuoteBatch.Unavailable("Источник рыночных котировок недоступен."));
 			var added = new List<HintRecord>();
 			var hintStore = new Mock<IHintStore>();
 			hintStore
@@ -100,7 +100,7 @@ public class HintAgentPassRecordAndSubjectTests
 			var pass = new HintAgentPass(
 				new RulesCorpusLoader(dir),
 				journalReader.Object,
-				markSource.Object,
+				quoteSource.Object,
 				hintStore.Object,
 				clock.Object);
 

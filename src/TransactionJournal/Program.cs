@@ -218,12 +218,12 @@ builder.Services.AddSingleton(sp => new TradeBindingService(
 builder.Services.AddSingleton<ITradeBindingService>(sp => sp.GetRequiredService<TradeBindingService>());
 builder.Services.AddSingleton(sp => new InboxReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
-builder.Services.AddSingleton(sp => new ManualCloseMarkService(
+builder.Services.AddSingleton(sp => new ManualCloseAnnotationService(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options));
 // Ручная пометка закрытия ставится из строки позиции и правится в закрывающих
 // записях: экран деталей зависит от интерфейса, тесты экрана подменяют заглушкой.
 // Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
-builder.Services.AddSingleton<IManualCloseMarkService>(sp => sp.GetRequiredService<ManualCloseMarkService>());
+builder.Services.AddSingleton<IManualCloseAnnotationService>(sp => sp.GetRequiredService<ManualCloseAnnotationService>());
 // Внешние корректировки PnL добавляются формой и правятся строкой таблицы в
 // деталях конструкции: экран зависит от интерфейса, тесты подменяют заглушкой.
 // Traceability: openspec:ui/screens#requirement-adjustments-in-detail
@@ -275,35 +275,35 @@ builder.Services.AddSingleton(sp => new FrameReadModel(
 	sp.GetRequiredService<InboxReadModel>()));
 builder.Services.AddSingleton<IFrameReadModel>(sp => sp.GetRequiredService<FrameReadModel>());
 
-// Провайдер марок аналитики: публичные тикеры без аутентификации и кэш последней
-// известной марки со временем получения. Read-модель позиций получает его как
+// Провайдер котировок аналитики: публичные тикеры без аутентификации и кэш последней
+// известной котировки со временем получения. Read-модель позиций получает его как
 // источник дефолта цены ручных пометок закрытия без цены.
-builder.Services.AddSingleton(sp => new InstrumentMarkProvider(
+builder.Services.AddSingleton(sp => new InstrumentQuoteProvider(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
 	sp.GetRequiredService<BybitTickersClient>()));
-builder.Services.AddSingleton<IInstrumentMarkSource>(sp => sp.GetRequiredService<InstrumentMarkProvider>());
+builder.Services.AddSingleton<IInstrumentQuoteSource>(sp => sp.GetRequiredService<InstrumentQuoteProvider>());
 
-// Оценка нереализованного PnL открытых остатков: свежие марки берутся у провайдера
-// тем же запросом, что и марка позиции, а недоступность тикеров деградирует только
-// в null нереализованной части с отметкой времени марок — реализованные метрики
+// Оценка нереализованного PnL открытых остатков: свежие котировки берутся у провайдера
+// тем же запросом, что и котировка позиции, а недоступность тикеров деградирует только
+// в null нереализованной части с отметкой времени котировок — реализованные метрики
 // читаются как есть.
-builder.Services.AddSingleton<IFreshInstrumentMarkSource>(sp => sp.GetRequiredService<InstrumentMarkProvider>());
-builder.Services.AddSingleton<UnrealizedPnlMarkEvaluator>();
+builder.Services.AddSingleton<IFreshInstrumentQuoteSource>(sp => sp.GetRequiredService<InstrumentQuoteProvider>());
+builder.Services.AddSingleton<UnrealizedPnlQuoteEvaluator>();
 
 // Read-модель позиций — производный запрос остатков без мутирующего API; источник
-// последних марок подставляет цену ручным пометкам, заданным без цены пользователя.
+// последних котировок подставляет цену ручным пометкам, заданным без цены пользователя.
 builder.Services.AddSingleton(sp => new PositionReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
-	sp.GetRequiredService<IInstrumentMarkSource>()));
+	sp.GetRequiredService<IInstrumentQuoteSource>()));
 
 // Композиция метрик журнала для экранов UI: метрики позиций и итоги конструкций
 // вычисляются из текущих данных при каждом чтении (контракт «аналитика при чтении»),
-// нереализованная часть оценивается свежими марками того же провайдера, а постоянный
+// нереализованная часть оценивается свежими котировками того же провайдера, а постоянный
 // итог панели «Терминала» читается отсюда же.
 builder.Services.AddSingleton(sp => new JournalMetricsReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
-	sp.GetRequiredService<IFreshInstrumentMarkSource>(),
-	sp.GetRequiredService<IInstrumentMarkSource>()));
+	sp.GetRequiredService<IFreshInstrumentQuoteSource>(),
+	sp.GetRequiredService<IInstrumentQuoteSource>()));
 builder.Services.AddSingleton<IJournalMetricsReadModel>(sp => sp.GetRequiredService<JournalMetricsReadModel>());
 
 // Окружение агента подсказок: порты объявлены в проекте Hints, адаптеры живут
@@ -317,8 +317,8 @@ builder.Services.AddSingleton<IHintStore>(sp => new HintStore(
 builder.Services.AddSingleton<IJournalSnapshotReader>(sp => new JournalSnapshotReader(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
 	sp.GetRequiredService<IJournalMetricsReadModel>()));
-builder.Services.AddSingleton<IMarkSource>(sp => new HintsMarkSource(
-	sp.GetRequiredService<IFreshInstrumentMarkSource>()));
+builder.Services.AddSingleton<IQuoteSource>(sp => new HintsQuoteSource(
+	sp.GetRequiredService<IFreshInstrumentQuoteSource>()));
 // Каталог корпуса правил: дефолт rules/ рядом с exe, путь переопределяется
 // настройкой Hints:RulesPath; правки карточек действуют со следующего прохода.
 // Traceability: openspec:hints/rules-corpus#requirement-corpus-snapshot-per-pass
@@ -352,7 +352,7 @@ builder.Services.AddSingleton(sp => new ConstructionListReadModel(
 builder.Services.AddSingleton<IConstructionListReadModel>(sp => sp.GetRequiredService<ConstructionListReadModel>());
 
 // Read-модель экрана деталей конструкции: сводка метрик с периодом и отметкой
-// марок, комментарий и таблицы позиций, сделок, закрывающих записей и корректировок —
+// котировок, комментарий и таблицы позиций, сделок, закрывающих записей и корректировок —
 // тонкое соединение метрик аналитики, потока закрывающих записей позиций и хранилища.
 builder.Services.AddSingleton(sp => new ConstructionDetailReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
@@ -412,7 +412,7 @@ builder.Services.AddKeyedSingleton<IChatClient>(ChatAgent.ChatClientServiceKey, 
 });
 // Инструменты чата: читатели связываются в composition root — корпус правил
 // через адаптер над загрузчиком, рынок Bybit поверх единого клиента тикеров
-// и кэша марок журнала.
+// и кэша котировок журнала.
 // Traceability: openspec:chats/sources#requirement-sources-read-only-tool-registry
 builder.Services.AddSingleton<IRuleCorpusReader>(sp =>
 	new RulesCorpusChatAdapter(sp.GetRequiredService<RulesCorpusLoader>()));

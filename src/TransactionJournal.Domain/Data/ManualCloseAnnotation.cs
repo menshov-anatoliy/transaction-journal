@@ -9,7 +9,7 @@ namespace TransactionJournal.Domain.Data;
 // Traceability: openspec:domain/constructions#requirement-position-close-lifecycle
 /// Traceability: change:add-core-domain/design#d3
 /// </summary>
-public sealed class ManualCloseMark
+public sealed class ManualCloseAnnotation
 {
 	/// <summary>Суррогатный ключ строки хранилища.</summary>
 	public long Id { get; set; }
@@ -25,12 +25,12 @@ public sealed class ManualCloseMark
 
 	/// <summary>
 	/// Цена закрытия по выбору пользователя; null — не задана, производный слой
-	/// подставляет последнюю известную марку инструмента при чтении.
+	/// подставляет последнюю известную котировку инструмента при чтении.
 	/// </summary>
 	public decimal? Price { get; set; }
 
 	/// <summary>Время пометки: задаёт место записи в хронологии закрывающих записей.</summary>
-	public required DateTimeOffset MarkedAt { get; set; }
+	public required DateTimeOffset AnnotatedAt { get; set; }
 
 	// Количество закрываемой позиции: null — закрывается весь остаток на момент
 	// пометки (прежняя семантика), заданное значение клэмпится остатком производным
@@ -40,7 +40,7 @@ public sealed class ManualCloseMark
 	// Traceability: change:manual-journal-management/design#d6
 	/// <summary>
 	/// Количество закрываемой позиции; null — весь остаток на
-	/// <see cref="MarkedAt"/>, заданное значение производный слой клэмпит остатком.
+	/// <see cref="AnnotatedAt"/>, заданное значение производный слой клэмпит остатком.
 	/// </summary>
 	public decimal? Quantity { get; set; }
 }

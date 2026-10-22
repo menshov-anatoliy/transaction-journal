@@ -42,7 +42,7 @@ export interface FinResultInput {
 	/** Сбой котировок: нереализованная оценка недоступна, индикатор неполный. */
 	readonly quotesDegraded: boolean;
 	// Неполнота индикатора считается только при открытых остатках: сбой
-	// марок скрывает нереализованную часть, лишь когда она существует.
+	// котировок скрывает нереализованную часть, лишь когда она существует.
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 	readonly hasOpenResidual: boolean;
 	/**
@@ -191,9 +191,9 @@ export function computeFinResultGeometry(
 	const unrealized = input.unrealized !== null && !input.quotesDegraded ? input.unrealized : null;
 	const realized = input.realized;
 	const total = realized === null ? null : realized + (unrealized ?? 0);
-	// Неполный индикатор — сбой марок именно при открытых остатках: без
+	// Неполный индикатор — сбой котировок именно при открытых остатках: без
 	// остатков нереализованной части не существует, скрывать нечего.
-	// Комбинация приходит из read-моделей: сбой марок бэкенд отдаёт вместе
+	// Комбинация приходит из read-моделей: сбой котировок бэкенд отдаёт вместе
 	// с null нереализованной части только при открытых остатках.
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 	const incomplete = input.quotesDegraded && input.hasOpenResidual;
@@ -261,7 +261,7 @@ export function computeFinResultGeometry(
 	const borderAt = borderValue === null ? null : toFraction(borderValue);
 	// Маркер итога стоит в истинном положении оценки ликвидации и не
 	// прижимается к границе худшего исхода: расхождение (широкий спред,
-	// устаревшие марки) показывается честно.
+	// устаревшие котировки) показывается честно.
 	// Traceability: openspec:ui/screens#scenario-finresult-marker-not-clamped
 	const markerAt = total === null ? null : toFraction(total);
 	const markerClipped = total !== null && (total > scale.max || total < scale.min);

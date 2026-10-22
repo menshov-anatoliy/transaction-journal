@@ -4,15 +4,15 @@ using System.Text.Json.Serialization;
 namespace TransactionJournal.Infrastructure.Bybit;
 
 /// <summary>
-/// Тикер инструмента из GET /v5/market/tickers: символ и публичная марка, по которой
-/// провайдер марок оценивает нереализованный результат открытых остатков. Марка приходит
+/// Тикер инструмента из GET /v5/market/tickers: символ и публичная котировка, по которой
+/// провайдер котировок оценивает нереализованный результат открытых остатков. Котировка приходит
 /// строкой с инвариантным разделителем, пустая строка означает отсутствие значения.
-/// Помимо марки тот же эндпоинт отдаёт опциональные рыночные поля для инструментов
+/// Помимо котировки тот же эндпоинт отдаёт опциональные рыночные поля для инструментов
 /// чата — греки и подразумеваемые волатильности опциона, открытый интерес,
 /// бид-аск и ставку фандинга; состав полей зависит от категории тикера, отсутствующие
-/// значения приходят пустой строкой и разбираются в null, а потребители марки их не читают.
+/// значения приходят пустой строкой и разбираются в null, а потребители котировки их не читают.
 /// Traceability: openspec:analytics/performance#requirement-mark-provider
-/// Traceability: doc:docs/research/bybit-api.md#3-публичные-марки-tickers-без-аутентификации
+/// Traceability: doc:docs/research/bybit-api.md#3-публичные-котировки-tickers-без-аутентификации
 /// Traceability: change:add-assistant-chat/design#d3
 /// </summary>
 public sealed class BybitTicker
@@ -21,7 +21,7 @@ public sealed class BybitTicker
 	[JsonPropertyName("symbol")]
 	public string Symbol { get; init; } = string.Empty;
 
-	/// <summary>Публичная марка инструмента на момент ответа биржи.</summary>
+	/// <summary>Публичная котировка инструмента на момент ответа биржи.</summary>
 	[JsonPropertyName("markPrice")]
 	public decimal? MarkPrice { get; init; }
 
@@ -47,11 +47,11 @@ public sealed class BybitTicker
 
 	#region Подразумеваемая волатильность
 
-	/// <summary>Марка базового актива опциона — якорь окрестности ATM доски; у не-опционов отсутствует.</summary>
+	/// <summary>Котировка базового актива опциона — якорь окрестности ATM доски; у не-опционов отсутствует.</summary>
 	[JsonPropertyName("underlyingPrice")]
 	public decimal? UnderlyingPrice { get; init; }
 
-	/// <summary>Подразумеваемая волатильность марки опциона; у не-опционов отсутствует.</summary>
+	/// <summary>Подразумеваемая волатильность котировки опциона; у не-опционов отсутствует.</summary>
 	[JsonPropertyName("markIv")]
 	public decimal? MarkIv { get; init; }
 

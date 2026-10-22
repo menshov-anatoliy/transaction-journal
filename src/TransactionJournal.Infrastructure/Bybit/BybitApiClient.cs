@@ -135,7 +135,7 @@ public sealed class BybitApiClient
 	/// <remarks>
 	/// Справочник журнала строится из этого эндпоинта, а не из разбора строки символа.
 	/// Traceability: openspec:sync/bybit-history#requirement-instrument-reference
-	/// Traceability: doc:docs/research/bybit-api.md#3-публичные-марки-tickers-без-аутентификации
+	/// Traceability: doc:docs/research/bybit-api.md#3-публичные-котировки-tickers-без-аутентификации
 	/// </remarks>
 	/// <exception cref="BybitApiException">Биржа ответила ошибкой retCode или неудачным HTTP-статусом.</exception>
 	public async Task<BybitPagedResponse<BybitInstrumentInfo>> GetInstrumentsInfoAsync(

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Info, Pencil } from "lucide-react";
 import type { ConstructionCardPosition } from "@/lib/api/construction-card";
-import { fetchLastInstrumentMark } from "@/lib/api/construction-card";
+import { fetchLastInstrumentQuote } from "@/lib/api/construction-card";
 import { Button } from "@/components/ui/button";
 import { MetricHint } from "@/components/ui/metric-tooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,7 +20,7 @@ import { useIsMobile } from "@/lib/use-mobile";
 // вход, выход, стоимость, раздельные части результата, общий P&L, комиссии,
 // времена, статус и inline-комментарий MD-рендером; единственное действие
 // открытой строки — «закрыть пометкой» с пикером даты-времени и дефолтом
-// последней марки.
+// последней котировки.
 // Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 
 /** Пропсы таблицы позиций карточки. */
@@ -30,9 +30,9 @@ export interface PositionsTableProps {
 	/** Строки позиций из снимка карточки. */
 	readonly positions: readonly ConstructionCardPosition[];
 	/** Состояние команды добавления пометки (для блокировки кнопок). */
-	readonly markPending: boolean;
+	readonly annotationPending: boolean;
 	/** Постановка ручной пометки закрытия позиции; promise разрешается только подтверждением сервера. */
-	readonly onAddCloseMark: (mark: { symbol: string; markedAt: string; price: number | null; quantity: number | null }) => void | Promise<unknown>;
+	readonly onAddCloseAnnotation: (annotation: { symbol: string; annotatedAt: string; price: number | null; quantity: number | null }) => void | Promise<unknown>;
 	/** Сохранение комментария позиции. */
 	readonly onSaveComment: (input: { symbol: string; text: string | null }) => void;
 }
@@ -75,7 +75,7 @@ export function toLocalInputValue(iso: string): string {
 }
 
 /** Части опционного символа, нужные подсказке внутренней стоимости. */
-interface MarkOptionParts {
+interface OptionSymbolParts {
 	/** Страйк опциона из строки символа. */
 	readonly strike: number;
 	/** Признак колла: сторона ноги определяет знак восстановления расчётной цены. */
@@ -83,7 +83,7 @@ interface MarkOptionParts {
 }
 
 /** Разбор символа опциона {BASE}-{dMMMyy}-{СТРАЙК}-{C|P}[-{QUOTE}]; null — символ не опцион. */
-function parseMarkOptionParts(symbol: string): MarkOptionParts | null {
+function parseOptionSymbolParts(symbol: string): OptionSymbolParts | null {
 	const segments = symbol.split("-");
 	if (segments.length !== 4 && segments.length !== 5) {
 		return null;
@@ -115,7 +115,7 @@ function intrinsicValueHint(position: ConstructionCardPosition): string | null {
 		return null;
 	}
 
-	const parts = parseMarkOptionParts(position.symbol);
+	const parts = parseOptionSymbolParts(position.symbol);
 	if (parts === null) {
 		return null;
 	}
@@ -156,45 +156,45 @@ function lifetimeTooltip(position: ConstructionCardPosition): string {
 	].join("\n");
 }
 
-export function PositionsTable({ constructionId, positions, markPending, onAddCloseMark, onSaveComment }: PositionsTableProps) {
+export function PositionsTable({ constructionId, positions, annotationPending, onAddCloseAnnotation, onSaveComment }: PositionsTableProps) {
 	const isMobile = useIsMobile();
-	const [markSymbol, setMarkSymbol] = React.useState<string | null>(null);
-	const [markPrice, setMarkPrice] = React.useState("");
-	const [markQuantity, setMarkQuantity] = React.useState("");
-	const [markTime, setMarkTime] = React.useState("");
+	const [annotationSymbol, setAnnotationSymbol] = React.useState<string | null>(null);
+	const [quotePrice, setQuotePrice] = React.useState("");
+	const [annotationQuantity, setAnnotationQuantity] = React.useState("");
+	const [annotationTime, setAnnotationTime] = React.useState("");
 	const [commentTarget, setCommentTarget] = React.useState<ConstructionCardPosition | null>(null);
-	const [markError, setMarkError] = React.useState<string | null>(null);
-	const markRequest = React.useRef(0);
+	const [annotationError, setAnnotationError] = React.useState<string | null>(null);
+	const annotationRequest = React.useRef(0);
 
 	// Цель формы пометки и производные подсказки: остаток и внутренняя
 	// стоимость берутся из строки позиции, открытой в форме.
-	const markTarget = markSymbol === null ? null : positions.find((position) => position.symbol === markSymbol) ?? null;
-	const markRemainder = markTarget === null ? 0 : Math.abs(markTarget.residual);
-	const intrinsicHintText = markTarget === null ? null : intrinsicValueHint(markTarget);
-	const parsedMarkQuantity = markQuantity.trim() === "" ? null : Number(markQuantity.trim().replace(",", "."));
-	const quantityHintText = parsedMarkQuantity !== null && Number.isFinite(parsedMarkQuantity)
-		? `частичное закрытие — останется ${formatAmount(Math.max(markRemainder - parsedMarkQuantity, 0))}`
+	const annotationTarget = annotationSymbol === null ? null : positions.find((position) => position.symbol === annotationSymbol) ?? null;
+	const annotationRemainder = annotationTarget === null ? 0 : Math.abs(annotationTarget.residual);
+	const intrinsicHintText = annotationTarget === null ? null : intrinsicValueHint(annotationTarget);
+	const parsedAnnotationQuantity = annotationQuantity.trim() === "" ? null : Number(annotationQuantity.trim().replace(",", "."));
+	const quantityHintText = parsedAnnotationQuantity !== null && Number.isFinite(parsedAnnotationQuantity)
+		? `частичное закрытие — останется ${formatAmount(Math.max(annotationRemainder - parsedAnnotationQuantity, 0))}`
 		: "незаданное количество закрывает весь остаток";
 
-	// Открытие формы пометки: цена предзаполняется последней известной маркой
-	// инструмента, время — текущим моментом; сбой марки виден у формы,
+	// Открытие формы пометки: цена предзаполняется последней известной котировкой
+	// инструмента, время — текущим моментом; сбой котировки виден у формы,
 	// запоздавший ответ отменённой или другой формы не меняет цену.
 	// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
-	const beginMark = async (symbol: string) => {
-		const request = ++markRequest.current;
-		setMarkSymbol(symbol);
-		setMarkTime(toLocalInputValue(new Date().toISOString()));
-		setMarkPrice("");
-		setMarkQuantity("");
-		setMarkError(null);
+	const beginAnnotation = async (symbol: string) => {
+		const request = ++annotationRequest.current;
+		setAnnotationSymbol(symbol);
+		setAnnotationTime(toLocalInputValue(new Date().toISOString()));
+		setQuotePrice("");
+		setAnnotationQuantity("");
+		setAnnotationError(null);
 		try {
-			const lastMark = await fetchLastInstrumentMark(constructionId, symbol);
-			if (request === markRequest.current) {
-				setMarkPrice(lastMark === null ? "" : String(lastMark));
+			const lastQuote = await fetchLastInstrumentQuote(constructionId, symbol);
+			if (request === annotationRequest.current) {
+				setQuotePrice(lastQuote === null ? "" : String(lastQuote));
 			}
 		} catch (error) {
-			if (request === markRequest.current) {
-				setMarkError(`Последняя марка недоступна: ${error instanceof Error ? error.message : String(error)}. Задайте цену вручную или оставьте её пустой.`);
+			if (request === annotationRequest.current) {
+				setAnnotationError(`Последняя котировка недоступна: ${error instanceof Error ? error.message : String(error)}. Задайте цену вручную или оставьте её пустой.`);
 			}
 		}
 	};
@@ -202,29 +202,29 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 	// Пометка ставится подтверждением сервера: форма скрывается только после
 	// успешной постановки, при отказе остаётся открытой с причиной отказа.
 	// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
-	const submitMark = async () => {
-		if (markSymbol === null) {
+	const submitAnnotation = async () => {
+		if (annotationSymbol === null) {
 			return;
 		}
 
-		const price = markPrice.trim() === "" ? null : Number(markPrice.replace(",", "."));
-		const quantity = parsedMarkQuantity;
-		const time = new Date(markTime);
-		// Ошибочное число не превращается в запрос последней марки;
+		const price = quotePrice.trim() === "" ? null : Number(quotePrice.replace(",", "."));
+		const quantity = parsedAnnotationQuantity;
+		const time = new Date(annotationTime);
+		// Ошибочное число не превращается в запрос последней котировки;
 		// некорректные время и количество не отправляются и не обрушают форму.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 		if ((price !== null && Number.isFinite(price) === false)
 			|| (quantity !== null && Number.isFinite(quantity) === false)
 			|| Number.isFinite(time.getTime()) === false) {
-			setMarkError("Введите корректную цену, время и количество пометки.");
+			setAnnotationError("Введите корректную цену, время и количество пометки.");
 			return;
 		}
 		try {
-			await onAddCloseMark({ symbol: markSymbol, markedAt: time.toISOString(), price, quantity });
-			++markRequest.current;
-			setMarkSymbol(null);
+			await onAddCloseAnnotation({ symbol: annotationSymbol, annotatedAt: time.toISOString(), price, quantity });
+			++annotationRequest.current;
+			setAnnotationSymbol(null);
 		} catch (error) {
-			setMarkError(`Пометка не поставлена: ${error instanceof Error ? error.message : String(error)}.`);
+			setAnnotationError(`Пометка не поставлена: ${error instanceof Error ? error.message : String(error)}.`);
 		}
 	};
 
@@ -233,30 +233,30 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 		// заголовком и счётчиком «17 колонок · N».
 		// Traceability: change:rework-spa-shell-and-screens/design#D7
 		<GridSection dataSlot="positions-table" title="Позиции" columnCount={17} rowCount={positions.length}>
-			{isMobile === false && markSymbol !== null && (
+			{isMobile === false && annotationSymbol !== null && (
 				// Форма ручной пометки закрытия по мастеру «Мастер/Пометка закрытия ·
-				// форма»: время и цена (марка подставится при чтении), подсказка
+				// форма»: время и цена (котировка подставится при чтении), подсказка
 				// внутренней стоимости и опциональное количество.
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
-					<span className="text-sm font-medium">закрыть позицию «{markSymbol}» пометкой</span>
+					<span className="text-sm font-medium">закрыть позицию «{annotationSymbol}» пометкой</span>
 					<label className="flex flex-col gap-1 text-sm">
 						время пометки
 						<input
 							type="datetime-local"
 							className="border-input bg-background h-9 rounded-md border px-2 text-sm"
-							value={markTime}
-							onChange={(event) => setMarkTime(event.target.value)}
+							value={annotationTime}
+							onChange={(event) => setAnnotationTime(event.target.value)}
 						/>
 					</label>
 					<label className="flex flex-col gap-1 text-sm">
 						цена закрытия
 						<input
 							className="border-input bg-background h-9 w-40 rounded-md border px-2 text-sm"
-							placeholder="пусто — последняя марка"
-							value={markPrice}
+							placeholder="пусто — последняя котировка"
+							value={quotePrice}
 							onChange={(event) => {
-								++markRequest.current;
-								setMarkPrice(event.target.value);
+								++annotationRequest.current;
+								setQuotePrice(event.target.value);
 							}}
 						/>
 					</label>
@@ -270,7 +270,7 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 						// котировок и страйка — и остатка; у OTM-ноги и без рыночных
 						// данных подсказка скрыта и ввод цены не блокирует.
 						// Traceability: openspec:ui/screens#scenario-mark-form-intrinsic-hint
-						<div data-slot="mark-intrinsic-hint" className="bg-info-soft flex w-full flex-col gap-[3px] rounded-sm px-2.5 py-2">
+						<div data-slot="annotation-intrinsic-hint" className="bg-info-soft flex w-full flex-col gap-[3px] rounded-sm px-2.5 py-2">
 							<span className="flex items-center gap-1 text-[11.5px] font-medium text-info">
 								<Info aria-hidden className="size-3 shrink-0" />
 								внутренняя стоимость на расчётной цене
@@ -286,26 +286,26 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 						{/* Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity */}
 						количество
 						<input
-							data-slot="mark-quantity-input"
+							data-slot="annotation-quantity-input"
 							aria-label="количество пометки"
 							className="border-input bg-background h-9 w-28 rounded-md border px-2 text-sm"
 							inputMode="decimal"
-							placeholder={`весь остаток — ${formatAmount(markRemainder)}`}
-							value={markQuantity}
-							onChange={(event) => setMarkQuantity(event.target.value)}
+							placeholder={`весь остаток — ${formatAmount(annotationRemainder)}`}
+							value={annotationQuantity}
+							onChange={(event) => setAnnotationQuantity(event.target.value)}
 						/>
 						<span className="text-[10.5px] font-normal text-text-muted">{quantityHintText}</span>
 					</label>
-					<Button size="sm" disabled={markPending || markTime === ""} onClick={() => void submitMark()}>
+					<Button size="sm" disabled={annotationPending || annotationTime === ""} onClick={() => void submitAnnotation()}>
 						Поставить пометку
 					</Button>
 					<Button size="sm" variant="outline" onClick={() => {
-						++markRequest.current;
-						setMarkSymbol(null);
+						++annotationRequest.current;
+						setAnnotationSymbol(null);
 					}}>
 						Отмена
 					</Button>
-					{markError !== null && <p className="text-destructive text-sm" role="alert">{markError}</p>}
+					{annotationError !== null && <p className="text-destructive text-sm" role="alert">{annotationError}</p>}
 				</div>
 			)}
 
@@ -430,16 +430,16 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 								<TableCell>
 									{position.isOpen === false ? (
 										<span className="text-muted-foreground">{DASH}</span>
-									) : position.markValue === null ? (
+									) : position.quoteValue === null ? (
 										<span className="text-muted-foreground" title="Провайдер котировок недоступен — стоимость не оценена">
 											сбой котировок
 										</span>
 									) : (
 										<span
-											className={cn("tabular-nums", toneClass(position.markValue))}
+											className={cn("tabular-nums", toneClass(position.quoteValue))}
 											title={position.daysToExpiry === null ? undefined : lifetimeTooltip(position)}
 										>
-											{formatSignedAmount(position.markValue)}
+											{formatSignedAmount(position.quoteValue)}
 										</span>
 									)}
 								</TableCell>
@@ -541,8 +541,8 @@ export function PositionsTable({ constructionId, positions, markPending, onAddCl
 											variant="outline"
 											size="sm"
 											className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
-											disabled={markPending}
-											onClick={() => void beginMark(position.symbol)}
+											disabled={annotationPending}
+											onClick={() => void beginAnnotation(position.symbol)}
 										>
 											закрыть пометкой…
 										</Button>

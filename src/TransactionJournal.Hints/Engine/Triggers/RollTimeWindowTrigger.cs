@@ -7,8 +7,8 @@ using TransactionJournal.Hints.Ports;
 /// ac-26 «Окно ролла»: до ближайшей экспирации открытых опционов конструкции
 /// осталось дней из окна порога («7-10»), и цена спота находится внутри
 /// страйкового диапазона этих опционов — цена у центра, кандидат на ролл.
-/// Марка спота базового актива берётся из партии марок; опционов, окна или
-/// марки нет — условие непроверяемо.
+/// Котировка спота базового актива берётся из партии котировок; опционов, окна или
+/// котировки нет — условие непроверяемо.
 /// Traceability: openspec:hints/engine-pass#requirement-engine-v1-trigger-set
 /// </summary>
 public sealed class RollTimeWindowTrigger : IHintTrigger
@@ -37,7 +37,7 @@ public sealed class RollTimeWindowTrigger : IHintTrigger
 		// Один базовый актив на конструкцию журнала; спот — линейный фьючерс
 		// «{база}USDT». Разные активы в одной конструкции не ожидаются.
 		var baseCoin = legs[0].BaseCoin;
-		if (ConstructionLegs.TrySpot(input.Marks, baseCoin, out var spot) == false)
+		if (ConstructionLegs.TrySpot(input.Quotes, baseCoin, out var spot) == false)
 		{
 			return TriggerOutcome.NotFired();
 		}

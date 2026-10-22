@@ -165,7 +165,7 @@ public sealed class ChatSseStreamTests
 		"data: {\"name\":\"get_market_snapshot\",\"phase\":\"start\"}\n" +
 		"\n" +
 		"event: token\n" +
-		"data: {\"text\":\"Марка\"}\n" +
+		"data: {\"text\":\"Котировка\"}\n" +
 		"\n" +
 		"event: tool\n" +
 		"data: {\"name\":\"get_market_snapshot\",\"phase\":\"end\"}\n" +
@@ -217,7 +217,7 @@ public sealed class ChatSseStreamTests
 	private static async IAsyncEnumerable<ChatStreamEvent> ToolActivityStream()
 	{
 		yield return ChatStreamEvents.Tool("get_market_snapshot", ChatStreamEvents.ToolStartPhase);
-		yield return ChatStreamEvents.Token("Марка");
+		yield return ChatStreamEvents.Token("Котировка");
 		yield return ChatStreamEvents.Tool("get_market_snapshot", ChatStreamEvents.ToolEndPhase);
 		yield return ChatStreamEvents.Done();
 		await Task.CompletedTask;

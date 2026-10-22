@@ -394,7 +394,7 @@ public class ExecutionCategorySyncTests
 	public async Task TryIfRepeatedWindowPassFiltersFundingAgainWithoutDuplicates()
 	{
 		// Arrange: первый запуск с писателем, связанным с проверкой известных execId:
-		// окно приносит сделку и фандинг с количеством и ценой по марк-цене.
+		// окно приносит сделку и фандинг с количеством и ценой по котировк-цене.
 		// Требование: повторные проходы того же окна снова отфильтровывают фандинг —
 		// без ошибок, дублей и предупреждений, водяной знак категории фиксируется как раньше.
 		// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
@@ -1136,7 +1136,7 @@ public class ExecutionCategorySyncTests
 	};
 
 	// Фандинг-запись живого ответа биржи: тип Funding, сторона без направления,
-	// количество и цена по марк-цене заполнены.
+	// количество и цена по котировк-цене заполнены.
 	private static BybitExecution Funding(string execId, long execTimeMs) => new()
 	{
 		Symbol = "BTCUSDT",

@@ -5,14 +5,14 @@ namespace TransactionJournal.Infrastructure.Bybit;
 
 /// <summary>
 /// HttpClient-обёртка публичного эндпоинта тикеров Bybit GET /v5/market/tickers —
-/// источник марок инструментов для аналитики результата. Эндпоинт общедоступен:
+/// источник котировок инструментов для аналитики результата. Эндпоинт общедоступен:
 /// запрос не подписывается и не использует API-ключ торгового аккаунта, поэтому
 /// конструктор клиента сознательно не принимает поставщика ключей. Каждый запрос
 /// проходит через общий конвейер устойчивости: минимальный интервал между запросами,
 /// учёт заголовков лимитов X-Bapi-Limit-* и повторы Polly по классам сбоев.
 /// Traceability: openspec:analytics/performance#requirement-mark-provider
 /// Traceability: change:add-analytics/design#d2
-/// Traceability: doc:docs/research/bybit-api.md#3-публичные-марки-tickers-без-аутентификации
+/// Traceability: doc:docs/research/bybit-api.md#3-публичные-котировки-tickers-без-аутентификации
 /// </summary>
 public sealed class BybitTickersClient
 {
@@ -37,13 +37,13 @@ public sealed class BybitTickersClient
 
 	/// <summary>
 	/// GET /v5/market/tickers — публичные тикеры инструментов категории linear/option
-	/// с маркой каждого инструмента. Запрос уходит без подписи и без заголовков
+	/// с котировкой каждого инструмента. Запрос уходит без подписи и без заголовков
 	/// аутентификации: API-ключ торгового аккаунта не используется.
 	/// </summary>
 	/// <remarks>
 	/// Для категории option биржа требует фильтр symbol или baseCoin; ответ не пагинируется.
 	/// Traceability: openspec:analytics/performance#scenario-public-tickers-no-auth
-	/// Traceability: doc:docs/research/bybit-api.md#3-публичные-марки-tickers-без-аутентификации
+	/// Traceability: doc:docs/research/bybit-api.md#3-публичные-котировки-tickers-без-аутентификации
 	/// </remarks>
 	/// <exception cref="BybitApiException">Биржа ответила ошибкой retCode или неудачным HTTP-статусом после всех повторов.</exception>
 	public async Task<IReadOnlyList<BybitTicker>> GetTickersAsync(

@@ -77,5 +77,5 @@ public interface IHintDisplayReadModel
 	/// <param name="hintId">Идентификатор записи подсказки.</param>
 	/// <param name="seenAt">Момент показа.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	Task MarkSeenAsync(long hintId, DateTimeOffset seenAt, CancellationToken cancellationToken = default);
+	Task RecordSeenAsync(long hintId, DateTimeOffset seenAt, CancellationToken cancellationToken = default);
 }

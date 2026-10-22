@@ -26,15 +26,15 @@ const preview: ConstructionPreview = {
 	adjustmentsPnL: 5,
 	totalPnL: 105.5,
 	totalPnLPercent: 3.5,
-	markValue: 500,
+	quoteValue: 500,
 	capitalUsagePercent: 16.7,
 	realRiskUsdt: 45,
 	worstCaseUsdt: 15.25,
 	realRiskStatus: "finite",
 	openedAt: "2026-06-18T09:05:00",
 	closedAt: null,
-	marksAsOf: "2026-06-20T14:30:00",
-	hasMarkFailure: false,
+	quotesAsOf: "2026-06-20T14:30:00",
+	hasQuoteFailure: false,
 	counts: { positions: 2, openPositions: 1, trades: 3, adjustments: 1 },
 	riskWarningsCount: 0,
 	riskWarnings: [],
@@ -148,11 +148,11 @@ describe("краткая карточка конструкции", () => {
 	});
 
 	it("деградирует нереализованную оценку признаком сбоя котировок", () => {
-		// Сбой марок — видимое состояние карточки: вместо нереализованной
+		// Сбой котировок — видимое состояние карточки: вместо нереализованной
 		// оценки показывается признак сбоя с пояснением.
 		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
-		// Act: карточка со сбоем марок.
-		renderPreview({ unrealizedPnL: null, hasMarkFailure: true });
+		// Act: карточка со сбоем котировок.
+		renderPreview({ unrealizedPnL: null, hasQuoteFailure: true });
 
 		// Assert: признак сбоя занимает место нереализованной величины.
 		expect(screen.getByText("сбой котировок")).toBeInTheDocument();

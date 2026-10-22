@@ -517,7 +517,7 @@ function renderA() {
       </div>
       <div class="kstrip">
         <div>итог по журналу<b>${pnl(totalJournal)} USDT</b></div>
-        <div>марки на<b>${MARKS_AS_OF}</b></div>
+        <div>котировки на<b>${MARKS_AS_OF}</b></div>
         <div>конструкций<b>${CONSTRUCTIONS.length} (2 открыты)</b></div>
       </div>
       <table>
@@ -556,11 +556,11 @@ function renderA() {
         <div>реализов. / нереализов.<b>${pnl(c.realized)} / ${c.unrealized === 0 ? "—" : pnl(c.unrealized)}</b></div>
         <div>корректировки<b>${c.adjustments === 0 ? "—" : pnl(c.adjustments)}</b></div>
         <div>период<b>${c.opened} → ${c.closed ?? "сейчас"} (${daysBetween(c.opened, c.closed ?? "2026-09-19")} дн.)</b></div>
-        <div>марки на<b>${MARKS_AS_OF}</b></div>
+        <div>котировки на<b>${MARKS_AS_OF}</b></div>
       </div>
       ${c.comment ? `<div class="note">Комментарий: ${esc(c.comment)}</div>` : ""}
       <div class="section">Позиции <small>чистый остаток по инструменту</small></div>
-      <table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Марка</th><th>Нереализ.</th><th>Статус</th><th>Комментарий</th></tr></thead>
+      <table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Котировка</th><th>Нереализ.</th><th>Статус</th><th>Комментарий</th></tr></thead>
       <tbody>${posRows}</tbody></table>
       <div class="section">Сделки <small>без агрегации, execId</small></div>
       <table><thead><tr><th>Дата</th><th>execId</th><th>Инструмент</th><th>Направл.</th><th>Кол-во</th><th>Цена</th><th>Сумма</th><th>Комиссия</th><th>Комментарий</th></tr></thead>
@@ -675,7 +675,7 @@ function renderB() {
     }).join("");
     body = `
       <h1>Мои конструкции</h1>
-      <div class="sub">итог считается из сделок журнала, марки на ${MARKS_AS_OF}</div>
+      <div class="sub">итог считается из сделок журнала, котировки на ${MARKS_AS_OF}</div>
       <div class="kpi-row">
         <div class="card kpi"><div class="label">Итог по журналу</div><div class="value">${pnl(totalJournal)} USDT</div></div>
         <div class="card kpi"><div class="label">Реализовано</div><div class="value">${pnl(realizedSum)} USDT</div></div>
@@ -690,7 +690,7 @@ function renderB() {
     const tabs = [["positions", "Позиции"], ["trades", "Сделки"], ["closings", "Закрывающие"], ["adjust", "Корректировки"], ["comments", "Комментарии"]];
     let tabBody = "";
     if (state.detailTab === "positions") {
-      tabBody = c.positions.length ? `<table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Марка</th><th>Нереализовано</th><th>Статус</th></tr></thead><tbody>
+      tabBody = c.positions.length ? `<table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Котировка</th><th>Нереализовано</th><th>Статус</th></tr></thead><tbody>
         ${c.positions.map(p => `<tr><td>${esc(p.instrument)}</td><td>${p.net > 0 ? "+" : ""}${fmt(p.net, 1)}</td><td>${fmt(p.avg)}</td><td>${fmt(p.mark)}</td><td>${pnl(p.upl)}</td><td>${p.net === 0 ? "закрыта" : "открыта"}</td></tr>`).join("")}
         </tbody></table>` : `<div class="muted">Открытых позиций нет — все остатки обнулены.</div>`;
     }
@@ -854,7 +854,7 @@ function renderC() {
         </div>
       </div>
       <div class="report-section"><h2>Позиции</h2>
-        ${c.positions.length ? `<table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Марка</th><th>Нереализ.</th></tr></thead><tbody>
+        ${c.positions.length ? `<table><thead><tr><th>Инструмент</th><th>Остаток</th><th>Средняя</th><th>Котировка</th><th>Нереализ.</th></tr></thead><tbody>
         ${c.positions.map(p => `<tr><td>${esc(p.instrument)}</td><td>${p.net > 0 ? "+" : ""}${fmt(p.net, 1)}</td><td>${fmt(p.avg)}</td><td>${fmt(p.mark)}</td><td>${pnl(p.upl)}</td></tr>`).join("")}</tbody></table>`
         : `<div class="lede" style="margin-bottom:0">Открытых позиций нет.</div>`}</div>
       <div class="report-section"><h2>Сделки</h2>

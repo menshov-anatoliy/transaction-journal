@@ -12,7 +12,7 @@ export const constructionsOverviewQueryKey = ["constructions-overview"] as const
 
 /**
  * Обзор раздела «Конструкции» из общего кэша: сводка журнала (итог с
- * разбивкой на реализованный и нереализованный P&L, признак сбоя марок)
+ * разбивкой на реализованный и нереализованный P&L, признак сбоя котировок)
  * и строки таблицы одним ответом API.
  */
 export function useConstructionsOverviewQuery(): UseQueryResult<ConstructionsOverview> {

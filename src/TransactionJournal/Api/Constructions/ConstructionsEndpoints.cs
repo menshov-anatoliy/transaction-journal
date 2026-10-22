@@ -61,8 +61,8 @@ public static class ConstructionsEndpoints
 				data.TotalPnL,
 				data.RealizedPnL,
 				data.UnrealizedPnL,
-				data.MarksAsOf,
-				data.HasMarkFailure,
+				data.QuotesAsOf,
+				data.HasQuoteFailure,
 				data.ConstructionCount,
 				data.OpenCount);
 			// Строки таблицы публикуют реальный риск со статусом состояния:
@@ -84,7 +84,7 @@ public static class ConstructionsEndpoints
 					item.AdjustmentsPnL,
 					item.TotalPnL,
 					item.TotalPnLPercent,
-					item.MarkValue,
+					item.QuoteValue,
 					item.CapitalUsagePercent,
 					item.RealRiskUsdt,
 					// Худший исход публикуется рядом с реальным риском: знаковая
@@ -155,7 +155,7 @@ public static class ConstructionsEndpoints
 				data.Metrics.AdjustmentsPnL,
 				data.Metrics.TotalPnL,
 				data.Metrics.TotalPnLPercent,
-				data.Metrics.MarkValue,
+				data.Metrics.QuoteValue,
 				data.Metrics.CapitalUsagePercent,
 				data.Metrics.RealRiskUsdt,
 				// Худший исход публикуется рядом с реальным риском: знаковая
@@ -169,8 +169,8 @@ public static class ConstructionsEndpoints
 				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt, data.Metrics.WorstCaseUsdt),
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
-				data.MarksAsOf,
-				data.HasMarkFailure,
+				data.QuotesAsOf,
+				data.HasQuoteFailure,
 				new ConstructionPreviewCountsResponse(
 					data.Positions.Count,
 					data.Positions.Count(position => position.IsOpen),
@@ -208,19 +208,19 @@ public sealed record ConstructionsOverviewResponse(
 	IReadOnlyList<ConstructionRowResponse> Items);
 
 /// <summary>Сводка журнала для шапки раздела.</summary>
-/// <param name="TotalPnL">Итог по журналу; null при неполном итоге из-за сбоя марок.</param>
+/// <param name="TotalPnL">Итог по журналу; null при неполном итоге из-за сбоя котировок.</param>
 /// <param name="RealizedPnL">Реализованный PnL журнала; виден всегда.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL журнала; null при сбое марок.</param>
-/// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое или без открытых остатков.</param>
-/// <param name="HasMarkFailure">Признак сбоя провайдера котировок.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL журнала; null при сбое котировок.</param>
+/// <param name="QuotesAsOf">Отметка времени котировок оценки; null при сбое или без открытых остатков.</param>
+/// <param name="HasQuoteFailure">Признак сбоя провайдера котировок.</param>
 /// <param name="ConstructionCount">Число видимых конструкций списка.</param>
 /// <param name="OpenCount">Число открытых конструкций среди видимых.</param>
 public sealed record ConstructionsSummaryResponse(
 	decimal? TotalPnL,
 	decimal RealizedPnL,
 	decimal? UnrealizedPnL,
-	DateTimeOffset? MarksAsOf,
-	bool HasMarkFailure,
+	DateTimeOffset? QuotesAsOf,
+	bool HasQuoteFailure,
 	int ConstructionCount,
 	int OpenCount);
 
@@ -234,11 +234,11 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="ProfitPercent">Профит в процентах от капитала; null без величины.</param>
 /// <param name="ProfitUsdt">Профит в USDT; null без величины.</param>
 /// <param name="RealizedPnL">Реализованный PnL конструкции.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое марок.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое котировок.</param>
 /// <param name="AdjustmentsPnL">Сумма внешних корректировок PnL.</param>
-/// <param name="TotalPnL">Итог конструкции; null при сбое марок.</param>
+/// <param name="TotalPnL">Итог конструкции; null при сбое котировок.</param>
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
-/// <param name="MarkValue">Стоимость открытых позиций по маркам; null без остатков или при сбое.</param>
+/// <param name="QuoteValue">Стоимость открытых позиций по котировкам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
 /// <param name="WorstCaseUsdt">Худший исход в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
@@ -277,7 +277,7 @@ public sealed record ConstructionRowResponse(
 	decimal AdjustmentsPnL,
 	decimal? TotalPnL,
 	decimal? TotalPnLPercent,
-	decimal? MarkValue,
+	decimal? QuoteValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
 	decimal? WorstCaseUsdt,
@@ -303,19 +303,19 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="ProfitPercent">Профит в процентах от капитала; null без величины.</param>
 /// <param name="ProfitUsdt">Плановый профит в USDT — граница индикатора; null без величины.</param>
 /// <param name="RealizedPnL">Реализованный PnL конструкции.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое марок.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL; null при сбое котировок.</param>
 /// <param name="AdjustmentsPnL">Сумма внешних корректировок PnL.</param>
-/// <param name="TotalPnL">Итог конструкции; null при сбое марок.</param>
+/// <param name="TotalPnL">Итог конструкции; null при сбое котировок.</param>
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
-/// <param name="MarkValue">Стоимость открытых позиций по маркам; null без остатков или при сбое.</param>
+/// <param name="QuoteValue">Стоимость открытых позиций по котировкам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
 /// <param name="WorstCaseUsdt">Худший исход в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
-/// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое или без остатков.</param>
-/// <param name="HasMarkFailure">Признак сбоя провайдера котировок.</param>
+/// <param name="QuotesAsOf">Отметка времени котировок оценки; null при сбое или без остатков.</param>
+/// <param name="HasQuoteFailure">Признак сбоя провайдера котировок.</param>
 /// <param name="Counts">Счётчики записей конструкции для превью.</param>
 /// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков; ноль — предупреждений нет.</param>
 /// <param name="RiskWarnings">Полный перечень текстов предупреждений краткой карточки; пустой список без предупреждений.</param>
@@ -344,15 +344,15 @@ public sealed record ConstructionPreviewResponse(
 	decimal AdjustmentsPnL,
 	decimal? TotalPnL,
 	decimal? TotalPnLPercent,
-	decimal? MarkValue,
+	decimal? QuoteValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
 	decimal? WorstCaseUsdt,
 	string RealRiskStatus,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
-	DateTimeOffset? MarksAsOf,
-	bool HasMarkFailure,
+	DateTimeOffset? QuotesAsOf,
+	bool HasQuoteFailure,
 	ConstructionPreviewCountsResponse Counts,
 	int RiskWarningsCount,
 	IReadOnlyList<ConstructionRiskWarningResponse> RiskWarnings);

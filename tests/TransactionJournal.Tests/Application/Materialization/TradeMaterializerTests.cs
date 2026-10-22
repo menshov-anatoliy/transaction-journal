@@ -196,7 +196,7 @@ public class TradeMaterializerTests
 	public void TryIfFundingRecordIsNotMaterializedAsTrade()
 	{
 		// Фандинг linear-инструмента приходит с заполненными количеством, ценой
-		// по марк-цене и валидной стороной, но сделкой «Входящих» не является:
+		// по котировк-цене и валидной стороной, но сделкой «Входящих» не является:
 		// запись остаётся в сырье, сделку из неё журнал не выводит, а материализация
 		// завершается без неразрешённых символов, ошибок и исключений.
 		// Traceability: openspec:sync/bybit-history#requirement-non-trade-executions-are-not-trades
@@ -302,7 +302,7 @@ public class TradeMaterializerTests
 		// Act — Assert: конфликт Trade-записей по-прежнему останавливает материализацию.
 		Assert.Throws<TradeMaterializationException>(() => materializer.Materialize(conflictingTrades));
 
-		// Arrange: Funding-двойник отличается от Trade-записи ценой по марк-цене.
+		// Arrange: Funding-двойник отличается от Trade-записи ценой по котировк-цене.
 		var tradeWithFundingTwin = new[]
 		{
 			Raw("exec-dup", "linear", "BTCUSDT", execTimeMs,

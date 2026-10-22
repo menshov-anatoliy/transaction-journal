@@ -20,7 +20,7 @@ public class HintAgentPassCorpusTests
 	private static readonly DateTimeOffset FixedNow = new(2026, 10, 4, 9, 0, 0, TimeSpan.Zero);
 
 	/// <summary>Собирает проход над стабами портов и загрузчиком корпуса из каталога.</summary>
-	private static HintAgentPass BuildPass(string corpusDir, Mock<IJournalSnapshotReader> journalReader, Mock<IMarkSource> markSource)
+	private static HintAgentPass BuildPass(string corpusDir, Mock<IJournalSnapshotReader> journalReader, Mock<IQuoteSource> quoteSource)
 	{
 		var hintStore = new Mock<IHintStore>();
 		hintStore
@@ -31,7 +31,7 @@ public class HintAgentPassCorpusTests
 		return new HintAgentPass(
 			new RulesCorpusLoader(corpusDir),
 			journalReader.Object,
-			markSource.Object,
+			quoteSource.Object,
 			hintStore.Object,
 			clock.Object);
 	}
@@ -42,11 +42,11 @@ public class HintAgentPassCorpusTests
 			.Setup(reader => reader.ReadAsync(It.IsAny<CancellationToken>()))
 			.ReturnsAsync(new JournalSnapshot { Constructions = [] });
 
-	/// <summary>Настраивает стаб доступного источника марок.</summary>
-	private static void SetupAvailableMarks(Mock<IMarkSource> markSource)
-		=> markSource
-			.Setup(source => source.GetMarksAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new MarkBatch { Marks = new Dictionary<string, decimal>(), FailureReason = null });
+	/// <summary>Настраивает стаб доступного источника котировок.</summary>
+	private static void SetupAvailableQuotes(Mock<IQuoteSource> quoteSource)
+		=> quoteSource
+			.Setup(source => source.GetQuotesAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new QuoteBatch { Quotes = new Dictionary<string, decimal>(), FailureReason = null });
 
 	[TestMethod]
 	[Description("Невалидный корпус возвращает CorpusInvalid с диагностикой, журнал и рынок не читаются")]
@@ -61,8 +61,8 @@ public class HintAgentPassCorpusTests
 		{
 			CorpusYaml.Write(dir, "broken.yaml", "title: карточка без обязательных полей");
 			var journalReader = new Mock<IJournalSnapshotReader>();
-			var markSource = new Mock<IMarkSource>();
-			var pass = BuildPass(dir, journalReader, markSource);
+			var quoteSource = new Mock<IQuoteSource>();
+			var pass = BuildPass(dir, journalReader, quoteSource);
 
 			var result = await pass.RunAsync();
 
@@ -71,7 +71,7 @@ public class HintAgentPassCorpusTests
 			Assert.That(result.Diagnostics, Is.Not.Null);
 			Assert.That(result.Diagnostics!, Has.Some.Contains("broken.yaml"));
 			journalReader.Verify(reader => reader.ReadAsync(It.IsAny<CancellationToken>()), Times.Never);
-			markSource.Verify(source => source.GetMarksAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+			quoteSource.Verify(source => source.GetQuotesAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
 		}
 		finally
 		{
@@ -89,15 +89,15 @@ public class HintAgentPassCorpusTests
 	{
 		var missingDir = Path.Combine(Path.GetTempPath(), "hints-corpus-tests", "missing-" + Guid.NewGuid().ToString("N"));
 		var journalReader = new Mock<IJournalSnapshotReader>();
-		var markSource = new Mock<IMarkSource>();
-		var pass = BuildPass(missingDir, journalReader, markSource);
+		var quoteSource = new Mock<IQuoteSource>();
+		var pass = BuildPass(missingDir, journalReader, quoteSource);
 
 		var result = await pass.RunAsync();
 
 		Assert.That(result.Outcome, Is.EqualTo(HintPassOutcome.CorpusInvalid));
 		Assert.That(result.Diagnostics, Is.Not.Null);
 		journalReader.Verify(reader => reader.ReadAsync(It.IsAny<CancellationToken>()), Times.Never);
-		markSource.Verify(source => source.GetMarksAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
+		quoteSource.Verify(source => source.GetQuotesAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Never);
 	}
 
 	[TestMethod]
@@ -114,16 +114,16 @@ public class HintAgentPassCorpusTests
 			CorpusYaml.Write(dir, "tc-unknown.yaml", CorpusYaml.Card("tc-unknown", implementation: "yet-unimplemented-key"));
 			var journalReader = new Mock<IJournalSnapshotReader>();
 			SetupEmptyJournal(journalReader);
-			var markSource = new Mock<IMarkSource>();
-			SetupAvailableMarks(markSource);
-			var pass = BuildPass(dir, journalReader, markSource);
+			var quoteSource = new Mock<IQuoteSource>();
+			SetupAvailableQuotes(quoteSource);
+			var pass = BuildPass(dir, journalReader, quoteSource);
 
 			var result = await pass.RunAsync();
 
 			Assert.That(result.Outcome, Is.EqualTo(HintPassOutcome.Completed));
 			Assert.That(result.UnimplementedRuleIds, Is.EqualTo(new[] { "tc-unknown" }));
 			journalReader.Verify(reader => reader.ReadAsync(It.IsAny<CancellationToken>()), Times.Once);
-			markSource.Verify(source => source.GetMarksAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Once);
+			quoteSource.Verify(source => source.GetQuotesAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()), Times.Once);
 		}
 		finally
 		{
@@ -144,9 +144,9 @@ public class HintAgentPassCorpusTests
 			CorpusYaml.Write(dir, "tc-null.yaml", CorpusYaml.Card("tc-null"));
 			var journalReader = new Mock<IJournalSnapshotReader>();
 			SetupEmptyJournal(journalReader);
-			var markSource = new Mock<IMarkSource>();
-			SetupAvailableMarks(markSource);
-			var pass = BuildPass(dir, journalReader, markSource);
+			var quoteSource = new Mock<IQuoteSource>();
+			SetupAvailableQuotes(quoteSource);
+			var pass = BuildPass(dir, journalReader, quoteSource);
 
 			var result = await pass.RunAsync();
 

@@ -3,7 +3,7 @@ namespace TransactionJournal.Hints.Engine;
 using TransactionJournal.Hints.Ports;
 
 /// <summary>
-/// Машинный триггер корпуса — чистая функция «(снапшот, марки, карточка) →
+/// Машинный триггер корпуса — чистая функция «(снапшот, котировки, карточка) →
 /// факты или нет срабатывания». Реестр собирает триггеры по ключам
 /// trigger.implementation; новый ключ добавляется кодом движка вместе с
 /// реализацией интерфейса, корпус сам код не меняет.
@@ -23,7 +23,7 @@ public interface IHintTrigger
 	HintSubjectKind SubjectKind { get; }
 
 	/// <summary>Вычисляет условие правила по входам прохода; пороги берутся только из thresholds карточки.</summary>
-	/// <param name="input">Вход оценки: снимок, марки, карточка, as-of, конструкция-субъект.</param>
+	/// <param name="input">Вход оценки: снимок, котировки, карточка, as-of, конструкция-субъект.</param>
 	/// <returns>Исход оценки с фактами шаблона при срабатывании.</returns>
 	TriggerOutcome Evaluate(TriggerEvaluationInput input);
 }

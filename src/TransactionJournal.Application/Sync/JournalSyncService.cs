@@ -115,14 +115,14 @@ public sealed class JournalSyncService : IJournalSyncService
 			var seenInstruments = CollectSeenInstruments(executionResults, deliveryResults);
 			instrumentSync = await _instrumentSync.SyncAsync(seenInstruments, run, cancellationToken).ConfigureAwait(false);
 
-			await _runJournal.MarkSucceededAsync(run, cancellationToken).ConfigureAwait(false);
+			await _runJournal.RecordSucceededAsync(run, cancellationToken).ConfigureAwait(false);
 		}
 		catch (Exception ex)
 		{
 			// Ошибка закрывает запуск со статусом Failed и текстом причины; состояние категорий
 			// остаётся без изменений, поэтому повторный запуск продолжит с места остановки.
 			// Пометка выполняется без токена отмены: отмена тоже должна оставлять след запуска.
-			await _runJournal.MarkFailedAsync(run, ex.Message, CancellationToken.None).ConfigureAwait(false);
+			await _runJournal.RecordFailedAsync(run, ex.Message, CancellationToken.None).ConfigureAwait(false);
 			throw;
 		}
 

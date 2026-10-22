@@ -564,7 +564,7 @@ public sealed class AgentSectionApiTests
 	public async Task TryIfToolActivityStreamsAroundRegistryToolCall()
 	{
 		// Arrange: изолированное хранилище, клиент модели с тул-вызовом в первой
-		// сцене и заглушка биржи, отдающая снимок с фиксированной маркой.
+		// сцене и заглушка биржи, отдающая снимок с фиксированной котировкой.
 		var directory = Path.Combine(AppContext.BaseDirectory, $"agent-tool-activity-{Guid.NewGuid():N}");
 		Directory.CreateDirectory(directory);
 		try
@@ -580,12 +580,12 @@ public sealed class AgentSectionApiTests
 					services.AddSingleton<IChatMarketReader>(market);
 				});
 			using var client = factory.CreateClient();
-			var chatId = await CreateChatAsync(client, "Что с маркой BTC?", "7", ["market"]);
+			var chatId = await CreateChatAsync(client, "Что с котировкой BTC?", "7", ["market"]);
 
 			// Act: стриминг ответа, при котором модель вызывает снимок рынка.
 			using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/chats/{chatId}/messages/stream")
 			{
-				Content = JsonContent.Create(new { text = "Покажи марку BTC", model = "glm-5.3" }),
+				Content = JsonContent.Create(new { text = "Покажи котировку BTC", model = "glm-5.3" }),
 			};
 			using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
@@ -603,7 +603,7 @@ public sealed class AgentSectionApiTests
 			var tokens = string.Concat(frames
 				.Where(frame => frame.EventName == ChatStreamEvents.TokenName)
 				.Select(frame => frame.Data!["text"]!.GetValue<string>()));
-			Assert.That(tokens, Is.EqualTo("Марка 108975.4."));
+			Assert.That(tokens, Is.EqualTo("Котировка 108975.4."));
 			// Терминальное событие ровно одно — done без события ошибки.
 			Assert.That(frames.Count(frame => frame.EventName == ChatStreamEvents.DoneName), Is.EqualTo(1));
 			Assert.That(frames.Any(frame => frame.EventName == ChatStreamEvents.ErrorName), Is.False);
@@ -613,7 +613,7 @@ public sealed class AgentSectionApiTests
 			var history = await (await client.GetAsync($"/api/v1/chats/{chatId}/messages"))
 				.Content.ReadFromJsonAsync<JsonArray>();
 			Assert.That(history![^1]!["role"]!.GetValue<string>(), Is.EqualTo("assistant"));
-			Assert.That(history[^1]!["text"]!.GetValue<string>(), Is.EqualTo("Марка 108975.4."));
+			Assert.That(history[^1]!["text"]!.GetValue<string>(), Is.EqualTo("Котировка 108975.4."));
 		}
 		finally
 		{
@@ -743,7 +743,7 @@ public sealed class AgentSectionApiTests
 			}
 
 			// Вторая сцена: ответ модели по результату инструмента.
-			yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = { new TextContent("Марка 108975.4.") } };
+			yield return new ChatResponseUpdate { Role = ChatRole.Assistant, Contents = { new TextContent("Котировка 108975.4.") } };
 		}
 
 		public object? GetService(Type serviceType, object? serviceKey = null) => null;
@@ -755,7 +755,7 @@ public sealed class AgentSectionApiTests
 
 	/// <summary>
 	/// Заглушка биржи: снимок рынка отвечает доступными данными с фиксированной
-	/// маркой, доска опционов сценарием не вызывается и отвечает пустой доской.
+	/// котировкой, доска опционов сценарием не вызывается и отвечает пустой доской.
 	/// </summary>
 	private sealed class StubMarketReader : IChatMarketReader
 	{
@@ -771,7 +771,7 @@ public sealed class AgentSectionApiTests
 				AsOf = DateTimeOffset.Parse("2026-10-11T10:00:00Z", CultureInfo.InvariantCulture),
 				IsAvailable = true,
 				Symbol = "BTCUSDT",
-				MarkPrice = 108975.4m,
+				QuotePrice = 108975.4m,
 			});
 		}
 

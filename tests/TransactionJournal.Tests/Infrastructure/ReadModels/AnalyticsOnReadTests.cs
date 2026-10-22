@@ -45,7 +45,7 @@ public class AnalyticsOnReadTests
 	private ConstructionService _constructionService = null!;
 	private TradeBindingService _bindingService = null!;
 	private PnLAdjustmentService _adjustmentService = null!;
-	private ManualCloseMarkService _markService = null!;
+	private ManualCloseAnnotationService _markService = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -61,7 +61,7 @@ public class AnalyticsOnReadTests
 		_constructionService = new ConstructionService(CreateOptions());
 		_bindingService = new TradeBindingService(CreateOptions());
 		_adjustmentService = new PnLAdjustmentService(CreateOptions());
-		_markService = new ManualCloseMarkService(CreateOptions());
+		_markService = new ManualCloseAnnotationService(CreateOptions());
 	}
 
 	[TestCleanup]
@@ -94,7 +94,7 @@ public class AnalyticsOnReadTests
 		await AddOptionTradeAsync("exec-option", "Buy", "0.0001", "100", "0.02");
 		await _bindingService.BindBatchAsync(construction.Id,
 			new[] { "exec-buy", "exec-sell", "exec-option" });
-		var mark = await _markService.AddAsync(
+		var quote = await _markService.AddAsync(
 			construction.Id, CallSymbol, At(2023, 12, 28, 12, 0), price: 90m);
 		var adjustment = await _adjustmentService.AddAsync(
 			construction.Id, At(2023, 12, 28, 13, 0), PnLAdjustmentSource.Robot, 20m);
@@ -131,17 +131,17 @@ public class AnalyticsOnReadTests
 		Assert.That(firstMetrics.Duration, Is.EqualTo(TimeSpan.FromHours(2)));
 
 		// Act — правка пометки: цена закрытия опциона 90 → 2000.
-		await _markService.EditAsync(mark.Id, CallSymbol, At(2023, 12, 28, 12, 0), 2000m, null);
-		var afterMarkEdit = await ReadMetricsAsync();
+		await _markService.EditAsync(quote.Id, CallSymbol, At(2023, 12, 28, 12, 0), 2000m, null);
+		var afterAnnotationEdit = await ReadMetricsAsync();
 
 		// Assert: опционная позиция пересчиталась — (2000 − 100) × 0.0001 − 0.02 = 0.17;
 		// линейная не изменилась, итог подхватил новое слагаемое.
 		// Требование: правка пометки отражается очередным чтением.
 		// Traceability: openspec:analytics/performance#scenario-no-stale-results
-		var afterMarkEditMetrics = afterMarkEdit.Constructions.Single(metrics => metrics.ConstructionId == construction.Id);
-		Assert.That(afterMarkEditMetrics.RealizedPnL, Is.EqualTo(98.17m));
-		Assert.That(afterMarkEditMetrics.TotalPnL, Is.EqualTo(118.17m));
-		Assert.That(afterMarkEdit.Positions.Single(position => position.Symbol == LinearSymbol).RealizedPnL, Is.EqualTo(98m));
+		var afterAnnotationEditMetrics = afterAnnotationEdit.Constructions.Single(metrics => metrics.ConstructionId == construction.Id);
+		Assert.That(afterAnnotationEditMetrics.RealizedPnL, Is.EqualTo(98.17m));
+		Assert.That(afterAnnotationEditMetrics.TotalPnL, Is.EqualTo(118.17m));
+		Assert.That(afterAnnotationEdit.Positions.Single(position => position.Symbol == LinearSymbol).RealizedPnL, Is.EqualTo(98m));
 
 		// Act — правка корректировки: сумма робота +20 → −10.
 		await _adjustmentService.EditAsync(
@@ -340,9 +340,9 @@ public class AnalyticsOnReadTests
 			.AsNoTracking()
 			.Where(userdata => userdata.ConstructionId != null)
 			.ToListAsync();
-		var marks = await db.ManualCloseMarks
+		var quotes = await db.ManualCloseAnnotations
 			.AsNoTracking()
-			.OrderBy(mark => mark.Id)
+			.OrderBy(quote => quote.Id)
 			.ToListAsync();
 
 		// Конвейер проекции строится заново при каждом чтении: сделки и закрывающие
@@ -390,12 +390,12 @@ public class AnalyticsOnReadTests
 				entry.ClosedAt, PositionFifoEntryKind.ExpiryClosing, entry.SourceKey, entry.Quantity, entry.EffectivePrice, entry.Fee));
 		}
 
-		foreach (var mark in marks)
+		foreach (var quote in quotes)
 		{
 			// Пометки проверок задают цену пользователя явно; пометка без цены
-			// разрешается последней маркой провайдера в слоях марок.
-			Append(streams, mark.ConstructionId, mark.Symbol, new StreamEvent(
-				mark.MarkedAt, PositionFifoEntryKind.ManualMark, $"manual:{mark.Id}", null, mark.Price ?? 0m, 0m));
+			// разрешается последней котировкой провайдера в слоях котировок.
+			Append(streams, quote.ConstructionId, quote.Symbol, new StreamEvent(
+				quote.AnnotatedAt, PositionFifoEntryKind.ManualAnnotation, $"manual:{quote.Id}", null, quote.Price ?? 0m, 0m));
 		}
 
 		var positionCalculator = new PositionMetricsCalculator();
@@ -469,7 +469,7 @@ public class AnalyticsOnReadTests
 					entries.Add(ToFifoEntry(streamEvent, streamEvent.Quantity!.Value));
 					break;
 
-				case PositionFifoEntryKind.ManualMark:
+				case PositionFifoEntryKind.ManualAnnotation:
 					// Пометка закрывает ровно тот остаток, что накопился к её моменту.
 					if (residual == 0m)
 					{

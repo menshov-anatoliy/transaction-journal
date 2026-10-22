@@ -96,11 +96,11 @@ public sealed class ExecutionHistorySync
 			// Ошибка закрывает запуск со статусом Failed и текстом причины; состояние категорий
 			// остаётся без изменений, поэтому повторный запуск продолжит с места остановки.
 			// Пометка выполняется без токена отмены: отмена тоже должна оставлять след запуска.
-			await _runJournal.MarkFailedAsync(run, ex.Message, CancellationToken.None).ConfigureAwait(false);
+			await _runJournal.RecordFailedAsync(run, ex.Message, CancellationToken.None).ConfigureAwait(false);
 			throw;
 		}
 
-		await _runJournal.MarkSucceededAsync(run, cancellationToken).ConfigureAwait(false);
+		await _runJournal.RecordSucceededAsync(run, cancellationToken).ConfigureAwait(false);
 		return new ExecutionHistorySyncResult
 		{
 			Mode = mode,

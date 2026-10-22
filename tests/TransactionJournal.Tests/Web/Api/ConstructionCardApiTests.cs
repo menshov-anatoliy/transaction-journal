@@ -85,7 +85,7 @@ public sealed class ConstructionCardApiTests
 		Assert.That(metrics["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(60.25m));
 		Assert.That(metrics["unrealizedPnL"]!.GetValue<decimal>(), Is.EqualTo(40.25m));
 		Assert.That(metrics["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(5m));
-		Assert.That(metrics["markValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
+		Assert.That(metrics["quoteValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(metrics["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
 		// Метрики карточки публикуют реальный риск для индикатора карточки:
 		// величина проходит из метрик аналитики без пересчёта.
@@ -99,15 +99,15 @@ public sealed class ConstructionCardApiTests
 		Assert.That(metrics["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(metrics["closedAt"], Is.Null);
 		Assert.That(metrics["durationSeconds"]!.GetValue<double>(), Is.EqualTo(53.4 * 3600).Within(0.1));
-		Assert.That(payload["marksAsOf"]!.GetValue<string>(), Is.EqualTo("2026-06-20T14:30:00+00:00"));
-		Assert.That(payload["hasMarkFailure"]!.GetValue<bool>(), Is.False);
+		Assert.That(payload["quotesAsOf"]!.GetValue<string>(), Is.EqualTo("2026-06-20T14:30:00+00:00"));
+		Assert.That(payload["hasQuoteFailure"]!.GetValue<bool>(), Is.False);
 
 		// Позиции: 15 колонок от входа до итога с комментарием и пометкой открытости.
 		var position = payload["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "ETH-28JUN24-3200-C")!;
 		Assert.That(position["residual"]!.GetValue<decimal>(), Is.EqualTo(2m));
 		Assert.That(position["averageEntryPrice"]!.GetValue<decimal>(), Is.EqualTo(30m));
 		Assert.That(position["averageClosePrice"], Is.Null);
-		Assert.That(position["markValue"]!.GetValue<decimal>(), Is.EqualTo(300m));
+		Assert.That(position["quoteValue"]!.GetValue<decimal>(), Is.EqualTo(300m));
 		Assert.That(position["priceChangePercent"]!.GetValue<decimal>(), Is.EqualTo(5m));
 		Assert.That(position["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(40m));
 		Assert.That(position["unrealizedPnL"]!.GetValue<decimal>(), Is.EqualTo(30m));
@@ -136,7 +136,7 @@ public sealed class ConstructionCardApiTests
 		Assert.That(entry["quantity"]!.GetValue<decimal>(), Is.EqualTo(-0.5m));
 		Assert.That(entry["price"]!.GetValue<decimal>(), Is.EqualTo(3520m));
 		Assert.That(entry["amountUsdt"]!.GetValue<decimal>(), Is.EqualTo(-1760m));
-		Assert.That(entry["manualMarkId"]!.GetValue<long>(), Is.EqualTo(21L));
+		Assert.That(entry["manualAnnotationId"]!.GetValue<long>(), Is.EqualTo(21L));
 
 		// Предупреждение об избыточной закрывающей записи доходит снимком.
 		var warning = payload["closingWarnings"]!.AsArray().Single()!;
@@ -184,7 +184,7 @@ public sealed class ConstructionCardApiTests
 		// прочего остатка; прежние колонки позиции сохранились.
 		var perpPosition = payload["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "XAUTUSDT")!;
 		Assert.That(perpPosition["residual"]!.GetValue<decimal>(), Is.EqualTo(0.34m));
-		Assert.That(perpPosition["markValue"]!.GetValue<decimal>(), Is.EqualTo(350m));
+		Assert.That(perpPosition["quoteValue"]!.GetValue<decimal>(), Is.EqualTo(350m));
 		Assert.That(perpPosition["syntheticResidual"]!.GetValue<decimal>(), Is.EqualTo(0.3m));
 		Assert.That(perpPosition["otherResidual"]!.GetValue<decimal>(), Is.EqualTo(0.04m));
 
@@ -744,7 +744,7 @@ public sealed class ConstructionCardApiTests
 		[TestMethod]
 		[Description("Ручная пометка закрытия ставится, правится и удаляется командами")]
 		// Ручные пометки закрытия — из строки открытой позиции, с пикерами даты-времени
-		// и дефолтом последней марки (№7): домен не проверяет остаток, избыточная
+		// и дефолтом последней котировки (№7): домен не проверяет остаток, избыточная
 		// пометка станет предупреждением при чтении. Количество опционально:
 		// незаданное закрывает весь остаток, заданное клэмпится остатком доменом.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
@@ -753,28 +753,28 @@ public sealed class ConstructionCardApiTests
 		public async Task TryIfManualCloseMarksAreAddedEditedAndDeleted()
 		{
 			// Arrange: записывающий сервис пометок.
-			var marks = new RecordingCloseMarkService();
-			await using var factory = new SectionApiFactory(services => services.ReplaceCloseMarkService(marks));
+			var quotes = new RecordingCloseAnnotationService();
+			await using var factory = new SectionApiFactory(services => services.ReplaceCloseAnnotationService(quotes));
 			using var client = factory.CreateClient();
 
 			// Act: постановка пометки с ценой, количеством и без них, правка и удаление.
 			var add = await client.PostAsJsonAsync("/api/v1/constructions/7/close-marks", new
 			{
 				symbol = "ETH-28JUN24-3200-C",
-				markedAt = new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero),
+				annotatedAt = new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero),
 				price = (decimal?)30.5m,
 				quantity = (decimal?)0.05m,
 			});
 			var addWithoutPrice = await client.PostAsJsonAsync("/api/v1/constructions/7/close-marks", new
 			{
 				symbol = "ETHUSDT",
-				markedAt = new DateTimeOffset(2026, 6, 21, 11, 0, 0, TimeSpan.Zero),
+				annotatedAt = new DateTimeOffset(2026, 6, 21, 11, 0, 0, TimeSpan.Zero),
 				price = (decimal?)null,
 			});
 			var edit = await client.PutAsJsonAsync("/api/v1/close-marks/21", new
 			{
 				symbol = "ETH-28JUN24-3200-C",
-				markedAt = new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero),
+				annotatedAt = new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero),
 				price = (decimal?)31m,
 				quantity = (decimal?)0.02m,
 			});
@@ -786,32 +786,32 @@ public sealed class ConstructionCardApiTests
 			Assert.That(addWithoutPrice.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 			Assert.That(edit.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
 			Assert.That(delete.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
-			Assert.That(marks.Added, Has.Count.EqualTo(2));
-			Assert.That(marks.Added[0], Is.EqualTo((7L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero), 30.5m, 0.05m)));
-			Assert.That(marks.Added[1].Price, Is.Null);
-			Assert.That(marks.Added[1].Quantity, Is.Null);
-			Assert.That(marks.Edited, Is.EqualTo(new[] { (21L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero), 31m, 0.02m) }));
-			Assert.That(marks.DeletedIds, Is.EqualTo(new[] { 21L }));
+			Assert.That(quotes.Added, Has.Count.EqualTo(2));
+			Assert.That(quotes.Added[0], Is.EqualTo((7L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 10, 0, 0, TimeSpan.Zero), 30.5m, 0.05m)));
+			Assert.That(quotes.Added[1].Price, Is.Null);
+			Assert.That(quotes.Added[1].Quantity, Is.Null);
+			Assert.That(quotes.Edited, Is.EqualTo(new[] { (21L, "ETH-28JUN24-3200-C", new DateTimeOffset(2026, 6, 21, 12, 0, 0, TimeSpan.Zero), 31m, 0.02m) }));
+			Assert.That(quotes.DeletedIds, Is.EqualTo(new[] { 21L }));
 		}
 
 		[TestMethod]
-		[Description("Последняя марка инструмента отдаётся для предзаполнения формы пометки")]
-		// Форма пометки закрытия открывается с дефолтом последней известной марки
+		[Description("Последняя котировка инструмента отдаётся для предзаполнения формы пометки")]
+		// Форма пометки закрытия открывается с дефолтом последней известной котировки
 		// инструмента: предзаполнение спрашивает API, а не хранит marcas в SPA.
 		// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
 		public async Task TryIfLastMarkServesFormPrefill()
 		{
-			// Arrange: источник марок со стабильной величиной.
-			await using var factory = new SectionApiFactory(services => services.ReplaceInstrumentMarkSource(new StubInstrumentMarkSource(30.5m)));
+			// Arrange: источник котировок со стабильной величиной.
+			await using var factory = new SectionApiFactory(services => services.ReplaceInstrumentQuoteSource(new StubInstrumentQuoteSource(30.5m)));
 			using var client = factory.CreateClient();
 
-			// Act: запрос последней марки инструмента.
+			// Act: запрос последней котировки инструмента.
 			var response = await client.GetAsync("/api/v1/constructions/7/positions/ETH-28JUN24-3200-C/last-mark");
 
-			// Assert: марка приходит формой предзаполнения.
+			// Assert: котировка приходит формой предзаполнения.
 			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
 			var payload = await response.Content.ReadFromJsonAsync<JsonNode>();
-			Assert.That(payload!["mark"]!.GetValue<decimal>(), Is.EqualTo(30.5m));
+			Assert.That(payload!["quote"]!.GetValue<decimal>(), Is.EqualTo(30.5m));
 		}
 
 		[TestMethod]
@@ -1066,11 +1066,11 @@ public sealed class ConstructionCardApiTests
 		// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#scenario-dispute-hides-logical-link
 		public async Task TryIfDisputeHidesLogicalLinkAndRevertRestoresIt()
 		{
-			// Arrange: хост с реальной read-моделью и стабильными свежими марками
+			// Arrange: хост с реальной read-моделью и стабильными свежими котировками
 			// без сети; сырьё и доменные записи кейса XAUT сеются в базу хоста.
-			var marksAt = new DateTimeOffset(2026, 10, 15, 16, 0, 0, TimeSpan.Zero);
+			var quotesAt = new DateTimeOffset(2026, 10, 15, 16, 0, 0, TimeSpan.Zero);
 			await using var factory = new SectionApiFactory(services =>
-				services.ReplaceFreshInstrumentMarkSource(new StubFreshMarkSource(4300m, marksAt)));
+				services.ReplaceFreshInstrumentQuoteSource(new StubFreshQuoteSource(4300m, quotesAt)));
 			using var client = factory.CreateClient();
 			// Миграции применяются явно до сеяния: таблицы сырья и домена
 			// должны существовать независимо от момента старта хоста.
@@ -1487,13 +1487,13 @@ internal sealed class RecordingAdjustmentService : IPnLAdjustmentService
 }
 
 /// <summary>Записывающий сервис ручных пометок закрытия: фиксирует команды карточки.</summary>
-internal sealed class RecordingCloseMarkService : IManualCloseMarkService
+internal sealed class RecordingCloseAnnotationService : IManualCloseAnnotationService
 {
 	/// <summary>Поставленные пометки: конструкция, инструмент, время, цена и количество.</summary>
-	public IReadOnlyList<(long ConstructionId, string Symbol, DateTimeOffset MarkedAt, decimal? Price, decimal? Quantity)> Added => _added;
+	public IReadOnlyList<(long ConstructionId, string Symbol, DateTimeOffset AnnotatedAt, decimal? Price, decimal? Quantity)> Added => _added;
 
 	/// <summary>Правки пометок: ключ, инструмент, время, цена и количество.</summary>
-	public IReadOnlyList<(long MarkId, string Symbol, DateTimeOffset MarkedAt, decimal? Price, decimal? Quantity)> Edited => _edited;
+	public IReadOnlyList<(long AnnotationId, string Symbol, DateTimeOffset AnnotatedAt, decimal? Price, decimal? Quantity)> Edited => _edited;
 
 	/// <summary>Удалённые пометки.</summary>
 	public IReadOnlyList<long> DeletedIds => _deletedIds;
@@ -1504,26 +1504,26 @@ internal sealed class RecordingCloseMarkService : IManualCloseMarkService
 
 	private readonly List<long> _deletedIds = [];
 
-	public Task<ManualCloseMark> AddAsync(long constructionId, string symbol, DateTimeOffset markedAt, decimal? price = null, decimal? quantity = null, CancellationToken cancellationToken = default)
+	public Task<ManualCloseAnnotation> AddAsync(long constructionId, string symbol, DateTimeOffset annotatedAt, decimal? price = null, decimal? quantity = null, CancellationToken cancellationToken = default)
 	{
-		_added.Add((constructionId, symbol, markedAt, price, quantity));
-		return Task.FromResult(new ManualCloseMark { ConstructionId = constructionId, Symbol = symbol, Price = price, Quantity = quantity, MarkedAt = markedAt });
+		_added.Add((constructionId, symbol, annotatedAt, price, quantity));
+		return Task.FromResult(new ManualCloseAnnotation { ConstructionId = constructionId, Symbol = symbol, Price = price, Quantity = quantity, AnnotatedAt = annotatedAt });
 	}
 
-	public Task EditAsync(long markId, string symbol, DateTimeOffset markedAt, decimal? price, decimal? quantity, CancellationToken cancellationToken = default)
+	public Task EditAsync(long annotationId, string symbol, DateTimeOffset annotatedAt, decimal? price, decimal? quantity, CancellationToken cancellationToken = default)
 	{
-		_edited.Add((markId, symbol, markedAt, price, quantity));
+		_edited.Add((annotationId, symbol, annotatedAt, price, quantity));
 		return Task.CompletedTask;
 	}
 
-	public Task DeleteAsync(long markId, CancellationToken cancellationToken = default)
+	public Task DeleteAsync(long annotationId, CancellationToken cancellationToken = default)
 	{
-		_deletedIds.Add(markId);
+		_deletedIds.Add(annotationId);
 		return Task.CompletedTask;
 	}
 
-	public Task<IReadOnlyList<ManualCloseMark>> ListAsync(long constructionId, CancellationToken cancellationToken = default) =>
-		Task.FromResult<IReadOnlyList<ManualCloseMark>>([]);
+	public Task<IReadOnlyList<ManualCloseAnnotation>> ListAsync(long constructionId, CancellationToken cancellationToken = default) =>
+		Task.FromResult<IReadOnlyList<ManualCloseAnnotation>>([]);
 }
 
 /// <summary>Записывающий сервис споров связок: фиксирует команды и повторяет отказы домена.</summary>
@@ -1577,18 +1577,18 @@ internal sealed class RecordingSyntheticCloseDisputeService : ISyntheticCloseDis
 		}
 	}
 
-/// <summary>Стабильный источник марок: одна известная марка инструмента.</summary>
-internal sealed class StubInstrumentMarkSource(decimal? mark) : IInstrumentMarkSource
+/// <summary>Стабильный источник котировок: одна известная котировка инструмента.</summary>
+internal sealed class StubInstrumentQuoteSource(decimal? quote) : IInstrumentQuoteSource
 {
-	public Task<decimal?> GetLastMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-		Task.FromResult(mark);
+	public Task<decimal?> GetLastQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+		Task.FromResult(quote);
 }
 
-/// <summary>Заглушка свежих марок: каждая марка приходит без сети в фиксированный момент.</summary>
-internal sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt) : IFreshInstrumentMarkSource
+/// <summary>Заглушка свежих котировок: каждая котировка приходит без сети в фиксированный момент.</summary>
+internal sealed class StubFreshQuoteSource(decimal quotePrice, DateTimeOffset receivedAt) : IFreshInstrumentQuoteSource
 {
-	public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-		Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, markPrice, receivedAt));
+	public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+		Task.FromResult<InstrumentQuoteSnapshot?>(new InstrumentQuoteSnapshot(symbol, quotePrice, receivedAt));
 }
 
 /// <summary>Помощники подмены сервисов карточки стабильными заглушками.</summary>
@@ -1613,9 +1613,9 @@ internal static class CardApiServiceExtensions
 	}
 
 	/// <summary>Заменяет регистрацию сервиса ручных пометок стабильной заглушкой.</summary>
-	public static IServiceCollection ReplaceCloseMarkService(this IServiceCollection services, IManualCloseMarkService markService)
+	public static IServiceCollection ReplaceCloseAnnotationService(this IServiceCollection services, IManualCloseAnnotationService annotationService)
 	{
-		return Replace(services, markService);
+		return Replace(services, annotationService);
 	}
 
 	/// <summary>Заменяет регистрацию сервиса привязки сделок стабильной заглушкой.</summary>
@@ -1630,16 +1630,16 @@ internal static class CardApiServiceExtensions
 		return Replace(services, adjustmentService);
 	}
 
-	/// <summary>Заменяет регистрацию источника марок стабильной заглушкой.</summary>
-	public static IServiceCollection ReplaceInstrumentMarkSource(this IServiceCollection services, IInstrumentMarkSource markSource)
+	/// <summary>Заменяет регистрацию источника котировок стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceInstrumentQuoteSource(this IServiceCollection services, IInstrumentQuoteSource quoteSource)
 	{
-		return Replace(services, markSource);
+		return Replace(services, quoteSource);
 	}
 
-	/// <summary>Заменяет регистрацию источника свежих марок стабильной заглушкой.</summary>
-	public static IServiceCollection ReplaceFreshInstrumentMarkSource(this IServiceCollection services, IFreshInstrumentMarkSource freshMarkSource)
+	/// <summary>Заменяет регистрацию источника свежих котировок стабильной заглушкой.</summary>
+	public static IServiceCollection ReplaceFreshInstrumentQuoteSource(this IServiceCollection services, IFreshInstrumentQuoteSource freshQuoteSource)
 	{
-		return Replace(services, freshMarkSource);
+		return Replace(services, freshQuoteSource);
 	}
 
 	/// <summary>Заменяет регистрацию сервиса споров связок стабильной заглушкой.</summary>
@@ -1779,7 +1779,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			throw new ConstructionNotFoundException(constructionId);
 		}
 
-		var marksAsOf = new DateTimeOffset(2026, 6, 20, 14, 30, 0, TimeSpan.Zero);
+		var quotesAsOf = new DateTimeOffset(2026, 6, 20, 14, 30, 0, TimeSpan.Zero);
 		var openedAt = new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero);
 		var closedPositionAt = new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero);
 		var metrics = new TransactionJournal.Application.Analytics.ConstructionMetrics
@@ -1790,7 +1790,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			UnrealizedPnL = 40.25m,
 			AdjustmentsPnL = 5m,
 			TotalPnL = 105.5m,
-			MarkValue = 500m,
+			QuoteValue = 500m,
 			RealizedPnLPercent = 2.0m,
 			UnrealizedPnLPercent = 1.34m,
 			AdjustmentsPnLPercent = 0.17m,
@@ -1831,8 +1831,8 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			Comment: "## стреддл\n*имя ручное*",
 			Metrics: metrics,
 			HasOpenResidual: true,
-			HasMarkFailure: false,
-			MarksAsOf: marksAsOf,
+			HasQuoteFailure: false,
+			QuotesAsOf: quotesAsOf,
 			Positions:
 			[
 				new ConstructionPositionRow(
@@ -1851,7 +1851,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					ClosedAt: null,
 					IsOpen: true,
 					Comment: "ножка **входа**",
-					MarkValue: 300m,
+					QuoteValue: 300m,
 					PriceChangePercent: 5m,
 					// Величины времени жизни открытой опционной строки: сутки,
 					// распад и состав тултипа проходят рядом с прежними колонками.
@@ -1881,7 +1881,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					ClosedAt: closedPositionAt,
 					IsOpen: false,
 					Comment: null,
-					MarkValue: null,
+					QuoteValue: null,
 					PriceChangePercent: null),
 				new ConstructionPositionRow(
 					Symbol: "XAUTUSDT",
@@ -1899,7 +1899,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					ClosedAt: null,
 					IsOpen: true,
 					Comment: null,
-					MarkValue: 350m,
+					QuoteValue: 350m,
 					PriceChangePercent: 1.2m,
 					SyntheticResidual: 0.3m,
 					OtherResidual: 0.04m),
@@ -1912,7 +1912,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			],
 			ClosingEntries:
 			[
-				new ConstructionClosingEntryRow(closedPositionAt, PositionClosingKind.ManualMark, "ETHUSDT", -0.5m, 3520m, -1760m, ManualMarkId: 21),
+				new ConstructionClosingEntryRow(closedPositionAt, PositionClosingKind.ManualAnnotation, "ETHUSDT", -0.5m, 3520m, -1760m, ManualAnnotationId: 21),
 			],
 			ClosingWarnings:
 			[
@@ -1920,7 +1920,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 				{
 					ConstructionId = constructionId,
 					Symbol = "ETHUSDT",
-					Kind = PositionClosingKind.ManualMark,
+					Kind = PositionClosingKind.ManualAnnotation,
 					ClosedAt = closedPositionAt,
 					SourceKey = "manual:99",
 				},

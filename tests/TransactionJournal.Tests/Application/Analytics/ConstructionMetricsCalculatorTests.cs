@@ -162,7 +162,7 @@ public class ConstructionMetricsCalculatorTests
 	[Description("Неоцененный остаток обнуляет только нереализованную часть и итог")]
 	public void TryIfUnevaluatedResidualNullsOnlyUnrealizedPart()
 	{
-		// Arrange: открытый остаток без оценки марками, закрытая позиция и
+		// Arrange: открытый остаток без оценки котировками, закрытая позиция и
 		// корректировка +20 в результате участвуют.
 		// Требование: нереализованная оценка отсутствует, пока открытый остаток
 		// не оценен; реализованные метрики, корректировки, даты и их проценты
@@ -277,15 +277,15 @@ public class ConstructionMetricsCalculatorTests
 		// Traceability: openspec:analytics/performance#scenario-capital-usage-computed-when-capital-set
 		var positions = new[]
 		{
-			OpenPosition(FirstSymbol, 0, 9.97m, markValue: 240m),
-			OpenPosition(SecondSymbol, 10, -2.5m, residual: -3m, markValue: -150m),
+			OpenPosition(FirstSymbol, 0, 9.97m, quoteValue: 240m),
+			OpenPosition(SecondSymbol, 10, -2.5m, residual: -3m, quoteValue: -150m),
 		};
 
 		// Act
 		var metrics = _calculator.Calculate(ConstructionId, 3000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
 
 		// Assert: 240 − 150 = 90; занято капитала 90 / 3000 × 100 = 3 %.
-		Assert.That(metrics.MarkValue, Is.EqualTo(90m));
+		Assert.That(metrics.QuoteValue, Is.EqualTo(90m));
 		Assert.That(metrics.CapitalUsagePercent, Is.EqualTo(3m));
 	}
 
@@ -307,7 +307,7 @@ public class ConstructionMetricsCalculatorTests
 		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
 
 		// Assert: стоимость и занятость null, реализованный итог на месте.
-		Assert.That(metrics.MarkValue, Is.Null);
+		Assert.That(metrics.QuoteValue, Is.Null);
 		Assert.That(metrics.CapitalUsagePercent, Is.Null);
 		Assert.That(metrics.RealizedPnL, Is.EqualTo(7.47m));
 		Assert.That(metrics.TotalPnL, Is.EqualTo(7.47m));
@@ -317,21 +317,21 @@ public class ConstructionMetricsCalculatorTests
 	[Description("Неоцененный открытый остаток обнуляет стоимость конструкции")]
 	public void TryIfUnevaluatedOpenResidualNullsConstructionValue()
 	{
-		// Arrange: открытый остаток ETH оценен марками, открытый остаток BTC — нет.
+		// Arrange: открытый остаток ETH оценен котировками, открытый остаток BTC — нет.
 		// Требование: стоимость конструкции недоступна, пока хоть один открытый
 		// остаток не оценен; занятость капитала деградирует вместе со стоимостью.
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-mark-value
 		var positions = new[]
 		{
 			OpenPosition(FirstSymbol, 0, 0m),
-			OpenPosition(SecondSymbol, 10, 0m, markValue: 90m),
+			OpenPosition(SecondSymbol, 10, 0m, quoteValue: 90m),
 		};
 
 		// Act
 		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
 
 		// Assert: стоимость и занятость null, реализованные величины не задеты.
-		Assert.That(metrics.MarkValue, Is.Null);
+		Assert.That(metrics.QuoteValue, Is.Null);
 		Assert.That(metrics.CapitalUsagePercent, Is.Null);
 		Assert.That(metrics.RealizedPnL, Is.EqualTo(0m));
 	}
@@ -345,16 +345,16 @@ public class ConstructionMetricsCalculatorTests
 		// капитал оставляет стоимость, но занятость не вычисляется.
 		// Traceability: openspec:analytics/performance#scenario-capital-usage-computed-when-capital-set
 		// Traceability: openspec:analytics/performance#scenario-capital-usage-absent-without-capital
-		var positions = new[] { OpenPosition(FirstSymbol, 0, 0m, residual: -1m, markValue: -40m) };
+		var positions = new[] { OpenPosition(FirstSymbol, 0, 0m, residual: -1m, quoteValue: -40m) };
 
 		// Act: один набор при капитале 200 и при незаданном капитале.
 		var withCapital = _calculator.Calculate(ConstructionId, 200m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
 		var withoutCapital = _calculator.Calculate(ConstructionId, null, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
 
 		// Assert: −40 / 200 × 100 = −20 %; без капитала стоимость остаётся.
-		Assert.That(withCapital.MarkValue, Is.EqualTo(-40m));
+		Assert.That(withCapital.QuoteValue, Is.EqualTo(-40m));
 		Assert.That(withCapital.CapitalUsagePercent, Is.EqualTo(-20m));
-		Assert.That(withoutCapital.MarkValue, Is.EqualTo(-40m));
+		Assert.That(withoutCapital.QuoteValue, Is.EqualTo(-40m));
 		Assert.That(withoutCapital.CapitalUsagePercent, Is.Null);
 	}
 
@@ -559,7 +559,7 @@ public class ConstructionMetricsCalculatorTests
 		var lifetime = new OptionLifetimeInput
 		{
 			Legs = new[] { NearExpiryLeg("BTC-28OCT26-90000-C") },
-			Marks = new Dictionary<string, InstrumentMarkSnapshot>(StringComparer.Ordinal),
+			Quotes = new Dictionary<string, InstrumentQuoteSnapshot>(StringComparer.Ordinal),
 			SnapshotHistory = Array.Empty<InstrumentMarketSnapshot>(),
 		};
 
@@ -630,7 +630,7 @@ public class ConstructionMetricsCalculatorTests
 		AverageEntryPrice = null,
 		AverageClosePrice = null,
 		TotalPnL = realizedPnL,
-		MarkPrice = null,
+		QuotePrice = null,
 		UnrealizedPnL = 0m,
 		OpenedAt = At(openedAt),
 		ClosedAt = At(closedAt),
@@ -638,7 +638,7 @@ public class ConstructionMetricsCalculatorTests
 	};
 
 	/// <summary>Строит метрики открытой позиции: ненулевой остаток, нереализованная оценка ещё не подставлена.</summary>
-	private static PositionMetrics OpenPosition(string symbol, int openedAt, decimal realizedPnL, long? constructionId = null, decimal residual = 1m, decimal? markValue = null, decimal? averageOpenPrice = 120m) => new()
+	private static PositionMetrics OpenPosition(string symbol, int openedAt, decimal realizedPnL, long? constructionId = null, decimal residual = 1m, decimal? quoteValue = null, decimal? averageOpenPrice = 120m) => new()
 	{
 		ConstructionId = constructionId ?? ConstructionId,
 		Symbol = symbol,
@@ -649,9 +649,9 @@ public class ConstructionMetricsCalculatorTests
 		AverageEntryPrice = null,
 		AverageClosePrice = null,
 		TotalPnL = null,
-		MarkPrice = null,
+		QuotePrice = null,
 		UnrealizedPnL = null,
-		MarkValue = markValue,
+		QuoteValue = quoteValue,
 		OpenedAt = At(openedAt),
 		ClosedAt = null,
 		Duration = null,

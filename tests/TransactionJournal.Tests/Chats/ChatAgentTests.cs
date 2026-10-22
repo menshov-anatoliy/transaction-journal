@@ -96,7 +96,7 @@ public sealed class ChatAgentTests
 		chatClient.Script =
 		[
 			[() => ToolCallFrame("call-1", ChatTools.GetMarketSnapshotToolName, "BTC")],
-			[() => new ChatResponseUpdate(ChatRole.Assistant, "Марка 108975.4.")],
+			[() => new ChatResponseUpdate(ChatRole.Assistant, "Котировка 108975.4.")],
 		];
 		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
@@ -107,12 +107,12 @@ public sealed class ChatAgentTests
 				AsOf = FixedNow,
 				IsAvailable = true,
 				Symbol = "BTCUSDT",
-				MarkPrice = 108975.4m,
+				QuotePrice = 108975.4m,
 			});
 		var agent = CreateAgent(chatClient, market);
 
 		// Act: вопрос провоцирует модель обратиться к инструменту.
-		var updates = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?"));
+		var updates = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с котировкой BTC?"));
 
 		// Assert: биржевой запрос выполнен ровно один раз на один вызов инструмента.
 		// Traceability: openspec:chats/sources#requirement-sources-single-request-per-call
@@ -126,7 +126,7 @@ public sealed class ChatAgentTests
 		Assert.That(secondRequest[^1].Role, Is.EqualTo(ChatRole.Tool));
 
 		// Assert: текстовый ответ модели после тула дошёл до вызывающего.
-		Assert.That(updates.Select(update => update.Text), Does.Contain("Марка 108975.4."));
+		Assert.That(updates.Select(update => update.Text), Does.Contain("Котировка 108975.4."));
 	}
 
 	[TestMethod]
@@ -167,12 +167,12 @@ public sealed class ChatAgentTests
 	public async Task TryIfMarketToolInvoked_TraceRecordsInvocationWithAsOf()
 	{
 		// Arrange: сцена 1 — модель вызывает снимок рынка, сцена 2 — отвечает текстом;
-		// биржа отвечает маркой с фиксированным as-of.
+		// биржа отвечает котировкой с фиксированным as-of.
 		var chatClient = new FakeChatClient();
 		chatClient.Script =
 		[
 			[() => ToolCallFrame("call-1", ChatTools.GetMarketSnapshotToolName, "BTC")],
-			[() => new ChatResponseUpdate(ChatRole.Assistant, "Марка 108975.4.")],
+			[() => new ChatResponseUpdate(ChatRole.Assistant, "Котировка 108975.4.")],
 		];
 		var market = new Mock<IChatMarketReader>(MockBehavior.Strict);
 		market
@@ -183,13 +183,13 @@ public sealed class ChatAgentTests
 				AsOf = FixedNow,
 				IsAvailable = true,
 				Symbol = "BTCUSDT",
-				MarkPrice = 108975.4m,
+				QuotePrice = 108975.4m,
 			});
 		var agent = CreateAgent(chatClient, market);
 		var traceRecorder = new ChatSourceTraceRecorder();
 
 		// Act: вопрос провоцирует модель обратиться к рыночному инструменту.
-		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с маркой BTC?", traceRecorder: traceRecorder));
+		_ = await CollectAsync(agent.StreamAnswerAsync(Snapshot(), [], "Что с котировкой BTC?", traceRecorder: traceRecorder));
 
 		// Assert: вызов записан в момент исполнения — имя, компактные аргументы
 		// и as-of данных, отданных инструментом.

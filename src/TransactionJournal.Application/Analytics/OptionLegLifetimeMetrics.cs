@@ -22,7 +22,7 @@ public sealed record OptionLegLifetimeMetrics
 	/// <summary>Внутренняя стоимость контракта: max(0, underlying − strike) у колла, зеркально у пута; null без индексной цены.</summary>
 	public decimal? IntrinsicValueUsdtPerContract { get; init; }
 
-	/// <summary>Временная стоимость контракта: марка минус внутренняя стоимость; null без индексной цены или марки.</summary>
+	/// <summary>Временная стоимость контракта: котировка минус внутренняя стоимость; null без индексной цены или котировки.</summary>
 	public decimal? TimeValueUsdtPerContract { get; init; }
 
 	/// <summary>Внутренняя стоимость ноги — стоимость контракта на чистый остаток со знаком остатка.</summary>

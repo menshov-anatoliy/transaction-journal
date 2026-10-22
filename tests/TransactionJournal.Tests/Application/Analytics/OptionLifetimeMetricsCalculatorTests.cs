@@ -38,7 +38,7 @@ public class OptionLifetimeMetricsCalculatorTests
 
 	private OptionLifetimeMetricsCalculator _calculator = null!;
 
-	private Dictionary<string, InstrumentMarkSnapshot> _marks = null!;
+	private Dictionary<string, InstrumentQuoteSnapshot> _marks = null!;
 
 	private List<InstrumentMarketSnapshot> _history = null!;
 
@@ -49,7 +49,7 @@ public class OptionLifetimeMetricsCalculatorTests
 		// проверяются без привязки к системному времени.
 		_time = new FixedTimeProvider(BaseAt);
 		_calculator = new OptionLifetimeMetricsCalculator(_time);
-		_marks = new Dictionary<string, InstrumentMarkSnapshot>(StringComparer.Ordinal);
+		_marks = new Dictionary<string, InstrumentQuoteSnapshot>(StringComparer.Ordinal);
 		_history = new List<InstrumentMarketSnapshot>();
 	}
 
@@ -58,15 +58,15 @@ public class OptionLifetimeMetricsCalculatorTests
 	// Traceability: openspec:analytics/option-lifetime#scenario-leg-itm-call-split
 	public void TryIfLegItmCallSplitsIntrinsicAndTimeValue()
 	{
-		// Arrange: колл со страйком 100 при индексе 110 и марке 15 — внутренняя
+		// Arrange: колл со страйком 100 при индексе 110 и котировке 15 — внутренняя
 		// стоимость 10, временная 5; остаток единичный, значения совпадают.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m);
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m);
 
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 30, residual: 1m) }, _marks, _history);
 
 		// Assert: внутренняя — превышение индекса над страйком, временная —
-		// остаток марки, на контракт и на чистый остаток значения равны.
+		// остаток котировки, на контракт и на чистый остаток значения равны.
 		var leg = evaluation.Legs.Single();
 		Assert.That(leg.IntrinsicValueUsdtPerContract, Is.EqualTo(10m));
 		Assert.That(leg.TimeValueUsdtPerContract, Is.EqualTo(5m));
@@ -80,14 +80,14 @@ public class OptionLifetimeMetricsCalculatorTests
 	public void TryIfLegOtmPutHasZeroIntrinsic()
 	{
 		// Arrange: пут со страйком 100 при индексе 110 вне денег — внутренняя
-		// стоимость нулевая, вся марка 3 временная.
-		_marks[PutSymbol] = FreshMark(PutSymbol, markPrice: 3m, underlyingPrice: 110m);
+		// стоимость нулевая, вся котировка 3 временная.
+		_marks[PutSymbol] = FreshQuote(PutSymbol, quotePrice: 3m, underlyingPrice: 110m);
 
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(PutSymbol, strike: 100m, OptionType.Put, daysToDelivery: 30, residual: 1m) }, _marks, _history);
 
 		// Assert: зеркальная формула пута не даёт отрицательной внутренней
-		// стоимости, временная равна полной марке.
+		// стоимости, временная равна полной котировке.
 		var leg = evaluation.Legs.Single();
 		Assert.That(leg.IntrinsicValueUsdtPerContract, Is.EqualTo(0m));
 		Assert.That(leg.TimeValueUsdtPerContract, Is.EqualTo(3m));
@@ -98,9 +98,9 @@ public class OptionLifetimeMetricsCalculatorTests
 	// Traceability: openspec:analytics/option-lifetime#scenario-leg-value-scaled-by-residual
 	public void TryIfLegValueScaledByResidual()
 	{
-		// Arrange: временная стоимость контракта 5 (марка 15, внутренняя 10),
+		// Arrange: временная стоимость контракта 5 (котировка 15, внутренняя 10),
 		// чистый остаток короткий −2.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m);
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m);
 
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 30, residual: -2m) }, _marks, _history);
@@ -119,7 +119,7 @@ public class OptionLifetimeMetricsCalculatorTests
 	public void TryIfLegDecayEqualsThetaTimesResidual()
 	{
 		// Arrange: тета контракта −2.5 USDT/день, длинный остаток +2.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m, theta: -2.5m);
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m, theta: -2.5m);
 
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 30, residual: 2m) }, _marks, _history);
@@ -135,7 +135,7 @@ public class OptionLifetimeMetricsCalculatorTests
 	public void TryIfLegDecayShortResidualFlipsSign()
 	{
 		// Arrange: та же тета −2.5, чистый остаток короткий −1.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m, theta: -2.5m);
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m, theta: -2.5m);
 
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 30, residual: -1m) }, _marks, _history);
@@ -168,7 +168,7 @@ public class OptionLifetimeMetricsCalculatorTests
 	// Traceability: openspec:analytics/option-lifetime#scenario-leg-days-no-market-data
 	public void TryIfLegDaysAvailableWithoutMarketData()
 	{
-		// Arrange: тикеры ноги недоступны — словарь марок символа не содержит,
+		// Arrange: тикеры ноги недоступны — словарь котировок символа не содержит,
 		// deliveryTime инструмента известен.
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 5, residual: 1m) }, _marks, _history);
@@ -191,9 +191,9 @@ public class OptionLifetimeMetricsCalculatorTests
 		// Arrange: текущая тета −2.5 при остатке 2 даёт распад −5; в истории
 		// два снимка старше суток — ближайший (25 часов) с тетой −2 и более
 		// старый (48 часов) с тетой −3; базой прироста обязан стать ближайший.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m, theta: -2.5m);
-		_history.Add(HistorySnapshot(CallSymbol, markPrice: 12m, receivedAt: _time.UtcNow - TimeSpan.FromHours(48), theta: -3m));
-		_history.Add(HistorySnapshot(CallSymbol, markPrice: 13m, receivedAt: _time.UtcNow - TimeSpan.FromHours(25), theta: -2m));
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m, theta: -2.5m);
+		_history.Add(HistorySnapshot(CallSymbol, quotePrice: 12m, receivedAt: _time.UtcNow - TimeSpan.FromHours(48), theta: -3m));
+		_history.Add(HistorySnapshot(CallSymbol, quotePrice: 13m, receivedAt: _time.UtcNow - TimeSpan.FromHours(25), theta: -2m));
 
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 30, residual: 2m) }, _marks, _history);
@@ -213,8 +213,8 @@ public class OptionLifetimeMetricsCalculatorTests
 	{
 		// Arrange: единственный снимок истории моложе суток — 23 часа; текущая
 		// тета и остаток те же, что в парном сценарии.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m, theta: -2.5m);
-		_history.Add(HistorySnapshot(CallSymbol, markPrice: 13m, receivedAt: _time.UtcNow - TimeSpan.FromHours(23), theta: -2m));
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m, theta: -2.5m);
+		_history.Add(HistorySnapshot(CallSymbol, quotePrice: 13m, receivedAt: _time.UtcNow - TimeSpan.FromHours(23), theta: -2m));
 
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 30, residual: 2m) }, _marks, _history);
@@ -253,8 +253,8 @@ public class OptionLifetimeMetricsCalculatorTests
 	{
 		// Arrange: распад первой ноги −5 (тета −2.5 × остаток 2), второй +3
 		// (тета +1 × остаток 3); тикеры обеих ног доступны.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m, theta: -2.5m);
-		_marks[SecondCallSymbol] = FreshMark(SecondCallSymbol, markPrice: 20m, underlyingPrice: 110m, theta: 1m);
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m, theta: -2.5m);
+		_marks[SecondCallSymbol] = FreshQuote(SecondCallSymbol, quotePrice: 20m, underlyingPrice: 110m, theta: 1m);
 
 		// Act
 		var evaluation = _calculator.Calculate(new[]
@@ -293,7 +293,7 @@ public class OptionLifetimeMetricsCalculatorTests
 	{
 		// Arrange: открытая опционная нога с остатком суток на границе порога
 		// и рыночные данные с распадом.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m, theta: -2.5m);
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m, theta: -2.5m);
 
 		// Act
 		var evaluation = _calculator.Calculate(new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: daysToDelivery, residual: 1m) }, _marks, _history);
@@ -309,7 +309,7 @@ public class OptionLifetimeMetricsCalculatorTests
 	{
 		// Arrange: один опционный инструмент с остатком 10 суток; повторная
 		// нога того же символа не должна задваивать запись.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m, theta: -2.5m);
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m, theta: -2.5m);
 
 		// Act
 		var evaluation = _calculator.Calculate(new[]
@@ -349,7 +349,7 @@ public class OptionLifetimeMetricsCalculatorTests
 	{
 		// Arrange: открытая нога в зоне порога; агент подсказок не запускался,
 		// вычислителю никаких его данных не передаётся.
-		_marks[CallSymbol] = FreshMark(CallSymbol, markPrice: 15m, underlyingPrice: 110m, theta: -2.5m);
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 15m, underlyingPrice: 110m, theta: -2.5m);
 		var legs = new[] { Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 14, residual: 1m) };
 
 		// Act: два независимых чтения подряд.
@@ -363,7 +363,7 @@ public class OptionLifetimeMetricsCalculatorTests
 
 	[TestMethod]
 	[DataRow("legs")]
-	[DataRow("marks")]
+	[DataRow("quotes")]
 	[DataRow("history")]
 	[ExpectedException(typeof(ArgumentNullException))]
 	[Description("Вычислитель отклоняет незаданные входные наборы")]
@@ -376,7 +376,7 @@ public class OptionLifetimeMetricsCalculatorTests
 			case "legs":
 				_calculator.Calculate(null!, _marks, _history);
 				break;
-			case "marks":
+			case "quotes":
 				_calculator.Calculate(Array.Empty<OptionLegLifetimeInput>(), null!, _history);
 				break;
 			default:
@@ -398,14 +398,14 @@ public class OptionLifetimeMetricsCalculatorTests
 	};
 
 	/// <summary>Свежий снимок тикера на текущий момент фальшивых часов.</summary>
-	private static InstrumentMarkSnapshot FreshMark(string symbol, decimal markPrice, decimal? underlyingPrice = null, decimal? theta = null) =>
-		new(symbol, markPrice, BaseAt, underlyingPrice, theta);
+	private static InstrumentQuoteSnapshot FreshQuote(string symbol, decimal quotePrice, decimal? underlyingPrice = null, decimal? theta = null) =>
+		new(symbol, quotePrice, BaseAt, underlyingPrice, theta);
 
 	/// <summary>Строка истории рыночных снимков с моментом получения и тетой.</summary>
-	private static InstrumentMarketSnapshot HistorySnapshot(string symbol, decimal markPrice, DateTimeOffset receivedAt, decimal? theta) => new()
+	private static InstrumentMarketSnapshot HistorySnapshot(string symbol, decimal quotePrice, DateTimeOffset receivedAt, decimal? theta) => new()
 	{
 		Symbol = symbol,
-		MarkPrice = markPrice,
+		QuotePrice = quotePrice,
 		UnderlyingPrice = 110m,
 		Theta = theta,
 		ReceivedAt = receivedAt,

@@ -16,10 +16,10 @@ internal static class HintPassHarness
 	/// <summary>Отметка as-of всех прогонов: четверг 2026-10-08, ISO-неделя 41.</summary>
 	public static readonly DateTimeOffset FixedNow = new(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
 
-	/// <summary>Марка спота BTC для условий у страйка.</summary>
+	/// <summary>Котировка спота BTC для условий у страйка.</summary>
 	public const decimal BtcSpot = 50_000m;
 
-	/// <summary>Марка спота ETH для условий у страйка.</summary>
+	/// <summary>Котировка спота ETH для условий у страйка.</summary>
 	public const decimal EthSpot = 3_000m;
 
 	/// <summary>
@@ -27,11 +27,11 @@ internal static class HintPassHarness
 	/// </summary>
 	/// <param name="corpusDir">Каталог корпуса карточек.</param>
 	/// <param name="snapshot">Снимок журнала прохода.</param>
-	/// <param name="marks">Марки инструментов прохода; null — пустая доступная партия.</param>
+	/// <param name="quotes">Котировки инструментов прохода; null — пустая доступная партия.</param>
 	public static async Task<(HintPassResult Result, List<HintRecord> Added)> RunAsync(
 		string corpusDir,
 		JournalSnapshot snapshot,
-		IReadOnlyDictionary<string, decimal>? marks = null)
+		IReadOnlyDictionary<string, decimal>? quotes = null)
 	{
 		var added = new List<HintRecord>();
 		var hintStore = new Mock<IHintStore>();
@@ -44,7 +44,7 @@ internal static class HintPassHarness
 		var pass = new HintAgentPass(
 			new RulesCorpusLoader(corpusDir),
 			StubJournalReader(snapshot).Object,
-			StubMarkSource(marks).Object,
+			StubQuoteSource(quotes).Object,
 			hintStore.Object,
 			StubClock(null).Object);
 		var result = await pass.RunAsync();
@@ -60,13 +60,13 @@ internal static class HintPassHarness
 	/// <param name="corpusDir">Каталог корпуса карточек.</param>
 	/// <param name="snapshot">Снимок журнала прохода.</param>
 	/// <param name="hintStore">Реальное хранилище подсказок прохода.</param>
-	/// <param name="marks">Марки инструментов прохода; null — пустая доступная партия.</param>
+	/// <param name="quotes">Котировки инструментов прохода; null — пустая доступная партия.</param>
 	/// <param name="now">Отметка as-of прохода; null — фиксированная отметка каркаса.</param>
 	public static async Task<(HintPassResult Result, List<HintRecord> Added)> RunAsync(
 		string corpusDir,
 		JournalSnapshot snapshot,
 		IHintStore hintStore,
-		IReadOnlyDictionary<string, decimal>? marks = null,
+		IReadOnlyDictionary<string, decimal>? quotes = null,
 		DateTimeOffset? now = null)
 	{
 		var beforeIds = (await hintStore.ListAllAsync().ConfigureAwait(false))
@@ -75,7 +75,7 @@ internal static class HintPassHarness
 		var pass = new HintAgentPass(
 			new RulesCorpusLoader(corpusDir),
 			StubJournalReader(snapshot).Object,
-			StubMarkSource(marks).Object,
+			StubQuoteSource(quotes).Object,
 			hintStore,
 			StubClock(now).Object);
 		var result = await pass.RunAsync();
@@ -95,14 +95,14 @@ internal static class HintPassHarness
 		return journalReader;
 	}
 
-	/// <summary>Стаб источника марок с доступной партией.</summary>
-	private static Mock<IMarkSource> StubMarkSource(IReadOnlyDictionary<string, decimal>? marks)
+	/// <summary>Стаб источника котировок с доступной партией.</summary>
+	private static Mock<IQuoteSource> StubQuoteSource(IReadOnlyDictionary<string, decimal>? quotes)
 	{
-		var markSource = new Mock<IMarkSource>();
-		markSource
-			.Setup(source => source.GetMarksAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new MarkBatch { Marks = marks ?? new Dictionary<string, decimal>(), FailureReason = null });
-		return markSource;
+		var quoteSource = new Mock<IQuoteSource>();
+		quoteSource
+			.Setup(source => source.GetQuotesAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+			.ReturnsAsync(new QuoteBatch { Quotes = quotes ?? new Dictionary<string, decimal>(), FailureReason = null });
+		return quoteSource;
 	}
 
 	/// <summary>Стаб часов с фиксированной отметкой as-of.</summary>
@@ -174,7 +174,7 @@ internal static class HintPassHarness
 			RealizedPnL = 0m,
 			UnrealizedPnL = unrealizedPnL,
 			AverageOpenPrice = null,
-			MarkPrice = null,
+			QuotePrice = null,
 			OpenedAt = FixedNow,
 			ClosedAt = null,
 		};

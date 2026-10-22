@@ -61,9 +61,9 @@ export function ConstructionPreviewCard({ preview, liveHintCount }: Construction
 					plannedProfit: preview.profitUsdt,
 					realized: preview.realizedPnL,
 					unrealized: preview.unrealizedPnL,
-					quotesDegraded: preview.hasMarkFailure,
+					quotesDegraded: preview.hasQuoteFailure,
 					// Открытые остатки есть, пока есть позиции с ненулевым
-					// остатком: без них сбой марок не делает индикатор неполным.
+					// остатком: без них сбой котировок не делает индикатор неполным.
 					// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 					hasOpenResidual: preview.counts.openPositions > 0,
 					// Пара «число + статус» из контракта API: конечный риск
@@ -86,14 +86,14 @@ export function ConstructionPreviewCard({ preview, liveHintCount }: Construction
 					<NullableValue value={preview.allocatedCapitalUsdt} format={formatAmount} />
 				</Metric>
 				<Metric label="стоимость">
-					<NullableValue value={preview.markValue} format={formatSignedAmount} />
+					<NullableValue value={preview.quoteValue} format={formatSignedAmount} />
 				</Metric>
 				<Metric label="реализов.">
 					<SignedToneValue value={preview.realizedPnL} format={formatSignedAmount} />
 				</Metric>
 				<Metric label="нереализов.">
 					{preview.unrealizedPnL === null ? (
-						// Сбой марок — видимое состояние карточки: признак сбоя
+						// Сбой котировок — видимое состояние карточки: признак сбоя
 						// занимает место нереализованной оценки.
 						<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
 							сбой котировок

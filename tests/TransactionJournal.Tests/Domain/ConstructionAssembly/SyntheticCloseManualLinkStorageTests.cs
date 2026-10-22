@@ -171,10 +171,10 @@ public class SyntheticCloseManualLinkStorageTests
 		new ChatStore(_chatsDatabasePath),
 		new FixedTimeProvider(Now));
 
-	/// <summary>Читающая модель деталей конструкции с заглушкой марок: логический слой читается как на экране.</summary>
+	/// <summary>Читающая модель деталей конструкции с заглушкой котировок: логический слой читается как на экране.</summary>
 	private ConstructionDetailReadModel CreateDetailReader() => new(
 		CreateOptions(),
-		new JournalMetricsReadModel(CreateOptions(), new StubFreshMarkSource(4300m, FetchedAt)),
+		new JournalMetricsReadModel(CreateOptions(), new StubFreshQuoteSource(4300m, FetchedAt)),
 		new PositionReadModel(CreateOptions()));
 
 	/// <summary>Создаёт опции контекста журнала над временной SQLite-базой проверки.</summary>
@@ -297,12 +297,12 @@ public class SyntheticCloseManualLinkStorageTests
 	}
 
 	/// <summary>
-	/// Заглушка источника свежих марок: фиксированная марка со временем получения.
+	/// Заглушка источника свежих котировок: фиксированная котировка со временем получения.
 	/// </summary>
-	private sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt) : IFreshInstrumentMarkSource
+	private sealed class StubFreshQuoteSource(decimal quotePrice, DateTimeOffset receivedAt) : IFreshInstrumentQuoteSource
 	{
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-			Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, markPrice, receivedAt));
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+			Task.FromResult<InstrumentQuoteSnapshot?>(new InstrumentQuoteSnapshot(symbol, quotePrice, receivedAt));
 	}
 
 	#endregion

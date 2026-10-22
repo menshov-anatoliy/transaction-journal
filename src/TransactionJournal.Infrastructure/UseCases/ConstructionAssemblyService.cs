@@ -528,7 +528,7 @@ public sealed class ConstructionAssemblyService : IConstructionAssemblyService
 		await db.TradeUserdata.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.PnLAdjustments.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.PositionComments.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
-		await db.ManualCloseMarks.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+		await db.ManualCloseAnnotations.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 		await db.SyntheticCloseDisputes.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
 
 		// Ручные сделки — сырьё журнала: строки переживают пересбор, а их привязки

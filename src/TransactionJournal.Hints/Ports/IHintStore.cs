@@ -57,7 +57,7 @@ public interface IHintStore
 	/// <param name="id">Идентификатор записи подсказки.</param>
 	/// <param name="seenAt">Момент первого показа.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	Task MarkFirstSeenAsync(long id, DateTimeOffset seenAt, CancellationToken cancellationToken = default);
+	Task RecordFirstSeenAsync(long id, DateTimeOffset seenAt, CancellationToken cancellationToken = default);
 }
 
 /// <summary>Статус подсказки в жизненном цикле new → applied | dismissed | expired.</summary>

@@ -17,13 +17,13 @@ namespace TransactionJournal.Application;
 /// <param name="ProfitPercent">Профит в процентах от капитала: введённые проценты либо вычисленные из введённых USDT; null, когда величины нет.</param>
 /// <param name="ProfitUsdt">Профит в USDT: введённые USDT либо вычисленные из введённых процентов; null, когда величины нет.</param>
 /// <param name="RealizedPnL">Реализованный PnL конструкции.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL; null при недоступной оценке марок.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL; null при недоступной оценке котировок.</param>
 /// <param name="AdjustmentsPnL">Сумма внешних корректировок PnL конструкции.</param>
-/// <param name="TotalPnL">Итог конструкции; null при недоступной оценке марок.</param>
+/// <param name="TotalPnL">Итог конструкции; null при недоступной оценке котировок.</param>
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы процентов или при недоступном итоге.</param>
 /// <param name="OpenedAt">Дата открытия — время первой сделки; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой конструкции.</param>
-/// <param name="MarkValue">Стоимость открытых позиций конструкции по маркам; null при закрытой конструкции или недоступной оценке марок.</param>
+/// <param name="QuoteValue">Стоимость открытых позиций конструкции по котировкам; null при закрытой конструкции или недоступной оценке котировок.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала — стоимость в процентах от капитала; null без базы процентов или стоимости.</param>
 /// <param name="RealRiskUsdt">Реальный риск конструкции в USDT — наихудший результат открытых остатков на экспирации; null, когда худший случай неограничен или символ остатка не разобран — причина различима статусом.</param>
 /// <param name="WorstCaseUsdt">Худший исход конструкции в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
@@ -38,7 +38,7 @@ namespace TransactionJournal.Application;
 // введённая единица первоисточника, незаполненная вычисляется от капитала.
 // Traceability: openspec:analytics/performance#requirement-risk-profit-unit-conversion
 // Стоимость и занятость капитала переносятся из метрик аналитики как есть:
-// правила оценки и деградации при сбое марок остаются в аналитике.
+// правила оценки и деградации при сбое котировок остаются в аналитике.
 // Traceability: openspec:ui/screens#scenario-list-value-and-capital-usage-columns
 // Traceability: openspec:analytics/performance#requirement-mark-value-of-position-and-construction
 // Реальный риск публикуется в контракте строки списка: величина переносится
@@ -77,7 +77,7 @@ public sealed record ConstructionListItem(
 	decimal? TotalPnLPercent,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
-	decimal? MarkValue = null,
+	decimal? QuoteValue = null,
 	decimal? CapitalUsagePercent = null,
 	decimal? RealRiskUsdt = null,
 	decimal? WorstCaseUsdt = null,
@@ -88,16 +88,16 @@ public sealed record ConstructionListItem(
 
 /// <summary>
 /// Данные экрана «Конструкции»: сводка журнала — итог с разбивкой на
-/// реализованный и нереализованный PnL, отметка времени марок и счётчик
+/// реализованный и нереализованный PnL, отметка времени котировок и счётчик
 /// конструкций с числом открытых, — и строки таблицы конструкций.
 /// Счётчик описывает видимые (неархивные) конструкции: скрытые из списка
 /// в счётчике не числятся.
 /// </summary>
-/// <param name="TotalPnL">Итог по журналу; null, пока сбой марок оставляет его неполным.</param>
-/// <param name="RealizedPnL">Реализованный PnL журнала — сумма реализованных частей всех конструкций, включая архивные; сбой марок его не затрагивает.</param>
-/// <param name="UnrealizedPnL">Нереализованный PnL журнала; null при сбое марок хотя бы одной конструкции.</param>
-/// <param name="MarksAsOf">Отметка времени марок оценки; null при сбое марок или без открытых остатков.</param>
-/// <param name="HasMarkFailure">Признак сбоя марок: провайдер не оценил хотя бы один открытый остаток журнала.</param>
+/// <param name="TotalPnL">Итог по журналу; null, пока сбой котировок оставляет его неполным.</param>
+/// <param name="RealizedPnL">Реализованный PnL журнала — сумма реализованных частей всех конструкций, включая архивные; сбой котировок его не затрагивает.</param>
+/// <param name="UnrealizedPnL">Нереализованный PnL журнала; null при сбое котировок хотя бы одной конструкции.</param>
+/// <param name="QuotesAsOf">Отметка времени котировок оценки; null при сбое котировок или без открытых остатков.</param>
+/// <param name="HasQuoteFailure">Признак сбоя котировок: провайдер не оценил хотя бы один открытый остаток журнала.</param>
 /// <param name="ConstructionCount">Число видимых конструкций списка.</param>
 /// <param name="OpenCount">Число конструкций со статусом «открыта» среди видимых.</param>
 /// <param name="Items">Строки таблицы конструкций, упорядоченные по статусу и датам.</param>
@@ -108,8 +108,8 @@ public sealed record ConstructionListData(
 	decimal? TotalPnL,
 	decimal RealizedPnL,
 	decimal? UnrealizedPnL,
-	DateTimeOffset? MarksAsOf,
-	bool HasMarkFailure,
+	DateTimeOffset? QuotesAsOf,
+	bool HasQuoteFailure,
 	int ConstructionCount,
 	int OpenCount,
 	IReadOnlyList<ConstructionListItem> Items);

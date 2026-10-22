@@ -212,7 +212,7 @@ public class ChatStoreTests : ChatDatabaseTests
 		var answer = await store.AppendMessageAsync(first.ChatId, null, new ChatMessageDraft
 		{
 			Role = ChatMessageRole.Assistant,
-			Text = "Марка BTC 108975.4.",
+			Text = "Котировка BTC 108975.4.",
 			AsOf = FixedNow,
 			SourceTrace = trace,
 		});

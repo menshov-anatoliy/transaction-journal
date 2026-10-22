@@ -27,9 +27,9 @@ export interface ClosingEntriesTableProps {
 	/** Состояние команд пометки (для блокировки кнопок). */
 	readonly actionsPending: boolean;
 	/** Правка ручной пометки закрытия. */
-	readonly onEditMark: (input: { markId: number; mark: { symbol: string; markedAt: string; price: number | null; quantity: number | null } }) => void;
+	readonly onEditAnnotation: (input: { annotationId: number; annotation: { symbol: string; annotatedAt: string; price: number | null; quantity: number | null } }) => void;
 	/** Удаление ручной пометки закрытия. */
-	readonly onDeleteMark: (markId: number) => void;
+	readonly onDeleteAnnotation: (annotationId: number) => void;
 }
 
 /** Подпись вида закрывающей записи. */
@@ -73,16 +73,16 @@ function excessiveLabel(count: number): string {
 	return "избыточных";
 }
 
-export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditMark, onDeleteMark }: ClosingEntriesTableProps) {
+export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditAnnotation, onDeleteAnnotation }: ClosingEntriesTableProps) {
 	const isMobile = useIsMobile();
-	const [editMark, setEditMark] = React.useState<ConstructionCardClosingEntry | null>(null);
+	const [editAnnotation, setEditAnnotation] = React.useState<ConstructionCardClosingEntry | null>(null);
 	const [editPrice, setEditPrice] = React.useState("");
 	const [editQuantity, setEditQuantity] = React.useState("");
 	const [editTime, setEditTime] = React.useState("");
 	const [editError, setEditError] = React.useState<string | null>(null);
 
 	const beginEdit = (entry: ConstructionCardClosingEntry) => {
-		setEditMark(entry);
+		setEditAnnotation(entry);
 		setEditPrice(entry.price === null ? "" : String(entry.price));
 		// Количество предзаполняется применённым количеством записи: правка
 		// цены и времени по умолчанию не меняет охват закрытия.
@@ -92,7 +92,7 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 	};
 
 	const submitEdit = () => {
-		if (editMark?.manualMarkId === null || editMark === null) {
+		if (editAnnotation?.manualAnnotationId === null || editAnnotation === null) {
 			return;
 		}
 
@@ -111,15 +111,15 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 			setEditError("Введите корректную цену, время и количество пометки.");
 			return;
 		}
-		onEditMark({
-			markId: editMark.manualMarkId,
+		onEditAnnotation({
+			annotationId: editAnnotation.manualAnnotationId,
 			// Форма правки меняет цену, время и количество пометки; правка
 			// сохраняет частичность закрытия вместо молчаливого расширения
 			// до всего остатка.
 			// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
-			mark: { symbol: editMark.symbol, markedAt: time.toISOString(), price, quantity },
+			annotation: { symbol: editAnnotation.symbol, annotatedAt: time.toISOString(), price, quantity },
 		});
-		setEditMark(null);
+		setEditAnnotation(null);
 	};
 
 	return (
@@ -145,18 +145,18 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 				</span>
 			) : null}
 		>
-			{isMobile === false && editMark !== null && (
+			{isMobile === false && editAnnotation !== null && (
 				// Правка ручной пометки: цена, количество и время предзаполнены
 				// значениями записи; пустая цена возвращает пометку к последней
-				// марке, пустое количество — к закрытию всего остатка.
+				// котировке, пустое количество — к закрытию всего остатка.
 				// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
 				<div className="bg-card flex flex-wrap items-end gap-3 rounded-md border p-3">
-					<span className="text-sm font-medium">правка ручной пометки «{editMark.symbol}»</span>
+					<span className="text-sm font-medium">правка ручной пометки «{editAnnotation.symbol}»</span>
 					<label className="flex flex-col gap-1 text-sm">
 						цена закрытия
 						<input
 							className="border-input bg-background h-9 w-40 rounded-md border px-2 text-sm"
-							placeholder="пусто — последняя марка"
+							placeholder="пусто — последняя котировка"
 							value={editPrice}
 							onChange={(event) => setEditPrice(event.target.value)}
 						/>
@@ -167,7 +167,7 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 						{/* Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity */}
 						количество
 						<input
-							data-slot="mark-quantity-input"
+							data-slot="annotation-quantity-input"
 							aria-label="количество пометки"
 							className="border-input bg-background h-9 w-28 rounded-md border px-2 text-sm"
 							inputMode="decimal"
@@ -188,7 +188,7 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 					<Button size="sm" disabled={actionsPending || editTime === ""} onClick={submitEdit}>
 						Сохранить пометку
 					</Button>
-					<Button size="sm" variant="outline" onClick={() => setEditMark(null)}>
+					<Button size="sm" variant="outline" onClick={() => setEditAnnotation(null)}>
 						Отмена
 					</Button>
 					{editError !== null && <p className="text-destructive text-sm" role="alert">{editError}</p>}
@@ -234,13 +234,13 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 					) : (
 						entries.map((entry) => (
 							// Разделитель строк — токен divider #EBEBE5 по мастеру Body #2.
-							<TableRow key={`${entry.kind}-${entry.closedAt}-${entry.symbol}-${entry.manualMarkId ?? "x"}`} className="border-divider">
+							<TableRow key={`${entry.kind}-${entry.closedAt}-${entry.symbol}-${entry.manualAnnotationId ?? "x"}`} className="border-divider">
 								<TableCell>{formatMoment(entry.closedAt)}</TableCell>
 								<TableCell>{kindText(entry.kind)}</TableCell>
 								<TableCell className="font-medium text-foreground">{entry.symbol}</TableCell>
 								<TableCell>
 									{entry.price === null ? (
-										<span className="text-muted-foreground" title="Марка инструмента неизвестна — сумма закрытия не вычислена">
+										<span className="text-muted-foreground" title="Котировка инструмента неизвестна — сумма закрытия не вычислена">
 											{DASH}
 										</span>
 									) : (
@@ -259,7 +259,7 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 								<TableCell>
 									{/* Правка ручных пометок относится к desktop-операциям. */}
 									{/* Traceability: doc:.wf-research/ui-concept/concept.md#11-адаптив */}
-									{entry.manualMarkId !== null && isMobile === false ? (
+									{entry.manualAnnotationId !== null && isMobile === false ? (
 										// Мелкие кнопки действия строки: радиус 6, паддинг [3,7], кегль 9.5.
 										<div className="flex gap-1.5">
 											<Button
@@ -267,7 +267,7 @@ export function ClosingEntriesTable({ entries, warnings, actionsPending, onEditM
 												size="sm"
 												className="h-auto rounded-[6px] px-[7px] py-[3px] text-[9.5px] text-text-secondary"
 												disabled={actionsPending}
-												onClick={() => onDeleteMark(entry.manualMarkId!)}
+												onClick={() => onDeleteAnnotation(entry.manualAnnotationId!)}
 											>
 												удалить
 											</Button>

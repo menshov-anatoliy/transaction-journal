@@ -101,7 +101,7 @@ public static class HintsEndpoints
 		// Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
 		group.MapPost("/{hintId:long}/seen", async (long hintId, IHintDisplayReadModel hintDisplays, CancellationToken cancellationToken) =>
 		{
-			await hintDisplays.MarkSeenAsync(hintId, DateTimeOffset.Now, cancellationToken);
+			await hintDisplays.RecordSeenAsync(hintId, DateTimeOffset.Now, cancellationToken);
 			return Results.NoContent();
 		});
 

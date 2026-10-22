@@ -1,4 +1,4 @@
-﻿import {
+import {
 	type ColumnDef,
 	type SortingState,
 	flexRender,
@@ -45,11 +45,11 @@ function quotesDegraded(row: ConstructionRow): boolean {
 }
 
 // Открытые остатки строки выводятся из семантики read-модели: при сбое
-// марок нереализованная часть остаётся null только у позиций с ненулевым
+// котировок нереализованная часть остаётся null только у позиций с ненулевым
 // остатком, а значение маркера ненулевое лишь при существующих остатках.
 // Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 function hasOpenResidual(row: ConstructionRow): boolean {
-	return row.markValue !== null || row.unrealizedPnL === null;
+	return row.quoteValue !== null || row.unrealizedPnL === null;
 }
 
 /** Тон итоговых величин: положительная — акцентно-зелёная, отрицательная — красная. */
@@ -199,17 +199,17 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 			{
 				id: "value",
 				header: "Стоимость",
-				accessorKey: "markValue",
+				accessorKey: "quoteValue",
 				sortingFn: "basic",
 				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
 				sortDescFirst: true,
 				cell: ({ row }) =>
-					row.original.markValue === null && quotesDegraded(row.original) ? (
+					row.original.quoteValue === null && quotesDegraded(row.original) ? (
 						<span className="text-muted-foreground" title="Провайдер котировок недоступен — стоимость не оценена">
 							сбой котировок
 						</span>
 					) : (
-						<DegradedValue value={row.original.markValue} format={formatSignedAmount} />
+						<DegradedValue value={row.original.quoteValue} format={formatSignedAmount} />
 					),
 			},
 			{
@@ -233,7 +233,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				sortDescFirst: true,
 				cell: ({ row }) =>
 					row.original.unrealizedPnL === null ? (
-						// Сбой марок — видимое состояние строки: признак сбоя
+						// Сбой котировок — видимое состояние строки: признак сбоя
 						// занимает место нереализованной оценки.
 						<span className="text-muted-foreground" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
 							сбой котировок
@@ -266,7 +266,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 					<div className="flex flex-col gap-1">
 						{row.original.totalPnL === null ? (
 							// Итог без нереализованной части неполный — признак
-							// сбоя марок, а не прочерк нулевого итога.
+							// сбоя котировок, а не прочерк нулевого итога.
 							<span className="text-muted-foreground" title="Итог неполный: нереализованная часть не оценена из-за сбоя котировок">
 								неполный
 							</span>

@@ -5,7 +5,7 @@ namespace TransactionJournal.Application.Bybit;
 /// <summary>
 /// Параметры запроса GET /v5/market/instruments-info — публичный справочник спецификаций
 /// инструментов; limit — диапазон [1..1000], без параметра биржа отдаёт 500 записей.
-/// Traceability: doc:docs/research/bybit-api.md#3-публичные-марки-tickers-без-аутентификации
+/// Traceability: doc:docs/research/bybit-api.md#3-публичные-котировки-tickers-без-аутентификации
 /// </summary>
 public sealed record BybitInstrumentInfoQuery
 {

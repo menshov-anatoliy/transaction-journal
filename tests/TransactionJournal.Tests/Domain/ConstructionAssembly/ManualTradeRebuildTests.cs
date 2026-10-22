@@ -166,7 +166,7 @@ public class ManualTradeRebuildTests
 		// Контроль до пересбора: позиция фьючерса — биржевая покупка за вычетом
 		// ручной продажи, реализованный результат — FIFO обоих источников.
 		var positionReader = new PositionReadModel(CreateOptions(), timeProvider: new FixedTimeProvider(Now));
-		var metricsReader = new JournalMetricsReadModel(CreateOptions(), new EmptyMarkSource(), timeProvider: new FixedTimeProvider(Now));
+		var metricsReader = new JournalMetricsReadModel(CreateOptions(), new EmptyQuoteSource(), timeProvider: new FixedTimeProvider(Now));
 		var positionsBefore = await positionReader.ListAsync(constructionId);
 		Assert.That(
 			positionsBefore.Positions.Single(position => position.Symbol == LinearSymbol).Residual,
@@ -325,13 +325,13 @@ public class ManualTradeRebuildTests
 		public override DateTimeOffset GetUtcNow() => utcNow;
 	}
 
-	/// <summary>Источник без известных марок: реализованные метрики от марок не зависят.</summary>
-	private sealed class EmptyMarkSource : IFreshInstrumentMarkSource, IInstrumentMarkSource
+	/// <summary>Источник без известных котировок: реализованные метрики от котировок не зависят.</summary>
+	private sealed class EmptyQuoteSource : IFreshInstrumentQuoteSource, IInstrumentQuoteSource
 	{
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-			Task.FromResult<InstrumentMarkSnapshot?>(null);
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+			Task.FromResult<InstrumentQuoteSnapshot?>(null);
 
-		public Task<decimal?> GetLastMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
+		public Task<decimal?> GetLastQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
 			Task.FromResult<decimal?>(null);
 	}
 

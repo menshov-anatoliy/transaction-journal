@@ -22,7 +22,7 @@ namespace TransactionJournal.Tests.Infrastructure.ReadModels;
 /// <summary>
 /// Интеграционные проверки read-модели экрана деталей конструкции на стыке
 /// с метриками аналитики и потоком закрывающих записей: сводка присоединяет
-/// метрики с периодом и отметкой марок, сделки и комментарии читаются из
+/// метрики с периодом и отметкой котировок, сделки и комментарии читаются из
 /// пользовательских данных, закрывающие записи перечисляются с типом,
 /// инструментом и суммой, а пустые таблицы передаются пустыми списками —
 /// экран показывает по ним явное сообщение об отсутствии.
@@ -89,7 +89,7 @@ public class ConstructionDetailReadModelTests
 	private ConstructionService _constructionService = null!;
 	private TradeBindingService _bindingService = null!;
 	private CommentService _commentService = null!;
-	private ManualCloseMarkService _markService = null!;
+	private ManualCloseAnnotationService _markService = null!;
 
 	[TestInitialize]
 	public void Initialize()
@@ -106,7 +106,7 @@ public class ConstructionDetailReadModelTests
 		_constructionService = new ConstructionService(CreateOptions());
 		_bindingService = new TradeBindingService(CreateOptions());
 		_commentService = new CommentService(CreateOptions());
-		_markService = new ManualCloseMarkService(CreateOptions());
+		_markService = new ManualCloseAnnotationService(CreateOptions());
 	}
 
 	[TestCleanup]
@@ -128,12 +128,12 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
-	[Description("Сводка деталей присоединяет метрики с периодом и отметкой марок, комментарий — к заголовку")]
+	[Description("Сводка деталей присоединяет метрики с периодом и отметкой котировок, комментарий — к заголовку")]
 	public async Task TryIfSummaryJoinsMetricsPeriodMarksAndComment()
 	{
 		// Arrange: конструкция с капиталом 1000 и комментарием; покупка 0.1 BTC
 		// по 42000 с комиссией 1 привязана к конструкции; у сделки и позиции
-		// оставлены комментарии; свежая марка провайдера — 44000 на 2026-09-20 12:00.
+		// оставлены комментарии; свежая котировка провайдера — 44000 на 2026-09-20 12:00.
 		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
 		await _commentService.SetConstructionCommentAsync(construction.Id, "тестовая конструкция");
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
@@ -141,16 +141,16 @@ public class ConstructionDetailReadModelTests
 		await _commentService.SetTradeCommentAsync("exec-buy", "вход в календарь");
 		await _commentService.SetPositionCommentAsync(construction.Id, LinearSymbol, "базовая позиция");
 		var receivedAt = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, receivedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, receivedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
 
 		// Assert: сводка показывает итог, процент от капитала, разбивку по
 		// реализованному и нереализованному результату, сумму корректировок,
-		// период с длительностью и отметку времени марок; комментарий — рядом
+		// период с длительностью и отметку времени котировок; комментарий — рядом
 		// со сводкой.
-		// Требование: детали показывают сводку метрик с периодом и отметкой марок.
+		// Требование: детали показывают сводку метрик с периодом и отметкой котировок.
 		// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
 		Assert.That(data.Name, Is.EqualTo("Календарь сентябрь"));
 		Assert.That(data.Status, Is.EqualTo(ConstructionStatus.Open));
@@ -165,14 +165,14 @@ public class ConstructionDetailReadModelTests
 		Assert.That(data.Metrics.ClosedAt, Is.Null);
 		Assert.That(data.Metrics.Duration, Is.Not.Null);
 		Assert.That(data.HasOpenResidual, Is.True);
-		Assert.That(data.HasMarkFailure, Is.False);
-		Assert.That(data.MarksAsOf, Is.EqualTo(receivedAt));
+		Assert.That(data.HasQuoteFailure, Is.False);
+		Assert.That(data.QuotesAsOf, Is.EqualTo(receivedAt));
 
 		// Строка позиции несёт общий P&L (реализованный плюс нереализованный) и его
 		// процент от выделенного капитала конструкции: 199 от 1000 — 19.9%;
 		// части результата передаются из метрик раздельно со своими процентами:
 		// реализованный −1 (комиссия) — −0.1% капитала, нереализованный 200
-		// (оценка остатка маркой 44000) — 20% капитала.
+		// (оценка остатка котировкой 44000) — 20% капитала.
 		// Требование: строка позиции показывает общий P&L с процентом от капитала,
 		// реализованная и нереализованная части — отдельными величинами с процентом.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
@@ -202,15 +202,15 @@ public class ConstructionDetailReadModelTests
 		await AddRawExecutionAsync("opt-buy", FutureCallSymbol, "option", "Buy", "1", "15000", ExecMs(2026, 10, 10, 10, 0), "USDT");
 		await AddLinearTradeAsync("perp-buy", "Buy", "0.1", "42000", "1", ExecMs(2026, 10, 10, 11, 0));
 		await _bindingService.BindBatchAsync(construction.Id, ["opt-buy", "perp-buy"]);
-		await AddMarketSnapshotAsync(FutureCallSymbol, markPrice: 15000m, theta: -1.0m, receivedAt: LifetimeNow.AddHours(-25));
-		var markSource = new StubFreshMarkSource(15000m, LifetimeNow.AddHours(-1), underlyingPrice: 110000m, theta: -2.5m);
-		var readModel = CreateDetailReadModel(markSource, new FixedTimeProvider(LifetimeNow));
+		await AddMarketSnapshotAsync(FutureCallSymbol, quotePrice: 15000m, theta: -1.0m, receivedAt: LifetimeNow.AddHours(-25));
+		var quoteSource = new StubFreshQuoteSource(15000m, LifetimeNow.AddHours(-1), underlyingPrice: 110000m, theta: -2.5m);
+		var readModel = CreateDetailReadModel(quoteSource, new FixedTimeProvider(LifetimeNow));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
 
 		// Assert: строка опциона несёт остаток 249 полных суток (249 сут 20 ч до
-		// доставки), распад тетой на остаток, разложение марки на внутреннюю
+		// доставки), распад тетой на остаток, разложение котировки на внутреннюю
 		// (110000 − 106000) и временную (15000 − 4000) стоимость и вчерашний
 		// распад по снимку суточной давности.
 		// Требование: метрики времени жизни открытой опционной ноги в строке.
@@ -251,13 +251,13 @@ public class ConstructionDetailReadModelTests
 	{
 		// Arrange: конструкция без выделенного капитала с риском 5% и профитом
 		// 300 USDT; покупка 0.1 BTC по 42000 с комиссией 1 привязана к ней;
-		// свежая марка провайдера — 44000.
+		// свежая котировка провайдера — 44000.
 		var construction = await _constructionService.CreateAsync("Без бюджета", null);
 		await _constructionService.UpdateRiskAsync(construction.Id, 5m, TargetUnit.Percent);
 		await _constructionService.UpdateProfitAsync(construction.Id, 300m, TargetUnit.Usdt);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-buy");
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -305,7 +305,7 @@ public class ConstructionDetailReadModelTests
 		await _bindingService.BindBatchAsync(construction.Id, ["exec-buy", "exec-sell"]);
 		await _commentService.SetTradeCommentAsync("exec-buy", "вход в календарь");
 		await _commentService.SetPositionCommentAsync(construction.Id, LinearSymbol, "частичный выход");
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -360,7 +360,7 @@ public class ConstructionDetailReadModelTests
 		await AddLinearTradeAsync("exec-early", "Buy", "0.01", "41000", "0", ExecMs(2023, 12, 28, 10, 0));
 		await AddLinearTradeAsync("exec-late-a", "Buy", "0.01", "43000", "0", ExecMs(2023, 12, 28, 11, 0));
 		await _bindingService.BindBatchAsync(construction.Id, new[] { "exec-late-z", "exec-early", "exec-late-a" });
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: дважды читаем данные экрана деталей.
 		var firstRead = await readModel.ReadAsync(construction.Id);
@@ -378,14 +378,14 @@ public class ConstructionDetailReadModelTests
 	public void TryIfPositionRowCarriesExactlyDisplayedColumns()
 	{
 		// Assert: контракт строки зафиксирован составом публичных свойств — поля
-		// служебных величин оценки открытого остатка (средняя остатка, марка как
+		// служебных величин оценки открытого остатка (средняя остатка, котировка как
 		// цена) из строки убраны вместе с их колонками; стоимость и процент
 		// изменения цены открытого остатка добавлены выводимыми столбцами; распад
 		// остатка линейной ноги на синтетическую и прочую части — двумя колонками;
 		// величины времени жизни открытой опционной ноги — пятью колонками;
 		// признак закрытия синтетикой опционной ноги — парой величин.
 		// Требование: строка позиции показывает вход, выход и итог,
-		// колонки «Средняя», «Марка» и «Нереализов.» отсутствуют.
+		// колонки «Средняя», «Котировка» и «Нереализов.» отсутствуют.
 		// Traceability: openspec:ui/screens#scenario-detail-position-row-entry-close-total
 		// Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#scenario-detail-linear-leg-splits-synthetic-and-scalps
 		// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen
@@ -407,7 +407,7 @@ public class ConstructionDetailReadModelTests
 			nameof(ConstructionPositionRow.ClosedAt),
 			nameof(ConstructionPositionRow.IsOpen),
 			nameof(ConstructionPositionRow.Comment),
-			nameof(ConstructionPositionRow.MarkValue),
+			nameof(ConstructionPositionRow.QuoteValue),
 			nameof(ConstructionPositionRow.PriceChangePercent),
 			nameof(ConstructionPositionRow.SyntheticResidual),
 			nameof(ConstructionPositionRow.OtherResidual),
@@ -426,7 +426,7 @@ public class ConstructionDetailReadModelTests
 	public async Task TryIfPositionRowsCarryMarkValueAndPriceChangePercent()
 	{
 		// Arrange: конструкция с открытой ногой — покупка 1 BTC по 100 — и закрытой
-		// ногой опциона — покупка 1 по 100 и продажа 1 по 90; свежая марка
+		// ногой опциона — покупка 1 по 100 и продажа 1 по 90; свежая котировка
 		// провайдера — 110 для обоих инструментов.
 		var construction = await _constructionService.CreateAsync("Смешанная", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "1", "100", "0", ExecMs(2023, 12, 28, 10, 0));
@@ -434,12 +434,12 @@ public class ConstructionDetailReadModelTests
 		await AddOptionTradeAsync("exec-opt-buy", "Buy", "1", "100");
 		await AddOptionTradeAsync("exec-opt-sell", "Sell", "1", "90");
 		await _bindingService.BindBatchAsync(construction.Id, ["exec-opt-buy", "exec-opt-sell"]);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(110m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(110m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
 
-		// Assert: открытая нога несёт стоимость по марке 110 × 1 = 110 и процент
+		// Assert: открытая нога несёт стоимость по котировке 110 × 1 = 110 и процент
 		// изменения цены (110 − 100) / 100 × 100 = 10; закрытая нога обе величины
 		// имеет null при живом реализованном результате (90 − 100) × 1 = −10.
 		// Требование: стоимость и процент изменения цены открытого остатка
@@ -447,11 +447,11 @@ public class ConstructionDetailReadModelTests
 		// Traceability: openspec:analytics/performance#requirement-open-remainder-price-change-percent
 		var open = data.Positions.Single(row => row.Symbol == LinearSymbol);
 		Assert.That(open.IsOpen, Is.True);
-		Assert.That(open.MarkValue, Is.EqualTo(110m));
+		Assert.That(open.QuoteValue, Is.EqualTo(110m));
 		Assert.That(open.PriceChangePercent, Is.EqualTo(10m));
 		var closed = data.Positions.Single(row => row.Symbol == CallSymbol);
 		Assert.That(closed.IsOpen, Is.False);
-		Assert.That(closed.MarkValue, Is.Null);
+		Assert.That(closed.QuoteValue, Is.Null);
 		Assert.That(closed.PriceChangePercent, Is.Null);
 		Assert.That(closed.RealizedPnL, Is.EqualTo(-10m));
 	}
@@ -467,12 +467,12 @@ public class ConstructionDetailReadModelTests
 	public async Task TryIfSyntheticCloseRowsAndLinearSplitServeXautCase()
 	{
 		// Arrange: справочник кейса, конструкция с пятью сделками эталонного
-		// состава и живая марка для метрик позиций.
+		// состава и живая котировка для метрик позиций.
 		SeedXautInstruments();
 		var construction = await _constructionService.CreateAsync("XAUT-кейс", 1000m);
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -518,7 +518,7 @@ public class ConstructionDetailReadModelTests
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		var disputeService = new SyntheticCloseDisputeService(CreateOptions());
 		await disputeService.DisputeAsync(construction.Id, "case-perp", "case-call");
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные экрана деталей после оспаривания.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -546,7 +546,7 @@ public class ConstructionDetailReadModelTests
 		var construction = await _constructionService.CreateAsync("Без связок", 1000m);
 		await AddLinearTradeAsync("exec-lone", "Buy", "1", "43000", "0", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-lone");
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -573,7 +573,7 @@ public class ConstructionDetailReadModelTests
 		await SeedXautCaseAsync();
 		await AddXautExecutionAsync("scalp-exit", XautPerp, "linear", "Sell", "0.04", "3099.91", "0", ExecMs(2026, 10, 15, 16, 0), "USDC");
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp", "scalp-exit"]);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -603,7 +603,7 @@ public class ConstructionDetailReadModelTests
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(construction.Id, "case-perp", "case-call");
 		var manualLink = await new SyntheticCloseManualLinkService(CreateOptions()).CreateAsync(construction.Id, "case-perp", "case-call", 0.3m);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные экрана деталей после спора и ручной связки.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -636,7 +636,7 @@ public class ConstructionDetailReadModelTests
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(disputed.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(disputed.Id, "case-perp", "case-call");
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные обеих конструкций.
 		var plainData = await readModel.ReadAsync(plain.Id);
@@ -648,27 +648,27 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
-	[Description("Сбой марок не мешает сводной: величина вычисляется при недоступных тикерах")]
-	// Локи связок детерминированы к экспирации и от марок не зависят:
+	[Description("Сбой котировок не мешает сводной: величина вычисляется при недоступных тикерах")]
+	// Локи связок детерминированы к экспирации и от котировок не зависят:
 	// деградация гасит только нереализованные метрики, сводная остаётся
 	// суммой реализованного результата и локов действующих связок.
 	// Traceability: change:add-synthetic-adjusted-finresult/specs/domain/synthetic-close/spec#scenario-adjusted-total-marks-failure-independent
 	public async Task TryIfSyntheticAdjustedTotalComputedOnMarkFailure()
 	{
-		// Arrange: кейс XAUT с действующей связкой и сбойным провайдером марок —
+		// Arrange: кейс XAUT с действующей связкой и сбойным провайдером котировок —
 		// публичные тикеры недоступны.
 		SeedXautInstruments();
-		var construction = await _constructionService.CreateAsync("XAUT-без-марок", 1000m);
+		var construction = await _constructionService.CreateAsync("XAUT-без-котировок", 1000m);
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
-		var readModel = CreateDetailReadModel(new FailingMarkSource());
+		var readModel = CreateDetailReadModel(new FailingQuoteSource());
 
-		// Act: читаем данные экрана деталей при сбое марок.
+		// Act: читаем данные экрана деталей при сбое котировок.
 		var data = await readModel.ReadAsync(construction.Id);
 
-		// Assert: сбой марок признан, нереализованная часть отсутствует,
+		// Assert: сбой котировок признан, нереализованная часть отсутствует,
 		// а сводная величина собрана из реализованного результата и лока 35.697.
-		Assert.That(data.HasMarkFailure, Is.True);
+		Assert.That(data.HasQuoteFailure, Is.True);
 		Assert.That(data.Metrics.UnrealizedPnL, Is.Null);
 		Assert.That(data.Metrics.SyntheticAdjustedTotalUsdt, Is.EqualTo(data.Metrics.RealizedPnL + 35.697m).Within(0.001m));
 	}
@@ -687,7 +687,7 @@ public class ConstructionDetailReadModelTests
 		var construction = await _constructionService.CreateAsync("XAUT-инварианты", 1000m);
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: первое чтение — связка действует; после оспаривания читаем снова.
 		var withActiveLink = await readModel.ReadAsync(construction.Id);
@@ -727,7 +727,7 @@ public class ConstructionDetailReadModelTests
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		await new SyntheticCloseManualLinkService(CreateOptions()).CreateAsync(construction.Id, "case-perp", "case-call", 0.1m);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -754,7 +754,7 @@ public class ConstructionDetailReadModelTests
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(construction.Id, "case-perp", "case-call");
 		await new SyntheticCloseManualLinkService(CreateOptions()).CreateAsync(construction.Id, "case-perp", "case-call", 0.1m);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные экрана деталей после оспаривания.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -779,7 +779,7 @@ public class ConstructionDetailReadModelTests
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		await _markService.AddAsync(construction.Id, XautPut, new DateTimeOffset(2026, 10, 16, 10, 0, 0, TimeSpan.Zero), 100m, 0.3m);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные экрана деталей после пометки.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -807,7 +807,7 @@ public class ConstructionDetailReadModelTests
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		await _markService.AddAsync(construction.Id, XautPut, new DateTimeOffset(2026, 10, 16, 10, 0, 0, TimeSpan.Zero), 100m);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные экрана деталей после пометки.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -838,7 +838,7 @@ public class ConstructionDetailReadModelTests
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(disputed.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
 		await new SyntheticCloseDisputeService(CreateOptions()).DisputeAsync(disputed.Id, "case-perp", "case-call");
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: читаем данные обеих конструкций.
 		var plainData = await readModel.ReadAsync(plain.Id);
@@ -868,7 +868,7 @@ public class ConstructionDetailReadModelTests
 		var construction = await _constructionService.CreateAsync("XAUT-инварианты-ноги", 1000m);
 		await SeedXautCaseAsync();
 		await _bindingService.BindBatchAsync(construction.Id, ["open-put", "open-call", "case-perp", "case-call", "scalp-perp"]);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(4300m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(4300m, FetchedAt));
 
 		// Act: первое чтение — связка действует, пара опубликована; после
 		// оспаривания читаем снова — пары нет.
@@ -932,7 +932,7 @@ public class ConstructionDetailReadModelTests
 		execIds.AddRange(await CloseLegAsync("may1900p", MayPut1900, "option", "USDC"));
 		execIds.AddRange(await CloseLegAsync("perp", EthPerpSymbol, "linear", "USDT"));
 		await _bindingService.BindBatchAsync(construction.Id, execIds);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(200m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(200m, FetchedAt));
 
 		// Act: читаем таблицу позиций конструкции.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -982,10 +982,10 @@ public class ConstructionDetailReadModelTests
 		var linearConstruction = await _constructionService.CreateAsync("Пердл BTC", 300m);
 		await AddLinearTradeAsync("exec-linear-buy", "Buy", "0.01", "42000", "0", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(linearConstruction.Id, "exec-linear-buy");
-		var markedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
-		await _markService.AddAsync(linearConstruction.Id, LinearSymbol, markedAt, 42100m);
+		var annotatedAt = new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero);
+		await _markService.AddAsync(linearConstruction.Id, LinearSymbol, annotatedAt, 42100m);
 
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: читаем детали обеих конструкций.
 		var optionData = await readModel.ReadAsync(optionConstruction.Id);
@@ -1004,12 +1004,12 @@ public class ConstructionDetailReadModelTests
 		Assert.That(delivery.Price, Is.EqualTo(1000m));
 		Assert.That(delivery.AmountUsdt, Is.EqualTo(0.1m));
 
-		var mark = linearData.ClosingEntries.Single();
-		Assert.That(mark.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
-		Assert.That(mark.Symbol, Is.EqualTo(LinearSymbol));
-		Assert.That(mark.Quantity, Is.EqualTo(-0.01m));
-		Assert.That(mark.Price, Is.EqualTo(42100m));
-		Assert.That(mark.AmountUsdt, Is.EqualTo(421m));
+		var quote = linearData.ClosingEntries.Single();
+		Assert.That(quote.Kind, Is.EqualTo(PositionClosingKind.ManualAnnotation));
+		Assert.That(quote.Symbol, Is.EqualTo(LinearSymbol));
+		Assert.That(quote.Quantity, Is.EqualTo(-0.01m));
+		Assert.That(quote.Price, Is.EqualTo(42100m));
+		Assert.That(quote.AmountUsdt, Is.EqualTo(421m));
 	}
 
 	[TestMethod]
@@ -1018,7 +1018,7 @@ public class ConstructionDetailReadModelTests
 	{
 		// Arrange: конструкция без сделок, пометок и корректировок.
 		var construction = await _constructionService.CreateAsync("Пустая", 500m);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -1064,7 +1064,7 @@ public class ConstructionDetailReadModelTests
 			await db.SaveChangesAsync();
 		}
 
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -1080,40 +1080,40 @@ public class ConstructionDetailReadModelTests
 	}
 
 	[TestMethod]
-	[Description("Сбой марок деградирует только нереализованную часть и отметку времени марок")]
+	[Description("Сбой котировок деградирует только нереализованную часть и отметку времени котировок")]
 	public async Task TryIfMarkFailureDegradesUnrealizedAndMarksOnly()
 	{
 		// Arrange: конструкция с открытым остатком 0.1 BTC; заглушка провайдера
-		// марок имитирует недоступность публичных тикеров ошибкой сети.
+		// котировок имитирует недоступность публичных тикеров ошибкой сети.
 		var construction = await _constructionService.CreateAsync("Длинный BTC", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-buy");
-		var readModel = CreateDetailReadModel(new FailingMarkSource());
+		var readModel = CreateDetailReadModel(new FailingQuoteSource());
 
 		// Act: чтение данных экрана деталей при сбойном провайдере.
 		var data = await readModel.ReadAsync(construction.Id);
 
-		// Assert: сбой марок оставил нереализованную оценку и итог непостроенными
+		// Assert: сбой котировок оставил нереализованную оценку и итог непостроенными
 		// с признаком сбоя и неизвестной отметкой времени; реализованный результат
 		// (−1 комиссия) виден; строка позиции без общего P&L и его процента.
 		// Требование: нереализованные величины сопровождаются отметкой времени
-		// марок, сбой показывается признаком; общий PnL открытой позиции при сбое —
+		// котировок, сбой показывается признаком; общий PnL открытой позиции при сбое —
 		// null вместе с нереализованной частью.
 		// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
 		// Traceability: openspec:analytics/performance#scenario-position-total-pnl-mark-failure
-		Assert.That(data.HasMarkFailure, Is.True);
+		Assert.That(data.HasQuoteFailure, Is.True);
 		Assert.That(data.HasOpenResidual, Is.True);
-		Assert.That(data.MarksAsOf, Is.Null);
+		Assert.That(data.QuotesAsOf, Is.Null);
 		Assert.That(data.Metrics.UnrealizedPnL, Is.Null);
 		Assert.That(data.Metrics.TotalPnL, Is.Null);
 		Assert.That(data.Metrics.RealizedPnL, Is.EqualTo(-1m));
 		var position = data.Positions.Single();
 		Assert.That(position.TotalPnL, Is.Null);
 		Assert.That(position.TotalPnLPercent, Is.Null);
-		// Раздельные части при сбое марок: нереализованная деградирует в null
+		// Раздельные части при сбое котировок: нереализованная деградирует в null
 		// вместе с общим P&L и своим процентом, реализованный результат остаётся
 		// видимым с процентом от капитала (−1 от 1000 — −0.1%).
-		// Требование: сбой марок не подменяет реализованные величины.
+		// Требование: сбой котировок не подменяет реализованные величины.
 		// Traceability: openspec:ui/screens#scenario-detail-position-pnl-parts
 		Assert.That(position.RealizedPnL, Is.EqualTo(-1m));
 		Assert.That(position.RealizedPnLPercent, Is.EqualTo(-0.1m));
@@ -1121,12 +1121,12 @@ public class ConstructionDetailReadModelTests
 		Assert.That(position.UnrealizedPnLPercent, Is.Null);
 		Assert.That(position.Residual, Is.EqualTo(0.1m));
 		Assert.That(position.AverageEntryPrice, Is.EqualTo(42000m));
-		// Стоимость и процент изменения цены открытой ноги при сбое марок — null
+		// Стоимость и процент изменения цены открытой ноги при сбое котировок — null
 		// наряду с нереализованной частью; реализованный результат и средняя
 		// цена входа остаются живыми.
-		// Требование: сбой марок гасит производные оценки остатка.
+		// Требование: сбой котировок гасит производные оценки остатка.
 		// Traceability: openspec:analytics/performance#scenario-mark-failure-nulls-price-change
-		Assert.That(position.MarkValue, Is.Null);
+		Assert.That(position.QuoteValue, Is.Null);
 		Assert.That(position.PriceChangePercent, Is.Null);
 	}
 
@@ -1139,12 +1139,12 @@ public class ConstructionDetailReadModelTests
 		var construction = await _constructionService.CreateAsync("Пердл BTC", 300m);
 		await AddLinearTradeAsync("exec-linear-buy", "Buy", "0.01", "42000", "0", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-linear-buy");
-		var mark = await _markService.AddAsync(
+		var quote = await _markService.AddAsync(
 			construction.Id,
 			LinearSymbol,
 			new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero),
 			42100m);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -1154,8 +1154,8 @@ public class ConstructionDetailReadModelTests
 		// Требование: поставленная пометка правится и удаляется из закрывающих записей.
 		// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
 		var row = data.ClosingEntries.Single();
-		Assert.That(row.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
-		Assert.That(row.ManualMarkId, Is.EqualTo(mark.Id));
+		Assert.That(row.Kind, Is.EqualTo(PositionClosingKind.ManualAnnotation));
+		Assert.That(row.ManualAnnotationId, Is.EqualTo(quote.Id));
 	}
 
 	[TestMethod]
@@ -1173,7 +1173,7 @@ public class ConstructionDetailReadModelTests
 			LinearSymbol,
 			new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero),
 			42100m);
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 
 		// Act: читаем данные экрана деталей.
 		var data = await readModel.ReadAsync(construction.Id);
@@ -1184,7 +1184,7 @@ public class ConstructionDetailReadModelTests
 		// Traceability: openspec:ui/screens#scenario-redundant-closing-entry-warned
 		Assert.That(data.ClosingEntries, Is.Empty);
 		var warning = data.ClosingWarnings.Single();
-		Assert.That(warning.Kind, Is.EqualTo(PositionClosingKind.ManualMark));
+		Assert.That(warning.Kind, Is.EqualTo(PositionClosingKind.ManualAnnotation));
 		Assert.That(warning.Symbol, Is.EqualTo(LinearSymbol));
 		Assert.That(warning.ClosedAt, Is.EqualTo(new DateTimeOffset(2023, 12, 30, 10, 0, 0, TimeSpan.Zero)));
 		Assert.That(warning.SourceKey, Does.StartWith("manual:"));
@@ -1214,7 +1214,7 @@ public class ConstructionDetailReadModelTests
 			Assert.That(assembled[0].Status, Is.EqualTo(ConstructionStatus.Open), "Затухающая конструкция с живым фьючерсом открыта");
 		}
 
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(3000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(3000m, FetchedAt));
 
 		// Act: пользователь открывает состав позиций каждой конструкции.
 		var positionsByConstruction = new List<IReadOnlyList<ConstructionPositionRow>>();
@@ -1275,7 +1275,7 @@ public class ConstructionDetailReadModelTests
 	public async Task ThrowOnUnknownConstruction()
 	{
 		// Arrange — Act: детали несуществующей конструкции.
-		var readModel = CreateDetailReadModel(new StubFreshMarkSource(44000m, FetchedAt));
+		var readModel = CreateDetailReadModel(new StubFreshQuoteSource(44000m, FetchedAt));
 		await readModel.ReadAsync(999);
 	}
 
@@ -1287,7 +1287,7 @@ public class ConstructionDetailReadModelTests
 		// Arrange — Act — Assert
 		new ConstructionDetailReadModel(
 			null!,
-			new JournalMetricsReadModel(CreateOptions(), new StubFreshMarkSource(44000m, FetchedAt)),
+			new JournalMetricsReadModel(CreateOptions(), new StubFreshQuoteSource(44000m, FetchedAt)),
 			new PositionReadModel(CreateOptions()));
 	}
 
@@ -1308,7 +1308,7 @@ public class ConstructionDetailReadModelTests
 		// Arrange — Act — Assert
 		new ConstructionDetailReadModel(
 			CreateOptions(),
-			new JournalMetricsReadModel(CreateOptions(), new StubFreshMarkSource(44000m, FetchedAt)),
+			new JournalMetricsReadModel(CreateOptions(), new StubFreshQuoteSource(44000m, FetchedAt)),
 			null!);
 	}
 
@@ -1321,9 +1321,9 @@ public class ConstructionDetailReadModelTests
 
 	/// <summary>Создаёт настоящее хранилище консультаций над временной папкой проверки.</summary>
 	/// <summary>Собирает read-модель деталей над реальными метриками журнала и позициями.</summary>
-	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentMarkSource freshMarkSource) => new(
+	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentQuoteSource freshQuoteSource) => new(
 		CreateOptions(),
-		new JournalMetricsReadModel(CreateOptions(), freshMarkSource),
+		new JournalMetricsReadModel(CreateOptions(), freshQuoteSource),
 		new PositionReadModel(CreateOptions()));
 
 	/// <summary>
@@ -1331,9 +1331,9 @@ public class ConstructionDetailReadModelTests
 	/// экспирации и давность снимков истории проверяются без привязки к системному
 	/// времени.
 	/// </summary>
-	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentMarkSource freshMarkSource, TimeProvider timeProvider) => new(
+	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentQuoteSource freshQuoteSource, TimeProvider timeProvider) => new(
 		CreateOptions(),
-		new JournalMetricsReadModel(CreateOptions(), freshMarkSource, timeProvider: timeProvider),
+		new JournalMetricsReadModel(CreateOptions(), freshQuoteSource, timeProvider: timeProvider),
 		new PositionReadModel(CreateOptions()));
 
 	/// <summary>Добавляет живой опцион сценария времени жизни в справочник инструментов: доска 25JUN27 08:00 UTC.</summary>
@@ -1345,13 +1345,13 @@ public class ConstructionDetailReadModelTests
 	}
 
 	/// <summary>Пишет строку истории рыночных снимков инструмента с индексной ценой, тетой и моментом получения.</summary>
-	private async Task AddMarketSnapshotAsync(string symbol, decimal markPrice, decimal theta, DateTimeOffset receivedAt)
+	private async Task AddMarketSnapshotAsync(string symbol, decimal quotePrice, decimal theta, DateTimeOffset receivedAt)
 	{
 		using var db = new JournalDbContext(CreateOptions());
 		db.InstrumentMarketSnapshots.Add(new InstrumentMarketSnapshot
 		{
 			Symbol = symbol,
-			MarkPrice = markPrice,
+			QuotePrice = quotePrice,
 			UnderlyingPrice = 110000m,
 			Theta = theta,
 			ReceivedAt = receivedAt,
@@ -1589,23 +1589,23 @@ public class ConstructionDetailReadModelTests
 	}
 
 	/// <summary>
-	/// Заглушка источника свежих марок: фиксированная марка со временем получения;
+	/// Заглушка источника свежих котировок: фиксированная котировка со временем получения;
 	/// nullable-поля индексной цены и теты имитируют расширенный снимок тикера
 	/// опциона — биржа отдаёт их только опционам.
 	/// </summary>
-	private sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt, decimal? underlyingPrice = null, decimal? theta = null) : IFreshInstrumentMarkSource
+	private sealed class StubFreshQuoteSource(decimal quotePrice, DateTimeOffset receivedAt, decimal? underlyingPrice = null, decimal? theta = null) : IFreshInstrumentQuoteSource
 	{
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-			Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, markPrice, receivedAt, underlyingPrice, theta));
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+			Task.FromResult<InstrumentQuoteSnapshot?>(new InstrumentQuoteSnapshot(symbol, quotePrice, receivedAt, underlyingPrice, theta));
 	}
 
 	/// <summary>
-	/// Заглушка провайдера марок для сценария сбоя: свежая марка всегда недоступна —
+	/// Заглушка провайдера котировок для сценария сбоя: свежая котировка всегда недоступна —
 	/// сеть до публичных тикеров не доходит, аналитика деградирует оценкой, а не ошибкой.
 	/// </summary>
-	private sealed class FailingMarkSource : IFreshInstrumentMarkSource
+	private sealed class FailingQuoteSource : IFreshInstrumentQuoteSource
 	{
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
 			throw new HttpRequestException("публичные тикеры недоступны");
 	}
 

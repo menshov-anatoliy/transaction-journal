@@ -6,10 +6,10 @@ import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PositionsTable } from "./positions-table";
 
-// Канал котировок подменён: форма пометки спрашивает последнюю марку
+// Канал котировок подменён: форма пометки спрашивает последнюю котировку
 // инструмента при открытии, сетевых запросов в тестах быть не должно.
 vi.mock("@/lib/api/construction-card", () => ({
-	fetchLastInstrumentMark: vi.fn().mockResolvedValue(null),
+	fetchLastInstrumentQuote: vi.fn().mockResolvedValue(null),
 }));
 
 // Проверяется распад остатка линейной ноги в таблице позиций карточки
@@ -37,7 +37,7 @@ function makePosition(overrides: Partial<ConstructionCardPosition> = {}): Constr
 		closedAt: null,
 		isOpen: true,
 		comment: null,
-		markValue: 1055,
+		quoteValue: 1055,
 		priceChangePercent: -0.1,
 		syntheticResidual: null,
 		otherResidual: null,
@@ -71,7 +71,7 @@ beforeEach(() => {
 	setViewport(1280);
 });
 
-function renderTable(positions: readonly ConstructionCardPosition[], onAddCloseMark: () => void = vi.fn()) {
+function renderTable(positions: readonly ConstructionCardPosition[], onAddCloseAnnotation: () => void = vi.fn()) {
 	return render(
 		// Подсказки заголовков открываются по наведению без задержки —
 		// провайдер задаёт нулевую задержку открытия для всех тестов.
@@ -79,8 +79,8 @@ function renderTable(positions: readonly ConstructionCardPosition[], onAddCloseM
 			<PositionsTable
 				constructionId={7}
 				positions={positions}
-				markPending={false}
-				onAddCloseMark={onAddCloseMark}
+				annotationPending={false}
+				onAddCloseAnnotation={onAddCloseAnnotation}
 				onSaveComment={vi.fn()}
 			/>
 		</TooltipProvider>,
@@ -321,11 +321,11 @@ describe("PositionsTable: форма пометки — количество и 
 		});
 	}
 
-	async function openMarkForm(position: ConstructionCardPosition, onAddCloseMark = vi.fn()) {
-		renderTable([position], onAddCloseMark);
+	async function openAnnotationForm(position: ConstructionCardPosition, onAddCloseAnnotation = vi.fn()) {
+		renderTable([position], onAddCloseAnnotation);
 		const user = userEvent.setup();
 		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
-		return { user, onAddCloseMark };
+		return { user, onAddCloseAnnotation };
 	}
 
 	// Сценарий «Форма пометки подсказывает внутреннюю стоимость»: для ноги
@@ -333,10 +333,10 @@ describe("PositionsTable: форма пометки — количество и 
 	// Traceability: openspec:ui/screens#scenario-mark-form-intrinsic-hint
 	it("показывает подсказку внутренней стоимости у ноги в деньгах", async () => {
 		// Arrange/Act: открыта форма пометки путовой ноги в деньгах.
-		await openMarkForm(makeItmPut());
+		await openAnnotationForm(makeItmPut());
 
 		// Assert: подсказка видна с восстановленными компонентами величины.
-		const hint = document.querySelector('[data-slot="mark-intrinsic-hint"]');
+		const hint = document.querySelector('[data-slot="annotation-intrinsic-hint"]');
 		expect(hint).toBeTruthy();
 		expect(hint?.textContent).toContain("|1360 − 1600| = 240 USDT");
 	});
@@ -348,16 +348,16 @@ describe("PositionsTable: форма пометки — количество и 
 	it("скрывает подсказку у OTM-ноги, без рыночных данных и у линейной ноги", async () => {
 		// Arrange/Act: три формы по очереди — OTM, без тикера, линейная нога;
 		// перед каждым следующим открытием форма размонтируется.
-		await openMarkForm(makeItmPut({ intrinsicValueUsdt: 0 }));
-		expect(document.querySelector('[data-slot="mark-intrinsic-hint"]')).toBeNull();
+		await openAnnotationForm(makeItmPut({ intrinsicValueUsdt: 0 }));
+		expect(document.querySelector('[data-slot="annotation-intrinsic-hint"]')).toBeNull();
 		cleanup();
 
-		await openMarkForm(makeItmPut({ intrinsicValueUsdt: null }));
-		expect(document.querySelector('[data-slot="mark-intrinsic-hint"]')).toBeNull();
+		await openAnnotationForm(makeItmPut({ intrinsicValueUsdt: null }));
+		expect(document.querySelector('[data-slot="annotation-intrinsic-hint"]')).toBeNull();
 		cleanup();
 
-		await openMarkForm(makePosition({ symbol: "ETHUSDT" }));
-		expect(document.querySelector('[data-slot="mark-intrinsic-hint"]')).toBeNull();
+		await openAnnotationForm(makePosition({ symbol: "ETHUSDT" }));
+		expect(document.querySelector('[data-slot="annotation-intrinsic-hint"]')).toBeNull();
 	});
 
 	// Сценарий «Частичная пометка оставляет остаток» на стороне формы:
@@ -366,7 +366,7 @@ describe("PositionsTable: форма пометки — количество и 
 	// Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity
 	it("отправляет частичное количество и ведёт остаток подсказкой", async () => {
 		// Arrange: открытая форма с командой-двойником.
-		const { user, onAddCloseMark } = await openMarkForm(makeItmPut());
+		const { user, onAddCloseAnnotation } = await openAnnotationForm(makeItmPut());
 		const quantity = await screen.findByLabelText("количество пометки");
 		expect(quantity.getAttribute("placeholder")).toBe("весь остаток — 0.5");
 
@@ -377,20 +377,20 @@ describe("PositionsTable: форма пометки — количество и 
 		// команда несёт заданное количество.
 		expect(screen.getByText("частичное закрытие — останется 0.3")).toBeTruthy();
 		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
-		expect(onAddCloseMark).toHaveBeenCalledWith({ symbol: "ETH-28MAR-1600-P", markedAt: expect.any(String), price: null, quantity: 0.2 });
+		expect(onAddCloseAnnotation).toHaveBeenCalledWith({ symbol: "ETH-28MAR-1600-P", annotatedAt: expect.any(String), price: null, quantity: 0.2 });
 	});
 
 	// Незаданное количество уходит в команду как null — весь остаток.
 	// Traceability: openspec:ui/screens#scenario-mark-form-partial-quantity
 	it("отправляет null при незаданном количестве", async () => {
 		// Arrange: форма с командой-двойником.
-		const { user, onAddCloseMark } = await openMarkForm(makeItmPut());
+		const { user, onAddCloseAnnotation } = await openAnnotationForm(makeItmPut());
 
 		// Act: количество не тронуто, пометка ставится сразу.
 		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
 
 		// Assert: в команде quantity null — закроется весь остаток.
-		expect(onAddCloseMark).toHaveBeenCalledWith({ symbol: "ETH-28MAR-1600-P", markedAt: expect.any(String), price: null, quantity: null });
+		expect(onAddCloseAnnotation).toHaveBeenCalledWith({ symbol: "ETH-28MAR-1600-P", annotatedAt: expect.any(String), price: null, quantity: null });
 	});
 });
 
@@ -398,16 +398,16 @@ describe("PositionsTable: форма пометки — количество и 
 // сервера она остаётся открытой с человекочитаемой причиной отказа.
 // Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
 describe("PositionsTable: форма пометки закрывается по результату", () => {
-	async function openForm(position: ConstructionCardPosition, onAddCloseMark: () => void) {
-		renderTable([position], onAddCloseMark);
+	async function openForm(position: ConstructionCardPosition, onAddCloseAnnotation: () => void) {
+		renderTable([position], onAddCloseAnnotation);
 		const user = userEvent.setup();
 		await user.click(await screen.findByRole("button", { name: "закрыть пометкой…" }));
-		return { user, onAddCloseMark };
+		return { user, onAddCloseAnnotation };
 	}
 
 	it("скрывает форму после успешной постановки пометки", async () => {
 		// Arrange: открытая форма с командой, разрешающейся успехом.
-		const { user, onAddCloseMark } = await openForm(
+		const { user, onAddCloseAnnotation } = await openForm(
 			makePosition({ symbol: "ETH-28MAR-1600-P", residual: 0.5, intrinsicValueUsdt: 120, timeValueUsdt: 30 }),
 			vi.fn().mockResolvedValue(undefined),
 		);
@@ -416,7 +416,7 @@ describe("PositionsTable: форма пометки закрывается по 
 		await user.click(screen.getByRole("button", { name: "Поставить пометку" }));
 
 		// Assert: команда выполнена, форма скрыта.
-		await waitFor(() => expect(onAddCloseMark).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(onAddCloseAnnotation).toHaveBeenCalledTimes(1));
 		expect(screen.queryByRole("button", { name: "Поставить пометку" })).not.toBeInTheDocument();
 	});
 

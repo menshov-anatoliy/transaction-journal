@@ -60,7 +60,7 @@ public sealed record ConstructionView
 	/// <summary>Реализованный PnL конструкции.</summary>
 	public required decimal RealizedPnL { get; init; }
 
-	/// <summary>Нереализованный PnL; null, пока открытый остаток не оценён марками.</summary>
+	/// <summary>Нереализованный PnL; null, пока открытый остаток не оценён котировками.</summary>
 	public required decimal? UnrealizedPnL { get; init; }
 
 	/// <summary>Сумма внешних корректировок PnL.</summary>
@@ -100,14 +100,14 @@ public sealed record PositionView
 	/// <summary>Реализованный PnL позиции (FIFO).</summary>
 	public required decimal RealizedPnL { get; init; }
 
-	/// <summary>Нереализованный PnL позиции; null, пока остаток не оценён марками.</summary>
+	/// <summary>Нереализованный PnL позиции; null, пока остаток не оценён котировками.</summary>
 	public required decimal? UnrealizedPnL { get; init; }
 
 	/// <summary>Средняя цена открытого остатка; null у закрытой позиции.</summary>
 	public required decimal? AverageOpenPrice { get; init; }
 
-	/// <summary>Марка инструмента при открытом остатке; null у закрытой позиции и при сбое марок.</summary>
-	public required decimal? MarkPrice { get; init; }
+	/// <summary>Котировка инструмента при открытом остатке; null у закрытой позиции и при сбое котировок.</summary>
+	public required decimal? QuotePrice { get; init; }
 
 	/// <summary>Время первой записи позиции.</summary>
 	public required DateTimeOffset OpenedAt { get; init; }

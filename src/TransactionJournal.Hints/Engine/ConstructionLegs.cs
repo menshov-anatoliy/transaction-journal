@@ -53,10 +53,10 @@ internal static class ConstructionLegs
 			.OfType<OptionLeg>()
 			.ToArray();
 
-	/// <summary>Марка спота базового актива: линейный фьючерс «{база}USDT» из партии марок.</summary>
-	/// <param name="marks">Партия марок прохода.</param>
+	/// <summary>Котировка спота базового актива: линейный фьючерс «{база}USDT» из партии котировок.</summary>
+	/// <param name="quotes">Партия котировок прохода.</param>
 	/// <param name="baseCoin">Базовый актив опционной ноги.</param>
-	/// <param name="spot">Марка спота или null, когда марки нет.</param>
-	public static bool TrySpot(MarkBatch marks, string baseCoin, out decimal spot)
-		=> marks.Marks.TryGetValue(baseCoin + "USDT", out spot);
+	/// <param name="spot">Котировка спота или null, когда котировки нет.</param>
+	public static bool TrySpot(QuoteBatch quotes, string baseCoin, out decimal spot)
+		=> quotes.Quotes.TryGetValue(baseCoin + "USDT", out spot);
 }

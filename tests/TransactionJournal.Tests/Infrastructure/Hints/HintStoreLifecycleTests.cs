@@ -143,8 +143,8 @@ public class HintStoreLifecycleTests
 		var first = new DateTimeOffset(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
 		var second = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
 
-		await store.MarkFirstSeenAsync(record.Id, first);
-		await store.MarkFirstSeenAsync(record.Id, second);
+		await store.RecordFirstSeenAsync(record.Id, first);
+		await store.RecordFirstSeenAsync(record.Id, second);
 
 		var stored = (await store.ListAllAsync()).Single();
 		Assert.That(stored.FirstSeenAt, Is.EqualTo(first));

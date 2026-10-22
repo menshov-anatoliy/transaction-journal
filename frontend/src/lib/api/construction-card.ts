@@ -27,7 +27,7 @@ export interface ConstructionCardMetrics {
 	readonly realizedPnLPercent: number | null;
 	readonly unrealizedPnLPercent: number | null;
 	readonly adjustmentsPnLPercent: number | null;
-	readonly markValue: number | null;
+	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
 	// Реальный риск открытых остатков идёт парой «величина + статус»:
 	// число только при конечном риске, статус различает неограниченный
@@ -76,7 +76,7 @@ export interface ConstructionCardPosition {
 	readonly closedAt: string | null;
 	readonly isOpen: boolean;
 	readonly comment: string | null;
-	readonly markValue: number | null;
+	readonly quoteValue: number | null;
 	readonly priceChangePercent: number | null;
 	// Распад остатка линейной ноги: пара не-null отличает синтетическое
 	// содержимое ноги от нулевого инструментального остатка; null — у ноги
@@ -107,7 +107,7 @@ export interface ConstructionCardSyntheticClose {
 	readonly closedLegSymbol: string;
 	/** Знаковое количество линейной части связки. */
 	readonly quantity: number;
-	/** Величина паритетного лока к экспирации, USDT; от марок не зависит. */
+	/** Величина паритетного лока к экспирации, USDT; от котировок не зависит. */
 	readonly lockedValueUsdt: number;
 	/** Признак ручного оспаривания: спорная связка в логический слой не входит. */
 	readonly disputed: boolean;
@@ -154,7 +154,7 @@ export interface ConstructionCardClosingEntry {
 	readonly quantity: number;
 	readonly price: number | null;
 	readonly amountUsdt: number | null;
-	readonly manualMarkId: number | null;
+	readonly manualAnnotationId: number | null;
 }
 
 /** Предупреждение об избыточной закрывающей записи. */
@@ -192,8 +192,8 @@ export interface ConstructionCard {
 	readonly profitUnit: TargetUnit | null;
 	readonly comment: string | null;
 	readonly hasOpenResidual: boolean;
-	readonly hasMarkFailure: boolean;
-	readonly marksAsOf: string | null;
+	readonly hasQuoteFailure: boolean;
+	readonly quotesAsOf: string | null;
 	readonly metrics: ConstructionCardMetrics;
 	readonly positions: readonly ConstructionCardPosition[];
 	readonly trades: readonly ConstructionCardTrade[];
@@ -225,9 +225,9 @@ export interface ConstructionMoveTarget {
 }
 
 /** Атрибуты ручной пометки закрытия: инструмент, время, цена и опциональное количество. */
-export interface ManualCloseMarkInput {
+export interface ManualCloseAnnotationInput {
 	readonly symbol: string;
-	readonly markedAt: string;
+	readonly annotatedAt: string;
 	readonly price: number | null;
 	// Количество пометки: незаданное (null) закрывает весь остаток на момент
 	// применения, заданное клэмпится остатком производным слоем.
@@ -338,34 +338,34 @@ export function setTradeComment(execId: string, text: string | null): Promise<vo
 	});
 }
 
-/** Читает последнюю известную марку инструмента — дефолт формы пометки. */
-export function fetchLastInstrumentMark(constructionId: number, symbol: string): Promise<number | null> {
-	return apiFetch<{ mark: number | null }>(
+/** Читает последнюю известную котировку инструмента — дефолт формы пометки. */
+export function fetchLastInstrumentQuote(constructionId: number, symbol: string): Promise<number | null> {
+	return apiFetch<{ quote: number | null }>(
 		`/constructions/${constructionId}/positions/${encodeURIComponent(symbol)}/last-mark`,
-	).then((payload) => payload.mark);
+	).then((payload) => payload.quote);
 }
 
 /** Ставит ручную пометку закрытия позиции. */
-export function addManualCloseMark(constructionId: number, mark: ManualCloseMarkInput): Promise<void> {
+export function addManualCloseAnnotation(constructionId: number, annotation: ManualCloseAnnotationInput): Promise<void> {
 	return apiCommand(`/constructions/${constructionId}/close-marks`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
-		body: JSON.stringify(mark),
+		body: JSON.stringify(annotation),
 	});
 }
 
 /** Правит ручную пометку закрытия. */
-export function editManualCloseMark(markId: number, mark: ManualCloseMarkInput): Promise<void> {
-	return apiCommand(`/close-marks/${markId}`, {
+export function editManualCloseAnnotation(annotationId: number, annotation: ManualCloseAnnotationInput): Promise<void> {
+	return apiCommand(`/close-marks/${annotationId}`, {
 		method: "PUT",
 		headers: { "content-type": "application/json" },
-		body: JSON.stringify(mark),
+		body: JSON.stringify(annotation),
 	});
 }
 
 /** Удаляет ручную пометку закрытия. */
-export function deleteManualCloseMark(markId: number): Promise<void> {
-	return apiCommand(`/close-marks/${markId}`, { method: "DELETE" });
+export function deleteManualCloseAnnotation(annotationId: number): Promise<void> {
+	return apiCommand(`/close-marks/${annotationId}`, { method: "DELETE" });
 }
 
 /** Ключ связки для команд спора: пара execId линейного и встречного опционного исполнений. */

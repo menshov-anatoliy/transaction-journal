@@ -96,7 +96,7 @@ public class ChatContextReaderTests
 	{
 		// Arrange: конструкция с капиталом 1000, риском 5% и профитом 200 USDT;
 		// покупка 0.1 BTC по 42000 с комиссией 1 привязана к конструкции, у позиции
-		// оставлен комментарий; свежая марка провайдера — 44000 на 2026-09-20 12:00.
+		// оставлен комментарий; свежая котировка провайдера — 44000 на 2026-09-20 12:00.
 		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
 		await _constructionService.UpdateRiskAsync(construction.Id, 5m, TargetUnit.Percent);
 		await _constructionService.UpdateProfitAsync(construction.Id, 200m, TargetUnit.Usdt);
@@ -105,7 +105,7 @@ public class ChatContextReaderTests
 		await _bindingService.BindAsync(construction.Id, "exec-buy");
 		await _commentService.SetPositionCommentAsync(construction.Id, LinearSymbol, "базовая позиция");
 		var receivedAt = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
-		var reader = CreateReader(new StubFreshMarkSource(44000m, receivedAt), new StubRuleCorpus());
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, receivedAt), new StubRuleCorpus());
 
 		// Act: собираем снимок контекста конструкции.
 		var snapshot = await reader.ReadAsync(construction.Id);
@@ -125,7 +125,7 @@ public class ChatContextReaderTests
 		Assert.That(markdown, Does.Contain("| BTCUSDT | 0.1 | открыта | 42000 | — | -1 | 200 | 199 | 1 |"));
 		Assert.That(markdown, Does.Contain("  - BTCUSDT: базовая позиция"));
 		Assert.That(markdown, Does.Contain("итог 199 USDT (19.9% капитала)"));
-		Assert.That(markdown, Does.Contain("- Марки оценки: 2026-09-20 12:00:00 UTC"));
+		Assert.That(markdown, Does.Contain("- Котировки оценки: 2026-09-20 12:00:00 UTC"));
 		Assert.That(markdown, Does.Contain($"## Портфельные агрегаты (as-of: {AsOfStamp})"));
 		Assert.That(markdown, Does.Contain("- Конструкций в журнале: 1, из них с открытыми позициями: 1"));
 		Assert.That(markdown, Does.Contain("- Реализованный PnL журнала: -1 USDT"));
@@ -154,7 +154,7 @@ public class ChatContextReaderTests
 		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-buy");
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus(
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus(
 		[
 			new RuleCardThreshold { Name = "weeklyRiskLimit", Value = "1", Unit = "percent" },
 			new RuleCardThreshold { Name = "monthlyRiskLimit", Value = "5", Unit = "percent" },
@@ -197,7 +197,7 @@ public class ChatContextReaderTests
 		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-buy");
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus());
 
 		// Act: снимок по набору источников чата — только рынок Bybit.
 		var snapshot = await reader.ReadAsync(construction.Id, [ChatDataSource.BybitMarket]);
@@ -223,7 +223,7 @@ public class ChatContextReaderTests
 		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-buy");
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus());
 
 		// Act: снимок по набору источников чата — только журнал.
 		var snapshot = await reader.ReadAsync(construction.Id, [ChatDataSource.Journal]);
@@ -248,7 +248,7 @@ public class ChatContextReaderTests
 		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-buy");
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus(
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus(
 		[
 			new RuleCardThreshold { Name = "weeklyRiskLimit", Value = "1", Unit = "percent" },
 		]));
@@ -273,7 +273,7 @@ public class ChatContextReaderTests
 	{
 		// Arrange: журнал с одной конструкцией, заглушка корпуса.
 		await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus());
 
 		// Act: снимок чата без привязки по набору источников — только корпус.
 		var snapshot = await reader.ReadAsync(null, [ChatDataSource.RulesCorpus]);
@@ -296,7 +296,7 @@ public class ChatContextReaderTests
 	{
 		// Arrange: журнал с одной конструкцией и пустым набором порогов корпуса.
 		await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus());
 
 		// Act: собираем портфельный снимок без карточки лимитов.
 		var snapshot = await reader.ReadAsync(null);
@@ -340,7 +340,7 @@ public class ChatContextReaderTests
 			await db.SaveChangesAsync();
 		}
 
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus());
 
 		// Act: собираем снимок контекста конструкции.
 		var snapshot = await reader.ReadAsync(construction.Id);
@@ -360,7 +360,7 @@ public class ChatContextReaderTests
 	{
 		// Arrange: конструкция с капиталом и заглушка корпуса с запретом полного текста.
 		var construction = await _constructionService.CreateAsync("Календарь сентябрь", 1000m);
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus());
 
 		// Act: собираем снимок контекста конструкции.
 		var snapshot = await reader.ReadAsync(construction.Id);
@@ -384,7 +384,7 @@ public class ChatContextReaderTests
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await _bindingService.BindAsync(construction.Id, "exec-buy");
 		await _constructionService.ChangeStatusAsync(construction.Id, ConstructionStatus.Closed);
-		var reader = CreateReader(new StubFreshMarkSource(44000m, FetchedAt), new StubRuleCorpus());
+		var reader = CreateReader(new StubFreshQuoteSource(44000m, FetchedAt), new StubRuleCorpus());
 
 		// Act: собираем снимок контекста закрытой конструкции.
 		var snapshot = await reader.ReadAsync(construction.Id);
@@ -397,12 +397,12 @@ public class ChatContextReaderTests
 	#region Помощники
 
 	/// <summary>Собирает адаптер снимка над реальными read-моделями и заглушкой корпуса.</summary>
-	private ChatContextReader CreateReader(IFreshInstrumentMarkSource freshMarkSource, IRuleCorpusReader corpus)
+	private ChatContextReader CreateReader(IFreshInstrumentQuoteSource freshQuoteSource, IRuleCorpusReader corpus)
 	{
 		var options = CreateOptions();
 		return new ChatContextReader(
-			new ConstructionDetailReadModel(options, new JournalMetricsReadModel(options, freshMarkSource), new PositionReadModel(options)),
-			new JournalMetricsReadModel(options, freshMarkSource),
+			new ConstructionDetailReadModel(options, new JournalMetricsReadModel(options, freshQuoteSource), new PositionReadModel(options)),
+			new JournalMetricsReadModel(options, freshQuoteSource),
 			corpus,
 			new FixedTimeProvider(Now));
 	}
@@ -455,11 +455,11 @@ public class ChatContextReaderTests
 	private static long ExecMs(int year, int month, int day, int hour, int minute) =>
 		new DateTimeOffset(year, month, day, hour, minute, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
-	/// <summary>Заглушка свежей марки: всегда отдаёт одну и ту же цену с фиксированным временем получения.</summary>
-	private sealed class StubFreshMarkSource(decimal markPrice, DateTimeOffset receivedAt) : IFreshInstrumentMarkSource
+	/// <summary>Заглушка свежей котировки: всегда отдаёт одну и ту же цену с фиксированным временем получения.</summary>
+	private sealed class StubFreshQuoteSource(decimal quotePrice, DateTimeOffset receivedAt) : IFreshInstrumentQuoteSource
 	{
-		public Task<InstrumentMarkSnapshot?> GetFreshMarkAsync(string symbol, CancellationToken cancellationToken = default) =>
-			Task.FromResult<InstrumentMarkSnapshot?>(new InstrumentMarkSnapshot(symbol, markPrice, receivedAt));
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+			Task.FromResult<InstrumentQuoteSnapshot?>(new InstrumentQuoteSnapshot(symbol, quotePrice, receivedAt));
 	}
 
 	/// <summary>

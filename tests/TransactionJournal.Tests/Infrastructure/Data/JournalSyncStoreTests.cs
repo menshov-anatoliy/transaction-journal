@@ -267,8 +267,8 @@ public class JournalSyncStoreTests
 		var failedRun = await _store.StartAsync(SyncRunMode.Incremental);
 
 		// Act
-		await _store.MarkSucceededAsync(succeededRun);
-		await _store.MarkFailedAsync(failedRun, "ошибка биржи");
+		await _store.RecordSucceededAsync(succeededRun);
+		await _store.RecordFailedAsync(failedRun, "ошибка биржи");
 
 		// Assert: первый запуск закрыт успехом с моментом завершения и без ошибки.
 		var succeededRow = LoadRun(succeededRun.Id)!;
@@ -498,7 +498,7 @@ public class JournalSyncStoreTests
 		var orphanRun = new SyncRun { Id = 404, StartedAt = Now, Mode = SyncRunMode.Backfill, Status = SyncRunStatus.Running };
 
 		// Act
-		await _store.MarkSucceededAsync(orphanRun);
+		await _store.RecordSucceededAsync(orphanRun);
 	}
 
 	[TestMethod]
@@ -511,7 +511,7 @@ public class JournalSyncStoreTests
 		var run = await _store.StartAsync(SyncRunMode.Backfill);
 
 		// Act: текст ошибки обязателен для диагностики прерывания.
-		await _store.MarkFailedAsync(run, error);
+		await _store.RecordFailedAsync(run, error);
 	}
 
 	[TestMethod]
@@ -523,7 +523,7 @@ public class JournalSyncStoreTests
 		var run = await _store.StartAsync(SyncRunMode.Backfill);
 
 		// Act: null-текст отвергается отдельной веткой проверки.
-		await _store.MarkFailedAsync(run, null!);
+		await _store.RecordFailedAsync(run, null!);
 	}
 
 	[TestMethod]
@@ -573,7 +573,7 @@ public class JournalSyncStoreTests
 		// и читаются при открытии страницы — переживают перезагрузку.
 		// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
 		var run = await _store.StartAsync(SyncRunMode.Incremental);
-		await _store.MarkSucceededAsync(run);
+		await _store.RecordSucceededAsync(run);
 		var warnings = new SyncRunWarnings
 		{
 			SkippedAreas = ["option:BTC"],
@@ -606,7 +606,7 @@ public class JournalSyncStoreTests
 		// Traceability: openspec:sync/bybit-history#requirement-run-warnings-persisted
 		var freshRun = await _store.StartAsync(SyncRunMode.Backfill);
 		var failedRun = await _store.StartAsync(SyncRunMode.Incremental);
-		await _store.MarkFailedAsync(failedRun, "обрыв связи");
+		await _store.RecordFailedAsync(failedRun, "обрыв связи");
 
 		// Act
 		var freshWarnings = await _store.ReadWarningsAsync(freshRun.Id);
