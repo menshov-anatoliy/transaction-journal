@@ -37,6 +37,7 @@ function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
 		plannedProfit: 900,
 		realized: 0,
 		unrealized: 0,
+		adjustments: 0,
 		quotesDegraded: false,
 		hasOpenResidual: false,
 		realRisk: 300,
@@ -399,6 +400,136 @@ describe("единая заливка отрицательного итога", 
 	});
 });
 
+describe("внешние корректировки в текущем результате", () => {
+	// Канон «текущего результата»: реализованная часть + доступная
+	// нереализованная + внешние корректировки PnL. Маркер стоит на полной
+	// сумме и подписывается ею же; шкала, золотая зона и заливки строятся
+	// от того же total.
+	// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+
+	it("маркер включает корректировки: +200 +150 +50 → +400", () => {
+		// Act: реализованный +200, нереализованный +150, корректировки +50.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 200, unrealized: 150, adjustments: 50 }),
+		);
+
+		// Assert: маркер подписан полным результатом +400.
+		expect(geometry.labels.marker).toBe("+400");
+
+		// Assert: позиция маркера соответствует total +400 на шкале
+		// −300…+900, клипа нет.
+		expect(geometry.markerAt).toBeCloseTo(700 / 1200, 4);
+		expect(geometry.scaleMax).toBe(900);
+		expect(geometry.markerClipped).toBe(false);
+
+		// Assert: заливка от нуля до +400, золота нет — профит не превышен.
+		expect(geometry.fillMain).toEqual({ from: 0.25, to: 700 / 1200 });
+		expect(geometry.superZone).toBeNull();
+		expect(geometry.tone).toBe("positive");
+	});
+
+	it("корректировки сверх профита тянут золотую зону до результата", () => {
+		// Act: реализованный +150, нереализованный +1250, корректировки +500
+		// → результат +1 900 за плановым профитом +900.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 150, unrealized: 1250, adjustments: 500 }),
+		);
+
+		// Assert: шкала растянута до результата, зелёный участок — до
+		// профита, золото — от профита до результата.
+		expect(geometry.scaleMax).toBe(1900);
+		expect(geometry.fillMain).toEqual({ from: 300 / 2200, to: 1200 / 2200 });
+		expect(geometry.superZone).toEqual({ from: 1200 / 2200, to: 1 });
+
+		// Assert: маркер на краю шкалы без клипа, подписан результатом.
+		expect(geometry.markerAt).toBe(1);
+		expect(geometry.markerClipped).toBe(false);
+		expect(geometry.labels.marker).toBe("+1\u00A0900");
+	});
+
+	it("свежая позиция с корректировками подписывается суммой, а не «≈ 0»", () => {
+		// Act: реализованного и нереализованного нет, корректировки +50.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 0, unrealized: 0, adjustments: 50 }),
+		);
+
+		// Assert: «≈ 0» остаётся только при нулевом полном результате —
+		// с корректировками подпись обычная сумма.
+		expect(geometry.labels.marker).toBe("+50");
+		expect(geometry.markerAt).toBeCloseTo(350 / 1200, 4);
+	});
+
+	it("отрицательные корректировки уменьшают результат", () => {
+		// Act: реализованный +200, нереализованный +150, корректировки −50.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 200, unrealized: 150, adjustments: -50 }),
+		);
+
+		// Assert: маркер на результате +300 — корректировки со знаком минус
+		// не ломают ни подпись, ни позицию.
+		expect(geometry.labels.marker).toBe("+300");
+		expect(geometry.markerAt).toBeCloseTo(600 / 1200, 4);
+	});
+
+	it("нулевые корректировки сохраняют прежнее поведение", () => {
+		// Act: adjustments 0 — результат равен сумме реализованной и
+		// нереализованной частей, как до появления корректировок.
+		const geometry = computeFinResultGeometry(
+			caseInput({ realized: 200, unrealized: 150, adjustments: 0 }),
+		);
+
+		// Assert: маркер на +350 — прежние значения кейса не изменились.
+		expect(geometry.labels.marker).toBe("+350");
+		expect(geometry.markerAt).toBeCloseTo(650 / 1200, 4);
+	});
+
+	// Сбой котировок: индикатор помечается неполным, а маркер остаётся
+	// подписанным доступной частью результата — реализованным и
+	// корректировками, скрытая нереализованная часть в подпись не попадает.
+	// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
+	it("сбой котировок оставляет результат по доступной части: +250", () => {
+		// Act: реализованный +200, скрытая нереализованная +150,
+		// корректировки +50.
+		const geometry = computeFinResultGeometry(
+			caseInput({
+				realized: 200,
+				unrealized: null,
+				adjustments: 50,
+				quotesDegraded: true,
+				hasOpenResidual: true,
+			}),
+		);
+
+		// Assert: индикатор неполный, маркер подписан доступной частью +250.
+		expect(geometry.incomplete).toBe(true);
+		expect(geometry.labels.marker).toBe("+250");
+
+		// Assert: позиция маркера и заливка соответствуют доступной части
+		// +250, скрытые +150 в геометрию не попали.
+		expect(geometry.markerAt).toBeCloseTo(550 / 1200, 4);
+		expect(geometry.fillMain).toEqual({ from: 0.25, to: 550 / 1200 });
+	});
+
+	it("сбой котировок без реализованной части подписи маркера не даёт", () => {
+		// Act: реализованного результата нет, корректировки +50 доступны.
+		const geometry = computeFinResultGeometry(
+			caseInput({
+				realized: null,
+				unrealized: null,
+				adjustments: 50,
+				quotesDegraded: true,
+				hasOpenResidual: true,
+			}),
+		);
+
+		// Assert: без реализованной части результата нет — ни позиции, ни
+		// подписи маркера; неполнота при открытых остатках сохранена.
+		expect(geometry.incomplete).toBe(true);
+		expect(geometry.labels.marker).toBeNull();
+		expect(geometry.markerAt).toBeNull();
+	});
+});
+
 describe("граница худшего исхода", () => {
 	// Граница ставится контрактной знаковой метрикой худшего исхода: при
 	// остаточном риске она равна «реализованный минус реальный риск»,
@@ -697,13 +828,17 @@ describe("состояние риска без насечки", () => {
 		);
 
 		// Assert: неполный режим, статус unbounded сохранён, насечки нет,
-		// плановое деление подписано плановым риском, маркер без подписи.
+		// плановое деление подписано плановым риском.
 		expect(geometry.incomplete).toBe(true);
 		expect(geometry.realRiskStatus).toBe("unbounded");
 		expect(geometry.borderAt).toBeNull();
 		expect(geometry.labels.riskState).toBe("риск не ограничен");
 		expect(geometry.labels.risk).toBe("плановый риск −300");
-		expect(geometry.labels.marker).toBeNull();
+
+		// Маркер подписан доступной частью результата — реализованным и
+		// корректировками, скрытая нереализованная часть в число не входит.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
+		expect(geometry.labels.marker).toBe("−250");
 	});
 
 	it.each(["unbounded", "unavailable"] as const)("заданный статус %s не подставляет плановый риск в насечку", (status) => {
@@ -899,20 +1034,25 @@ describe("состояния индикатора из §9 концепта", ()
 		);
 
 		// Assert: нереализованная часть скрыта, индикатор помечен неполным;
-		// маркер — realized −250, граница по худшему исходу прижата к краю.
+		// маркер — на доступной части −250, граница по худшему исходу
+		// прижата к краю.
 		expect(geometry.incomplete).toBe(true);
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.borderAt).toBe(0);
 		// Граница со своей подписью остаётся: худший исход виден и без
 		// котировок.
 		expect(geometry.labels.borderValue).toBe("−550 USDT · 183%");
-		// Ноль остаётся нулём, а отсутствие данных не превращается в ноль.
-		expect(geometry.labels.marker).toBeNull();
+
+		// Маркер подписан доступной частью результата — реализованным и
+		// корректировками; скрытая нереализованная часть в число не входит.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
+		expect(geometry.labels.marker).toBe("−250");
 	});
 
 	// Сбой котировок без открытых остатков не помечает индикатор неполным:
-	// скрывать нечего — нереализованной части не существует. Число маркера
-	// всё равно не показывается: при сбое котировок подпись — без числа.
+	// скрывать нечего — нереализованной части не существует. Маркер
+	// подписывается доступной частью результата — реализованным и
+	// корректировками.
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 	it("состояние 5а: сбой котировок без открытых остатков — индикатор полный", () => {
 		// Act: котировки недоступны, но все остатки закрыты.
@@ -920,11 +1060,11 @@ describe("состояния индикатора из §9 концепта", ()
 			caseInput({ realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: false }),
 		);
 
-		// Assert: неполноты нет, маркер стоит на реализованном результате,
-		// но подписи числа нет — сбой котировок запрещает выводить итог.
+		// Assert: неполноты нет, маркер стоит на доступной части результата
+		// −250 (реализованный + корректировки).
 		expect(geometry.incomplete).toBe(false);
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
-		expect(geometry.labels.marker).toBeNull();
+		expect(geometry.labels.marker).toBe("−250");
 	});
 
 	// Закрытая конструкция с нулевым реальным риском: граница совпадает
@@ -958,6 +1098,7 @@ describe("отказ на некорректных входах", () => {
 	it.each([
 		["NaN в realized", caseInput({ realized: Number.NaN })],
 		["Infinity в unrealized", caseInput({ unrealized: Number.POSITIVE_INFINITY })],
+		["NaN в adjustments", caseInput({ adjustments: Number.NaN })],
 		["NaN в plannedRisk", caseInput({ plannedRisk: Number.NaN })],
 		["NaN в realRisk", caseInput({ realRisk: Number.NaN })],
 		["NaN в worstCase", caseInput({ worstCase: Number.NaN })],

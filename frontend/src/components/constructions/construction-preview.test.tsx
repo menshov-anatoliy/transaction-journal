@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import type { ConstructionPreview } from "@/lib/api/constructions";
@@ -118,6 +118,22 @@ describe("краткая карточка конструкции", () => {
 		expect(riskScale?.className).not.toContain("fin-negative");
 		const profitScale = document.querySelector('[data-part="profit-scale"]');
 		expect(profitScale?.className).toContain("text-text-muted");
+	});
+
+	it("включает внешние корректировки в результат среднего индикатора", () => {
+		// Текущий результат конструкции — реализованная и нереализованная
+		// части плюс внешние корректировки PnL: превью прокидывает сумму
+		// корректировок во вход индикатора, маркер подписан полной суммой.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+		// Act: карточка с фикстурой, где корректировки равны 5.
+		renderPreview();
+
+		// Assert: маркер результата — 60.25 + 40.25 + 5 = +105.5,
+		// а не сумма только частей PnL (+100.5).
+		const medium = document.querySelector('[data-slot="fin-result-medium"]');
+		expect(medium).not.toBeNull();
+		expect(within(medium as HTMLElement).getByRole("img", { name: /результат \+105\.5/ })).toBeInTheDocument();
+		expect(within(medium as HTMLElement).queryByRole("img", { name: /результат \+100\.5/ })).not.toBeInTheDocument();
 	});
 
 	it("показывает период, счётчики записей и живые подсказки", () => {

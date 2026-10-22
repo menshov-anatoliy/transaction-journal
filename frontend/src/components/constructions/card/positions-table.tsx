@@ -17,8 +17,8 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-mobile";
 
 // Таблица позиций карточки по концепции §4: картина позиции её записями —
-// вход, выход, стоимость, раздельные части результата, общий P&L, комиссии,
-// времена, статус и inline-комментарий MD-рендером; единственное действие
+// вход, выход, стоимость, раздельные части результата, текущий результат,
+// комиссии, времена, статус и inline-комментарий MD-рендером; единственное действие
 // открытой строки — «закрыть пометкой» с пикером даты-времени и дефолтом
 // последней котировки.
 // Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
@@ -351,8 +351,12 @@ export function PositionsTable({ constructionId, positions, annotationPending, o
 						<TableHead>
 							<MetricHint tooltip={METRIC_TOOLTIPS.positionUnrealizedPnl}>Нереализ. P&amp;L</MetricHint>
 						</TableHead>
+						{/* Колонка текущего результата позиции: при сбое котировок
+						    нереализованная часть недоступна и ячейка помечается
+						    признаком сбоя, рыночные части остаются видимыми. */}
+						{/* Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-detail-position-total-pnl-marks-failure */}
 						<TableHead>
-							<MetricHint tooltip={METRIC_TOOLTIPS.positionTotalPnl}>Общий P&amp;L</MetricHint>
+							<MetricHint tooltip={METRIC_TOOLTIPS.positionTotalPnl}>Текущий результат</MetricHint>
 						</TableHead>
 						<TableHead>
 							<MetricHint tooltip={METRIC_TOOLTIPS.commissionFees}>Комиссии</MetricHint>
@@ -494,7 +498,7 @@ export function PositionsTable({ constructionId, positions, annotationPending, o
 								</TableCell>
 								<TableCell>
 									{position.isOpen && position.totalPnL === null ? (
-										<span className="text-muted-foreground" title="Провайдер котировок недоступен — общий P&L не оценён">
+										<span className="text-muted-foreground" title="Провайдер котировок недоступен — текущий результат не оценён">
 											сбой котировок
 										</span>
 									) : (

@@ -690,7 +690,7 @@ describe("карточка конструкции", () => {
 		expect(screen.getByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i }).className).toContain("page-title");
 
 		// Kstrip: итог с процентом капитала, разбивка, стоимость, занятость.
-		expect(screen.getByText("общий P&L")).toBeInTheDocument();
+		expect(screen.getByText("текущий результат")).toBeInTheDocument();
 		expect(screen.getByText("+105.5 USDT")).toBeInTheDocument();
 		expect(screen.getByText("+3.5%")).toBeInTheDocument();
 		expect(screen.getByText("котировки на")).toBeInTheDocument();
@@ -819,7 +819,7 @@ describe("карточка конструкции: примитивы дизай
 
 		// Assert: 12 инстансов Метрики — M1–M9 мастера «Сводка метрик» (h69OG)
 		// и три метрики саммари времени жизни (ML1–ML3 макета).
-		expect(await screen.findByText("общий P&L")).toBeInTheDocument();
+		expect(await screen.findByText("текущий результат")).toBeInTheDocument();
 		const metrics = document.querySelectorAll('[data-slot="metric"]');
 		expect(metrics).toHaveLength(12);
 

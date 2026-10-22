@@ -30,6 +30,7 @@ const CASE_C3 = {
 	plannedProfit: 900,
 	realized: -250,
 	unrealized: 180,
+	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: 300,
@@ -44,6 +45,7 @@ const CASE_C6 = {
 	plannedProfit: 900,
 	realized: 150,
 	unrealized: 1250,
+	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: 300,
@@ -59,6 +61,7 @@ const CASE_UNBOUNDED = {
 	plannedProfit: 900,
 	realized: 5942.16,
 	unrealized: null,
+	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: null,
@@ -73,6 +76,7 @@ const CASE_UNAVAILABLE = {
 	plannedProfit: 900,
 	realized: 200,
 	unrealized: null,
+	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: null,
@@ -87,6 +91,7 @@ const CASE_UNBOUNDED_WITHOUT_PLAN = {
 	plannedProfit: null,
 	realized: 100,
 	unrealized: null,
+	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRisk: null,
@@ -173,6 +178,7 @@ describe("полный индикатор", () => {
 					plannedProfit: 900,
 					realized: 0,
 					unrealized: 0,
+					adjustments: 0,
 					quotesDegraded: false,
 					hasOpenResidual: true,
 					realRisk: 120,
@@ -200,6 +206,7 @@ describe("полный индикатор", () => {
 					plannedProfit: 900,
 					realized: 945,
 					unrealized: null,
+					adjustments: 0,
 					quotesDegraded: false,
 					hasOpenResidual: false,
 					realRisk: 0,
@@ -226,6 +233,7 @@ describe("полный индикатор", () => {
 					plannedProfit: 900,
 					realized: 150,
 					unrealized: 699,
+					adjustments: 0,
 					quotesDegraded: false,
 					hasOpenResidual: true,
 					realRisk: 300,
@@ -259,6 +267,7 @@ describe("полный индикатор", () => {
 					plannedProfit: 900,
 					realized: -250,
 					unrealized: 100,
+					adjustments: 0,
 					quotesDegraded: false,
 					hasOpenResidual: true,
 					realRisk: 70,
@@ -558,7 +567,7 @@ describe("компактный индикатор", () => {
 		// Act: плановые границы не заданы.
 		const { container } = render(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, quotesDegraded: false, hasOpenResidual: true, realRisk: 300, worstCase: -350, realRiskStatus: "finite" }}
+				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, adjustments: 0, quotesDegraded: false, hasOpenResidual: true, realRisk: 300, worstCase: -350, realRiskStatus: "finite" }}
 			/>,
 		);
 
@@ -576,7 +585,7 @@ describe("компактный индикатор", () => {
 		// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 		const { container } = render(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: null, quotesDegraded: true, hasOpenResidual: true, realRisk: 300, worstCase: -550, realRiskStatus: "finite" }}
+				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: null, adjustments: 0, quotesDegraded: true, hasOpenResidual: true, realRisk: 300, worstCase: -550, realRiskStatus: "finite" }}
 			/>,
 		);
 
@@ -613,7 +622,7 @@ describe("компактный индикатор", () => {
 		// Act: итог +420 и граница +420 на одной позиции — нижний уровень
 		// занят маркером, граница уходит наверх.
 		const { container } = renderIndicator(<FullFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: 520, unrealized: -100, quotesDegraded: false, hasOpenResidual: true, realRisk: 100, worstCase: 420, realRiskStatus: "finite" }}
+				input={{ plannedRisk: 300, plannedProfit: 900, realized: 520, unrealized: -100, adjustments: 0, quotesDegraded: false, hasOpenResidual: true, realRisk: 100, worstCase: 420, realRiskStatus: "finite" }}
 			/>,
 		);
 

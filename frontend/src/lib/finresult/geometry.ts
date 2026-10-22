@@ -10,8 +10,9 @@ import type { RealRiskStatus } from "../api/constructions";
 // итога, граница худшего исхода в расчёте шкалы не участвует и клипуется
 // её краем. Граница — худший исход конструкции (worstCaseUsdt:
 // реализованный результат плюс худший платёж открытых остатков),
-// маркер — позиция итога (реализованный + нереализованный); итог рисуется
-// одной заливкой без разложения на реализованную и нереализованную части.
+// маркер — позиция текущего результата (реализованный + нереализованный +
+// внешние корректировки PnL); результат рисуется одной заливкой без
+// разложения на реализованную и нереализованную части.
 // Насечка границы ставится только при конечном риске с числом худшего
 // исхода: состояния unbounded/unavailable возвращают borderAt: null со
 // статусом состояния, а плановое деление подписывается плановым риском.
@@ -39,6 +40,13 @@ export interface FinResultInput {
 	 * (различает пара hasOpenResidual + quotesDegraded).
 	 */
 	readonly unrealized: number | null;
+	/**
+	 * Сумма внешних корректировок PnL конструкции в USDT (правки вне
+	 * реализованных сделок и открытых остатков); 0 — корректировок нет.
+	 * Входит в текущий результат наравне с реализованной и нереализованной
+	 * частями и доступна независимо от сбоя котировок.
+	 */
+	readonly adjustments: number;
 	/** Сбой котировок: нереализованная оценка недоступна, индикатор неполный. */
 	readonly quotesDegraded: boolean;
 	// Неполнота индикатора считается только при открытых остатках: сбой
@@ -183,6 +191,7 @@ export function computeFinResultGeometry(
 	assertFinite("plannedProfit", input.plannedProfit);
 	assertFinite("realized", input.realized);
 	assertFinite("unrealized", input.unrealized);
+	assertFinite("adjustments", input.adjustments);
 	assertFinite("realRisk", input.realRisk);
 	assertFinite("worstCase", input.worstCase);
 
@@ -190,7 +199,12 @@ export function computeFinResultGeometry(
 	// доступных котировках: сбой скрывает её, не подменяя нулём.
 	const unrealized = input.unrealized !== null && !input.quotesDegraded ? input.unrealized : null;
 	const realized = input.realized;
-	const total = realized === null ? null : realized + (unrealized ?? 0);
+	// Текущий результат конструкции — реализованная часть плюс доступная
+	// нереализованная и внешние корректировки PnL; без реализованной части
+	// результата нет вовсе. Все производные величины (шкала, золотая зона,
+	// заливка, позиция маркера) строятся только от этого total.
+	// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+	const total = realized === null ? null : realized + (unrealized ?? 0) + input.adjustments;
 	// Неполный индикатор — сбой котировок именно при открытых остатках: без
 	// остатков нереализованной части не существует, скрывать нечего.
 	// Комбинация приходит из read-моделей: сбой котировок бэкенд отдаёт вместе
@@ -219,7 +233,16 @@ export function computeFinResultGeometry(
 	// заполнение идёт от нуля до края в сторону знака итога; состояние
 	// риска при этом остаётся в геометрии отдельно от полосы.
 	if (input.plannedRisk === null && input.plannedProfit === null) {
-		return buildNeutralGeometry(realized, total, incomplete, input.realRiskStatus, riskState, layout);
+		return buildNeutralGeometry(
+			realized,
+			total,
+			input.adjustments,
+			input.quotesDegraded,
+			incomplete,
+			input.realRiskStatus,
+			riskState,
+			layout,
+		);
 	}
 
 	// Граница худшего исхода: контрактная знаковая метрика worstCaseUsdt —
@@ -289,7 +312,13 @@ export function computeFinResultGeometry(
 		riskState === null && input.worstCase !== null
 			? resolveBorderLabels(input.plannedRisk, input.plannedProfit, input.worstCase, input.realRisk)
 			: null;
-	const markerLabel = resolveMarkerLabel(realized, unrealized, total, input.quotesDegraded);
+	const markerLabel = resolveMarkerLabel(
+		realized,
+		unrealized,
+		total,
+		input.adjustments,
+		input.quotesDegraded,
+	);
 
 	const labels = {
 		risk: resolveRiskTickLabel(input.plannedRisk, riskState),
@@ -359,6 +388,8 @@ export function computeFinResultGeometry(
 function buildNeutralGeometry(
 	realized: number | null,
 	total: number | null,
+	adjustments: number,
+	quotesDegraded: boolean,
 	incomplete: boolean,
 	riskStatus: RealRiskStatus,
 	riskState: RiskState | null,
@@ -395,7 +426,7 @@ function buildNeutralGeometry(
 			borderTitle: null,
 			borderValue: null,
 			riskState: resolveRiskStateLabel(riskState),
-			marker: resolveMarkerLabel(realized, null, total, false),
+			marker: resolveMarkerLabel(realized, null, total, adjustments, quotesDegraded),
 		},
 		placements:
 			layout === null || layout === undefined
@@ -494,26 +525,35 @@ function resolveBorderLabels(
 	return { title, value };
 }
 
-// Подпись маркера — итог (реализованный + нереализованный); у свежей
-// позиции — «≈ 0» (ликвидация вернёт около нуля за вычетом комиссий и
-// спреда); при сбое котировок числа нет.
+// Подпись маркера — текущий результат (реализованный + нереализованный +
+// корректировки); у свежей позиции с нулевым полным результатом — «≈ 0»
+// (ликвидация вернёт около нуля за вычетом комиссий и спреда); при сбое
+// котировок маркер подписывается доступной частью результата —
+// реализованным и корректировками, скрытая нереализованная часть в подпись
+// не попадает; без реализованной части подписи нет.
 // Traceability: openspec:ui/screens#scenario-finresult-fresh-position-real-risk
 // Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 function resolveMarkerLabel(
 	realized: number | null,
 	unrealized: number | null,
 	total: number | null,
+	adjustments: number,
 	quotesDegraded: boolean,
 ): string | null {
 	if (realized === null || total === null) {
 		return null;
 	}
 
+	// Сбой котировок: маркер остаётся подписанным доступной частью
+	// результата, индикатор при этом помечается неполным.
+	// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
 	if (quotesDegraded) {
-		return null;
+		return formatFinAmount(realized + adjustments);
 	}
 
-	if (realized === 0 && unrealized === 0) {
+	// «≈ 0» только у свежей позиции с нулевым полным результатом:
+	// ненулевые корректировки делают подпись обычной суммой.
+	if (realized === 0 && unrealized === 0 && adjustments === 0) {
 		return "≈ 0";
 	}
 

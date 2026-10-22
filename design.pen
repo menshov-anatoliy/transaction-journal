@@ -395,7 +395,7 @@
                       "id": "gkfz0",
                       "name": "Caption",
                       "fill": "$textMuted",
-                      "content": "Общий P&L",
+                      "content": "Текущий результат",
                       "fontFamily": "$font",
                       "fontSize": 11,
                       "fontWeight": "normal",
@@ -552,7 +552,7 @@
                       "id": "GeVNN",
                       "name": "Заголовок",
                       "fill": "$textPrimary",
-                      "content": "Общий P&L",
+                      "content": "Текущий результат",
                       "fontFamily": "$font",
                       "fontSize": 12.5,
                       "fontWeight": "600"
@@ -2264,7 +2264,7 @@
                           "fill": "$textSecondary",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "насечка — худший исход конструкции, подпись «худший исход · X USDT · N%» от плановой границы зоны (насечка может стоять правее реализованного результата)",
+                          "content": "насечка — худший исход конструкции к экспирации, подпись «худший исход · X USDT · N%» от плановой границы зоны (насечка может стоять правее реализованного результата, а при фиксации остатков синтетикой — и правее маркера: гарантия платежа остатков, в частности синтетическая фиксация по правилу ac-43; величина зафиксированного видна в зоне синтетики карточки). При полной синтетической фиксации маркер может стоять левее насечки: рыночная оценка «сейчас» несёт временную стоимость встречного опциона, спред и свежесть котировок — к экспирации значения сходятся",
                           "fontFamily": "$font",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -2294,7 +2294,7 @@
                           "fill": "$textSecondary",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "маркер — оценка итога «заберу при ликвидации сейчас»",
+                          "content": "маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки",
                           "fontFamily": "$font",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -3824,7 +3824,7 @@
                             {
                               "type": "frame",
                               "id": "A6qer",
-                              "name": "HC:Итог",
+                              "name": "HC:Результат",
                               "width": 144,
                               "padding": 8,
                               "children": [
@@ -3840,7 +3840,7 @@
                                       "id": "TyxYZ",
                                       "name": "Value",
                                       "fill": "$textSecondary",
-                                      "content": "Итог",
+                                      "content": "Результат",
                                       "fontFamily": "$font",
                                       "fontSize": 11,
                                       "fontWeight": "600"
@@ -6578,25 +6578,25 @@
                           "id": "PlG60",
                           "type": "ref",
                           "ref": "CDitz",
-                          "name": "Подсказка «Итог» открыта",
+                          "name": "Подсказка «Результат» открыта",
                           "layoutPosition": "absolute",
                           "x": 745,
                           "y": 38,
                           "descendants": {
                             "GeVNN": {
-                              "content": "Итог"
+                              "content": "Результат"
                             },
                             "so206": {
-                              "content": "Реализованный, USDT"
+                              "content": "Текущий результат конструкции, USDT"
                             },
                             "gk36c": {
-                              "content": "закрытые сделки конструкции по FIFO, комиссии уменьшают результат"
+                              "content": "реализованный + нереализованный результат позиций и внешние корректировки PnL"
                             },
                             "BP8uh": {
-                              "content": "Нереализованный, USDT"
+                              "content": "% от капитала"
                             },
                             "l8lnHC": {
-                              "content": "открытый остаток по текущим котировкам без комиссий закрытия"
+                              "content": "доля результата в текущей величине капитала"
                             }
                           }
                         }
@@ -7033,7 +7033,7 @@
                               "width": "fit_content",
                               "descendants": {
                                 "bGGN9": {
-                                  "content": "Общий P&L"
+                                  "content": "Текущий результат"
                                 },
                                 "Q4NLmR": {
                                   "type": "frame",
@@ -8554,10 +8554,18 @@
                           "id": "g83v6",
                           "type": "ref",
                           "ref": "CDitz",
-                          "name": "Подсказка «Общий P&L» открыта",
+                          "name": "Подсказка «Текущий результат» открыта",
                           "layoutPosition": "absolute",
                           "x": 18,
-                          "y": 57
+                          "y": 57,
+                          "descendants": {
+                            "GeVNN": {
+                              "content": "Текущий результат"
+                            },
+                            "gk36c": {
+                              "content": "реализованный + нереализованный результат позиций и внешние корректировки PnL"
+                            }
+                          }
                         }
                       ]
                     },
@@ -8843,7 +8851,6 @@
                   "type": "frame",
                   "id": "B4HVo",
                   "name": "Позиции",
-                  "clip": true,
                   "width": "fill_container",
                   "fill": "$surface",
                   "cornerRadius": 12,
@@ -9116,7 +9123,7 @@
                         {
                           "type": "frame",
                           "id": "oze2K",
-                          "name": "HC:Общий P&L",
+                          "name": "HC:Текущий результат",
                           "width": 56,
                           "padding": 6,
                           "children": [
@@ -9127,7 +9134,7 @@
                               "fill": "$textSecondary",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Общий P&L",
+                              "content": "Текущий результат",
                               "fontFamily": "$font",
                               "fontSize": 9.5,
                               "fontWeight": "600"
@@ -10110,6 +10117,32 @@
                           ]
                         }
                       ]
+                    },
+                    {
+                      "id": "EE7Fy",
+                      "type": "ref",
+                      "ref": "CDitz",
+                      "name": "Подсказка «Текущий результат» открыта",
+                      "layoutPosition": "absolute",
+                      "x": 460,
+                      "y": 44,
+                      "descendants": {
+                        "GeVNN": {
+                          "content": "Текущий результат"
+                        },
+                        "so206": {
+                          "content": "Значение, USDT"
+                        },
+                        "gk36c": {
+                          "content": "текущий результат позиции: реализованный P&L плюс нереализованная оценка открытого остатка; у закрытой позиции равен реализованному"
+                        },
+                        "BP8uh": {
+                          "content": "% от капитала"
+                        },
+                        "l8lnHC": {
+                          "content": "текущий результат позиции в процентах от текущего выделенного капитала конструкции"
+                        }
+                      }
                     }
                   ]
                 },
@@ -23282,7 +23315,7 @@
                         {
                           "type": "frame",
                           "id": "uOFjo",
-                          "name": "HC:Общий P&L",
+                          "name": "HC:Текущий результат",
                           "width": 56,
                           "padding": 6,
                           "children": [
@@ -23293,7 +23326,7 @@
                               "fill": "$textSecondary",
                               "textGrowth": "fixed-width",
                               "width": "fill_container",
-                              "content": "Общий P&L",
+                              "content": "Текущий результат",
                               "fontFamily": "$font",
                               "fontSize": 9.5,
                               "fontWeight": "600"
@@ -27384,7 +27417,7 @@
       "name": "Экран/Карточка конструкции · подсказка чтения открыта",
       "clip": true,
       "width": 1240,
-      "height": 440,
+      "height": 560,
       "fill": "$bg",
       "layout": "none",
       "children": [
@@ -27490,7 +27523,7 @@
                   "width": "fit_content",
                   "descendants": {
                     "bGGN9": {
-                      "content": "Общий P&L"
+                      "content": "Текущий результат"
                     },
                     "Q4NLmR": {
                       "content": "+385,30",

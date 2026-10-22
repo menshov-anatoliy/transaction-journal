@@ -576,7 +576,7 @@ function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; prese
 }
 
 // Текстовое описание для скринридеров: состояние риска, плановая граница
-// в состоянии не конечного риска, состояние границы и итог. В состояниях
+// в состоянии не конечного риска, состояние границы и результат. В состояниях
 // unbounded/unavailable описание называет полное состояние и отдельно
 // плановый риск, чтобы тонированную плановую зону не принимали за
 // реальный риск; в конечном состоянии описание прежнее.
@@ -589,7 +589,11 @@ function describeForScreenReader(geometry: FinResultGeometry): string {
 		geometry.labels.borderTitle !== null && geometry.labels.borderValue !== null
 			? `${geometry.labels.borderTitle} ${geometry.labels.borderValue}`
 			: "";
-	const marker = geometry.labels.marker !== null ? `итог ${geometry.labels.marker}` : "";
+	// Метрика называется «результат» по канону «текущего результата»:
+	// подпись несёт полную сумму — реализованную, нереализованную и
+	// корректировки, а при сбое котировок — доступную часть.
+	// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+	const marker = geometry.labels.marker !== null ? `результат ${geometry.labels.marker}` : "";
 	const incomplete = geometry.incomplete ? "неполный, сбой котировок" : "";
 
 	return [state, planned, border, marker, incomplete].filter(Boolean).join(", ") || "нет данных о результате";

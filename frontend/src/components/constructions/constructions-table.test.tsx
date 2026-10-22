@@ -143,7 +143,7 @@ describe("таблица конструкций", () => {
 			"Реализов.",
 			"Нереализов.",
 			"Коррект.",
-			"Итог",
+			"Результат",
 			"% капитала",
 			"Занято %",
 			"До экспирации",
@@ -250,7 +250,7 @@ describe("таблица конструкций", () => {
 		// Act: таблица с открытой строкой.
 		renderTable(<ConstructionsTable rows={[openRow]} selectedId={null} onSelect={() => {}} />);
 
-		// Assert: компактный индикатор в ячейке итога.
+		// Assert: компактный индикатор в ячейке результата.
 		const indicator = screen.getByRole("row", { name: /ETH-240628/ }).querySelector('[data-slot="fin-result-compact"]');
 		expect(indicator).not.toBeNull();
 		expect(indicator).toHaveClass("w-[132px]");
@@ -277,10 +277,10 @@ describe("таблица конструкций", () => {
 		const user = userEvent.setup();
 		renderTable(<ConstructionsTable rows={[closedRow, openRow]} selectedId={null} onSelect={() => {}} />);
 
-		// Act: сортировка по колонке «Итог».
-		await user.click(screen.getByRole("button", { name: "Итог" }));
+		// Act: сортировка по колонке «Результат».
+		await user.click(screen.getByRole("button", { name: "Результат" }));
 
-		// Assert: строка с большим итогом поднялась наверх.
+		// Assert: строка с большим результатом поднялась наверх.
 		const body = screen.getAllByRole("row").filter((row) => row.querySelectorAll("td").length > 0);
 		const firstDataRow = body.find((row) => within(row).queryByText("ETH-240628-3200C+P"))!;
 		expect(body.indexOf(firstDataRow)).toBeLessThan(
@@ -318,7 +318,7 @@ describe("таблица конструкций", () => {
 	// колонки («Имя», «Статус») триггеров не получают.
 	// Traceability: openspec:ui/screens#requirement-column-header-tooltips
 	// Traceability: openspec:ui/screens#scenario-date-columns-skip-tooltip
-	it("даёт подсказку заголовку «Итог», числовым шапкам и не даёт колонкам дат", async () => {
+	it("даёт подсказку заголовку «Результат», числовым шапкам и не даёт колонкам дат", async () => {
 		// Arrange: пользователь для наведения, таблица с двумя строками
 		// внутри провайдера с нулевой задержкой открытия.
 		const user = userEvent.setup();
@@ -326,10 +326,10 @@ describe("таблица конструкций", () => {
 		const triggerOf = (name: string) =>
 			screen.getByRole("columnheader", { name }).querySelector('[data-slot="tooltip-trigger"]');
 
-		// Act: наведение на триггер заголовка «Итог».
-		await user.hover(within(screen.getByRole("columnheader", { name: "Итог" })).getByRole("button", { name: "Итог" }));
+		// Act: наведение на триггер заголовка «Результат».
+		await user.hover(within(screen.getByRole("columnheader", { name: "Результат" })).getByRole("button", { name: "Результат" }));
 
-		// Assert: попап содержит заголовок метрики и разделы итога из справочника.
+		// Assert: попап содержит заголовок метрики и разделы результата из справочника.
 		const tooltip = screen.getByRole("tooltip");
 		expect(tooltip).toHaveTextContent(METRIC_TOOLTIPS.listTotal.title);
 		for (const section of METRIC_TOOLTIPS.listTotal.sections ?? []) {
@@ -345,7 +345,7 @@ describe("таблица конструкций", () => {
 			"Реализов.",
 			"Нереализов.",
 			"Коррект.",
-			"Итог",
+			"Результат",
 			"% капитала",
 			"Занято %",
 			"До экспирации",

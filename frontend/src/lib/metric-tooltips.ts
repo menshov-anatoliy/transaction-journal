@@ -60,13 +60,15 @@ export type MetricTooltipKey =
 	| "closingEntryDetails";
 
 export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip } = {
-	// Итог конструкции в сводке карточки: суммирует реализованный
-	// и нереализованный P&L позиций и внешние корректировки PnL.
+	// Текущий результат конструкции в сводке карточки: реализованный
+	// и нереализованный PnL позиций плюс внешние корректировки PnL.
 	// Traceability: openspec:analytics/performance#requirement-construction-metrics
+	// Traceability: change:unify-current-result/specs/analytics/performance/spec#scenario-construction-total-includes-adjustments
+	// Traceability: doc:GLOSSARY.md#Текущий результат
 	totalPnl: {
-		title: "Общий P&L",
+		title: "Текущий результат",
 		purpose:
-			"Итог конструкции: суммарный результат её позиций с учётом внешних корректировок PnL.",
+			"Текущий результат конструкции: реализованный + нереализованный результат позиций и внешние корректировки PnL.",
 		method:
 			"Сумма реализованного и нереализованного P&L позиций и внешних корректировок PnL.",
 	},
@@ -295,22 +297,23 @@ export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip 
 		],
 	},
 
-	// Колонка «Общий P&L» таблицы позиций: сумма реализованной
-	// и нереализованной частей и процент от капитала.
+	// Колонка «Текущий результат» таблицы позиций: рыночные части PnL
+	// позиции без внешних корректировок и процент от капитала.
 	// Traceability: openspec:ui/screens#scenario-column-tooltip-sections-per-indicator
 	// Traceability: openspec:analytics/performance#scenario-position-total-pnl-includes-unrealized
+	// Traceability: doc:GLOSSARY.md#Текущий результат
 	positionTotalPnl: {
-		title: "Общий P&L",
+		title: "Текущий результат",
 		purpose:
-			"Полный результат позиции и его доля от выделенного капитала конструкции.",
+			"Текущий результат позиции и его доля от выделенного капитала конструкции.",
 		sections: [
 			{
 				label: "Значение, USDT",
-				text: "Общий P&L позиции: реализованный P&L плюс нереализованная оценка открытого остатка; у закрытой позиции равен реализованному.",
+				text: "Текущий результат позиции: реализованный P&L плюс нереализованная оценка открытого остатка; у закрытой позиции равен реализованному.",
 			},
 			{
 				label: "% от капитала",
-				text: "Общий P&L позиции в процентах от текущего выделенного капитала конструкции.",
+				text: "Текущий результат позиции в процентах от текущего выделенного капитала конструкции.",
 			},
 		],
 	},
@@ -449,14 +452,17 @@ export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip 
 			"Реализованный результат плюс суммарный минимум платежа групп открытых остатков (до клэмпа нулём): при остаточном риске — «реализованный минус реальный риск», при гарантированной прибыли остатков — выше реализованного; от текущих котировок не зависит.",
 	},
 
-	// Маркер итога на шкале индикатора: оценка мгновенной ликвидации
-	// остатков по средним котировкам, без комиссий закрытия.
-	// Traceability: doc:GLOSSARY.md#Маркер итога
+	// Маркер результата на шкале индикатора: рыночная часть — оценка
+	// «заберу при ликвидации сейчас» по средним котировкам, без комиссий
+	// закрытия; при сбое котировок подписывается доступной частью.
 	// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+	// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+	// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
+	// Traceability: doc:GLOSSARY.md#Маркер результата
 	totalMarker: {
-		title: "Маркер итога",
+		title: "Маркер результата",
 		purpose:
-			"Точка текущего итога на шкале индикатора: реализованный плюс нереализованный результат — оценка мгновенной ликвидации остатков по средним котировкам, без комиссий закрытия.",
+			"Точка текущего результата на шкале индикатора: реализованный и нереализованный результат — оценка остатков «заберу при ликвидации сейчас» по средним котировкам, без комиссий закрытия — плюс внешние корректировки; при сбое котировок подписывается доступной частью (реализованный + корректировки).",
 	},
 
 	// Колонка «Капитал» списка конструкций: выделенный капитал конструкции;
@@ -468,22 +474,23 @@ export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip 
 			"Выделенный капитал конструкции — база процентных метрик; показывается прочерком при незаданном значении.",
 	},
 
-	// Колонка «Итог» списка конструкций: итог конструкции с разделами
-	// реализованного и нереализованного результата.
+	// Колонка «Результат» списка конструкций: текущий результат конструкции.
 	// Traceability: openspec:ui/screens#requirement-construction-list-screen
 	// Traceability: openspec:analytics/performance#requirement-construction-metrics
+	// Traceability: change:unify-current-result/specs/analytics/performance/spec#scenario-construction-total-includes-adjustments
+	// Traceability: doc:GLOSSARY.md#Текущий результат
 	listTotal: {
-		title: "Итог",
+		title: "Результат",
 		purpose:
-			"Итог конструкции в строке списка: суммарный результат её позиций с учётом внешних корректировок PnL.",
+			"Результат конструкции в строке списка: текущий результат конструкции — реализованный + нереализованный результат позиций и внешние корректировки PnL.",
 		sections: [
 			{
-				label: "Реализованный, USDT",
-				text: "Реализованный P&L позиций конструкции.",
+				label: "Текущий результат конструкции, USDT",
+				text: "Реализованный + нереализованный результат позиций и внешние корректировки PnL.",
 			},
 			{
-				label: "Нереализованный, USDT",
-				text: "Нереализованная оценка открытых остатков конструкции по текущим котировкам.",
+				label: "% от капитала",
+				text: "Доля результата в текущей величине капитала.",
 			},
 		],
 	},

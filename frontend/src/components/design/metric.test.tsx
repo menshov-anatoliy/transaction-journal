@@ -59,10 +59,10 @@ describe("Metric: подпись/значение по дизайн-нодам",
 		);
 	});
 
-	it("valueClassName перекрашивает значение под инстанс M1 «Общий P&L»", () => {
+	it("valueClassName перекрашивает значение под инстанс M1 «Текущий результат»", () => {
 		// Act: инстанс ZzdbC — значение accentStrong 16.
 		render(
-			<Metric label="Общий P&L" valueClassName="text-[16px] text-accent-strong">
+			<Metric label="Текущий результат" valueClassName="text-[16px] text-accent-strong">
 				+385,30
 			</Metric>,
 		);

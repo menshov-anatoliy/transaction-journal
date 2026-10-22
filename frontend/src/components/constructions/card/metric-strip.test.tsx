@@ -864,36 +864,40 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(screen.getByText(/сверхприбыль — золотая зона за \+Профит/)).toBeTruthy();
 	});
 
-	it("поясняет насечку худшего исхода и маркер без устаревших формулировок", async () => {
+	it("поясняет насечку худшего исхода и маркер результата без устаревших формулировок", async () => {
 		// Сценарий «Пояснение отражает актуальную модель чтения»: подсказка
-		// объясняет насечку как худший исход конструкции и маркер как оценку
-		// «заберу при ликвидации сейчас»; формулировки устаревшей модели
-		// («реальный риск минус реализованная прибыль», «граница строится
-		// от нуля») в попапе отсутствуют.
-		// Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model
+		// объясняет насечку как худший исход конструкции к экспирации и
+		// маркер как текущий результат — реализованную часть, оценку
+		// остатков «заберу при ликвидации сейчас» и внешние корректировки;
+		// формулировки устаревшей модели («реальный риск минус
+		// реализованная прибыль», «граница строится от нуля», «оценка
+		// итога», «Общий P&L») в попапе отсутствуют.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model
 		// Arrange: открытая подсказка чтения.
 		const user = userEvent.setup();
 		renderStrip(makeCard());
 		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
 		const popup = screen.getByRole("dialog");
 
-		// Assert: насечка объяснена худшим исходом конструкции с подписью
-		// от плановой границы зоны, маркер — оценкой итога при ликвидации;
-		// устаревших формулировок во всём попапе нет.
-		expect(within(popup).getByText(/насечка — худший исход конструкции/)).toBeTruthy();
-		expect(within(popup).getByText(/маркер — оценка итога «заберу при ликвидации сейчас»/)).toBeTruthy();
+		// Assert: насечка объяснена худшим исходом конструкции к экспирации
+		// с подписью от плановой границы зоны, маркер — текущим результатом
+		// с разбивкой на части; устаревших формулировок во всём попапе нет.
+		expect(within(popup).getByText(/насечка — худший исход конструкции к экспирации/)).toBeTruthy();
+		expect(within(popup).getByText(/маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки/)).toBeTruthy();
+		expect(within(popup).queryByText(/оценка итога/)).toBeNull();
+		expect(within(popup).queryByText(/Общий P&L/)).toBeNull();
 		expect(within(popup).queryByText(/реальный риск минус реализованная прибыль/)).toBeNull();
 		expect(within(popup).queryByText(/граница строится от нуля/)).toBeNull();
 	});
 
 	it("объясняет насечку правее маркера синтетической фиксацией остатков и отсылает к зоне синтетики", async () => {
-		// Сценарий «Подсказка объясняет насечку правее маркера»: случай
-		// «насечка правее маркера итога» объясняется гарантией платежа
-		// остатков, в частности синтетической фиксацией по правилу ac-43,
-		// а место зафиксированной части названо строкой «зафиксировано
-		// синтетикой» и сводной величиной зоны синтетики карточки.
-		// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#scenario-tooltip-explains-notch-right-of-marker
-		// Traceability: change:add-synthetic-adjusted-finresult/specs/ui/screens/spec#scenario-tooltip-points-to-synthetic-zone
+		// Сценарии «Подсказка объясняет насечку правее маркера» и
+		// «Подсказка отсылает к зоне синтетики»: случай «насечка правее
+		// маркера» объясняется гарантией платежа остатков, в частности
+		// синтетической фиксацией по правилу ac-43, а место
+		// зафиксированной части названо зоной синтетики карточки.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-tooltip-explains-notch-right-of-marker
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-tooltip-points-to-synthetic-zone
 		// Arrange: открытая подсказка чтения.
 		const user = userEvent.setup();
 		renderStrip(makeCard());
@@ -902,11 +906,29 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 
 		// Assert: насечка правее маркера объяснена синтетической фиксацией
 		// остатков по правилу ac-43; зафиксированная часть адресована
-		// строкой лока и сводной величиной зоны синтетики.
-		expect(within(popup).getByText(/правее маркера итога/)).toBeTruthy();
+		// зоной синтетики карточки.
+		expect(within(popup).getByText(/при фиксации остатков синтетикой — и правее маркера/)).toBeTruthy();
 		expect(within(popup).getByText(/синтетическая фиксация по правилу ac-43/)).toBeTruthy();
-		expect(within(popup).getByText(/в строке «зафиксировано синтетикой»/)).toBeTruthy();
-		expect(within(popup).getByText(/сводной величине «с учётом зафиксированного синтетикой»/)).toBeTruthy();
+		expect(within(popup).getByText(/величина зафиксированного видна в зоне синтетики карточки/)).toBeTruthy();
+	});
+
+	it("объясняет расхождение насечки и маркера при полной синтетической фиксации", async () => {
+		// Сценарий «Подсказка объясняет расхождение при полной фиксации»:
+		// маркер может стоять левее насечки, потому что рыночная оценка
+		// «сейчас» несёт временную стоимость встречного опциона, спред и
+		// свежесть котировок — к экспирации значения сходятся.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-tooltip-explains-full-fix-divergence
+		// Arrange: открытая подсказка чтения.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
+		const popup = screen.getByRole("dialog");
+
+		// Assert: причина расхождения названа через временную стоимость
+		// встречного опциона и сходимость к экспирации.
+		expect(within(popup).getByText(/маркер может стоять левее насечки/)).toBeTruthy();
+		expect(within(popup).getByText(/временную стоимость встречного опциона, спред и свежесть котировок/)).toBeTruthy();
+		expect(within(popup).getByText(/к экспирации значения сходятся/)).toBeTruthy();
 	});
 
 	it("закрывается по Esc", async () => {
@@ -968,5 +990,65 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(row?.className).toContain("pt-[26px]");
 		expect(trigger.className).toContain("top-[4px]");
 		expect(trigger.className).toContain("size-5");
+	});
+});
+
+describe("ConstructionMetricStrip: метрика «текущий результат»", () => {
+	it("называет сводную «текущий результат» и показывает полную сумму", () => {
+		// Сценарий «Маркер результата включает внешние корректировки»:
+		// метрика сводки «текущий результат» показывает то же число, что
+		// маркер индикатора, — реализованную часть, нереализованную и
+		// внешние корректировки; имя «общий P&L» больше не используется.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+		// Arrange: метрики карточки 60.25 + 40.25 + 5 = 105.5 USDT.
+		renderStrip(makeCard());
+
+		// Assert: метка переименована, значение — полная сумма, старой
+		// метки в сводке нет.
+		expect(screen.getByText("текущий результат")).toBeTruthy();
+		expect(screen.getByText("+105.5 USDT")).toBeTruthy();
+		expect(screen.queryByText("общий P&L")).toBeNull();
+	});
+
+	it("помечает неполный текущий результат сбоем котировок с пояснением в тайтле", () => {
+		// Сценарий «Сбой котировок оставляет результат по доступной части»:
+		// без нереализованной части метрика помечена неполной, тайтл
+		// называет новую метку и причину неполноты.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
+		// Arrange: сбой котировок — нереализованная часть и итог null.
+		const base = makeCard();
+		const card = makeCard({
+			hasQuoteFailure: true,
+			metrics: { ...base.metrics, unrealizedPnL: null, totalPnL: null },
+		});
+
+		// Act: рендер сводки карточки.
+		renderStrip(card);
+
+		// Assert: признак неполноты сопровождён тайтлом про текущий
+		// результат и сбой котировок.
+		const incomplete = screen.getByText("неполный (сбой котировок)");
+		expect(incomplete.getAttribute("title")).toBe(
+			"Текущий результат неполный: нереализованная часть не оценена из-за сбоя котировок",
+		);
+	});
+});
+
+describe("ConstructionMetricStrip: вход индикатора результата", () => {
+	it("прокидывает внешние корректировки PnL во вход индикатора", () => {
+		// Сценарий «Маркер результата включает внешние корректировки»:
+		// маркер подписан полной суммой реализованной части, доступной
+		// нереализованной и внешних корректировок — без прокидывания
+		// adjustmentsPnL подпись была бы меньше на их величину.
+		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+		// Arrange: метрики карточки 60.25 + 40.25 + 5 = 105.5 USDT;
+		// подпись маркера без корректировок была бы «+100.5».
+		renderStrip(makeCard());
+
+		// Assert: подпись маркера полного индикатора — полная сумма
+		// текущего результата.
+		const markerLabel = document.querySelector<HTMLElement>('[data-part="marker-label"]');
+		expect(markerLabel).not.toBeNull();
+		expect(markerLabel?.textContent).toBe("+105.5");
 	});
 });

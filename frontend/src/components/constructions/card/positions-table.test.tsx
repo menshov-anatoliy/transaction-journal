@@ -472,7 +472,7 @@ describe("PositionsTable: подсказки заголовков числовы
 			["До экспирации", "daysToExpiry"],
 			["Распад", "decayPerDay"],
 			["Нереализ. P&L", "positionUnrealizedPnl"],
-			["Общий P&L", "positionTotalPnl"],
+			["Текущий результат", "positionTotalPnl"],
 			["Комиссии", "commissionFees"],
 		] as const) {
 			// Act: наведение на заголовок очередной колонки.

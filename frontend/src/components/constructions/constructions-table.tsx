@@ -23,7 +23,7 @@ import { useIsMobile } from "@/lib/use-mobile";
 
 // Таблица конструкций раздела по концепции §3: паритет колонок мастера
 // design.pen, бейджи живых подсказок и предупреждений в строке, компактный
-// индикатор финрезультата в ячейке итога, клик по строке выделяет (не
+// индикатор финрезультата в ячейке результата, клик по строке выделяет (не
 // навигация), сортировка колонками.
 // Traceability: doc:.wf-research/ui-concept/concept.md#3-раздел-конструкции-маршрут-
 
@@ -52,7 +52,7 @@ function hasOpenResidual(row: ConstructionRow): boolean {
 	return row.quoteValue !== null || row.unrealizedPnL === null;
 }
 
-/** Тон итоговых величин: положительная — акцентно-зелёная, отрицательная — красная. */
+/** Тон результата: положительная величина — акцентно-зелёная, отрицательная — красная. */
 function toneClass(value: number): string {
 	if (value > 0) {
 		return "text-[color:var(--fin-positive-strong)]";
@@ -192,7 +192,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "Капитал",
 				accessorKey: "allocatedCapitalUsdt",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				cell: ({ row }) => <DegradedValue value={row.original.allocatedCapitalUsdt} format={formatAmount} />,
 			},
@@ -201,7 +201,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "Стоимость",
 				accessorKey: "quoteValue",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				cell: ({ row }) =>
 					row.original.quoteValue === null && quotesDegraded(row.original) ? (
@@ -229,7 +229,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "Нереализов.",
 				accessorKey: "unrealizedPnL",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				cell: ({ row }) =>
 					row.original.unrealizedPnL === null ? (
@@ -257,17 +257,17 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 			},
 			{
 				id: "total",
-				header: "Итог",
+				header: "Результат",
 				accessorKey: "totalPnL",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				cell: ({ row }) => (
 					<div className="flex flex-col gap-1">
 						{row.original.totalPnL === null ? (
-							// Итог без нереализованной части неполный — признак
-							// сбоя котировок, а не прочерк нулевого итога.
-							<span className="text-muted-foreground" title="Итог неполный: нереализованная часть не оценена из-за сбоя котировок">
+							// Результат без нереализованной части неполный — признак
+							// сбоя котировок, а не прочерк нулевого результата.
+							<span className="text-muted-foreground" title="Результат неполный: нереализованная часть не оценена из-за сбоя котировок">
 								неполный
 							</span>
 						) : (
@@ -281,6 +281,11 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 								plannedProfit: row.original.profitUsdt,
 								realized: row.original.realizedPnL,
 								unrealized: row.original.unrealizedPnL,
+								// Текущий результат конструкции включает внешние
+								// корректировки PnL: маркер результата ставится
+								// по полной сумме, а не только по частям PnL.
+								// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+								adjustments: row.original.adjustmentsPnL,
 								quotesDegraded: quotesDegraded(row.original),
 								// Открытые остатки строки из семантики read-модели.
 								// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
@@ -304,7 +309,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "% капитала",
 				accessorKey: "totalPnLPercent",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				cell: ({ row }) =>
 					row.original.totalPnLPercent === null ? (
@@ -320,7 +325,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "Занято %",
 				accessorKey: "capitalUsagePercent",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				// Занятость капитала — вторичным текстом по мастеру списка.
 				// Traceability: openspec:ui/screens#requirement-construction-list-screen
@@ -333,7 +338,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "До экспирации",
 				accessorKey: "daysToNearestExpiry",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				// Колонки времени жизни строки: остаток суток до ближайшей экспирации
 				// открытых опционных ног и нетто-дневной распад; без опционных ног —
@@ -351,7 +356,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "Распад",
 				accessorKey: "netDailyDecayUsdt",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				// Распад деградирует без тикеров прочерком, остаток суток остаётся
 				// доступным и без рыночных данных.
@@ -370,7 +375,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "Открыта",
 				accessorKey: "openedAt",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				cell: ({ row }) => <DegradedValue value={row.original.openedAt} format={formatDay} tone="text-text-secondary" />,
 			},
@@ -379,7 +384,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 				header: "Закрыта",
 				accessorKey: "closedAt",
 				sortingFn: "basic",
-				// Числовые колонки сортируются от большего к меньшему: сильнейший итог сверху.
+				// Числовые колонки сортируются от большего к меньшему: сильнейший результат сверху.
 				sortDescFirst: true,
 				cell: ({ row }) => <DegradedValue value={row.original.closedAt} format={formatDay} tone="text-text-secondary" />,
 			},
@@ -429,7 +434,7 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 								<span>· капитал {row.allocatedCapitalUsdt === null ? DASH : formatAmount(row.allocatedCapitalUsdt)}</span>
 							</div>
 							<p className="mt-1 text-sm">
-								итог: {row.totalPnL === null ? "неполный" : formatSignedAmount(row.totalPnL)} ·
+								результат: {row.totalPnL === null ? "неполный" : formatSignedAmount(row.totalPnL)} ·
 								{" "}реализов. {formatSignedAmount(row.realizedPnL)} ·
 								{" "}нереализов. {row.unrealizedPnL === null ? "сбой котировок" : formatSignedAmount(row.unrealizedPnL)}
 							</p>

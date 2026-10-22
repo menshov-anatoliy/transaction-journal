@@ -61,6 +61,11 @@ export function ConstructionPreviewCard({ preview, liveHintCount }: Construction
 					plannedProfit: preview.profitUsdt,
 					realized: preview.realizedPnL,
 					unrealized: preview.unrealizedPnL,
+					// Текущий результат конструкции включает внешние
+					// корректировки PnL: маркер результата среднего
+					// индикатора ставится по полной сумме.
+					// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-includes-adjustments
+					adjustments: preview.adjustmentsPnL,
 					quotesDegraded: preview.hasQuoteFailure,
 					// Открытые остатки есть, пока есть позиции с ненулевым
 					// остатком: без них сбой котировок не делает индикатор неполным.
