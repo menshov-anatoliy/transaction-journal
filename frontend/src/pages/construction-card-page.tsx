@@ -20,10 +20,7 @@ import { MarkdownViewer } from "@/components/markdown/markdown-viewer";
 import { MarkdownEditDialog } from "@/components/markdown/markdown-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/http";
-import { DASH } from "@/lib/format/degradation";
 import { formatCount } from "@/lib/format/plural";
-import { formatAmount } from "@/lib/format/quantity";
-import { formatMoment } from "@/lib/format/display-time";
 import type { ConstructionCard, ConstructionCardRiskWarning, SyntheticCloseManualLinkInput, TargetUnit } from "@/lib/api/construction-card";
 
 // Карточка конструкции — маршрут /constructions/{id} по концепции §4: полная
@@ -351,41 +348,11 @@ function firstError(...mutations: readonly { isError: boolean; error: Error | nu
 	return null;
 }
 
-// Текст реального риска в Meta-строке: число при конечном статусе,
-// каноническая подпись статуса иначе — по подписям resolveRiskStateLabel
-// геометрии финрезультата; прочерк здесь не используется, чтобы сбой
-// расчёта и неограниченный хвост не выглядели как «нет данных».
+// Мета-строка под заголовком упразднена: введённые значения живут
+// в группах заголовка конструкции — плановые риск/профит в ПЛАНе, реальный
+// риск (или его статус) в РИСКе, выделенный капитал в ПОЗИЦИИ, дата
+// открытия — в показателе периода сводки.
 // Traceability: openspec:ui/screens#scenario-detail-header-meta-line
-function realRiskMetaText(card: ConstructionCard): string {
-	if (card.metrics.realRiskStatus === "unbounded") {
-		return "не ограничен";
-	}
-
-	if (card.metrics.realRiskStatus === "unavailable" || card.metrics.realRiskUsdt === null) {
-		return "не удалось рассчитать";
-	}
-
-	return formatAmount(card.metrics.realRiskUsdt);
-}
-
-// Meta-строка под заголовком (мастер Uw04r Meta): плановый риск/профит,
-// реальный риск со статусом, капитал и дата открытия; пустые плановые
-// значения и капитал — прочерк, дату и числа выводит проектный слой
-// формата, чтобы подписи не разъезжались с таблицами и сводкой.
-// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
-function headerMeta(card: ConstructionCard): string {
-	const planLine = `плановый риск ${card.riskUsdt === null ? DASH : formatAmount(card.riskUsdt)} / плановый профит ${card.profitUsdt === null ? DASH : formatAmount(card.profitUsdt)}`;
-	const capitalLine = card.allocatedCapitalUsdt === null
-		? `капитал ${DASH}`
-		: `капитал ${formatAmount(card.allocatedCapitalUsdt)} USDT`;
-
-	return [
-		planLine,
-		`реальный риск ${realRiskMetaText(card)}`,
-		capitalLine,
-		`открыта ${formatMoment(card.metrics.openedAt)}`,
-	].join(" · ");
-}
 
 /** Шапка карточки: имя, статус, действия и отказы домена причиной. */
 function ConstructionHeader({
@@ -501,9 +468,10 @@ function ConstructionHeader({
 				</Link>
 			</Button>
 
-			{/* Титул с именем и статусом-пилюлей: строка TitleRow мастера Body #2
-			    (Uw04r) — имя 21/600, чип статуса и кнопка меню «Параметры»
-			    с зазором 10, выравнивание по центру строки. */}
+			{/* Титул и действия в одной строке по обновлённой строке TitleRow
+			    мастера Body #2 (Uw04r): слева имя 21/600, чип статуса и кнопка
+			    меню «Параметры» с зазором 10; справа за Spacer-ом — кнопки
+			    действий, выравнивание по центру строки. */}
 			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
 			<div className="flex flex-wrap items-center gap-2.5">
 				<h1 className="page-title flex flex-wrap items-center gap-2.5">
@@ -530,81 +498,80 @@ function ConstructionHeader({
 						{ label: "Профит…", icon: TrendingUp, onSelect: () => openBound("profit") },
 					]}
 				/>
+
+				{/* Иконочные действия шапки в хвосте титульной строки мастера
+				    Uw04r: переименование (ghost с карандашом), смена ручного
+				    статуса (secondary), архив и возврат из архива (ghost),
+				    удаление пустой конструкции (destructive). Отдельного
+				    действия «В новом окне» в шапке нет. ml-auto прижимает
+				    действия вправо, как Spacer в макете. */}
+				{/* Traceability: openspec:ui/screens#scenario-detail-no-new-window-button */}
+				<div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+					{renameOpen ? (
+						<div className="flex items-center gap-2">
+							<input
+								className="border-input bg-background h-8 w-64 rounded-md border px-2 text-sm"
+								value={renameValue}
+								onChange={(event) => setRenameValue(event.target.value)}
+								aria-label="новое имя"
+							/>
+							<Button
+								size="sm"
+								disabled={busy || renameValue.trim() === ""}
+								onClick={() => {
+									commands.rename.mutate(renameValue.trim(), { onSuccess: () => setRenameOpen(false) });
+								}}
+							>
+								Сохранить имя
+							</Button>
+							<Button size="sm" variant="outline" onClick={() => setRenameOpen(false)}>
+								Отмена
+							</Button>
+						</div>
+					) : (
+						<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => {
+							setRenameValue(card.name);
+							setRenameOpen(true);
+						}}>
+							<Pencil aria-hidden className="size-3.5" />
+							Переименовать
+						</Button>
+					)}
+
+					{/* Смена ручного статуса — свободные переходы; возврат из архива
+					    восстанавливает статус «закрыта». */}
+					{card.status === "open" && (
+						<Button variant="secondary" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("closed")}>
+							Закрыть
+						</Button>
+					)}
+					{card.status === "closed" && (
+						<Button variant="secondary" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("open")}>
+							Открыть
+						</Button>
+					)}
+					{card.status !== "archived" ? (
+						<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("archived")}>
+							В архив
+						</Button>
+					) : (
+						<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("closed")}>
+							Вернуть из архива
+						</Button>
+					)}
+
+					{canDelete && (
+						<Button variant="destructive" size="sm" className="text-xs" disabled={busy} onClick={() => setDeleteOpen(true)}>
+							Удалить
+						</Button>
+					)}
+				</div>
 			</div>
 
-			{/* Иконочные действия шапки по Row2 мастера Uw04r: переименование
-			    (ghost с карандашом), смена ручного статуса (secondary), архив
-			    и возврат из архива (ghost), удаление пустой конструкции
-			    (destructive). Отдельного действия «В новом окне» в шапке нет. */}
-			{/* Traceability: openspec:ui/screens#scenario-detail-no-new-window-button */}
-			<div className="flex flex-wrap items-center justify-end gap-2">
-				{renameOpen ? (
-					<div className="flex items-center gap-2">
-						<input
-							className="border-input bg-background h-8 w-64 rounded-md border px-2 text-sm"
-							value={renameValue}
-							onChange={(event) => setRenameValue(event.target.value)}
-							aria-label="новое имя"
-						/>
-						<Button
-							size="sm"
-							disabled={busy || renameValue.trim() === ""}
-							onClick={() => {
-								commands.rename.mutate(renameValue.trim(), { onSuccess: () => setRenameOpen(false) });
-							}}
-						>
-							Сохранить имя
-						</Button>
-						<Button size="sm" variant="outline" onClick={() => setRenameOpen(false)}>
-							Отмена
-						</Button>
-					</div>
-				) : (
-					<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => {
-						setRenameValue(card.name);
-						setRenameOpen(true);
-					}}>
-						<Pencil aria-hidden className="size-3.5" />
-						Переименовать
-					</Button>
-				)}
-
-				{/* Смена ручного статуса — свободные переходы; возврат из архива
-				    восстанавливает статус «закрыта». */}
-				{card.status === "open" && (
-					<Button variant="secondary" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("closed")}>
-						Закрыть
-					</Button>
-				)}
-				{card.status === "closed" && (
-					<Button variant="secondary" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("open")}>
-						Открыть
-					</Button>
-				)}
-				{card.status !== "archived" ? (
-					<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("archived")}>
-						В архив
-					</Button>
-				) : (
-					<Button variant="ghost" size="sm" className="text-xs" disabled={busy} onClick={() => commands.status.mutate("closed")}>
-						Вернуть из архива
-					</Button>
-				)}
-
-				{canDelete && (
-					<Button variant="destructive" size="sm" className="text-xs" disabled={busy} onClick={() => setDeleteOpen(true)}>
-						Удалить
-					</Button>
-				)}
-			</div>
-
-			{/* Meta-строка под заголовком (Meta мастера Uw04r): плановые
-			    риск/профит, реальный риск со статусом состояния, капитал и дата
-			    открытия; пустые значения — прочерк проектного слоя формата. */}
+			{/* Мета-строка под заголовком не выводится: плановые значения,
+			    реальный риск и капитал — в группах сводки, дата открытия —
+			    в показателе периода. */}
 			{/* Traceability: openspec:ui/screens#scenario-detail-header-meta-line */}
-			<p data-slot="construction-header-meta" className="text-text-muted text-xs">
-				{headerMeta(card)}
-			</p>
 
 			{/* Форма капитала открывается пунктом меню «Параметры»; пустое
 			    поле снимает капитал, ошибка ввода форму не закрывает. */}

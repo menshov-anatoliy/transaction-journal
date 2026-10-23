@@ -113,7 +113,12 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				// прочерки, деградация без тикеров решена в аналитике.
 				// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
 				item.Lifetime?.Summary?.DaysToNearestExpiry,
-				item.Lifetime?.Summary?.NetDailyDecayUsdt));
+				item.Lifetime?.Summary?.NetDailyDecayUsdt,
+				// Суммарная внутренняя стоимость проходит из того же саммари рядом
+				// с распадом и временной стоимостью без пересчёта: null — ног нет
+				// или тикеры недоступны.
+				// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+				item.Lifetime?.Summary?.TotalIntrinsicValueUsdt));
 		}
 
 		// Счётчик сводки описывает видимые конструкции: сколько в списке и сколько

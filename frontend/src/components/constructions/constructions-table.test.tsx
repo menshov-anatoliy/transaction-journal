@@ -38,6 +38,7 @@ const openRow: ConstructionRow = {
 	riskWarningsCount: 1,
 	daysToNearestExpiry: 9,
 	netDailyDecayUsdt: -6.8,
+	totalIntrinsicValueUsdt: 640,
 };
 
 const closedRow: ConstructionRow = {
@@ -65,6 +66,7 @@ const closedRow: ConstructionRow = {
 	riskWarningsCount: 0,
 	daysToNearestExpiry: null,
 	netDailyDecayUsdt: null,
+	totalIntrinsicValueUsdt: null,
 };
 
 /** Рендер таблицы внутри провайдера подсказок: Radix Tooltip требует провайдера. */

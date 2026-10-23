@@ -54,6 +54,7 @@ const card: ConstructionCard = {
 		daysToNearestExpiry: 9,
 		netDailyDecayUsdt: -6.8,
 		totalTimeValueUsdt: 1240,
+		totalIntrinsicValueUsdt: 640,
 	},
 	positions: [
 		{
@@ -323,34 +324,48 @@ describe("карточка конструкции: действия и ввод"
 		expect(screen.queryByRole("button", { name: "Изменить капитал" })).not.toBeInTheDocument();
 	});
 
-	// Meta-строка под заголовком: плановые риск/профит, реальный риск числом
-	// при конечном статусе, капитал и дата открытия.
+	// Мета-строки под заголовком больше нет: введённые значения живут
+	// в группах заголовка — плановые риск/профит в ПЛАНе, реальный риск
+	// в РИСКе, капитал в ПОЗИЦИИ, дата открытия — в показателе периода.
 	// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
-	it("TryIfHeaderMetaLineShowsPlannedAndRealValues", async () => {
+	it("TryIfHeaderMetaLineIsGoneAndPlannedValuesLiveInSummaryGroups", async () => {
 		renderCardPage();
 		await screen.findByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i });
-		const meta = document.querySelector('[data-slot="construction-header-meta"]');
-		expect(meta?.textContent).toContain("плановый риск 90 / плановый профит 240");
-		expect(meta?.textContent).toContain("реальный риск 45");
-		expect(meta?.textContent).toContain("капитал 3000 USDT");
-		expect(meta?.textContent).toMatch(/открыта 2026-06-18 \d{2}:05/);
+
+		// Мета-строка не выводится вовсе.
+		expect(document.querySelector('[data-slot="construction-header-meta"]')).toBeNull();
+
+		// Введённые значения — в группах сводки: плановые границы, реальный
+		// риск и капитал с единицей USDT; дата открытия — в периоде.
+		const summary = document.querySelector('[data-slot="construction-metrics-card"]');
+		expect(summary).not.toBeNull();
+		const withinSummary = within(summary as HTMLElement);
+		expect(withinSummary.getByText("90 USDT")).toBeInTheDocument();
+		expect(withinSummary.getByText("240 USDT")).toBeInTheDocument();
+		expect(withinSummary.getByText("45 USDT")).toBeInTheDocument();
+		expect(withinSummary.getByText("3000 USDT")).toBeInTheDocument();
+		expect(withinSummary.getByText(/2026-06-18/)).toBeInTheDocument();
 	});
 
-	// Неконечный реальный риск показывается канонической подписью статуса:
-	// неограниченный хвост и сбой расчёта не превращаются в прочерк или ноль.
+	// Неконечный реальный риск показывается канонической подписью статуса
+	// в группе РИСК сводки: неограниченный хвост и сбой расчёта не
+	// превращаются в прочерк или ноль.
 	// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
 	it.each([
-		["unbounded", "реальный риск не ограничен"],
-		["unavailable", "реальный риск не удалось рассчитать"],
-	] as const)("TryIfHeaderMetaLineShowsNonFiniteRealRiskStatus %s", async (status, label) => {
+		["unbounded", "не ограничен"],
+		["unavailable", "не удалось рассчитать"],
+	] as const)("TryIfRealRiskStatusShownInRiskGroup %s", async (status, label) => {
 		cardApi.fetchConstructionCard.mockResolvedValue({
 			...card, metrics: { ...card.metrics, realRiskUsdt: null, realRiskStatus: status },
 		});
 		renderCardPage();
 		await screen.findByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i });
-		const meta = document.querySelector('[data-slot="construction-header-meta"]');
-		expect(meta?.textContent).toContain(label);
-		expect(meta?.textContent).not.toContain("реальный риск 45");
+
+		const summary = document.querySelector('[data-slot="construction-metrics-card"]');
+		expect(summary).not.toBeNull();
+		const withinSummary = within(summary as HTMLElement);
+		expect(withinSummary.getByText(label)).toBeInTheDocument();
+		expect(withinSummary.queryByText("45 USDT")).toBeNull();
 	});
 
 	// Невалидный маршрут показывает «не найдена», а не вечное чтение.
@@ -689,12 +704,15 @@ describe("карточка конструкции", () => {
 		// Traceability: openspec:ui/design-system#requirement-typography-matches-design-system
 		expect(screen.getByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i }).className).toContain("page-title");
 
-		// Kstrip: итог с процентом капитала, разбивка, стоимость, занятость.
+		// Kstrip: группы заголовка — итог с процентом капитала и разбивкой;
+		// служебные показатели (стоимость, занятость, корректировки) несут
+		// таблицы позиций и корректировок.
 		expect(screen.getByText("текущий результат")).toBeInTheDocument();
 		expect(screen.getByText("+105.5 USDT")).toBeInTheDocument();
 		expect(screen.getByText("+3.5%")).toBeInTheDocument();
+		// Техстрока котировок вне групп: момент показывается в локальной зоне
+		// браузера — сверяем дату и минуты.
 		expect(screen.getByText("котировки на")).toBeInTheDocument();
-		// Момент показывается в локальной зоне браузера — сверяем дату и минуты.
 		expect(screen.getByText(/2026-06-20 \d{2}:30/)).toBeInTheDocument();
 		expect(screen.getByText("период")).toBeInTheDocument();
 
@@ -806,47 +824,51 @@ describe("карточка конструкции", () => {
 	});
 });
 
-// Примитивы дизайн-системы в карточке (задача 7.2 change
-// reconcile-frontend-with-design): сводка метрик — примитив Метрика по
-// мастеру «Сводка метрик» (h69OG) Body #2, статус — примитив Чип/Статус.
+// Примитивы дизайн-системы в карточке: сводка метрик — примитив Метрика
+// в группах заголовка по мастеру «Заголовок конструкции» (изменение
+// construction-header-groups), статус — примитив Чип/Статус.
 // Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
-// Traceability: change:reconcile-frontend-with-design/design#D2
 
 describe("карточка конструкции: примитивы дизайн-системы", () => {
-	it("рендерит все 12 показателей сводки примитивом Metric в карточке мастера h69OG", async () => {
+	it("рендерит показатели сводки группами примитивом Metric на подложках", async () => {
 		// Act: карточка открытой конструкции с оценёнными котировками.
 		renderCardPage();
 
-		// Assert: 12 инстансов Метрики — M1–M9 мастера «Сводка метрик» (h69OG)
-		// и три метрики саммари времени жизни (ML1–ML3 макета).
+		// Assert: 14 инстансов Метрики в пяти группах заголовка — ПЛАН (2),
+		// ПОЗИЦИЯ (5 при заданном капитале), РИСК (2), ВРЕМЯ (2), СТОИМОСТЬ (3).
 		expect(await screen.findByText("текущий результат")).toBeInTheDocument();
 		const metrics = document.querySelectorAll('[data-slot="metric"]');
-		expect(metrics).toHaveLength(12);
+		expect(metrics).toHaveLength(14);
 
 		// Контейнер сводки — surface-карточка радиуса 12 с каймой, паддинги
-		// [14,18]: колонка с зазором 12 (нода h69OG после 5.1 change
-		// synthetic-close-logical-layer), внутри — строка метрик с зазором 20.
-		const card = document.querySelector('[data-slot="construction-metrics-card"]');
-		expect(card?.className).toContain("rounded-lg");
-		expect(card?.className).toContain("border");
-		expect(card?.className).toContain("bg-surface");
-		expect(card?.className).toContain("px-[18px]");
-		expect(card?.className).toContain("py-3.5");
-		expect(card?.className).toContain("flex-col");
-		expect(card?.className).toContain("gap-3");
-		const row = card?.querySelector("div");
-		expect(row?.className).toContain("gap-5");
+		// [14,18]: колонка с зазором 12; группы — подложки surface2 радиуса 8
+		// на grid-рядах модульной сетки (ячейка Г1 мастера).
+		// Traceability: change:construction-header-groups/design#d2
+		const cardEl = document.querySelector('[data-slot="construction-metrics-card"]');
+		expect(cardEl?.className).toContain("rounded-lg");
+		expect(cardEl?.className).toContain("border");
+		expect(cardEl?.className).toContain("bg-surface");
+		expect(cardEl?.className).toContain("px-[18px]");
+		expect(cardEl?.className).toContain("py-3.5");
+		expect(cardEl?.className).toContain("flex-col");
+		expect(cardEl?.className).toContain("gap-3");
+		const groups = document.querySelectorAll('[data-slot="metric-group"]');
+		expect(groups).toHaveLength(5);
+		for (const group of groups) {
+			expect(group.className).toContain("bg-surface-2");
+			expect(group.className).toContain("rounded-sm");
+		}
 
-		// Итог (M1) — значение 16/600: единственный акцентный кегль строки.
-		const first = metrics[0]?.querySelector('[data-slot="metric-value"]');
-		expect(first?.className).toContain("text-[16px]");
-		expect(first?.className).toContain("tabular-nums");
-
-		// Остальные показатели (M2–M9 и саммари времени жизни) — значение
-		// 14/600 поверх примитива.
-		const second = metrics[1]?.querySelector('[data-slot="metric-value"]');
-		expect(second?.className).toContain("text-[14px]");
-		expect(second?.className).not.toContain("text-[16px]");
+		// Итог («текущий результат») — значение 16/600: единственный акцентный
+		// кегль сводки; остальные показатели — значение 14/600 поверх примитива.
+		const byLabel = (label: string) =>
+			[...metrics].find((metric) => metric.firstElementChild?.textContent === label);
+		const total = byLabel("текущий результат");
+		expect(total?.querySelector('[data-slot="metric-value"]')?.className).toContain("text-[16px]");
+		expect(total?.querySelector('[data-slot="metric-value"]')?.className).toContain("tabular-nums");
+		const plannedRisk = byLabel("плановый риск");
+		expect(plannedRisk?.querySelector('[data-slot="metric-value"]')?.className).toContain("text-[14px]");
+		expect(plannedRisk?.querySelector('[data-slot="metric-value"]')?.className).not.toContain("text-[16px]");
 
 		// Подписи — Caption мастера: 11/normal textMuted с трекингом 0.3.
 		const caption = metrics[0]?.querySelector("span");

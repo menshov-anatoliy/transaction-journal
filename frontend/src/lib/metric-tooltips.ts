@@ -35,6 +35,7 @@ export type MetricTooltipKey =
 	| "daysToExpiry"
 	| "decayPerDay"
 	| "timeValue"
+	| "intrinsic"
 	| "priceChangePercent"
 	| "positionValue"
 	| "positionRealizedPnl"
@@ -53,8 +54,10 @@ export type MetricTooltipKey =
 	| "plannedRisk"
 	| "plannedProfit"
 	| "worstCase"
+	| "realRisk"
 	| "totalMarker"
 	| "listCapital"
+	| "allocatedCapital"
 	| "listTotal"
 	| "constructionCounters"
 	| "closingEntryDetails";
@@ -233,6 +236,19 @@ export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip 
 			"Суммарная временная стоимость открытых опционных остатков конструкции.",
 		method:
 			"Котировка минус внутренняя стоимость, на контракт и на чистый остаток, суммарно по открытым опционным ногам; внутренняя стоимость — max(0, цена базового актива − страйк) для колла и max(0, страйк − цена) для пута.",
+	},
+
+	// Суммарная внутренняя стоимость открытых опционных остатков — пара
+	// к временной в группе СТОИМОСТЬ заголовка; деградация — прочерк
+	// без опционных ног или тикеров.
+	// Traceability: openspec:analytics/option-lifetime#requirement-leg-intrinsic-time-value
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	intrinsic: {
+		title: "Внутренняя стоимость",
+		purpose:
+			"Суммарная внутренняя стоимость открытых опционных остатков конструкции.",
+		method:
+			"max(0, цена базового актива − страйк) для колла и max(0, страйк − цена) для пута, на контракт и на чистый остаток, суммарно по открытым опционным ногам; без тикеров ноги не оценивается.",
 	},
 
 	// «Изм., %» — движение текущей котировки от средней цены открытого остатка
@@ -452,6 +468,19 @@ export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip 
 			"Реализованный результат плюс суммарный минимум платежа групп открытых остатков (до клэмпа нулём): при остаточном риске — «реализованный минус реальный риск», при гарантированной прибыли остатков — выше реализованного; от текущих котировок не зависит.",
 	},
 
+	// Реальный риск в группе РИСК заголовка конструкции: число при конечном
+	// статусе, канонический текст статуса при unbounded/unavailable —
+	// пара «величина + статус» из read-модели без заглушек.
+	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Traceability: doc:GLOSSARY.md#Реальный риск
+	realRisk: {
+		title: "Реальный риск",
+		purpose:
+			"Худший сценарий по структуре открытых остатков на оси цены базового актива: совместный минимум платежа ног групп; публикуется парой — число при конечном статусе, иначе статус «не ограничен» или «не удалось рассчитать».",
+		method:
+			"Совместный минимум платежа групп открытых остатков по оси цены базового актива, где линейные ноги входят в группу своего базового актива; из структуры ног и средней цены открытого остатка, от текущих котировок не зависит; после закрытия остатков равен нулю.",
+	},
+
 	// Маркер результата на шкале индикатора: рыночная часть — оценка
 	// «заберу при ликвидации сейчас» по средним котировкам, без комиссий
 	// закрытия; при сбое котировок подписывается доступной частью.
@@ -470,6 +499,15 @@ export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip 
 	// Traceability: openspec:ui/screens#requirement-construction-list-screen
 	listCapital: {
 		title: "Капитал",
+		purpose:
+			"Выделенный капитал конструкции — база процентных метрик; показывается прочерком при незаданном значении.",
+	},
+
+	// Выделенный капитал в группе ПОЗИЦИЯ заголовка карточки: база
+	// процентных метрик группы; прочерк при незаданном значении.
+	// Traceability: change:construction-header-groups/specs/ui/screens/spec#scenario-detail-summary-metrics-period
+	allocatedCapital: {
+		title: "Выделенный капитал",
 		purpose:
 			"Выделенный капитал конструкции — база процентных метрик; показывается прочерком при незаданном значении.",
 	},

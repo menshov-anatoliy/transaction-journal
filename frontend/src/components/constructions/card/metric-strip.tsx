@@ -2,6 +2,7 @@ import * as React from "react";
 import { ChevronDown, CircleHelp } from "lucide-react";
 import type {
 	ConstructionCard,
+	RealRiskStatus,
 	SyntheticCloseDisputeInput,
 	SyntheticCloseManualLinkInput,
 } from "@/lib/api/construction-card";
@@ -19,13 +20,12 @@ import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { ManualSyntheticLinkForm } from "./manual-synthetic-link-form";
 import { cn } from "@/lib/utils";
 
-// Сводка метрик карточки (kstrip) по концепции §4: текущий результат,
-// % капитала,
-// стоимость, занятость, реализованная и нереализованная части, корректировки,
-// «котировки на» и период с длительностью; под сводкой — полный индикатор
-// финансового результата (§9). Деградация при сбое котировок — признак сбоя
-// вместо нереализованных величин.
-// Traceability: doc:.wf-research/ui-concept/concept.md#4-карточка-конструкции-маршрут-constructionsid
+// Заголовок конструкции (kstrip): сводка метрик, сгруппированных по зеркалу
+// индикатора финрезультата — ПЛАН, ПОЗИЦИЯ, РИСК, ВРЕМЯ, СТОИМОСТЬ на
+// тонированных подложках, техстрока котировок; под сводкой — полный
+// индикатор финансового результата. Деградации — признак сбоя вместо
+// нереализованных величин.
+// Traceability: openspec:ui/screens#requirement-construction-detail-screen
 
 /** Пропсы kstrip метрик карточки. */
 export interface ConstructionMetricStripProps {
@@ -60,6 +60,295 @@ function toneClass(value: number): string {
 	}
 
 	return value < 0 ? "text-[color:var(--fin-negative)]" : "";
+}
+
+/** Ключи групп заголовка: зеркальные зоны индикатора финрезультата. */
+type MetricGroupKey = "plan" | "position" | "risk" | "time" | "value";
+
+/** Капс-метки групп; верхний регистр задаёт стиль метки, а не текст. */
+const METRIC_GROUP_LABELS: { readonly [K in MetricGroupKey]: string } = {
+	plan: "план",
+	position: "позиция",
+	risk: "риск",
+	time: "время",
+	value: "стоимость",
+};
+
+/** Статичная конфигурация рядов заголовка: ряд 1 — ПЛАН фиксированной
+    модульной ширины 350px и ПОЗИЦИЯ до края ряда, ряд 2 — три равных
+    группы РИСК · ВРЕМЯ · СТОИМОСТЬ; зазор между группами 12px. */
+// Traceability: openspec:ui/screens#scenario-detail-header-modular-grid
+const METRIC_GROUP_ROWS: readonly {
+	readonly className: string;
+	readonly groups: readonly MetricGroupKey[];
+}[] = [
+	{ className: "grid-cols-[minmax(350px,auto)_1fr]", groups: ["plan", "position"] },
+	{ className: "grid-cols-3", groups: ["risk", "time", "value"] },
+];
+
+/** Группа заголовка (ячейка Г1 мастера): капс-метка 9.5/500 с трекингом
+    0.6 и горизонтальный ряд метрик на подложке surface2 радиусом 8 и
+    паддингами [10,14]. Капс — категория просмотра: триггером подсказки
+    остаётся значение метрики, метка группы триггером не становится. */
+// Traceability: openspec:ui/screens#scenario-detail-header-modular-grid
+// Traceability: openspec:ui/design-system#requirement-reusable-design-primitives
+function MetricGroup({ group, children }: { group: MetricGroupKey; children: React.ReactNode }) {
+	return (
+		<div
+			data-slot="metric-group"
+			data-group={group}
+			className="flex min-w-0 flex-col gap-1.5 rounded-sm bg-surface-2 px-3.5 py-2.5"
+		>
+			<span className="text-[9.5px] font-medium uppercase leading-[normal] tracking-[0.6px] text-text-muted">
+				{METRIC_GROUP_LABELS[group]}
+			</span>
+			<div className="flex min-w-0 flex-wrap items-start gap-4">{children}</div>
+		</div>
+	);
+}
+
+/** Каноническая подпись неконечного реального риска: статус текстом вместо
+    заглушки — неограниченный хвост и сбой расчёта не выглядят «нет данных». */
+// Traceability: change:show-unbounded-finresult-risk/design#d1
+function realRiskStatusText(status: RealRiskStatus): string {
+	return status === "unbounded" ? "не ограничен" : "не удалось рассчитать";
+}
+
+/** Состав группы заголовка: метрики читаются из снимка карточки. Служебные
+    показатели («стоимость», «занято капитала», «корректировки») в сводку
+    не входят — их несут таблицы позиций и внешних корректировок; денежные
+    величины групп выводятся с единицей USDT. */
+// Traceability: openspec:ui/screens#requirement-construction-detail-screen
+// Traceability: openspec:ui/screens#scenario-detail-summary-value-and-usage
+// Traceability: openspec:ui/screens#scenario-detail-header-units
+function groupMetrics(group: MetricGroupKey, card: ConstructionCard): React.ReactNode {
+	const metrics = card.metrics;
+	switch (group) {
+		case "plan":
+			return (
+				<>
+					{/* Плановый риск — плановая граница красной зоны индикатора;
+					    незаданный план — прочерк, не ноль. */}
+					{/* Traceability: openspec:ui/screens#scenario-detail-header-meta-line */}
+					<Metric label="плановый риск" valueClassName={`tabular-nums ${VALUE_PART}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.plannedRisk}>
+							{card.riskUsdt === null ? (
+								<span className="text-text-muted">{DASH}</span>
+							) : (
+								`${formatAmount(card.riskUsdt)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+					{/* Плановый профит — правая граница зелёной зоны индикатора. */}
+					{/* Traceability: openspec:ui/screens#scenario-detail-header-meta-line */}
+					<Metric label="плановый профит" valueClassName={`tabular-nums ${VALUE_PART}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.plannedProfit}>
+							{card.profitUsdt === null ? (
+								<span className="text-text-muted">{DASH}</span>
+							) : (
+								`${formatAmount(card.profitUsdt)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+				</>
+			);
+		case "position":
+			return (
+				<>
+					{/* Первая метрика группы — «текущий результат»: реализованная
+					    часть, доступная оценка остатков и внешние корректировки
+					    PnL; имя переименовано из «общий P&L» по канону change. */}
+					{/* Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-detail-summary-metrics-period */}
+					<Metric
+						label="текущий результат"
+						valueClassName={`tabular-nums ${VALUE_TOTAL} ${toneClass(metrics.totalPnL ?? 0)}`}
+					>
+						<MetricHint tooltip={METRIC_TOOLTIPS.totalPnl}>
+							{metrics.totalPnL === null ? (
+								// Текущий результат без нереализованной части неполный —
+								// признак сбоя котировок; причина названа в тайтле.
+								// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
+								<span className="text-text-muted" title="Текущий результат неполный: нереализованная часть не оценена из-за сбоя котировок">
+									неполный (сбой котировок)
+								</span>
+							) : (
+								`${formatSignedAmount(metrics.totalPnL)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+					{/* Процент от капитала выводится только при заданном капитале:
+					    без него процент не показывается — остаётся абсолютная
+					    величина; сам капитал стоит рядом отдельной метрикой. */}
+					{/* Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent */}
+					{card.allocatedCapitalUsdt !== null && (
+						<Metric label="% капитала" valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.totalPnLPercent ?? 0)}`}>
+							{/* Ячейка объединяет процент результата и выделенный
+							    капитал — один триггер на ячейку, подсказка даёт
+							    раздел на каждый показатель. */}
+							{/* Traceability: openspec:ui/screens#scenario-multi-indicator-sections */}
+							<MetricHint tooltip={METRIC_TOOLTIPS.capitalPercent}>
+								{metrics.totalPnLPercent === null ? (
+									<span className="text-text-muted">{DASH}</span>
+								) : (
+									formatSignedPercent(metrics.totalPnLPercent)
+								)}
+							</MetricHint>
+						</Metric>
+					)}
+					{/* Реализованная часть — собственный FIFO-расчёт с комиссиями;
+					    видна всегда, в том числе у закрытой конструкции. */}
+					{/* Traceability: openspec:analytics/performance#requirement-realized-pnl-own-fifo */}
+					<Metric label="реализ. P&L" valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.realizedPnL)}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.realizedPnl}>{`${formatSignedAmount(metrics.realizedPnL)} USDT`}</MetricHint>
+					</Metric>
+					{/* Нереализованная часть — оценка открытых остатков по
+					    котировкам; без котировок — признак сбоя. */}
+					{/* Traceability: openspec:analytics/performance#requirement-unrealized-pnl-current-marks */}
+					<Metric label="нереализ. P&L" valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.unrealizedPnL ?? 0)}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.unrealizedPnl}>
+							{card.hasQuoteFailure ? (
+								<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
+									сбой котировок
+								</span>
+							) : (
+								`${formatSignedAmount(metrics.unrealizedPnL ?? 0)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+					{/* Выделенный капитал — база процентных метрик группы. */}
+					{/* Traceability: change:construction-header-groups/specs/ui/screens/spec#scenario-detail-summary-metrics-period */}
+					<Metric label="выделенный капитал" valueClassName={`tabular-nums ${VALUE_PART}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.allocatedCapital}>
+							{card.allocatedCapitalUsdt === null ? (
+								<span className="text-text-muted">{DASH}</span>
+							) : (
+								`${formatAmount(card.allocatedCapitalUsdt)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+				</>
+			);
+		case "risk":
+			return (
+				<>
+					{/* Реальный риск — пара «величина + статус» из read-модели:
+					    число только при конечном статусе, иначе канонический
+					    текст статуса вместо заглушки плановым риском. */}
+					{/* Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry */}
+					{/* Traceability: openspec:ui/screens#scenario-detail-header-meta-line */}
+					<Metric label="реальный риск" valueClassName={`tabular-nums ${VALUE_PART}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.realRisk}>
+							{metrics.realRiskUsdt === null ? (
+								<span className="text-text-muted">{realRiskStatusText(metrics.realRiskStatus)}</span>
+							) : (
+								`${formatAmount(metrics.realRiskUsdt)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+					{/* Худший исход — знаковая граница насечки индикатора; null
+					    без конечного риска — прочерк. */}
+					{/* Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric */}
+					<Metric
+						label="худший исход"
+						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.worstCaseUsdt ?? 0)}`}
+					>
+						<MetricHint tooltip={METRIC_TOOLTIPS.worstCase}>
+							{metrics.worstCaseUsdt === null ? (
+								<span className="text-text-muted">{DASH}</span>
+							) : (
+								`${formatSignedAmount(metrics.worstCaseUsdt)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+				</>
+			);
+		case "time":
+			return (
+				<>
+					{/* «Период» — метрика времени: даты и времена подсказками
+					    метрик не снабжаются; дата открытия живёт здесь — отдельной
+					    мета-строки под шапкой нет. */}
+					{/* Traceability: openspec:ui/screens#scenario-dates-skip-tooltip */}
+					{/* Traceability: openspec:ui/screens#scenario-detail-header-meta-line */}
+					<Metric label="период" valueClassName={VALUE_PART}>
+						{metrics.openedAt === null ? (
+							<span className="text-text-muted">{DASH}</span>
+						) : (
+							<span title="Период конструкции с длительностью">
+								{formatDay(metrics.openedAt)}
+								{metrics.closedAt !== null ? ` — ${formatDay(metrics.closedAt)}` : " — …"}{" "}
+								<span className="text-text-muted">
+									({metrics.durationSeconds === null ? "" : formatDuration(metrics.durationSeconds)})
+								</span>
+							</span>
+						)}
+					</Metric>
+					{/* Остаток суток до ближайшей экспирации открытых опционных
+					    ног: красный в зоне предупреждения (≤ 14), прочерк без ног. */}
+					{/* Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary */}
+					<Metric
+						label="до экспирации"
+						valueClassName={`tabular-nums ${VALUE_PART} ${metrics.daysToNearestExpiry !== null && metrics.daysToNearestExpiry <= EXPIRY_WARNING_DAYS ? "text-destructive" : ""}`}
+					>
+						<MetricHint tooltip={METRIC_TOOLTIPS.daysToExpiry}>
+							{metrics.daysToNearestExpiry === null ? (
+								<span className="text-text-muted" title="Открытых опционных ног нет — времени жизни нет">
+									{DASH}
+								</span>
+							) : (
+								<span title="Остаток суток до ближайшей экспирации открытых опционных ног">{metrics.daysToNearestExpiry} дн.</span>
+							)}
+						</MetricHint>
+					</Metric>
+				</>
+			);
+		case "value":
+			return (
+				<>
+					{/* Внутренняя стоимость — пара к временной в саммари времени
+					    жизни; null без опционных ног или тикеров — прочерк. */}
+					{/* Traceability: openspec:analytics/option-lifetime#requirement-leg-intrinsic-time-value */}
+					{/* Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary */}
+					<Metric label="внутренняя стоимость" valueClassName={`tabular-nums ${VALUE_PART}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.intrinsic}>
+							{metrics.totalIntrinsicValueUsdt === null ? (
+								<span className="text-text-muted" title="Тикеры опционных ног недоступны — внутренняя стоимость не оценена">
+									{DASH}
+								</span>
+							) : (
+								`${formatSignedAmount(metrics.totalIntrinsicValueUsdt)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+					{/* Временная стоимость — рыночная надбавка опционных остатков. */}
+					{/* Traceability: openspec:analytics/option-lifetime#requirement-leg-intrinsic-time-value */}
+					<Metric label="временная стоимость" valueClassName={`tabular-nums ${VALUE_PART}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.timeValue}>
+							{metrics.totalTimeValueUsdt === null ? (
+								<span className="text-text-muted" title="Тикеры опционных ног недоступны — временная стоимость не оценена">
+									{DASH}
+								</span>
+							) : (
+								`${formatSignedAmount(metrics.totalTimeValueUsdt)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+					{/* Нетто-распад в сутки — тета открытых опционных ног со знаком. */}
+					{/* Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary */}
+					<Metric label="распад / сутки" valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.netDailyDecayUsdt ?? 0)}`}>
+						<MetricHint tooltip={METRIC_TOOLTIPS.decayPerDay}>
+							{metrics.netDailyDecayUsdt === null ? (
+								<span className="text-text-muted" title="Тикеры опционных ног недоступны — распад не оценён">
+									{DASH}
+								</span>
+							) : (
+								`${formatSignedAmount(metrics.netDailyDecayUsdt)} USDT`
+							)}
+						</MetricHint>
+					</Metric>
+				</>
+			);
+	}
 }
 
 /** Сводка неоспоренных связок по закрываемой ноге: лок и логический размер ноги. */
@@ -156,197 +445,67 @@ export function ConstructionMetricStrip({
 
 	return (
 		<section data-slot="construction-metric-strip" className="flex flex-col gap-4">
-			{/* Сводка показателей — примитив Метрика (нода jtDmV) в карточке мастера
-			    «Сводка метрик» (h69OG) Body #2: поверхность с каймой, радиус 12,
-			    паддинги [14,18], строка из девяти метрик с зазором 20; итог (M1)
-			    акцентируется кеглем 16, разбивка (M2–M9) — кегль 14. Цвет знака
-			    величин — доменная семантика финрезультата, в мастере не задан.
-			    Под строкой метрик — разделитель и строка «зафиксировано
-			    синтетикой» из мастера сводки (5.1 change synthetic-close-logical-layer). */}
+			{/* Заголовок конструкции — сводка метрик по зеркалу индикатора
+			    финрезультата (ячейка Г1 мастера «Заголовок конструкции»):
+			    группы на тонированных подложках surface2 (radius 8, паддинги
+			    [10,14], капс-метка 9.5/500/0.6), ряды — модульная сетка на
+			    полную ширину карточки; итог акцентируется кеглем 16.
+			    Служебные показатели — «стоимость», «занято капитала»,
+			    «корректировки» — сводку не показывают: их несут таблицы
+			    позиций и внешних корректировок. */}
 			{/* Traceability: openspec:ui/design-system#requirement-reusable-design-primitives */}
-			{/* Traceability: change:reconcile-frontend-with-design/design#D2 */}
+			{/* Traceability: openspec:ui/screens#requirement-construction-detail-screen */}
+			{/* Traceability: openspec:ui/screens#scenario-detail-header-modular-grid */}
+			{/* Traceability: openspec:ui/screens#scenario-detail-summary-value-and-usage */}
 			{/* Числовые метрики сводки снабжаются подсказкой метрики: триггер —
 			    само значение с пунктирным подчёркиванием примитива, попап —
 			    тексты справочника (назначение, метод, разделы по показателям);
 			    деградации (прочерк, «сбой котировок») обёртываются вместе со
-			    значением, подписи-категории триггерами не становятся. */}
+			    значением, капс-метки групп триггерами не становятся. Денежные
+			    величины групп выводятся с единицей USDT. */}
 			{/* Traceability: openspec:ui/screens#requirement-metric-tooltips-on-numeric-metrics */}
+			{/* Traceability: openspec:ui/screens#scenario-detail-header-units */}
 			<div
 				data-slot="construction-metrics-card"
 				className="flex flex-col gap-3 rounded-lg border bg-surface px-[18px] py-3.5"
 			>
-				<div className="flex flex-wrap gap-5">
-					{/* Первая метрика сводки — «текущий результат»: реализованная
-					    часть, доступная оценка остатков и внешние корректировки
-					    PnL; имя переименовано из «общий P&L» по канону change. */}
-					{/* Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-detail-summary-metrics-period */}
-					<Metric
-						label="текущий результат"
-						valueClassName={`tabular-nums ${VALUE_TOTAL} ${toneClass(metrics.totalPnL ?? 0)}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.totalPnl}>
-							{metrics.totalPnL === null ? (
-								// Текущий результат без нереализованной части неполный —
-								// признак сбоя котировок; причина названа в тайтле.
-								// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
-								<span className="text-text-muted" title="Текущий результат неполный: нереализованная часть не оценена из-за сбоя котировок">
-									неполный (сбой котировок)
-								</span>
-							) : (
-								`${formatSignedAmount(metrics.totalPnL)} USDT`
-							)}
-						</MetricHint>
-					</Metric>
-					<Metric
-						label={`% капитала${card.allocatedCapitalUsdt !== null ? ` (${formatAmount(card.allocatedCapitalUsdt)})` : ""}`}
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.totalPnLPercent ?? 0)}`}
-					>
-						{/* Ячейка объединяет процент результата и выделенный капитал —
-						    один триггер на ячейку, подсказка даёт раздел на каждый
-						    показатель. */}
-						{/* Traceability: openspec:ui/screens#scenario-multi-indicator-sections */}
-						<MetricHint tooltip={METRIC_TOOLTIPS.capitalPercent}>
-							{metrics.totalPnLPercent === null ? (
-								<span className="text-text-muted">{DASH}</span>
-							) : (
-								formatSignedPercent(metrics.totalPnLPercent)
-							)}
-						</MetricHint>
-					</Metric>
-					<Metric
-						label="стоимость"
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.quoteValue ?? 0)}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.constructionValue}>
-							{card.hasOpenResidual === false ? (
-								<span className="text-text-muted" title="Открытых остатков нет — стоимости нет">
-									{DASH}
-								</span>
-							) : metrics.quoteValue === null ? (
-								<span className="text-text-muted" title="Провайдер котировок недоступен — стоимость не оценена">
-									сбой котировок
-								</span>
-							) : (
-								formatSignedAmount(metrics.quoteValue)
-							)}
-						</MetricHint>
-					</Metric>
-					<Metric
-						label="занято капитала, %"
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.capitalUsagePercent ?? 0)}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.capitalUsage}>
-							{metrics.capitalUsagePercent === null ? (
-								<span className="text-text-muted">{DASH}</span>
-							) : (
-								formatSignedPercent(metrics.capitalUsagePercent)
-							)}
-						</MetricHint>
-					</Metric>
-					<Metric
-						label="реализ. P&L"
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.realizedPnL)}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.realizedPnl}>{formatSignedAmount(metrics.realizedPnL)}</MetricHint>
-					</Metric>
-					<Metric
-						label="нереализ. P&L"
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.unrealizedPnL ?? 0)}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.unrealizedPnl}>
-							{card.hasQuoteFailure ? (
-								<span className="text-text-muted" title="Провайдер котировок недоступен — нереализованный PnL не оценён">
-									сбой котировок
-								</span>
-							) : (
-								formatSignedAmount(metrics.unrealizedPnL ?? 0)
-							)}
-						</MetricHint>
-					</Metric>
-					<Metric
-						label="корректировки"
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.adjustmentsPnL)}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.adjustmentsCount}>
-							{metrics.adjustmentsPnL === 0 ? DASH : formatSignedAmount(metrics.adjustmentsPnL)}
-						</MetricHint>
-					</Metric>
-					{/* «Котировки на» — метрика времени: даты и времена подсказками
-					    метрик не снабжаются. */}
-					{/* Traceability: openspec:ui/screens#scenario-dates-skip-tooltip */}
-					<Metric label="котировки на" valueClassName={VALUE_PART}>
-						{card.hasQuoteFailure ? (
-							<span className="text-text-muted" title="Провайдер котировок недоступен — время получения котировок неизвестно">
-								сбой котировок
-							</span>
-						) : card.hasOpenResidual === false ? (
-							<span className="text-text-muted" title="Открытых остатков нет — котировки оценке не нужны">
-								не нужны
-							</span>
-						) : (
-							(card.quotesAsOf === null ? DASH : formatMoment(card.quotesAsOf))
-						)}
-					</Metric>
-					{/* «Период» — метрика времени: даты и времена подсказками
-					    метрик не снабжаются. */}
-					{/* Traceability: openspec:ui/screens#scenario-dates-skip-tooltip */}
-					<Metric label="период" valueClassName={VALUE_PART}>
-						{metrics.openedAt === null ? (
-							<span className="text-text-muted">{DASH}</span>
-						) : (
-							<span title="Период конструкции с длительностью">
-								{formatDay(metrics.openedAt)}
-								{metrics.closedAt !== null ? ` — ${formatDay(metrics.closedAt)}` : " — …"}{" "}
-								<span className="text-text-muted">
-									({metrics.durationSeconds === null ? "" : formatDuration(metrics.durationSeconds)})
-								</span>
-							</span>
-						)}
-					</Metric>
-					{/* Саммари времени жизни открытых опционных ног: остаток суток до
-					    ближайшей экспирации (красный при ≤ 14), нетто-распад в сутки
-					    и суммарная временная стоимость; без опционных ног — прочерк. */}
-					{/* Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary */}
-					{/* Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#requirement-construction-detail-screen */}
-					<Metric
-						label="до экспирации"
-						valueClassName={`tabular-nums ${VALUE_PART} ${metrics.daysToNearestExpiry !== null && metrics.daysToNearestExpiry <= EXPIRY_WARNING_DAYS ? "text-destructive" : ""}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.daysToExpiry}>
-							{metrics.daysToNearestExpiry === null ? (
-								<span className="text-text-muted" title="Открытых опционных ног нет — времени жизни нет">
-									{DASH}
-								</span>
-							) : (
-								<span title="Остаток суток до ближайшей экспирации открытых опционных ног">{metrics.daysToNearestExpiry} дн.</span>
-							)}
-						</MetricHint>
-					</Metric>
-					<Metric
-						label="распад / сутки"
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.netDailyDecayUsdt ?? 0)}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.decayPerDay}>
-							{metrics.netDailyDecayUsdt === null ? (
-								<span className="text-text-muted" title="Тикеры опционных ног недоступны — распад не оценён">
-									{DASH}
-								</span>
-							) : (
-								formatSignedAmount(metrics.netDailyDecayUsdt)
-							)}
-						</MetricHint>
-					</Metric>
-					<Metric label="временная стоимость" valueClassName={`tabular-nums ${VALUE_PART}`}>
-						<MetricHint tooltip={METRIC_TOOLTIPS.timeValue}>
-							{metrics.totalTimeValueUsdt === null ? (
-								<span className="text-text-muted" title="Тикеры опционных ног недоступны — временная стоимость не оценена">
-									{DASH}
-								</span>
-							) : (
-								formatSignedAmount(metrics.totalTimeValueUsdt)
-							)}
-						</MetricHint>
-					</Metric>
+				{/* Ряды групп по статичной конфигурации: модульная сетка на
+				    полную ширину карточки, зазор 12px; состав метрик группы —
+				    в groupMetrics. */}
+				{METRIC_GROUP_ROWS.map((row) => (
+					<div key={row.className} className={cn("grid gap-3", row.className)}>
+						{row.groups.map((group) => (
+							<MetricGroup key={group} group={group}>
+								{groupMetrics(group, card)}
+							</MetricGroup>
+						))}
+					</div>
+				))}
+
+				{/* Техстрока котировок: отметка времени оценки вне групп, 11px
+				    приглушённым тоном, выравнивание вправо; деградации — признак
+				    сбоя и «не нужны» при отсутствии открытых остатков. */}
+				{/* Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period */}
+				{/* Даты и времена подсказками метрик не снабжаются. */}
+				{/* Traceability: openspec:ui/screens#scenario-dates-skip-tooltip */}
+				<div
+					data-slot="construction-quotes-asof"
+					className="flex justify-end gap-1 text-[11px] leading-[normal]"
+				>
+					<span className="text-text-muted">котировки на</span>
+					{card.hasQuoteFailure ? (
+						<span className="text-text-secondary" title="Провайдер котировок недоступен — время получения котировок неизвестно">
+							сбой котировок
+						</span>
+					) : card.hasOpenResidual === false ? (
+						<span className="text-text-secondary" title="Открытых остатков нет — котировки оценке не нужны">
+							не нужны
+						</span>
+					) : (
+						<span className="text-text-secondary tabular-nums">
+							{card.quotesAsOf === null ? DASH : formatMoment(card.quotesAsOf)}
+						</span>
+					)}
 				</div>
 
 				{/* Зона синтетики: строка «зафиксировано синтетикой» с раскрытым

@@ -59,6 +59,7 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 			daysToNearestExpiry: 9,
 			netDailyDecayUsdt: -6.8,
 			totalTimeValueUsdt: 1240,
+			totalIntrinsicValueUsdt: 640,
 		},
 		positions: [
 			{
@@ -163,6 +164,200 @@ function renderStrip(
 		</TooltipProvider>,
 	);
 }
+
+/** Метрика сводки по подписи: группы не дают стабильных позиций в DOM. */
+function findMetric(label: string): HTMLElement {
+	const metric = [...document.querySelectorAll('[data-slot="construction-metrics-card"] [data-slot="metric"]')].find(
+		(node) => node.firstElementChild?.textContent === label,
+	);
+	if (metric == null) {
+		throw new Error(`метрика «${label}» не найдена`);
+	}
+
+	return metric as HTMLElement;
+}
+
+// Заголовок конструкции — сводка метрик по зеркалу индикатора финрезультата:
+// группы ПЛАН, ПОЗИЦИЯ, РИСК, ВРЕМЯ и СТОИМОСТЬ на тонированных подложках
+// surface2, ряды — модульная сетка «ПЛАН 350 + ПОЗИЦИЯ до края» и «три
+// равных»; служебные показатели (стоимость, занятость, корректировки)
+// из сводки убраны в таблицы позиций и корректировок, «котировки на» —
+// обособленная техстрока справа под группами.
+// Traceability: openspec:ui/screens#requirement-construction-detail-screen
+// Traceability: openspec:ui/screens#scenario-detail-header-modular-grid
+describe("ConstructionMetricStrip: группы заголовка", () => {
+	it("раскладывает группы по модульной сетке рядов", () => {
+		// Arrange/Act: рендер сводки карточки по умолчанию.
+		renderStrip(makeCard());
+
+		// Assert: пять групп с капс-метками; ряд 1 — ПЛАН и ПОЗИЦИЯ на сетке
+		// «minmax(350px,auto) + 1fr», ряд 2 — три равных колонки; подложки —
+		// surface2 радиусом 8, капс-метка группы триггером подсказки не
+		// становится.
+		const groups = [...document.querySelectorAll('[data-slot="metric-group"]')];
+		expect(groups.map((group) => group.getAttribute("data-group"))).toEqual(["plan", "position", "risk", "time", "value"]);
+		expect(groups.map((group) => group.firstElementChild?.textContent)).toEqual([
+			"план",
+			"позиция",
+			"риск",
+			"время",
+			"стоимость",
+		]);
+		for (const group of groups) {
+			expect(group.className).toContain("bg-surface-2");
+			expect(group.className).toContain("rounded-sm");
+			expect(group.firstElementChild!.querySelector('[data-slot="tooltip-trigger"]')).toBeNull();
+		}
+
+		const rows = [...document.querySelectorAll('[data-slot="construction-metrics-card"] > div.grid')];
+		expect(rows).toHaveLength(2);
+		expect(rows[0].className).toContain("grid-cols-[minmax(350px,auto)_1fr]");
+		expect(rows[1].className).toContain("grid-cols-3");
+	});
+
+	// Состав групп по дельте спеки: плановые границы — в ПЛАНе, результат
+	// с частями и капиталом — в ПОЗИЦИИ, риск с худшим исходом — в РИСКе,
+	// период с экспирацией — во ВРЕМЕНИ, стоимость опционов — в СТОИМОСТИ;
+	// денежные величины выводятся с единицей USDT.
+	// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
+	// Traceability: openspec:ui/screens#scenario-detail-header-units
+	it("собирает группы из показателей зеркала индикатора", () => {
+		// Arrange/Act: рендер сводки карточки по умолчанию.
+		renderStrip(makeCard());
+
+		// Assert: каждая метрика стоит в своей группе и несёт USDT.
+		expect(findMetric("плановый риск")).toHaveTextContent("90 USDT");
+		expect(findMetric("плановый профит")).toHaveTextContent("240 USDT");
+		expect(findMetric("текущий результат")).toHaveTextContent("+105.5 USDT");
+		expect(findMetric("% капитала")).toHaveTextContent("+3.5%");
+		expect(findMetric("реализ. P&L")).toHaveTextContent("+60.25 USDT");
+		expect(findMetric("нереализ. P&L")).toHaveTextContent("+40.25 USDT");
+		expect(findMetric("выделенный капитал")).toHaveTextContent("3000 USDT");
+		expect(findMetric("реальный риск")).toHaveTextContent("45 USDT");
+		expect(findMetric("худший исход")).toHaveTextContent("+15.25 USDT");
+		expect(findMetric("период")).toHaveTextContent("2026-10-01");
+		expect(findMetric("до экспирации")).toHaveTextContent("9 дн.");
+		expect(findMetric("внутренняя стоимость")).toHaveTextContent("+640 USDT");
+		expect(findMetric("временная стоимость")).toHaveTextContent("+1240 USDT");
+		expect(findMetric("распад / сутки")).toHaveTextContent("-6.8 USDT");
+	});
+
+	// Служебные показатели уходят из сводки: стоимость и занятость несут
+	// таблицы позиций, корректировки — таблицу внешних корректировок.
+	// Traceability: openspec:ui/screens#scenario-detail-summary-value-and-usage
+	it("не показывает стоимость, занятость и корректировки", () => {
+		// Arrange/Act: рендер сводки карточки по умолчанию.
+		renderStrip(makeCard());
+
+		// Assert: ни одной метрики сводки с такими подписями; капс-метка
+		// группы СТОИМОСТЬ метрикой не является и совпадением не считается.
+		const labels = [...document.querySelectorAll('[data-slot="construction-metrics-card"] [data-slot="metric"]')].map(
+			(metric) => metric.firstElementChild?.textContent,
+		);
+		expect(labels).not.toContain("стоимость");
+		expect(labels).not.toContain("занято капитала, %");
+		expect(labels).not.toContain("корректировки");
+	});
+
+	// Незаданный капитал: процент от капитала не выводится вовсе, сам
+	// капитал — прочерком; абсолютные величины остаются.
+	// Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
+	it("без капитала скрывает процент и показывает прочерк капитала", () => {
+		// Arrange: карточка без выделенного капитала.
+		const base = makeCard();
+
+		// Act: рендер сводки карточки.
+		renderStrip({ ...base, allocatedCapitalUsdt: null });
+
+		// Assert: метрики процента нет, капитал — прочерк.
+		expect(screen.queryByText("% капитала")).toBeNull();
+		expect(findMetric("выделенный капитал")).toHaveTextContent("—");
+	});
+
+	// Реальный риск деградирует статусом: неограниченный хвост и сбой
+	// расчёта показываются каноническим текстом вместо числа.
+	// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
+	it.each([
+		["unbounded", "не ограничен"],
+		["unavailable", "не удалось рассчитать"],
+	] as const)("показывает статус реального риска %s текстом", (status, text) => {
+		// Arrange: пара «величина + статус» без числа.
+		const base = makeCard();
+
+		// Act: рендер сводки карточки.
+		renderStrip({ ...base, metrics: { ...base.metrics, realRiskUsdt: null, realRiskStatus: status } });
+
+		// Assert: в группе РИСК текст статуса, числа нет.
+		expect(findMetric("реальный риск")).toHaveTextContent(text);
+		expect(findMetric("реальный риск").textContent).not.toContain("USDT");
+	});
+
+	// Худший исход публикуется только при конечном реальном риске: null —
+	// прочерк в группе РИСК.
+	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+	it("показывает худший исход прочерком без конечного риска", () => {
+		// Arrange: неконечный реальный риск и худший исход null.
+		const base = makeCard();
+
+		// Act: рендер сводки карточки.
+		renderStrip({ ...base, metrics: { ...base.metrics, realRiskUsdt: null, realRiskStatus: "unbounded", worstCaseUsdt: null } });
+
+		// Assert: прочерк вместо величины.
+		expect(findMetric("худший исход")).toHaveTextContent("—");
+	});
+
+	// Внутренняя стоимость деградирует как пара к временной: без опционных
+	// ног или тикеров — прочерк в группе СТОИМОСТЬ.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	it("показывает внутреннюю стоимость прочерком без тикеров", () => {
+		// Arrange: суммарная внутренняя стоимость null.
+		const base = makeCard();
+
+		// Act: рендер сводки карточки.
+		renderStrip({ ...base, metrics: { ...base.metrics, totalIntrinsicValueUsdt: null } });
+
+		// Assert: прочерк вместо величины.
+		expect(findMetric("внутренняя стоимость")).toHaveTextContent("—");
+	});
+
+	// Техстрока котировок: отметка времени оценки вне групп, выравнивание
+	// вправо, без триггера подсказки — даты и времена подсказок не получают.
+	// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
+	it("выводит «котировки на» техстрокой справа под группами", () => {
+		// Arrange/Act: рендер сводки карточки по умолчанию.
+		renderStrip(makeCard());
+
+		// Assert: техстрока стоит после групп, прижата вправо и показывает
+		// момент котировок; метрикой не является и триггера не имеет.
+		const line = document.querySelector('[data-slot="construction-quotes-asof"]');
+		expect(line).not.toBeNull();
+		expect(line!.className).toContain("justify-end");
+		expect(line).toHaveTextContent("котировки на");
+		expect(line).toHaveTextContent(/2026-10-15 \d{2}:30/);
+		expect(line!.closest('[data-slot="metric"]')).toBeNull();
+		expect(line!.querySelector('[data-slot="tooltip-trigger"]')).toBeNull();
+		// Техстрока стоит после групп сводки.
+		const groups = document.querySelector('[data-slot="metric-group"]')!;
+		expect(groups.compareDocumentPosition(line!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	// Деградации техстроки: сбой провайдера и отсутствие открытых остатков
+	// названы текстом с пояснением в тайтле.
+	// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
+	it("помечает техстроку сбоем котировок и ненужностью оценки", () => {
+		// Arrange: карточка по умолчанию; поочерёдно оба деградационных состояния.
+		const base = makeCard();
+
+		// Act/Assert: сбой котировок назван в техстроке.
+		const { unmount } = renderStrip({ ...base, hasQuoteFailure: true });
+		expect(document.querySelector('[data-slot="construction-quotes-asof"]')).toHaveTextContent("сбой котировок");
+		unmount();
+
+		// Act/Assert: без открытых остатков оценка не нужна.
+		renderStrip({ ...base, hasOpenResidual: false });
+		expect(document.querySelector('[data-slot="construction-quotes-asof"]')).toHaveTextContent("не нужны");
+	});
+});
 
 describe("ConstructionMetricStrip: строка «зафиксировано синтетикой»", () => {
 	it("показывает лок к экспирации и логический размер ноги при неоспоренной связке", () => {
@@ -450,7 +645,7 @@ describe("ConstructionMetricStrip: строка «зафиксировано с�
 
 		// Assert: «Реализованный результат» остаётся инструментальным —
 		// его величина совпадает с metrics.realizedPnL, лок в него не вмешался.
-		expect(screen.getByText("+60.25")).toBeTruthy();
+		expect(screen.getByText("+60.25 USDT")).toBeTruthy();
 	});
 });
 
@@ -552,20 +747,16 @@ describe("ConstructionMetricStrip: саммари времени жизни", ()
 		// Act: рендер сводки карточки.
 		renderStrip(makeCard());
 
-		// Assert: три метрики саммари — сутки со знаком зоны предупреждения,
-		// распад красным по минусу и суммарная временная стоимость.
-		const metrics = document.querySelectorAll('[data-slot="construction-metrics-card"] [data-slot="metric"]');
-		const labels = [...metrics].map((metric) => metric.querySelector("span")?.textContent);
-		expect(labels).toContain("до экспирации");
-		expect(labels).toContain("распад / сутки");
-		expect(labels).toContain("временная стоимость");
-		const expiryMetric = metrics[metrics.length - 3];
+		// Assert: три метрики саммари в группе СТОИМОСТЬ и ВРЕМЯ — сутки
+		// со знаком зоны предупреждения, распад красным по минусу и
+		// суммарная временная стоимость.
+		const expiryMetric = findMetric("до экспирации");
 		expect(expiryMetric).toHaveTextContent("9 дн.");
 		expect(expiryMetric.querySelector('[data-slot="metric-value"]')).toHaveClass("text-destructive");
-		const decayMetric = metrics[metrics.length - 2];
+		const decayMetric = findMetric("распад / сутки");
 		expect(decayMetric).toHaveTextContent("-6.8");
 		expect(decayMetric.querySelector('[data-slot="metric-value"]')).toHaveClass("text-[color:var(--fin-negative)]");
-		expect(metrics[metrics.length - 1]).toHaveTextContent("+1240");
+		expect(findMetric("временная стоимость")).toHaveTextContent("+1240");
 	});
 
 	// Сутки дальше зоны предупреждения остаются нейтральными: красный —
@@ -581,11 +772,10 @@ describe("ConstructionMetricStrip: саммари времени жизни", ()
 
 		// Assert: значение суток без красного тона, положительный распад —
 		// в акцентно-зелёном тоне знака.
-		const metricNodes = document.querySelectorAll('[data-slot="construction-metrics-card"] [data-slot="metric"]');
-		const expiryMetric = metricNodes[metricNodes.length - 3];
+		const expiryMetric = findMetric("до экспирации");
 		expect(expiryMetric).toHaveTextContent("21 дн.");
 		expect(expiryMetric.querySelector('[data-slot="metric-value"]')).not.toHaveClass("text-destructive");
-		expect(metricNodes[metricNodes.length - 2].querySelector('[data-slot="metric-value"]')).toHaveClass(
+		expect(findMetric("распад / сутки").querySelector('[data-slot="metric-value"]')).toHaveClass(
 			"text-[color:var(--fin-positive-strong)]",
 		);
 	});
@@ -602,9 +792,8 @@ describe("ConstructionMetricStrip: саммари времени жизни", ()
 		renderStrip({ ...card, metrics });
 
 		// Assert: три метрики саммари — прочерки.
-		const metricNodes = document.querySelectorAll('[data-slot="construction-metrics-card"] [data-slot="metric"]');
-		for (const metric of [...metricNodes].slice(-3)) {
-			expect(metric).toHaveTextContent("—");
+		for (const label of ["до экспирации", "распад / сутки", "временная стоимость"]) {
+			expect(findMetric(label)).toHaveTextContent("—");
 		}
 	});
 });
@@ -710,14 +899,17 @@ describe("ConstructionMetricStrip: подсказки числовых метр�
 		for (const [value, key] of [
 			["+105.5 USDT", "totalPnl"],
 			["+3.5%", "capitalPercent"],
-			["+500", "constructionValue"],
-			["+16.7%", "capitalUsage"],
-			["+60.25", "realizedPnl"],
-			["+40.25", "unrealizedPnl"],
-			["+5", "adjustmentsCount"],
+			["+60.25 USDT", "realizedPnl"],
+			["+40.25 USDT", "unrealizedPnl"],
+			["90 USDT", "plannedRisk"],
+			["240 USDT", "plannedProfit"],
+			["3000 USDT", "allocatedCapital"],
+			["45 USDT", "realRisk"],
+			["+15.25 USDT", "worstCase"],
 			["9 дн.", "daysToExpiry"],
-			["-6.8", "decayPerDay"],
-			["+1240", "timeValue"],
+			["+640 USDT", "intrinsic"],
+			["-6.8 USDT", "decayPerDay"],
+			["+1240 USDT", "timeValue"],
 		] as const) {
 			// Act: наведение на значение очередной метрики.
 			await user.hover(screen.getByText(value));
@@ -816,23 +1008,28 @@ describe("ConstructionMetricStrip: подсказки числовых метр�
 	it("«Котировки на» и «Период» подсказок не имеют", async () => {
 		// Даты и времена подсказками метрик не снабжаются: триггера нет
 		// ни у подписи, ни у значения, наведение ничего не открывает.
+		// «Котировки на» — техстрока вне групп, «Период» — метрика группы
+		// ВРЕМЯ без обёртки подсказки.
 		// Traceability: openspec:ui/screens#scenario-dates-skip-tooltip
 		// Arrange: карточка по умолчанию с заполненными датами.
 		const user = userEvent.setup();
 		renderStrip(makeCard());
 
-		for (const label of ["котировки на", "период"]) {
-			// Assert (структура): у метрики-даты нет триггера подсказки.
-			const metric = screen.getByText(label).closest('[data-slot="metric"]');
-			expect(metric).not.toBeNull();
-			expect(metric!.querySelector('[data-slot="tooltip-trigger"]')).toBeNull();
+		// Assert (структура): у метрики-даты нет триггера подсказки.
+		const metric = findMetric("период");
+		expect(metric.querySelector('[data-slot="tooltip-trigger"]')).toBeNull();
 
-			// Act: наведение на всю метрику — и подпись, и значение.
-			await user.hover(metric!);
+		// Act: наведение на всю метрику — и подпись, и значение.
+		await user.hover(metric);
 
-			// Assert (поведение): подсказка не открылась.
-			expect(screen.queryByRole("tooltip")).toBeNull();
-		}
+		// Assert (поведение): подсказка не открылась.
+		expect(screen.queryByRole("tooltip")).toBeNull();
+
+		// «Котировки на» — техстрока: метрикой не является и триггера нет.
+		const line = document.querySelector('[data-slot="construction-quotes-asof"]')!;
+		expect(line.closest('[data-slot="metric"]')).toBeNull();
+		await user.hover(line);
+		expect(screen.queryByRole("tooltip")).toBeNull();
 	});
 });
 

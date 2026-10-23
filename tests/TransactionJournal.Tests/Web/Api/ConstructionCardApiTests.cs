@@ -442,6 +442,10 @@ public sealed class ConstructionCardApiTests
 		Assert.That(metrics["daysToNearestExpiry"]!.GetValue<int>(), Is.EqualTo(9));
 		Assert.That(metrics["netDailyDecayUsdt"]!.GetValue<decimal>(), Is.EqualTo(-2.5m));
 		Assert.That(metrics["totalTimeValueUsdt"]!.GetValue<decimal>(), Is.EqualTo(300m));
+		// Суммарная внутренняя стоимость публикуется рядом с временной:
+		// величина проходит из того же саммари без пересчёта.
+		// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+		Assert.That(metrics["totalIntrinsicValueUsdt"]!.GetValue<decimal>(), Is.EqualTo(60m));
 	}
 
 	[TestMethod]
@@ -459,7 +463,7 @@ public sealed class ConstructionCardApiTests
 		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
 
 		// Assert: опционная строка без вычислителя несёт явный null во всех пяти
-		// величинах, метрики — null во всех трёх слагаемых саммари.
+		// величинах, метрики — null во всех четырёх слагаемых саммари.
 		var optionPosition = payload!["positions"]!.AsArray().Single(node => node!["symbol"]!.GetValue<string>() == "ETH-28JUN24-3200-C");
 		Assert.That(optionPosition!["daysToExpiry"], Is.Null);
 		Assert.That(optionPosition["dailyDecayUsdt"], Is.Null);
@@ -470,6 +474,7 @@ public sealed class ConstructionCardApiTests
 		Assert.That(metrics["daysToNearestExpiry"], Is.Null);
 		Assert.That(metrics["netDailyDecayUsdt"], Is.Null);
 		Assert.That(metrics["totalTimeValueUsdt"], Is.Null);
+		Assert.That(metrics["totalIntrinsicValueUsdt"], Is.Null);
 	}
 
 	[TestMethod]
@@ -1739,6 +1744,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 				DaysToNearestExpiry = daysToExpiry,
 				NetDailyDecayUsdt = dailyDecayUsdt,
 				TotalTimeValueUsdt = 300m,
+				TotalIntrinsicValueUsdt = 60m,
 			},
 			ExpiryWarnings = [],
 		};

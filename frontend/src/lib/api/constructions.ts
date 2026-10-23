@@ -67,6 +67,10 @@ export interface ConstructionRow {
 	// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
 	readonly daysToNearestExpiry: number | null;
 	readonly netDailyDecayUsdt: number | null;
+	// Суммарная внутренняя стоимость открытых опционных остатков — третье
+	// слагаемое саммари времени жизни; null без опционных ног или без тикеров.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	readonly totalIntrinsicValueUsdt: number | null;
 }
 
 /** Обзор раздела: сводка шапки и строки таблицы одним ответом. */

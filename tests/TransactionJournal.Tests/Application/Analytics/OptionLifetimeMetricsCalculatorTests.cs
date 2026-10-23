@@ -15,8 +15,9 @@ namespace TransactionJournal.Tests.Analytics;
 /// остатком со знаком, остаток суток — floor полных суток до deliveryTime
 /// и вычисляется без рыночных данных. Прирост распада — фактическая разность
 /// тет с ближайшим снимком истории суточной давности, молодая история даёт
-/// прочерк. Саммари конструкции берёт минимум суток, нетто-распад и суммарную
-/// временную стоимость открытых опционных ног и отсутствует без них.
+/// прочерк. Саммари конструкции берёт минимум суток, нетто-распад, суммарную
+/// временную и суммарную внутреннюю стоимость открытых опционных ног,
+/// исключает ноги без тикеров из слагаемых и отсутствует без них.
 /// Предупреждение об экспирации срабатывает при остатке не более четырнадцати
 /// полных суток, по одной записи на инструмент, только по открытым ногам
 /// и не зависит от проходов агента подсказок. Негативная проверка отклоняет
@@ -266,6 +267,73 @@ public class OptionLifetimeMetricsCalculatorTests
 		// Assert: нетто-дневной распад конструкции −5 + 3 = −2 USDT/день.
 		Assert.That(evaluation.Summary, Is.Not.Null);
 		Assert.That(evaluation.Summary!.NetDailyDecayUsdt, Is.EqualTo(-2m));
+	}
+
+	[TestMethod]
+	[Description("Суммарная внутренняя стоимость саммари суммирует ноги")]
+	// Внутренняя стоимость сводится по ногам рядом с временной: ноль вне денег —
+	// полноценное слагаемое, сумма не теряет его.
+	// Traceability: openspec:analytics/option-lifetime#scenario-summary-intrinsic-sum
+	public void TryIfSummaryIntrinsicSumsLegs()
+	{
+		// Arrange: внутренняя стоимость колла 90,2 на контракт (индекс 190,2 при
+		// страйке 100) × остаток 2 = 180,4; пут вне денег даёт нулевую внутреннюю.
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 200m, underlyingPrice: 190.2m);
+		_marks[PutSymbol] = FreshQuote(PutSymbol, quotePrice: 3m, underlyingPrice: 110m);
+
+		// Act
+		var evaluation = _calculator.Calculate(new[]
+		{
+			Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 10, residual: 2m),
+			Leg(PutSymbol, strike: 100m, OptionType.Put, daysToDelivery: 25, residual: 3m),
+		}, _marks, _history);
+
+		// Assert: суммарная внутренняя стоимость конструкции 180,4 + 0 = 180,4 USDT.
+		Assert.That(evaluation.Summary, Is.Not.Null);
+		Assert.That(evaluation.Summary!.TotalIntrinsicValueUsdt, Is.EqualTo(180.4m));
+	}
+
+	[TestMethod]
+	[Description("Нога без тикеров исключается из суммарной внутренней стоимости, остальные не подменяются")]
+	// Деградация прочерком не превращает недоступную ногу в ноль: сумма
+	// строится только по доступным слагаемым, остальные не трогает.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	public void TryIfSummaryIntrinsicSkipsLegWithoutTickers()
+	{
+		// Arrange: тикеры только у первой ноги с внутренней 180,4; вторая
+		// без тикеров — прочерк, а не ноль в слагаемых.
+		_marks[CallSymbol] = FreshQuote(CallSymbol, quotePrice: 200m, underlyingPrice: 190.2m);
+
+		// Act
+		var evaluation = _calculator.Calculate(new[]
+		{
+			Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 10, residual: 2m),
+			Leg(SecondCallSymbol, strike: 3000m, OptionType.Call, daysToDelivery: 25, residual: 3m),
+		}, _marks, _history);
+
+		// Assert: суммарная внутренняя 180,4 — только из доступной ноги.
+		Assert.That(evaluation.Summary, Is.Not.Null);
+		Assert.That(evaluation.Summary!.TotalIntrinsicValueUsdt, Is.EqualTo(180.4m));
+	}
+
+	[TestMethod]
+	[Description("Все ноги без тикеров дают null суммарной внутренней стоимости")]
+	// Полное отсутствие величины — null: прочерк, а не нулевая сумма.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	public void TryIfSummaryIntrinsicNullWhenAllLegsLackTickers()
+	{
+		// Arrange: обе открытые ноги без тикеров — словарь котировок пуст.
+		// Act
+		var evaluation = _calculator.Calculate(new[]
+		{
+			Leg(CallSymbol, strike: 100m, OptionType.Call, daysToDelivery: 10, residual: 2m),
+			Leg(SecondCallSymbol, strike: 3000m, OptionType.Call, daysToDelivery: 25, residual: 3m),
+		}, _marks, _history);
+
+		// Assert: суммарная внутренняя стоимость — null, сутки остаются доступны.
+		Assert.That(evaluation.Summary, Is.Not.Null);
+		Assert.That(evaluation.Summary!.TotalIntrinsicValueUsdt, Is.Null);
+		Assert.That(evaluation.Summary!.DaysToNearestExpiry, Is.EqualTo(10));
 	}
 
 	[TestMethod]

@@ -6720,7 +6720,7 @@
                         {
                           "type": "frame",
                           "id": "zhgCN",
-                          "name": "Row1",
+                          "name": "TitleRow",
                           "width": "fill_container",
                           "gap": 10,
                           "alignItems": "center",
@@ -6765,23 +6765,6 @@
                             {
                               "type": "frame",
                               "id": "giOHk",
-                              "name": "Spacer",
-                              "width": "fill_container",
-                              "height": 1
-                            }
-                          ]
-                        },
-                        {
-                          "type": "frame",
-                          "id": "O2iuZE",
-                          "name": "Row2",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "Ties6",
                               "name": "Spacer",
                               "width": "fill_container",
                               "height": 1
@@ -6853,16 +6836,6 @@
                           ]
                         }
                       ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "tKUF6",
-                      "name": "Meta",
-                      "fill": "$textMuted",
-                      "content": "плановый риск 300 / плановый профит 900 · реальный риск 250 · конечный · капитал 6 000 USDT · открыта 12 авг 2026, 10:04",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
                     },
                     {
                       "type": "frame",
@@ -7020,1115 +6993,437 @@
                       "children": [
                         {
                           "type": "frame",
-                          "id": "NEN9T",
-                          "name": "Метрики",
+                          "id": "iKjSD",
+                          "name": "Ряд групп 1",
                           "width": "fill_container",
-                          "gap": 20,
+                          "gap": 12,
                           "children": [
                             {
-                              "id": "ZzdbC",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M1",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Текущий результат"
+                              "type": "frame",
+                              "id": "R8Nahc",
+                              "name": "Группа · ПЛАН",
+                              "width": 350,
+                              "fill": "$surface2",
+                              "cornerRadius": 8,
+                              "layout": "vertical",
+                              "gap": 6,
+                              "padding": [
+                                10,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "qknDP",
+                                  "name": "Капс",
+                                  "fill": "$textMuted",
+                                  "content": "ПЛАН",
+                                  "fontFamily": "$font",
+                                  "fontSize": 9.5,
+                                  "fontWeight": "500",
+                                  "letterSpacing": 0.6
                                 },
-                                "Q4NLmR": {
+                                {
                                   "type": "frame",
-                                  "id": "R6aSut",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
+                                  "id": "tOm2N",
+                                  "name": "Метрики",
+                                  "gap": 16,
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "id": "gurGS",
-                                      "name": "Value",
-                                      "fill": "$accentStrong",
-                                      "content": "+385,30",
-                                      "fontFamily": "$font",
-                                      "fontSize": 15,
-                                      "fontWeight": "600"
+                                      "id": "mK7BK",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · плановый риск",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "плановый риск"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "−300 USDT",
+                                          "fill": "$neg"
+                                        }
+                                      }
                                     },
                                     {
-                                      "type": "frame",
-                                      "id": "ONvUa",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "cPZHy",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
+                                      "id": "dDxEu",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · плановый профит",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "плановый профит"
                                         },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "MlCDp",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "z8pqgS",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "ss8IU",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "fIAxW",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "IZhZG",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "P1Weu",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "x1ZNf",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "Z5FqQ9",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "ls4yO",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "oVzCf",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "OLpuS",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "M0Sie",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
+                                        "Q4NLmR": {
+                                          "content": "+900 USDT",
+                                          "fill": "$accentStrong"
                                         }
-                                      ]
+                                      }
                                     }
                                   ]
                                 }
-                              }
+                              ]
                             },
                             {
-                              "id": "dpMJg",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M2",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "% капитала"
-                                },
-                                "Q4NLmR": {
-                                  "type": "frame",
-                                  "id": "r67VLG",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "VZ5DQ",
-                                      "name": "Value",
-                                      "fill": "$textPrimary",
-                                      "content": "64%",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "J5I0w",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "G0LbK",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "gJkZK",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "SX9ow",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "gufx2",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "dOUHN",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              }
-                            },
-                            {
-                              "id": "CqQnP",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M3",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Стоимость"
-                                },
-                                "Q4NLmR": {
-                                  "type": "frame",
-                                  "id": "QrJ6G",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "MHmkW",
-                                      "name": "Value",
-                                      "fill": "$textPrimary",
-                                      "content": "1 240",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "h9T3OX",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "bqvq0",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "vO4N3",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "h9qIZF",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "pmkM4",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "L6cCxo",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "pCZpc",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "sgHKE",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "ziUm4",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              }
-                            },
-                            {
-                              "id": "vw4zf",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M4",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Занятость"
-                                },
-                                "Q4NLmR": {
-                                  "type": "frame",
-                                  "id": "scTtv",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "r1jyJ",
-                                      "name": "Value",
-                                      "fill": "$textPrimary",
-                                      "content": "78%",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "qdVoR",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "vvOB9",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "rLC2l",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "jC6IJ",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "Q8omUc",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "VzNwD",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              }
-                            },
-                            {
-                              "id": "lN9aE",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M5",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Реализов."
-                                },
-                                "Q4NLmR": {
-                                  "type": "frame",
-                                  "id": "tCnj3",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "bak5V",
-                                      "name": "Value",
-                                      "fill": "$textPrimary",
-                                      "content": "+240,20",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "p0AtFj",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "bLzJd",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "iRl0w",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "n1T5Og",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "bttFt",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "aIBQM",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "WobYp",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "iuWly",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "H7k4yy",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "qBMbM",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "aaMvV",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "oI3px",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "Qtb7L",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              }
-                            },
-                            {
-                              "id": "RT5pk",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M6",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Нереализов."
-                                },
-                                "Q4NLmR": {
-                                  "type": "frame",
-                                  "id": "nmPHp",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "l6XbU",
-                                      "name": "Value",
-                                      "fill": "$textPrimary",
-                                      "content": "+145,10",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "LB9Lh",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "HTJUA",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "NiImN",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "ID3UT",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "ZYLTP",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "k1wycJ",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "J5cd6s",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "i5wrZR",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "qk9mE",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "rUJ56",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "hD1az",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "lHDAD",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "zNFYD",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              }
-                            },
-                            {
-                              "id": "bIjcE",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M7",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Корректировки"
-                                },
-                                "Q4NLmR": {
-                                  "type": "frame",
-                                  "id": "FvEwp",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
-                                  "children": [
-                                    {
-                                      "type": "text",
-                                      "id": "YShaY",
-                                      "name": "Value",
-                                      "fill": "$textPrimary",
-                                      "content": "3",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
-                                    },
-                                    {
-                                      "type": "frame",
-                                      "id": "a3CsC",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "I8vKER",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "D7YNBC",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "c2zkmf",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              }
-                            },
-                            {
-                              "id": "Sn0Ud",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M8",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Котировки на"
-                                },
-                                "Q4NLmR": {
-                                  "content": "07.10 13:51",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
-                                }
-                              }
-                            },
-                            {
-                              "id": "e5auzF",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "M9",
+                              "type": "frame",
+                              "id": "ItWM9",
+                              "name": "Группа · ПОЗИЦИЯ",
                               "width": "fill_container",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Период"
+                              "fill": "$surface2",
+                              "cornerRadius": 8,
+                              "layout": "vertical",
+                              "gap": 6,
+                              "padding": [
+                                10,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "a5pR6A",
+                                  "name": "Капс",
+                                  "fill": "$textMuted",
+                                  "content": "ПОЗИЦИЯ",
+                                  "fontFamily": "$font",
+                                  "fontSize": 9.5,
+                                  "fontWeight": "500",
+                                  "letterSpacing": 0.6
                                 },
-                                "Q4NLmR": {
-                                  "content": "12 авг — 07 окт · 56 дн.",
-                                  "fill": "$textPrimary",
-                                  "fontSize": 14
+                                {
+                                  "type": "frame",
+                                  "id": "j4ntd6",
+                                  "name": "Метрики",
+                                  "gap": 16,
+                                  "children": [
+                                    {
+                                      "id": "kRTlQ",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · текущий результат",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "текущий результат"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "+385,30 USDT",
+                                          "fill": "$accentStrong"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "id": "c0t0NG",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · % капитала",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "% капитала"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "64%",
+                                          "fontSize": 14
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "id": "IZC2J",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · реализованная",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "реализованная"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "+240,20 USDT",
+                                          "fontSize": 14
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "id": "eyzl7",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · нереализованная",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "нереализованная"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "+145,10 USDT",
+                                          "fontSize": 14
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "id": "mh1ps",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · выделенный капитал",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "выделенный капитал"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "6 000 USDT",
+                                          "fontSize": 14
+                                        }
+                                      }
+                                    }
+                                  ]
                                 }
-                              }
+                              ]
                             }
                           ]
                         },
                         {
                           "type": "frame",
-                          "id": "Ee94Q",
-                          "name": "Метрики времени жизни",
+                          "id": "dAqNc",
+                          "name": "Ряд групп 2",
                           "width": "fill_container",
-                          "gap": 20,
+                          "gap": 12,
                           "children": [
                             {
-                              "id": "LpRC6",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "ML1",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "До экспирации"
+                              "type": "frame",
+                              "id": "plKsm",
+                              "name": "Группа · РИСК",
+                              "width": "fill_container",
+                              "fill": "$surface2",
+                              "cornerRadius": 8,
+                              "layout": "vertical",
+                              "gap": 6,
+                              "padding": [
+                                10,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "qzPGh",
+                                  "name": "Капс",
+                                  "fill": "$textMuted",
+                                  "content": "РИСК",
+                                  "fontFamily": "$font",
+                                  "fontSize": 9.5,
+                                  "fontWeight": "500",
+                                  "letterSpacing": 0.6
                                 },
-                                "Q4NLmR": {
+                                {
                                   "type": "frame",
-                                  "id": "bjPB4",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
+                                  "id": "Pi5Zm",
+                                  "name": "Метрики",
+                                  "gap": 16,
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "id": "JKyZw",
-                                      "name": "Value",
-                                      "fill": "$neg",
-                                      "content": "9 дн.",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
+                                      "id": "DYTLK",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · реальный риск",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "реальный риск"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "250 USDT",
+                                          "fontSize": 14
+                                        }
+                                      }
                                     },
                                     {
-                                      "type": "frame",
-                                      "id": "EhTgB",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "dIxa4",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
+                                      "id": "CUUWS",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · худший исход",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "худший исход"
                                         },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "Sup27",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "H8Xaxx",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "MeNya",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "v8yfN",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "UrDak",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "fvkuX",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "hMFy0",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
+                                        "Q4NLmR": {
+                                          "content": "−9,80 USDT",
+                                          "fill": "$neg",
+                                          "fontSize": 14
                                         }
-                                      ]
+                                      }
                                     }
                                   ]
                                 }
-                              }
+                              ]
                             },
                             {
-                              "id": "IBQsh",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "ML2",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Распад / сутки"
+                              "type": "frame",
+                              "id": "OV5UN",
+                              "name": "Группа · ВРЕМЯ",
+                              "width": "fill_container",
+                              "fill": "$surface2",
+                              "cornerRadius": 8,
+                              "layout": "vertical",
+                              "gap": 6,
+                              "padding": [
+                                10,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "rvXlY",
+                                  "name": "Капс",
+                                  "fill": "$textMuted",
+                                  "content": "ВРЕМЯ",
+                                  "fontFamily": "$font",
+                                  "fontSize": 9.5,
+                                  "fontWeight": "500",
+                                  "letterSpacing": 0.6
                                 },
-                                "Q4NLmR": {
+                                {
                                   "type": "frame",
-                                  "id": "vjw1J",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
+                                  "id": "L4FPET",
+                                  "name": "Метрики",
+                                  "gap": 16,
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "id": "snCdn",
-                                      "name": "Value",
-                                      "fill": "$neg",
-                                      "content": "−6,80",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
+                                      "id": "Z0ZbNb",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · период",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "период"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "12 авг — 07 окт · 56 дн.",
+                                          "fontSize": 14
+                                        }
+                                      }
                                     },
                                     {
-                                      "type": "frame",
-                                      "id": "xMTfc",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "a0D9V",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
+                                      "id": "acYmZ",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · до экспирации",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "до экспирации"
                                         },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "jrayc",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "XRTkJ",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "zLMIZ",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "mHgQ0",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "gstay",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "R6nNF",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "YX8vX",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
+                                        "Q4NLmR": {
+                                          "content": "9 дн.",
+                                          "fontSize": 14
                                         }
-                                      ]
+                                      }
                                     }
                                   ]
                                 }
-                              }
+                              ]
                             },
                             {
-                              "id": "iPIIy",
-                              "type": "ref",
-                              "ref": "jtDmV",
-                              "name": "ML3",
-                              "width": "fit_content",
-                              "descendants": {
-                                "bGGN9": {
-                                  "content": "Временная стоимость"
+                              "type": "frame",
+                              "id": "xZZ6w",
+                              "name": "Группа · СТОИМОСТЬ",
+                              "width": "fill_container",
+                              "fill": "$surface2",
+                              "cornerRadius": 8,
+                              "layout": "vertical",
+                              "gap": 6,
+                              "padding": [
+                                10,
+                                14
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "F7jLju",
+                                  "name": "Капс",
+                                  "fill": "$textMuted",
+                                  "content": "СТОИМОСТЬ",
+                                  "fontFamily": "$font",
+                                  "fontSize": 9.5,
+                                  "fontWeight": "500",
+                                  "letterSpacing": 0.6
                                 },
-                                "Q4NLmR": {
+                                {
                                   "type": "frame",
-                                  "id": "b8vqPZ",
-                                  "name": "Триггер",
-                                  "layout": "vertical",
-                                  "gap": 2,
+                                  "id": "VuHbe",
+                                  "name": "Метрики",
+                                  "gap": 16,
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "id": "RCmqw",
-                                      "name": "Value",
-                                      "fill": "$textPrimary",
-                                      "content": "+1 060",
-                                      "fontFamily": "$font",
-                                      "fontSize": 14,
-                                      "fontWeight": "600"
+                                      "id": "lYfgT",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · внутренняя",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "внутренняя"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "+180,40 USDT",
+                                          "fontSize": 14
+                                        }
+                                      }
                                     },
                                     {
-                                      "type": "frame",
-                                      "id": "lfyQR",
-                                      "name": "Пунктир",
-                                      "gap": 2,
-                                      "children": [
-                                        {
-                                          "type": "rectangle",
-                                          "id": "bvtCT",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
+                                      "id": "YpKmO",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · временная",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "временная"
                                         },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "S8hPh",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "b14rd7",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "XFP9c",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "O7eYP",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "m54nfh",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "N2CP6",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "RTG94",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "KdwU7",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
-                                        },
-                                        {
-                                          "type": "rectangle",
-                                          "id": "B3m2th",
-                                          "name": "Тире",
-                                          "fill": "$textMuted",
-                                          "width": 3,
-                                          "height": 1
+                                        "Q4NLmR": {
+                                          "content": "+1 060 USDT",
+                                          "fontSize": 14
                                         }
-                                      ]
+                                      }
+                                    },
+                                    {
+                                      "id": "GTcMR",
+                                      "type": "ref",
+                                      "ref": "jtDmV",
+                                      "name": "Метрика · распад / сутки",
+                                      "descendants": {
+                                        "bGGN9": {
+                                          "content": "распад / сутки"
+                                        },
+                                        "Q4NLmR": {
+                                          "content": "−6,80 USDT",
+                                          "fill": "$neg",
+                                          "fontSize": 14
+                                        }
+                                      }
                                     }
                                   ]
                                 }
-                              }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "hbsaT",
+                          "name": "Котировки · техстрока",
+                          "width": "fill_container",
+                          "gap": 6,
+                          "justifyContent": "end",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "wvJE7",
+                              "name": "Label",
+                              "fill": "$textMuted",
+                              "content": "котировки на",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Y9s14k",
+                              "name": "Value",
+                              "fill": "$textSecondary",
+                              "content": "07.10 13:51",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "500"
                             }
                           ]
                         },

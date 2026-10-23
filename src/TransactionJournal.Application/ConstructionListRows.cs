@@ -31,6 +31,7 @@ namespace TransactionJournal.Application;
 /// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков — счётчик бейджа «⚠ N» строки; ноль — предупреждений нет.</param>
 /// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
 /// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
+/// <param name="TotalIntrinsicValueUsdt">Суммарная внутренняя стоимость открытых опционных остатков; null без опционных ног или без тикеров.</param>
 // Капитал передаётся незаданным как есть: прочерк вместо значения — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
 // Traceability: openspec:ui/screens#scenario-list-no-capital-percent-dash
@@ -61,6 +62,9 @@ namespace TransactionJournal.Application;
 // без открытых опционных ног несёт прочерки, деградация без тикеров решена
 // в аналитике и список её не повторяет.
 // Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
+// Суммарная внутренняя стоимость идёт третьим слагаемым саммари рядом с
+// распадом и временной стоимостью: null — ног нет или тикеры недоступны.
+// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
 public sealed record ConstructionListItem(
 	long ConstructionId,
 	string Name,
@@ -84,7 +88,8 @@ public sealed record ConstructionListItem(
 	RealRiskStatus RealRiskStatus = RealRiskStatus.Unavailable,
 	int RiskWarningsCount = 0,
 	int? DaysToNearestExpiry = null,
-	decimal? NetDailyDecayUsdt = null);
+	decimal? NetDailyDecayUsdt = null,
+	decimal? TotalIntrinsicValueUsdt = null);
 
 /// <summary>
 /// Данные экрана «Конструкции»: сводка журнала — итог с разбивкой на

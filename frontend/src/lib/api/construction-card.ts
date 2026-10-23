@@ -57,6 +57,11 @@ export interface ConstructionCardMetrics {
 	readonly daysToNearestExpiry: number | null;
 	readonly netDailyDecayUsdt: number | null;
 	readonly totalTimeValueUsdt: number | null;
+	// Суммарная внутренняя стоимость открытых опционных остатков — третье
+	// слагаемое саммари рядом с временной: null без опционных ног или без
+	// тикеров, нога без тикеров исключается прочерком.
+	// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+	readonly totalIntrinsicValueUsdt: number | null;
 }
 
 /** Строка таблицы позиций карточки. */

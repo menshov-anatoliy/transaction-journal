@@ -12,8 +12,9 @@ namespace TransactionJournal.Application.Analytics;
 /// экспирации floor((deliveryTime − now) / 24 ч) по UTC. Прирост распада —
 /// фактическая разность тет с ближайшим снимком истории суточной давности,
 /// приведённая к текущему остатку. Саммари конструкции сводит открытые
-/// опционные ноги: минимум суток до экспирации, нетто-распад со знаком и
-/// суммарную временную стоимость; нога без рыночных данных исключается из
+/// опционные ноги: минимум суток до экспирации, нетто-распад со знаком,
+/// суммарную временную и суммарную внутреннюю стоимость; нога без рыночных
+/// данных исключается из
 /// слагаемых прочерком, не подменяя остальные. Открытая нога с остатком не
 /// более четырнадцати полных суток порождает предупреждение об экспирации —
 /// по одной записи на инструмент, чисто временное, без условия «в зоне
@@ -205,7 +206,8 @@ public sealed class OptionLifetimeMetricsCalculator
 
 	/// <summary>
 	/// Сводит метрики открытых опционных ног в саммари конструкции: минимум
-	/// суток, нетто-распад со знаком и суммарная временная стоимость. Нога без
+	/// суток, нетто-распад со знаком, суммарная временная и суммарная
+	/// внутренняя стоимость. Нога без
 	/// рыночной величины исключается из соответствующего слагаемого прочерком;
 	/// пока ни одна нога величины не дала, слагаемое остаётся null. Без открытых
 	/// опционных ног саммари отсутствует — фьючерсные остатки его не строят.
@@ -228,11 +230,21 @@ public sealed class OptionLifetimeMetricsCalculator
 			.Select(leg => leg.TimeValueUsdt.GetValueOrDefault())
 			.ToList();
 
+		// Внутренняя стоимость сводится тем же жестом, что временная: слагаемое
+		// даёт только нога с доступной величиной, ноль вне денег — полноценное
+		// слагаемое, отсутствие тикеров — прочерк без подмены остальных.
+		// Traceability: openspec:analytics/option-lifetime#scenario-summary-intrinsic-sum
+		var intrinsicValues = legs
+			.Where(leg => leg.IntrinsicValueUsdt != null)
+			.Select(leg => leg.IntrinsicValueUsdt.GetValueOrDefault())
+			.ToList();
+
 		return new ConstructionLifetimeSummary
 		{
 			DaysToNearestExpiry = legs.Min(leg => leg.DaysToExpiry),
 			NetDailyDecayUsdt = decays.Count == 0 ? null : decays.Sum(),
 			TotalTimeValueUsdt = timeValues.Count == 0 ? null : timeValues.Sum(),
+			TotalIntrinsicValueUsdt = intrinsicValues.Count == 0 ? null : intrinsicValues.Sum(),
 		};
 	}
 

@@ -108,7 +108,12 @@ public static class ConstructionsEndpoints
 					// null — конструкция без опционных ног или без тикеров.
 					// Traceability: change:add-option-lifetime-metrics/specs/ui/screens/spec#scenario-list-lifetime-columns
 					item.DaysToNearestExpiry,
-					item.NetDailyDecayUsdt))
+					item.NetDailyDecayUsdt,
+					// Суммарная внутренняя стоимость проходит рядом с распадом из
+					// того же саммари времени жизни: null без опционных ног или
+					// без тикеров.
+					// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
+					item.TotalIntrinsicValueUsdt))
 				.ToArray();
 			return Results.Json(new ConstructionsOverviewResponse(summary, rows));
 		});
@@ -249,6 +254,7 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков для бейджа «⚠ N» строки; ноль — предупреждений нет.</param>
 /// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
 /// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
+/// <param name="TotalIntrinsicValueUsdt">Суммарная внутренняя стоимость открытых опционных остатков; null без опционных ног или без тикеров.</param>
 // Реальный риск входит в контракт строки списка со статусом состояния:
 // SPA рисует насечку только конечного риска и различает неограниченный
 // хвост и неполные данные без догадок по null.
@@ -287,7 +293,8 @@ public sealed record ConstructionRowResponse(
 	int LiveHintCount,
 	int RiskWarningsCount,
 	int? DaysToNearestExpiry,
-	decimal? NetDailyDecayUsdt);
+	decimal? NetDailyDecayUsdt,
+	decimal? TotalIntrinsicValueUsdt);
 
 /// <summary>Состояние недоступности журнала: обзор не собран, причина — в тексте.</summary>
 /// <param name="Error">Человекочитаемая причина недоступности.</param>

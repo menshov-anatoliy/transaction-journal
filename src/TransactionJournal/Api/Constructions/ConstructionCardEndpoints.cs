@@ -730,13 +730,15 @@ public static class ConstructionCardEndpoints
 			data.Metrics.ClosedAt,
 			data.Metrics.Duration is { } duration ? (long?)Math.Round(duration.TotalSeconds) : null,
 			// Саммари времени жизни проходит в метрики карточки из аналитики
-			// без пересчёта: минимум суток до ближайшей экспирации, нетто-распад
-			// и суммарная временная стоимость открытых опционных остатков;
-			// null — открытых опционных ног нет или тикеры недоступны.
+			// без пересчёта: минимум суток до ближайшей экспирации, нетто-распад,
+			// суммарная временная и суммарная внутренняя стоимость открытых
+			// опционных остатков; null — открытых опционных ног нет или тикеры
+			// недоступны.
 			// Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary
 			data.Metrics.Lifetime?.Summary?.DaysToNearestExpiry,
 			data.Metrics.Lifetime?.Summary?.NetDailyDecayUsdt,
 			data.Metrics.Lifetime?.Summary?.TotalTimeValueUsdt,
+			data.Metrics.Lifetime?.Summary?.TotalIntrinsicValueUsdt,
 			// Сводная величина «с учётом зафиксированного синтетикой» публикуется
 			// в метриках карточки как есть из read-модели деталей: null без
 			// действующих связок, инструментальные величины рядом не меняются.
@@ -1012,6 +1014,7 @@ public sealed record ConstructionCardResponse(
 /// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
 /// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
 /// <param name="TotalTimeValueUsdt">Суммарная временная стоимость открытых опционных остатков; null без опционных ног или без тикеров.</param>
+/// <param name="TotalIntrinsicValueUsdt">Суммарная внутренняя стоимость открытых опционных остатков; null без опционных ног или без тикеров.</param>
 /// <param name="SyntheticAdjustedTotalUsdt">Сводная величина «с учётом зафиксированного синтетикой» — реализованный результат плюс сумма локов действующих связок (оспоренные не входят, ручные входят наравне); null без действующих связок.</param>
 // Реальный риск входит в контракт метрик карточки со статусом состояния:
 // полный индикатор карточки строится с насечкой только конечного риска.
@@ -1047,6 +1050,7 @@ public sealed record ConstructionCardMetricsResponse(
 	int? DaysToNearestExpiry,
 	decimal? NetDailyDecayUsdt,
 	decimal? TotalTimeValueUsdt,
+	decimal? TotalIntrinsicValueUsdt,
 	decimal? SyntheticAdjustedTotalUsdt);
 
 /// <summary>Строка таблицы позиций карточки.</summary>

@@ -58,6 +58,7 @@ const overview: ConstructionsOverview = {
 			riskWarningsCount: 1,
 			daysToNearestExpiry: 9,
 			netDailyDecayUsdt: -6.8,
+			totalIntrinsicValueUsdt: 640,
 		},
 		{
 			constructionId: 8,
@@ -84,6 +85,7 @@ const overview: ConstructionsOverview = {
 			riskWarningsCount: 0,
 			daysToNearestExpiry: null,
 			netDailyDecayUsdt: null,
+			totalIntrinsicValueUsdt: null,
 		},
 		{
 			constructionId: 9,
@@ -110,6 +112,7 @@ const overview: ConstructionsOverview = {
 			riskWarningsCount: 0,
 			daysToNearestExpiry: null,
 			netDailyDecayUsdt: null,
+			totalIntrinsicValueUsdt: null,
 		},
 	],
 };
