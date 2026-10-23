@@ -34526,6 +34526,42 @@
           ]
         }
       ]
+    },
+    {
+      "type": "rectangle",
+      "id": "Qtu5t",
+      "x": 18392,
+      "y": 0,
+      "name": "default - Projects",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost-4.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 572,
+      "height": 833
+    },
+    {
+      "type": "rectangle",
+      "id": "izUC7",
+      "x": 19004,
+      "y": 0,
+      "name": "default - Projects",
+      "fill": [
+        "#ffffff",
+        {
+          "type": "image",
+          "enabled": true,
+          "url": "screenshot-localhost-5.png",
+          "mode": "cover"
+        }
+      ],
+      "width": 572,
+      "height": 833
     }
   ],
   "variables": {
