@@ -28,10 +28,12 @@ internal static class HintPassHarness
 	/// <param name="corpusDir">Каталог корпуса карточек.</param>
 	/// <param name="snapshot">Снимок журнала прохода.</param>
 	/// <param name="quotes">Котировки инструментов прохода; null — пустая доступная партия.</param>
+	/// <param name="unavailableReason">Причина недоступности котировок; null — источник доступен.</param>
 	public static async Task<(HintPassResult Result, List<HintRecord> Added)> RunAsync(
 		string corpusDir,
 		JournalSnapshot snapshot,
-		IReadOnlyDictionary<string, decimal>? quotes = null)
+		IReadOnlyDictionary<string, decimal>? quotes = null,
+		string? unavailableReason = null)
 	{
 		var added = new List<HintRecord>();
 		var hintStore = new Mock<IHintStore>();
@@ -44,7 +46,7 @@ internal static class HintPassHarness
 		var pass = new HintAgentPass(
 			new RulesCorpusLoader(corpusDir),
 			StubJournalReader(snapshot).Object,
-			StubQuoteSource(quotes).Object,
+			StubQuoteSource(quotes, unavailableReason).Object,
 			hintStore.Object,
 			StubClock(null).Object);
 		var result = await pass.RunAsync();
@@ -62,12 +64,14 @@ internal static class HintPassHarness
 	/// <param name="hintStore">Реальное хранилище подсказок прохода.</param>
 	/// <param name="quotes">Котировки инструментов прохода; null — пустая доступная партия.</param>
 	/// <param name="now">Отметка as-of прохода; null — фиксированная отметка каркаса.</param>
+	/// <param name="unavailableReason">Причина недоступности котировок; null — источник доступен.</param>
 	public static async Task<(HintPassResult Result, List<HintRecord> Added)> RunAsync(
 		string corpusDir,
 		JournalSnapshot snapshot,
 		IHintStore hintStore,
 		IReadOnlyDictionary<string, decimal>? quotes = null,
-		DateTimeOffset? now = null)
+		DateTimeOffset? now = null,
+		string? unavailableReason = null)
 	{
 		var beforeIds = (await hintStore.ListAllAsync().ConfigureAwait(false))
 			.Select(record => record.Id)
@@ -75,7 +79,7 @@ internal static class HintPassHarness
 		var pass = new HintAgentPass(
 			new RulesCorpusLoader(corpusDir),
 			StubJournalReader(snapshot).Object,
-			StubQuoteSource(quotes).Object,
+			StubQuoteSource(quotes, unavailableReason).Object,
 			hintStore,
 			StubClock(now).Object);
 		var result = await pass.RunAsync();
@@ -95,13 +99,15 @@ internal static class HintPassHarness
 		return journalReader;
 	}
 
-	/// <summary>Стаб источника котировок с доступной партией.</summary>
-	private static Mock<IQuoteSource> StubQuoteSource(IReadOnlyDictionary<string, decimal>? quotes)
+	/// <summary>Стаб источника котировок: доступная партия или недоступность с причиной.</summary>
+	private static Mock<IQuoteSource> StubQuoteSource(IReadOnlyDictionary<string, decimal>? quotes, string? unavailableReason)
 	{
 		var quoteSource = new Mock<IQuoteSource>();
 		quoteSource
 			.Setup(source => source.GetQuotesAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-			.ReturnsAsync(new QuoteBatch { Quotes = quotes ?? new Dictionary<string, decimal>(), FailureReason = null });
+			.ReturnsAsync(unavailableReason is null
+				? new QuoteBatch { Quotes = quotes ?? new Dictionary<string, decimal>(), FailureReason = null }
+				: QuoteBatch.Unavailable(unavailableReason));
 		return quoteSource;
 	}
 

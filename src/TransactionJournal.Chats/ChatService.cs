@@ -1,5 +1,6 @@
 namespace TransactionJournal.Chats;
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.AI;
@@ -141,18 +142,28 @@ public sealed class ChatService
 	/// инструменты агентного цикла пишут след источников, по завершении
 	/// стрима ответ фиксируется с as-of и следом. Отмена генерации оставляет
 	/// чат без ответа помощника.
+	/// Весь ход — от вопроса владельца до фиксации ответа — покрывается
+	/// корневым спаном chat_turn источника TransactionJournal.Chats:
+	/// атрибуты tj.chat.id и tj.chat.message.id ставятся в начале (значения
+	/// известны до старта стрима), tj.chat.iterations — по завершении,
+	/// отмена помечается tj.chat.cancelled=true со статусом не-ошибки.
+	/// Trace id корневого спана пишется только в ответ помощника в момент
+	/// фиксации; сообщение владельца trace id не получает.
 	// Traceability: openspec:chats/history#scenario-chat-neighbour-isolation
 	// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
 	// Traceability: openspec:chats/sources#scenario-sources-subset-parameter
+	// Traceability: openspec:ops/agent-tracing#scenario-trace-chat-turn-root
+	// Traceability: openspec:ops/agent-tracing#scenario-trace-chat-cancel-not-error
+	// Traceability: openspec:chats/history#requirement-chat-trace-id-on-answer
 	/// </summary>
 	/// <param name="chatId">Идентификатор чата, в котором оставлено сообщение владельца.</param>
 	/// <param name="userMessage">Зафиксированное сообщение владельца, на которое отвечает помощник.</param>
 	/// <param name="cancellationToken">Токен отмены генерации.</param>
 	/// <returns>Поток обновлений ответа: текстовые чанки и tool-вызовы.</returns>
-	public async IAsyncEnumerable<ChatResponseUpdate> StreamAssistantAnswerAsync(
+	public IAsyncEnumerable<ChatResponseUpdate> StreamAssistantAnswerAsync(
 		long chatId,
 		ChatMessage userMessage,
-		[EnumeratorCancellation] CancellationToken cancellationToken = default)
+		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(userMessage);
 
@@ -168,6 +179,114 @@ public sealed class ChatService
 				nameof(userMessage));
 		}
 
+		// Корневой спан хода открывается до чтения хранилища и закрывается
+		// после фиксации ответа; без слушателя трассировки спана нет.
+		var turn = ChatAgentTracing.Source.StartActivity(ChatAgentTracing.TurnSpanName, ActivityKind.Internal);
+		if (turn is not null)
+		{
+			// Связь хода с чатом и вопросом известна до старта стрима: по ней
+			// восстанавливаются и отменённые ходы, не оставившие записи-носителя.
+			// Traceability: openspec:chats/history#scenario-chat-cancelled-turn-trace-only
+			turn.SetTag(ChatAgentTracing.ChatIdTag, chatId);
+			turn.SetTag(ChatAgentTracing.MessageIdTag, userMessage.Id);
+		}
+
+		var iterations = new ChatTurnIterationCounter();
+		return StreamAssistantAnswerTurnAsync(
+			turn,
+			turn?.TraceId.ToHexString(),
+			chatId,
+			userMessage,
+			iterations,
+			cancellationToken);
+	}
+
+	/// <summary>
+	/// Ручной энумератор основного хода: в async-итераторе нельзя совместить
+	/// yield с ветками обработки исключений, поэтому каждое продвижение
+	/// внутреннего энумератора вынесено в отдельный try-catch, а yield
+	/// остаётся только в try-finally. Отмена хода помечает спан
+	/// tj.chat.cancelled=true и остаётся не-ошибкой; иной сбой помечает спан
+	/// ошибкой; исключения пробрасываются как есть.
+	// Traceability: openspec:ops/agent-tracing#scenario-trace-chat-cancel-not-error
+	/// </summary>
+	/// <param name="turn">Корневая активность хода; null — трассировка не слушается.</param>
+	/// <param name="traceId">W3C TraceId корневого спана; null — трассировка не слушается.</param>
+	/// <param name="chatId">Идентификатор чата.</param>
+	/// <param name="userMessage">Вопрос владельца.</param>
+	/// <param name="iterations">Аккумулятор запросов модели этого хода.</param>
+	/// <param name="cancellationToken">Токен отмены генерации.</param>
+	private async IAsyncEnumerable<ChatResponseUpdate> StreamAssistantAnswerTurnAsync(
+		Activity? turn,
+		string? traceId,
+		long chatId,
+		ChatMessage userMessage,
+		ChatTurnIterationCounter iterations,
+		[EnumeratorCancellation] CancellationToken cancellationToken = default)
+	{
+		var enumerator = StreamAssistantAnswerCoreAsync(chatId, userMessage, iterations, traceId, cancellationToken)
+			.GetAsyncEnumerator(cancellationToken);
+		try
+		{
+			while (true)
+			{
+				ChatResponseUpdate update;
+				try
+				{
+					if (await enumerator.MoveNextAsync().ConfigureAwait(false) == false)
+					{
+						break;
+					}
+
+					update = enumerator.Current;
+				}
+				catch (OperationCanceledException)
+				{
+					// Отменённый владельцем ход — не ошибка: спан помечается
+					// признаком отмены, статус остаётся не-ошибкой, запись ответа
+					// не создаётся, исключение уходит вызывающему как есть.
+					// Traceability: openspec:ops/agent-tracing#scenario-trace-chat-cancel-not-error
+					turn?.SetTag(ChatAgentTracing.CancelledTag, true);
+					throw;
+				}
+				catch (Exception failure)
+				{
+					// Иной сбой хода — ошибка спана; исключение пробрасывается
+					// как есть: транспортный слой сам решает, как его доставить.
+					turn?.SetStatus(ActivityStatusCode.Error, failure.Message);
+					throw;
+				}
+
+				yield return update;
+			}
+		}
+		finally
+		{
+			// Энумератор закрывается до остановки спана: очистка хода остаётся
+			// внутри его трассы. Число запросов модели известно только здесь.
+			// Traceability: openspec:ops/agent-tracing#scenario-trace-chat-turn-root
+			await enumerator.DisposeAsync().ConfigureAwait(false);
+			if (turn is not null)
+			{
+				turn.SetTag(ChatAgentTracing.IterationsTag, iterations.Count);
+				turn.Dispose();
+			}
+		}
+	}
+
+	/// <summary>Основной ход: чат, история, снимок контекста, стрим и фиксация ответа.</summary>
+	/// <param name="chatId">Идентификатор чата.</param>
+	/// <param name="userMessage">Вопрос владельца.</param>
+	/// <param name="iterations">Аккумулятор запросов модели этого хода.</param>
+	/// <param name="traceId">W3C TraceId корневого спана хода; null — трассировка не слушается.</param>
+	/// <param name="cancellationToken">Токен отмены генерации.</param>
+	private async IAsyncEnumerable<ChatResponseUpdate> StreamAssistantAnswerCoreAsync(
+		long chatId,
+		ChatMessage userMessage,
+		ChatTurnIterationCounter iterations,
+		string? traceId,
+		[EnumeratorCancellation] CancellationToken cancellationToken = default)
+	{
 		// Чат — носитель параметров: привязка выбирает ветку снимка контекста,
 		// отсутствующий чат означает, что отвечать некуда.
 		var chat = await _store
@@ -212,8 +331,11 @@ public sealed class ChatService
 			// только read-only функции выбранных категорий справочника.
 			// Рабочая модель — текущий параметр чата: смена модели на лету
 			// действует со следующего сообщения, история не переписывается.
+			// Аккумулятор хода передаётся агенту: он считает запросы модели
+			// внутренним слоем конвейера.
 			// Traceability: openspec:chats/sources#scenario-sources-registry-matches-chat-sources
 			// Traceability: openspec:chats/sources#scenario-sources-model-switch-mid-chat
+			// Traceability: openspec:ops/agent-tracing#scenario-trace-chat-turn-root
 			.StreamAnswerAsync(
 				snapshot,
 				history,
@@ -221,6 +343,7 @@ public sealed class ChatService
 				chat.Sources,
 				chat.Model,
 				traceRecorder,
+				iterations,
 				cancellationToken)
 			.ConfigureAwait(false))
 		{
@@ -229,8 +352,14 @@ public sealed class ChatService
 		}
 
 		// Ответ фиксируется по завершении стрима: текст целиком, as-of момента
-		// фиксации и след источников из накопителя агентного цикла.
+		// фиксации, след источников из накопителя агентного цикла и trace id
+		// корневого спана этого хода. Trace id — метаданные отладки: пишется
+		// только здесь, доменные правила колонку не читают; сообщение
+		// владельца trace id не получает вовсе.
 		// Traceability: openspec:chats/history#scenario-chat-source-trace-persisted
+		// Traceability: openspec:chats/history#scenario-chat-answer-carries-trace-id
+		// Traceability: openspec:chats/history#scenario-chat-owner-message-no-trace-id
+		// Traceability: openspec:chats/history#scenario-chat-trace-id-not-domain
 		await _store.AppendMessageAsync(
 			chatId,
 			null,
@@ -240,6 +369,7 @@ public sealed class ChatService
 				Text = answer.ToString(),
 				AsOf = _timeProvider.GetUtcNow(),
 				SourceTrace = traceRecorder.Build(),
+				TraceId = traceId,
 			},
 			cancellationToken).ConfigureAwait(false);
 	}

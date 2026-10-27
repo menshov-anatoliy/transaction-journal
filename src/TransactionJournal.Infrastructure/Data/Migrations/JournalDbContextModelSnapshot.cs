@@ -544,6 +544,9 @@ namespace TransactionJournal.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TraceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("WindowPeriodKey")
                         .HasColumnType("TEXT");
 

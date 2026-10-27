@@ -163,6 +163,14 @@ public sealed record HintRecord
 	public DateTimeOffset? FirstSeenAt { get; init; }
 
 	/// <summary>
+	/// W3C TraceId корневого спана hint_pass прохода, создавшего запись (32 hex) —
+	/// метаданные отладки для связи записи со строкой трассы; null у записей вне
+	/// трассы и созданных до внедрения. Ни одно доменное правило колонку не читает.
+	// Traceability: openspec:hints/engine-pass#requirement-engine-trace-id-on-created-hints
+	/// </summary>
+	public string? TraceId { get; init; }
+
+	/// <summary>
 	/// Ключ периода периодного правила в ключе окна дедупа (например неделя,
 	/// месяц, квартал лимитов риска); null — правило непериодное.
 	// Traceability: openspec:hints/hint-lifecycle#requirement-hint-dedup-rule-subject-window

@@ -1,5 +1,6 @@
 namespace TransactionJournal.Infrastructure.Hints;
 
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TransactionJournal.Hints.Ports;
@@ -37,6 +38,14 @@ public sealed class HintStore : IHintStore
 
 		using var db = new JournalDbContext(_options);
 		var entity = ToEntity(hint);
+
+		// Trace id снимается с текущей активности в момент сохранения: внутри
+		// прохода это идентификатор общей трассы корневого hint_pass — все
+		// записи прохода получают один id; запись вне трассы хранит null.
+		// Гашения (TryTransitionAsync) идентификатор не получают — гашение не создание.
+		// Traceability: openspec:hints/engine-pass#scenario-engine-pass-single-trace-id
+		// Traceability: openspec:hints/engine-pass#scenario-engine-expiry-no-trace-id
+		entity.TraceId = Activity.Current?.TraceId.ToHexString();
 		db.Hints.Add(entity);
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 		return ToRecord(entity);
@@ -186,6 +195,10 @@ public sealed class HintStore : IHintStore
 		AsOf = entity.AsOf,
 		Status = Enum.Parse<HintStatus>(entity.Status),
 		FirstSeenAt = entity.FirstSeenAt,
+		// Trace id возвращается записью только как метаданные отладки: домен
+		// и правила жизненного цикла колонку не читают.
+		// Traceability: openspec:hints/engine-pass#scenario-engine-hints-before-adoption-null
+		TraceId = entity.TraceId,
 		WindowPeriodKey = entity.WindowPeriodKey,
 	};
 

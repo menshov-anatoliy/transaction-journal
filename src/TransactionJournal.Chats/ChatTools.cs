@@ -53,13 +53,20 @@ public sealed class ChatTools
 
 	private readonly IChatMarketReader _marketReader;
 
+	private readonly ChatTracingOptions _tracingOptions;
+
 	/// <summary>Создаёт реестр поверх читателя корпуса и порта рыночных данных.</summary>
 	/// <param name="ruleCorpusReader">Читатель корпуса правил: полный текст карточки только по id.</param>
 	/// <param name="marketReader">Порт рыночных данных: одно чтение — один биржевой запрос.</param>
-	public ChatTools(IRuleCorpusReader ruleCorpusReader, IChatMarketReader marketReader)
+	/// <param name="tracingOptions">Опции инструментации хода; null — дефолт, уровень detailed.</param>
+	public ChatTools(
+		IRuleCorpusReader ruleCorpusReader,
+		IChatMarketReader marketReader,
+		ChatTracingOptions? tracingOptions = null)
 	{
 		_ruleCorpusReader = ruleCorpusReader ?? throw new ArgumentNullException(nameof(ruleCorpusReader));
 		_marketReader = marketReader ?? throw new ArgumentNullException(nameof(marketReader));
+		_tracingOptions = tracingOptions ?? new ChatTracingOptions();
 	}
 
 	/// <summary>
@@ -109,7 +116,13 @@ public sealed class ChatTools
 				new AIFunctionFactoryOptions { Name = GetOptionBoardToolName, Description = "Возвращает компактную проекцию доски опционов по базовому активу: страйки с IV, греками, открытым интересом и бид-аском.", ConfigureParameterBinding = TraceBinding(traceRecorder) }));
 		}
 
-		return functions;
+		// Захват аргументов тулов включается уровнем детализации: на detailed
+		// обёртка пишет событие tj.tool.args на спан execute_tool, на basic
+		// реестр возвращается как есть — событий аргументов нет вовсе.
+		// Traceability: openspec:ops/agent-tracing#requirement-trace-detail-levels
+		// Traceability: openspec:ops/agent-tracing#scenario-trace-basic-without-tool-args
+		// Traceability: openspec:ops/agent-tracing#scenario-trace-detailed-with-tool-args
+		return ChatToolArgsCapture.Wrap(functions, _tracingOptions.Detail);
 	}
 
 	/// <summary>

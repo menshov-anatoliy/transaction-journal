@@ -47,6 +47,14 @@ internal sealed class HintEntity
 	/// <summary>Момент первого показа в UI; null, пока подсказка не показывалась.</summary>
 	public DateTimeOffset? FirstSeenAt { get; set; }
 
+	/// <summary>
+	/// W3C TraceId прохода, создавшего запись (32 hex), — метаданные отладки
+	/// для связи строки хранилища со строкой трассы; null у записей вне трассы
+	/// и созданных до внедрения колонки. Доменные правила колонку не читают.
+	// Traceability: openspec:hints/engine-pass#requirement-engine-trace-id-on-created-hints
+	/// </summary>
+	public string? TraceId { get; set; }
+
 	/// <summary>Ключ периода периодного правила в ключе окна дедупа; null — правило непериодное.</summary>
 	public string? WindowPeriodKey { get; set; }
 }

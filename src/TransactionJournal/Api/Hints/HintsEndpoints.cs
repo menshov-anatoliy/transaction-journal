@@ -69,13 +69,18 @@ public static class HintsEndpoints
 		group.MapPost("/pass", async (IHintPassRunner passRunner, CancellationToken cancellationToken) =>
 		{
 			var result = await passRunner.RunAsync(cancellationToken);
+
+			// Ответ несёт trace id прохода как опциональное поле: он находит
+			// строки трассы и созданные записи прохода; null у проходов без трассы.
+			// Traceability: openspec:hints/engine-pass#scenario-engine-pass-response-trace-id
 			return Results.Json(new HintPassResponse(
 				SerializeOutcome(result.Outcome),
 				result.AsOf,
 				result.CreatedHints,
 				result.ExpiredHints,
 				result.Diagnostics,
-				result.UnimplementedRuleIds));
+				result.UnimplementedRuleIds,
+				result.TraceId));
 		});
 
 		// Команда «Применено»: человек переводит живую подсказку в applied;
@@ -305,13 +310,15 @@ public sealed record HintSourceTagResponse(string Tag, string File, IReadOnlyLis
 /// <param name="ExpiredHints">Погашенных записей за проход.</param>
 /// <param name="Diagnostics">Диагностика: причина пропуска или проблемы корпуса; null — диагностик нет.</param>
 /// <param name="UnimplementedRuleIds">Идентификаторы активных правил без машинной реализации.</param>
+/// <param name="TraceId">W3C TraceId корневого спана hint_pass прохода (32 hex); null у проходов без трассы — метаданные отладки, домен поле не читает.</param>
 public sealed record HintPassResponse(
 	string Outcome,
 	DateTimeOffset AsOf,
 	int CreatedHints,
 	int ExpiredHints,
 	IReadOnlyList<string>? Diagnostics,
-	IReadOnlyList<string> UnimplementedRuleIds);
+	IReadOnlyList<string> UnimplementedRuleIds,
+	string? TraceId = null);
 
 /// <summary>Результат команды перевода подсказки («Применено»/«Отклонено»).</summary>
 /// <param name="HintId">Идентификатор записи команды.</param>

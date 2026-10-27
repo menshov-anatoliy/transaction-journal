@@ -1,5 +1,6 @@
 ﻿namespace TransactionJournal.Hints;
 
+using System.Diagnostics;
 using TransactionJournal.Domain.Materialization;
 using TransactionJournal.Hints.Corpus;
 using TransactionJournal.Hints.Engine;
@@ -61,6 +62,11 @@ public sealed class HintAgentPass : IHintPassRunner
 	/// <returns>Итог прохода с исходом и счётчиками записей.</returns>
 	public async Task<HintPassResult> RunAsync(CancellationToken cancellationToken = default)
 	{
+		// Корневой спан прохода охватывает всё тело RunAsync, включая ранние
+		// возвраты (corpus-invalid, market-unavailable); атрибуты исхода и
+		// счётчиков проставляются на каждом пути возврата до завершения спана.
+		// Traceability: openspec:ops/agent-tracing#scenario-trace-hint-pass-phases
+		using var passActivity = HintAgentTracing.Source.StartActivity(HintAgentTracing.PassSpanName, ActivityKind.Internal);
 		var asOf = _clock.UtcNow;
 
 		// Фаза 0: снимок корпуса — предусловие валидности прохода. Невалидный
@@ -69,25 +75,32 @@ public sealed class HintAgentPass : IHintPassRunner
 		// работать, диагностика видна на входе запуска.
 		// Traceability: openspec:hints/rules-corpus#requirement-corpus-validity-precondition
 		RulesCorpusSnapshot corpus;
-		try
+		using (HintAgentTracing.StartPhase(HintAgentTracing.PhaseCorpusSnapshot))
 		{
-			corpus = _corpusLoader.Load();
-		}
-		catch (CorpusInvalidException ex)
-		{
-			return new HintPassResult
+			try
 			{
-				Outcome = HintPassOutcome.CorpusInvalid,
-				AsOf = asOf,
-				Diagnostics = ex.Problems,
-			};
+				corpus = _corpusLoader.Load();
+			}
+			catch (CorpusInvalidException ex)
+			{
+				return FinishPass(passActivity, new HintPassResult
+				{
+					Outcome = HintPassOutcome.CorpusInvalid,
+					AsOf = asOf,
+					Diagnostics = ex.Problems,
+				});
+			}
 		}
 
 		// Фаза 1: гашение живых записей выведенных правил — retired-карточек
 		// и карточек, удалённых из корпуса. Гашение выполняется при загрузке
 		// снимка корпуса; журнал сделок и рыночные данные не участвуют.
 		// Traceability: openspec:hints/hint-lifecycle#requirement-hint-expiry-on-subject-close-and-retirement
-		var expiredHints = await ExpireWithdrawnRulesAsync(corpus, cancellationToken).ConfigureAwait(false);
+		var expiredHints = 0;
+		using (HintAgentTracing.StartPhase(HintAgentTracing.PhaseExpireWithdrawnRules))
+		{
+			expiredHints += await ExpireWithdrawnRulesAsync(corpus, cancellationToken).ConfigureAwait(false);
+		}
 
 		// Активные правила без машинной реализации (implementation: null или
 		// неизвестный движку ключ) валидны: подсказок не порождают, проход
@@ -99,13 +112,20 @@ public sealed class HintAgentPass : IHintPassRunner
 			.ToArray();
 
 		// Фаза 1: снимок журнала — данные триггеров строятся до любых решений прохода.
-		var snapshot = await _journalSnapshotReader.ReadAsync(cancellationToken).ConfigureAwait(false);
+		JournalSnapshot snapshot;
+		using (HintAgentTracing.StartPhase(HintAgentTracing.PhaseJournalSnapshot))
+		{
+			snapshot = await _journalSnapshotReader.ReadAsync(cancellationToken).ConfigureAwait(false);
+		}
 
 		// Фаза 2: гашение записей закрытых субъектов-конструкций — первый же
 		// проход после закрытия гасит их живые записи; журнал сделок в гашении
 		// не участвует, достаточно набора открытых конструкций снимка.
 		// Traceability: openspec:hints/hint-lifecycle#requirement-hint-expiry-on-subject-close-and-retirement
-		expiredHints += await ExpireClosedSubjectsAsync(snapshot, cancellationToken).ConfigureAwait(false);
+		using (HintAgentTracing.StartPhase(HintAgentTracing.PhaseExpireClosedSubjects))
+		{
+			expiredHints += await ExpireClosedSubjectsAsync(snapshot, cancellationToken).ConfigureAwait(false);
+		}
 
 		// Котировки нужны открытым остаткам открытых конструкций и спотам базовых
 		// активов их опционных ног (условия ролла, распада и ITM сравнивают
@@ -129,19 +149,25 @@ public sealed class HintAgentPass : IHintPassRunner
 
 		// Фаза 3: рыночные котировки. Недоступность источника пропускает проход
 		// с диагностикой — подсказки на неполных данных не выпускаются.
-		// Гашения фаз 1–2 не зависят от рынка и остаются в силе.
+		// Гашения фаз 1–2 не зависят от рынка и остаются в силе. Сетевая
+		// задержка источника видна на водопаде отдельным спаном фазы.
 		// Traceability: openspec:hints/engine-pass#requirement-engine-market-unavailable-skips-pass
-		var quotes = await _quoteSource.GetQuotesAsync(symbols, cancellationToken).ConfigureAwait(false);
+		QuoteBatch quotes;
+		using (HintAgentTracing.StartPhase(HintAgentTracing.PhaseQuotes))
+		{
+			quotes = await _quoteSource.GetQuotesAsync(symbols, cancellationToken).ConfigureAwait(false);
+		}
+
 		if (quotes.IsAvailable == false)
 		{
-			return new HintPassResult
+			return FinishPass(passActivity, new HintPassResult
 			{
 				Outcome = HintPassOutcome.SkippedMarketUnavailable,
 				AsOf = asOf,
 				CreatedHints = 0,
 				ExpiredHints = expiredHints,
 				Diagnostics = [quotes.FailureReason!],
-			};
+			});
 		}
 
 		// Фаза 4: оценка триггеров активных правил с машинной реализацией.
@@ -150,43 +176,24 @@ public sealed class HintAgentPass : IHintPassRunner
 		// вид субъекта объявляет триггер, а не скоуп карточки.
 		// Traceability: openspec:hints/engine-pass#requirement-engine-deterministic-selection
 		// Traceability: openspec:hints/hint-lifecycle#requirement-hint-subject-v1-closed-set
-		var openConstructions = snapshot.Constructions
-			.Where(construction => construction.IsOpen)
-			.ToArray();
-
-		// Живые записи читаются один раз на цикл оценки: решения фазы опираются
-		// на согласованный срез, записи этого прохода в гашение не попадают.
-		var liveRecords = await _hintStore.ListLiveAsync(cancellationToken).ConfigureAwait(false);
 		var createdHints = 0;
-		foreach (var card in corpus.ExecutableCards)
+		using (HintAgentTracing.StartPhase(HintAgentTracing.PhaseEvaluateTriggers))
 		{
-			if (_triggerRegistry.TryResolve(card.TriggerImplementation!, out var trigger) == false)
-			{
-				continue;
-			}
+			var openConstructions = snapshot.Constructions
+				.Where(construction => construction.IsOpen)
+				.ToArray();
 
-			if (trigger.SubjectKind == HintSubjectKind.Journal)
+			// Живые записи читаются один раз на цикл оценки: решения фазы опираются
+			// на согласованный срез, записи этого прохода в гашение не попадают.
+			var liveRecords = await _hintStore.ListLiveAsync(cancellationToken).ConfigureAwait(false);
+			foreach (var card in corpus.ExecutableCards)
 			{
-				var input = new TriggerEvaluationInput
+				if (_triggerRegistry.TryResolve(card.TriggerImplementation!, out var trigger) == false)
 				{
-					Snapshot = snapshot,
-					Quotes = quotes,
-					Card = card,
-					AsOf = asOf,
-				};
-				var (created, expired) = await EvaluateRuleOnSubjectAsync(
-					trigger,
-					input,
-					HintSubject.ForJournal(),
-					liveRecords,
-					asOf,
-					cancellationToken).ConfigureAwait(false);
-				createdHints += created;
-				expiredHints += expired;
-			}
-			else
-			{
-				foreach (var construction in openConstructions)
+					continue;
+				}
+
+				if (trigger.SubjectKind == HintSubjectKind.Journal)
 				{
 					var input = new TriggerEvaluationInput
 					{
@@ -194,30 +201,76 @@ public sealed class HintAgentPass : IHintPassRunner
 						Quotes = quotes,
 						Card = card,
 						AsOf = asOf,
-						Construction = construction,
 					};
 					var (created, expired) = await EvaluateRuleOnSubjectAsync(
 						trigger,
 						input,
-						HintSubject.ForConstruction(construction.Id),
+						HintSubject.ForJournal(),
 						liveRecords,
 						asOf,
 						cancellationToken).ConfigureAwait(false);
 					createdHints += created;
 					expiredHints += expired;
 				}
+				else
+				{
+					foreach (var construction in openConstructions)
+					{
+						var input = new TriggerEvaluationInput
+						{
+							Snapshot = snapshot,
+							Quotes = quotes,
+							Card = card,
+							AsOf = asOf,
+							Construction = construction,
+						};
+						var (created, expired) = await EvaluateRuleOnSubjectAsync(
+							trigger,
+							input,
+							HintSubject.ForConstruction(construction.Id),
+							liveRecords,
+							asOf,
+							cancellationToken).ConfigureAwait(false);
+						createdHints += created;
+						expiredHints += expired;
+					}
+				}
 			}
 		}
 
 		// Фаза 5: записи сохранены, дедуп-окно и гашения применены по фазам прохода.
-		return new HintPassResult
+		return FinishPass(passActivity, new HintPassResult
 		{
 			Outcome = HintPassOutcome.Completed,
 			AsOf = asOf,
 			CreatedHints = createdHints,
 			ExpiredHints = expiredHints,
 			UnimplementedRuleIds = unimplementedRuleIds,
-		};
+		});
+	}
+
+	/// <summary>
+	/// Завершает проход: проставляет на корневом спане атрибут исхода и
+	/// счётчики результата и возвращает итог с TraceId корневого спана — один
+	/// и тот же идентификатор уходит в ответ API и во все созданные записи
+	/// прохода; у прохода без трассы (нет слушателя источника) итог остаётся
+	/// с null.
+	// Traceability: openspec:ops/agent-tracing#scenario-trace-hint-pass-phases
+	// Traceability: openspec:hints/engine-pass#requirement-engine-trace-id-on-created-hints
+	/// </summary>
+	/// <param name="passActivity">Корневая активность прохода; null — трассировка не слушается.</param>
+	/// <param name="result">Итог прохода на пути возврата.</param>
+	private static HintPassResult FinishPass(Activity? passActivity, HintPassResult result)
+	{
+		if (passActivity is null)
+		{
+			return result;
+		}
+
+		passActivity.SetTag(HintAgentTracing.OutcomeTag, HintAgentTracing.SerializeOutcome(result.Outcome));
+		passActivity.SetTag(HintAgentTracing.CreatedTag, result.CreatedHints);
+		passActivity.SetTag(HintAgentTracing.ExpiredTag, result.ExpiredHints);
+		return result with { TraceId = passActivity.TraceId.ToHexString() };
 	}
 
 	/// <summary>
@@ -392,6 +445,14 @@ public sealed record HintPassResult
 
 	/// <summary>Диагностика прохода: причина пропуска, проблемы корпуса; null — диагностик нет.</summary>
 	public IReadOnlyList<string>? Diagnostics { get; init; }
+
+	/// <summary>
+	/// W3C TraceId корневого спана hint_pass этого прохода (32 hex) — метаданные
+	/// отладки для связи ответа API и созданных записей со строками трассы;
+	/// null у прохода без трассы.
+	// Traceability: openspec:hints/engine-pass#scenario-engine-pass-response-trace-id
+	/// </summary>
+	public string? TraceId { get; init; }
 
 	/// <summary>
 	/// Идентификаторы активных правил без машинной реализации — чек-лист сводки

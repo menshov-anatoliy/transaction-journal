@@ -237,6 +237,15 @@ public sealed record ChatMessageDraft
 
 	/// <summary>След источников ответа ИИ-помощника; у сообщений владельца null.</summary>
 	public ChatSourceTrace? SourceTrace { get; init; }
+
+	/// <summary>
+	/// W3C TraceId корневого спана chat_turn хода; пишется только в ответ
+	/// помощника в момент фиксации, у сообщений владельца null. Метаданные
+	/// отладки: доменные правила колонку не читают.
+	// Traceability: openspec:chats/history#requirement-chat-trace-id-on-answer
+	// Traceability: openspec:chats/history#scenario-chat-trace-id-not-domain
+	/// </summary>
+	public string? TraceId { get; init; }
 }
 
 /// <summary>Сообщение чата: роль, текст, as-of; у помощника дополнительно след источников.</summary>
@@ -259,6 +268,15 @@ public sealed record ChatMessage
 
 	/// <summary>След источников ответа ИИ-помощника; у сообщений владельца null.</summary>
 	public ChatSourceTrace? SourceTrace { get; init; }
+
+	/// <summary>
+	/// W3C TraceId (32 hex) корневого спана chat_turn этого хода; null у
+	/// сообщений владельца и ответов до внедрения. Метаданные отладки:
+	/// доменные правила колонку не читают.
+	// Traceability: openspec:chats/history#requirement-chat-trace-id-on-answer
+	// Traceability: openspec:chats/history#scenario-chat-trace-id-not-domain
+	/// </summary>
+	public string? TraceId { get; init; }
 }
 
 /// <summary>

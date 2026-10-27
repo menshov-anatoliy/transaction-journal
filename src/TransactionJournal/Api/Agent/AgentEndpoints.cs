@@ -92,8 +92,11 @@ public static class AgentEndpoints
 		});
 
 		// Полная история одного чата: истории соседних чатов в выборку не
-		// попадают, след источников ответов ассистента переносится в DTO.
+		// попадают, след источников ответов ассистента переносится в DTO;
+		// traceId — опциональное поле корреляции с журналом трасс, домен
+		// колонку не читает.
 		// Traceability: openspec:chats/history#requirement-chat-message-composition
+		// Traceability: openspec:chats/history#requirement-chat-trace-id-on-answer
 		chats.MapGet("/{chatId}/messages", async (
 			string chatId,
 			IChatStore store,
@@ -425,7 +428,8 @@ public static class AgentEndpoints
 				ToWireRole(message.Role),
 				message.Text,
 				message.AsOf,
-				null);
+				null,
+				message.TraceId);
 
 		// Вызовы инструментов переносятся как есть: as-of данных инструмента
 		// домен выражает, пометку деградации — нет, поле остаётся пустым.
@@ -452,7 +456,8 @@ public static class AgentEndpoints
 			ToWireRole(message.Role),
 			message.Text,
 			message.AsOf,
-			new AgentSourceTrace(toolCalls, references));
+			new AgentSourceTrace(toolCalls, references),
+			message.TraceId);
 	}
 
 	private static string ToWireRole(ChatMessageRole role) => role switch
@@ -560,12 +565,21 @@ public sealed record AgentChatDto(
 	DateTimeOffset LastMessageAt,
 	string FirstMessagePreview);
 
+/// <summary>
+/// Сообщение истории чата: опознавательные поля, as-of и след источников;
+/// traceId — опциональные метаданные корреляции с журналом трасс, null у
+/// сообщений владельца и ответов до внедрения. Домен колонку не читает —
+/// эндпоинт только переносит её в контракт.
+// Traceability: openspec:chats/history#requirement-chat-trace-id-on-answer
+// Traceability: openspec:chats/history#scenario-chat-trace-id-not-domain
+/// </summary>
 public sealed record AgentChatMessageDto(
 	string Id,
 	string Role,
 	string Text,
 	DateTimeOffset AsOf,
-	AgentSourceTrace? SourceTrace);
+	AgentSourceTrace? SourceTrace,
+	string? TraceId);
 
 public sealed record AgentChatNotFoundResponse(string ChatId);
 

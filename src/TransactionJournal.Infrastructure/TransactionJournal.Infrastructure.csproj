@@ -11,6 +11,12 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.12" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.12" />
     <PackageReference Include="Polly.Core" Version="8.8.0" />
+    <!-- Единая операционная трасса агентского харнеса (ADR-0020): OTel SDK
+         с локальным JSONL-экспортёром и опциональным OTLP-приёмником (Phoenix).
+         Traceability: openspec:ops/agent-tracing#requirement-trace-jsonl-sink -->
+    <PackageReference Include="OpenTelemetry" Version="1.20.1" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.20.1" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.20.1" />
   </ItemGroup>
 
   <!-- В монолите internal-типы Bybit были доступны всей сборке: сохраняем видимость

@@ -45,13 +45,10 @@ public sealed class ChatAgent
 		_tools = tools ?? throw new ArgumentNullException(nameof(tools));
 		_instructions = instructions ?? throw new ArgumentNullException(nameof(instructions));
 
-		// Цикл с функциями и его потолок — механика проекта Chats, а не
-		// composition root: контракт потолка проверяется тестом на зацикливание.
-		// Traceability: openspec:chats/sources#scenario-sources-iteration-cap
-		_chatClient = chatClient
-			.AsBuilder()
-			.UseFunctionInvocation(configure: static options => options.MaximumIterationsPerRequest = MaximumIterationsPerRequest)
-			.Build();
+		// Клиент модели хранится развёрнутым: конвейер хода собирается на
+		// каждый вызов StreamAnswerAsync, потому что счётчик итераций —
+		// состояние одного хода, а конвейер обязан видеть его внутренним слоем.
+		_chatClient = chatClient;
 	}
 
 	/// <summary>
@@ -71,6 +68,7 @@ public sealed class ChatAgent
 	/// <param name="sources">Набор источников чата; null — дефолт, все три категории.</param>
 	/// <param name="model">Рабочая модель запроса — параметр чата; null или пустая — дефолт клиента.</param>
 	/// <param name="traceRecorder">Накопитель следа источников ответа; null — вызовы не записываются.</param>
+	/// <param name="iterationCounter">Аккумулятор запросов модели хода; null — запросы не считаются.</param>
 	/// <param name="cancellationToken">Токен отмены генерации.</param>
 	/// <returns>Поток обновлений ответа: текстовые чанки и tool-вызовы.</returns>
 	public async IAsyncEnumerable<ChatResponseUpdate> StreamAnswerAsync(
@@ -80,6 +78,7 @@ public sealed class ChatAgent
 		IReadOnlyList<ChatDataSource>? sources = null,
 		string? model = null,
 		ChatSourceTraceRecorder? traceRecorder = null,
+		ChatTurnIterationCounter? iterationCounter = null,
 		[EnumeratorCancellation] CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(context);
@@ -108,7 +107,32 @@ public sealed class ChatAgent
 			ModelId = string.IsNullOrWhiteSpace(model) ? null : model.Trim(),
 		};
 
-		await foreach (var update in _chatClient
+		// Конвейер собирается на вызов: первым Use стоит внешний слой — цикл
+		// с функциями и его потолок (контракт потолка проверяется тестом на
+		// зацикливание); строго под ним — встроенная инструментация
+		// Microsoft.Extensions.AI, чьи спаны chat {model}, orchestrate_tools и
+		// execute_tool {name} используются как есть, без собственных
+		// дубликатов; EnableSensitiveData всегда false — полные тексты
+		// сообщений модели в трассу не пишутся никогда. Внутренним слоем —
+		// считающий декоратор: каждый запрос модели, включая повторные
+		// итерации цикла, проходит через него ровно один раз.
+		// Traceability: openspec:chats/sources#scenario-sources-iteration-cap
+		// Traceability: openspec:ops/agent-tracing#scenario-trace-meai-spans-verbatim
+		// Traceability: openspec:ops/agent-tracing#requirement-trace-metadata-only
+		// Traceability: openspec:ops/agent-tracing#scenario-trace-chat-turn-root
+		var pipeline = _chatClient
+			.AsBuilder()
+			.UseFunctionInvocation(configure: static pipelineOptions => pipelineOptions.MaximumIterationsPerRequest = MaximumIterationsPerRequest)
+			.UseOpenTelemetry(
+				loggerFactory: null,
+				sourceName: ChatAgentTracing.MeaiSourceName,
+				configure: static instrumentationOptions => instrumentationOptions.EnableSensitiveData = false)
+			.Use(inner => iterationCounter is null
+				? inner
+				: new ModelRequestCountingChatClient(inner, iterationCounter))
+			.Build();
+
+		await foreach (var update in pipeline
 			.GetStreamingResponseAsync(chatMessages, options, cancellationToken)
 			.ConfigureAwait(false))
 		{

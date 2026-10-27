@@ -112,6 +112,11 @@ public sealed class ChatStore : IChatStore
 			SourceTraceJson = message.SourceTrace == null
 				? null
 				: JsonSerializer.Serialize(message.SourceTrace, JsonOptions),
+			// Trace id пишется тем, кто собрал черновик: конвейер передаёт его
+			// только в черновике ответа помощника, у владельца он остаётся null.
+			// Traceability: openspec:chats/history#scenario-chat-answer-carries-trace-id
+			// Traceability: openspec:chats/history#scenario-chat-owner-message-no-trace-id
+			TraceId = message.TraceId,
 		};
 		db.Messages.Add(entity);
 		await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -492,6 +497,10 @@ public sealed class ChatStore : IChatStore
 		SourceTrace = entity.SourceTraceJson == null
 			? null
 			: JsonSerializer.Deserialize<ChatSourceTrace>(entity.SourceTraceJson, JsonOptions),
+		// Колонка читается только переносом в запись порта: доменные правила
+		// trace id не используют.
+		// Traceability: openspec:chats/history#scenario-chat-trace-id-not-domain
+		TraceId = entity.TraceId,
 	};
 
 	#endregion

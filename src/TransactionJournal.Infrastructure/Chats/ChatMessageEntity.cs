@@ -5,9 +5,11 @@ namespace TransactionJournal.Infrastructure.Chats;
 /// ИИ-помощника хранится денормализованным JSON — происхождение рекомендаций
 /// проверяемо постфактум и не зависит от позднейших правок кода. История
 /// чата плоская: сообщения одного чата упорядочены суррогатным ключом, без
-/// вложенных диалогов.
+/// вложенных диалогов. TraceId — nullable метаданные корреляции с журналом
+/// трасс: заполняется только у ответов помощника, домен колонку не читает.
 // Traceability: openspec:chats/history#requirement-chat-flat-full-history
 // Traceability: openspec:chats/history#requirement-chat-message-composition
+// Traceability: openspec:chats/history#requirement-chat-trace-id-on-answer
 /// </summary>
 internal sealed class ChatMessageEntity
 {
@@ -31,4 +33,7 @@ internal sealed class ChatMessageEntity
 
 	/// <summary>След источников ответа ИИ-помощника в JSON; null у сообщений владельца.</summary>
 	public string? SourceTraceJson { get; set; }
+
+	/// <summary>W3C TraceId корневого спана chat_turn; null у сообщений владельца и старых записей.</summary>
+	public string? TraceId { get; set; }
 }

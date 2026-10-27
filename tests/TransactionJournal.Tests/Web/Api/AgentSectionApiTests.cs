@@ -1,10 +1,12 @@
 namespace TransactionJournal.Tests.Web.Api;
 
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -244,6 +246,70 @@ public sealed class AgentSectionApiTests
 		// Assert: смена модели неизвестного чата даёт 404.
 		var unknownResponse = await client.PutAsJsonAsync($"/api/v1/chats/999999/model", new { model = "glm-5.2" });
 		Assert.That(unknownResponse.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+	}
+
+	[TestMethod]
+	[Description("История чата несёт опциональное поле traceId: у ответа помощника заполнено, у владельца null")]
+	// Контракт сообщения чата расширен опциональным trace id корреляции с
+	// журналом трасс: эндпоинт только переносит колонку записи в DTO, домен
+	// колонку не читает.
+	// Traceability: openspec:chats/history#requirement-chat-trace-id-on-answer
+	// Traceability: openspec:chats/history#scenario-chat-trace-id-not-domain
+	public async Task TryIfChatMessagesCarryOptionalTraceId()
+	{
+		// Arrange: изолированное хранилище и скриптовый клиент модели.
+		var directory = Path.Combine(AppContext.BaseDirectory, $"agent-trace-id-{Guid.NewGuid():N}");
+		Directory.CreateDirectory(directory);
+		try
+		{
+			var store = new ChatStore(Path.Combine(directory, "chats.db"));
+			await using var factory = CreateChatHost(store, new RecordingContextReader(), new ScriptedModelClient("Ответ"));
+			using var client = factory.CreateClient();
+
+			// Приёмник источника чатов ставится тестом: в тестовом хосте
+			// WebApplicationFactory приёмник OTel sink не активен в момент
+			// запроса, а в живом приложении корневой спан chat_turn существует
+			// всегда — слушатель делает это присутствие детерминированным.
+			var turnSpans = new List<Activity>();
+			using var turnListener = new ActivityListener
+			{
+				ShouldListenTo = source => source.Name == "TransactionJournal.Chats",
+				Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+				ActivityStarted = turnSpans.Add,
+			};
+			ActivitySource.AddActivityListener(turnListener);
+
+			var chatId = await CreateChatAsync(client, "Проверь риски", "7", ["journal"]);
+
+			// Act: ход чата стримится до конца, ответ фиксируется конвейером.
+			using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/chats/{chatId}/messages/stream")
+			{
+				Content = JsonContent.Create(new { text = "Ответь на вопрос" }),
+			};
+			using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+			Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+			_ = await response.Content.ReadAsStringAsync();
+
+			// Assert: ход покрыт корневым спаном chat_turn, и его trace id
+			// дошёл до ответа помощника в истории.
+			Assert.That(turnSpans, Has.Count.EqualTo(1));
+			var expectedTraceId = turnSpans[0].TraceId.ToHexString();
+
+			// Assert: у ответа помощника traceId — 32 hex корневого chat_turn,
+			// у сообщений владельца (вопрос создания и вопрос стрима) поля нет.
+			var history = await (await client.GetAsync($"/api/v1/chats/{chatId}/messages")).Content.ReadFromJsonAsync<JsonArray>();
+			Assert.That(history!, Has.Count.EqualTo(3));
+			Assert.That(history[0]!["role"]!.GetValue<string>(), Is.EqualTo("user"));
+			Assert.That(history[0]!["traceId"], Is.Null);
+			Assert.That(history[1]!["role"]!.GetValue<string>(), Is.EqualTo("user"));
+			Assert.That(history[1]!["traceId"], Is.Null);
+			Assert.That(history[2]!["role"]!.GetValue<string>(), Is.EqualTo("assistant"));
+			Assert.That(history[2]!["traceId"]!.GetValue<string>(), Is.EqualTo(expectedTraceId));
+		}
+		finally
+		{
+			CleanupChatStoreDirectory(directory);
+		}
 	}
 
 	[TestMethod]

@@ -35,6 +35,7 @@ using TransactionJournal.Hints.Display;
 using TransactionJournal.Hints.Ports;
 using TransactionJournal.Infrastructure.ReadModels;
 using TransactionJournal.Infrastructure.UseCases;
+using TransactionJournal.Infrastructure.Tracing;
 using TransactionJournal.Domain;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -434,9 +435,38 @@ builder.Services.AddSingleton(_ => new ChatInstructions(
 // Агентный цикл и сервис конвейера: стриминг ответа, след источников,
 // жизненный цикл чатов — единственный путь HTTP-раздела к данным чатов.
 // Traceability: openspec:chats/history#requirement-chat-flat-full-history
-builder.Services.AddSingleton<ChatTools>();
 builder.Services.AddSingleton<ChatAgent>();
 builder.Services.AddSingleton<ChatService>();
+// Уровень детализации чата: секция Tracing (Infrastructure) маппится на
+// опцию окружения Chats — проект Chats на Infrastructure не ссылается,
+// поэтому маппинг живёт в composition root. Дефолт — detailed.
+// Traceability: openspec:ops/agent-tracing#requirement-trace-detail-levels
+// Traceability: openspec:ops/agent-tracing#requirement-trace-otel-two-surfaces
+builder.Services.AddSingleton(sp =>
+{
+	var tracing = sp.GetRequiredService<TracingOptions>();
+	return new ChatTracingOptions
+	{
+		Detail = tracing.Detail == TracingDetail.Basic ? ChatTracingDetail.Basic : ChatTracingDetail.Detailed,
+	};
+});
+// Реестр инструментов получает опции инструментации: на detailed вызовы
+// тулов пишут событие tj.tool.args, на basic — нет.
+// Traceability: openspec:ops/agent-tracing#requirement-trace-detail-levels
+builder.Services.AddSingleton(sp => new ChatTools(
+	sp.GetRequiredService<IRuleCorpusReader>(),
+	sp.GetRequiredService<IChatMarketReader>(),
+	sp.GetRequiredService<ChatTracingOptions>()));
+
+// Подсистема трассировки агентского харнеса: единый OTel-механизм операционной
+// трассы чата консультаций и прохода подсказок с локальным JSONL-sink — плоский
+// span-per-line в App_Data/traces с ротацией по размеру. Трассировка всегда
+// включена, сэмплирования нет; параметры читаются из секции Tracing, отсутствие
+// секции даёт дефолты, опциональный OTLP-приёмник (dev-просмотр Phoenix)
+// включается настройкой Tracing:OtlpEndpoint. Регистрация создаёт каталог трасс.
+// Traceability: openspec:ops/agent-tracing#requirement-trace-otel-two-surfaces
+// Traceability: openspec:config/tracing#requirement-tracing-config-section
+builder.Services.AddAgentTracing(builder.Configuration, builder.Environment.ContentRootPath);
 
 var app = builder.Build();
 
