@@ -91,10 +91,6 @@ public sealed class ConstructionCardApiTests
 		// величина проходит из метрик аналитики без пересчёта.
 		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 		Assert.That(metrics["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
-		// Худший исход публикуется рядом с риском: знаковая величина границы
-		// индикатора карточки — реализованный результат 60.25 минус риск 150.
-		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-		Assert.That(metrics["worstCaseUsdt"]!.GetValue<decimal>(), Is.EqualTo(-89.75m));
 		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
 		Assert.That(metrics["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(metrics["closedAt"], Is.Null);
@@ -560,9 +556,6 @@ public sealed class ConstructionCardApiTests
 		var metrics = payload!["metrics"]!;
 		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unbounded"));
 		Assert.That(metrics["realRiskUsdt"], Is.Null);
-		// Худший исход без величины переиспользует статус реального риска.
-		// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-		Assert.That(metrics["worstCaseUsdt"], Is.Null);
 		RealRiskContractChecks.AssertNumberOnlyWhenFinite(metrics);
 	}
 
@@ -585,10 +578,58 @@ public sealed class ConstructionCardApiTests
 		var metrics = payload!["metrics"]!;
 		Assert.That(metrics["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unavailable"));
 		Assert.That(metrics["realRiskUsdt"], Is.Null);
-		// Худший исход без величины переиспользует статус реального риска.
-		// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-		Assert.That(metrics["worstCaseUsdt"], Is.Null);
 		RealRiskContractChecks.AssertNumberOnlyWhenFinite(metrics);
+	}
+
+	[TestMethod]
+	[Description("Карточка публикует список маркеров изменения результата с номером, типом, изменением и итогом")]
+	// Область описания маркеров строится по контракту карточки: каждый
+	// выведенный маркер несёт порядковый номер, время события, тип события,
+	// изменение относительно предыдущего выведенного и накопленный итог.
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
+	public async Task TryIfCardPublishesResultMarkers()
+	{
+		// Arrange: стабильная read-модель деталей с тремя событиями истории.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: список маркеров с полями контракта, номера идут подряд.
+		var markers = payload!["resultMarkers"]!.AsArray();
+		Assert.That(markers, Has.Count.EqualTo(3));
+		Assert.That(markers[0]!["number"]!.GetValue<int>(), Is.EqualTo(1));
+		Assert.That(markers[0]!["eventTime"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
+		Assert.That(markers[0]!["kind"]!.GetValue<string>(), Is.EqualTo("option-window"));
+		Assert.That(markers[0]!["changeUsdt"]!.GetValue<decimal>(), Is.EqualTo(-100m));
+		Assert.That(markers[0]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-100m));
+		Assert.That(markers[1]!["number"]!.GetValue<int>(), Is.EqualTo(2));
+		Assert.That(markers[1]!["kind"]!.GetValue<string>(), Is.EqualTo("pnl-adjustment"));
+		Assert.That(markers[1]!["changeUsdt"]!.GetValue<decimal>(), Is.EqualTo(5m));
+		Assert.That(markers[1]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-95m));
+		Assert.That(markers[2]!["number"]!.GetValue<int>(), Is.EqualTo(3));
+		Assert.That(markers[2]!["kind"]!.GetValue<string>(), Is.EqualTo("manual-mark"));
+		Assert.That(markers[2]!["changeUsdt"]!.GetValue<decimal>(), Is.EqualTo(160.25m));
+		Assert.That(markers[2]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(65.25m));
+	}
+
+	[TestMethod]
+	[Description("Карточка без событий истории отдаёт пустой список маркеров")]
+	// Пустая история — обычное состояние: контракт отдаёт явную пустоту,
+	// а не отсутствие поля, область описания показывает пустое состояние.
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+	public async Task TryIfCardWithoutEventsServesEmptyResultMarkers()
+	{
+		// Arrange: стаб деталей с пустой историей маркеров.
+		await using var factory = new SectionApiFactory(services => services.ReplaceDetailReadModel(new StubCardDetailReadModel().WithEmptyResultMarkers()));
+		using var client = factory.CreateClient();
+
+		// Act: запрос снимка карточки.
+		var payload = await (await client.GetAsync("/api/v1/constructions/7")).Content.ReadFromJsonAsync<JsonNode>();
+
+		// Assert: явный пустой список в контракте.
+		Assert.That(payload!["resultMarkers"]!.AsArray(), Has.Count.EqualTo(0));
 	}
 
 		[TestMethod]
@@ -1695,6 +1736,35 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	/// <summary>Открытая после синтетического закрытия часть опционной ноги.</summary>
 	private decimal? _syntheticOpenQuantity;
 
+	/// <summary>История маркеров конструкции: выведенные маркеры проходят в контракт карточки.</summary>
+	private IReadOnlyList<ResultMarker> _resultMarkers =
+	[
+		new ResultMarker
+		{
+			Number = 1,
+			EventTime = new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
+			Kind = ResultMarkerKind.OptionWindow,
+			ChangeUsdt = -100m,
+			TotalUsdt = -100m,
+		},
+		new ResultMarker
+		{
+			Number = 2,
+			EventTime = new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero),
+			Kind = ResultMarkerKind.PnLAdjustment,
+			ChangeUsdt = 5m,
+			TotalUsdt = -95m,
+		},
+		new ResultMarker
+		{
+			Number = 3,
+			EventTime = new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero),
+			Kind = ResultMarkerKind.ClosingManualMark,
+			ChangeUsdt = 160.25m,
+			TotalUsdt = 65.25m,
+		},
+	];
+
 	private StubCardDetailReadModel(bool brokenJournal, RealRiskStatus realRiskStatus)
 	{
 		_brokenJournal = brokenJournal;
@@ -1717,6 +1787,13 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	public StubCardDetailReadModel WithRiskWarnings(params string[] warnings)
 	{
 		_riskWarnings = warnings;
+		return this;
+	}
+
+	/// <summary>Вариант с пустой историей маркеров: контракт отдаёт явную пустоту.</summary>
+	public StubCardDetailReadModel WithEmptyResultMarkers()
+	{
+		_resultMarkers = [];
 		return this;
 	}
 
@@ -1805,10 +1882,6 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			// Число реального риска выдаётся только конечному состоянию:
 			// unbounded и unavailable идут с null, инвариант «число только при finite».
 			RealRiskUsdt = _realRiskStatus == RealRiskStatus.Finite ? 150m : null,
-			// Худший исход переиспользует то же правило: число только при
-			// конечном риске, иначе null со статусом состояния.
-			// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-			WorstCaseUsdt = _realRiskStatus == RealRiskStatus.Finite ? -89.75m : null,
 			RealRiskStatus = _realRiskStatus,
 			OpenedAt = openedAt,
 			ClosedAt = null,
@@ -1947,7 +2020,11 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			ProfitUnit: TargetUnit.Usdt,
 			// Перечень предупреждений идёт из того же набора текущего чтения,
 			// что и счётчик метрик, — расхождение перечня и счётчика исключено.
-			RiskWarnings: _riskWarnings);
+			RiskWarnings: _riskWarnings,
+			// История маркеров идёт в контракт карточки набором текущего чтения:
+			// нумерация сплошная, последний маркер — накопленный зафиксированный итог.
+			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
+			ResultMarkers: new ConstructionResultMarkers { Markers = _resultMarkers });
 		return Task.FromResult(data);
 	}
 }

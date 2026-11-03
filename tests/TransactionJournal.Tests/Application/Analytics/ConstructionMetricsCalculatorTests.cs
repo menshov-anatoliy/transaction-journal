@@ -413,14 +413,15 @@ public class ConstructionMetricsCalculatorTests
 	[Description("Неразобранный символ открытого остатка оставляет реальный риск отсутствующим со статусом нерассчитанного")]
 	public void TryIfUnparseableResidualLeavesRealRiskNull()
 	{
-		// Arrange: открытый остаток с символом, который не разбирается как символ
-		// опциона, рядом с разобранным остатком.
+		// Arrange: открытый остаток с символом, который не разбирается ни как
+		// символ опциона, ни как символ линейного фьючерса, рядом с разобранным
+		// остатком.
 		// Требование: неопределённый совместный минимум деградирует только метрику
 		// реального риска со статусом unavailable, остальные метрики не задеты.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
 		var positions = new[]
 		{
-			OpenPosition("BTCUSDT", 0, 0m, residual: 2m),
+			OpenPosition("BTCUSD", 0, 0m, residual: 2m),
 			OpenPosition(SecondSymbol, 10, -2.5m),
 		};
 
@@ -458,18 +459,16 @@ public class ConstructionMetricsCalculatorTests
 	}
 
 	[TestMethod]
-	[Description("Гарантированная прибыль остатков смещает худший исход выше реализованного результата")]
-	public void TryIfGuaranteedResidualProfitShiftsWorstCaseAboveRealized()
+	[Description("Гарантированная прибыль остатков клэмпится нулём риска в метриках конструкции")]
+	public void TryIfGuaranteedResidualProfitKeepsZeroRiskInMetrics()
 	{
 		// Arrange: открытые остатки полностью зафиксированы синтетическим
 		// паритетным локом — длинный колл 100 по средней 60 и короткий перп
 		// BTCUSDT −1 по средней 195.7 с суммарным минимумом платежа +35.7 —
 		// при реализованном результате позиций −46.6.
-		// Требование: худший исход равен реализованному результату плюс
-		// неклэмпированный минимум платежа остатков и остаётся отрицательным
-		// даже при нулевом реальном риске.
-		// Traceability: openspec:analytics/performance#scenario-worst-case-guaranteed-profit
-		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+		// Требование: реальный риск клэмпится нулём, статус конечный —
+		// гарантированная прибыль остатков риском не считается.
+		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 		var positions = new[]
 		{
 			OpenPosition("BTC-27DEC24-100-C", 0, -23.3m, residual: 1m, averageOpenPrice: 60m),
@@ -479,33 +478,7 @@ public class ConstructionMetricsCalculatorTests
 		// Act
 		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
 
-		// Assert: −46.6 + 35.7 = −10.9; реальный риск клэмпится нулём, статус
-		// конечный — гарантированная прибыль остатков риском не считается.
-		Assert.That(metrics.WorstCaseUsdt, Is.EqualTo(-10.9m));
-		Assert.That(metrics.RealRiskUsdt, Is.EqualTo(0m));
-		Assert.That(metrics.RealRiskStatus, Is.EqualTo(RealRiskStatus.Finite));
-	}
-
-	[TestMethod]
-	[Description("Без открытых остатков худший исход равен реализованному результату")]
-	public void TryIfClosedConstructionWorstCaseEqualsRealized()
-	{
-		// Arrange: конструкция полностью закрыта с реализованным результатом +200 —
-		// открытых остатков нет.
-		// Требование: худший платёж остатков нулевой, поэтому худший исход
-		// совпадает с реализованным результатом при конечном статусе.
-		// Traceability: openspec:analytics/performance#scenario-worst-case-closed-equals-realized
-		var positions = new[]
-		{
-			ClosedPosition(FirstSymbol, 0, 30, 200m),
-			ClosedPosition(SecondSymbol, 10, 50, 0m),
-		};
-
-		// Act
-		var metrics = _calculator.Calculate(ConstructionId, 1000m, positions, Array.Empty<ConstructionPnLAdjustment>(), Now);
-
-		// Assert: худший исход +200, риска нет, статус конечный.
-		Assert.That(metrics.WorstCaseUsdt, Is.EqualTo(200m));
+		// Assert: реальный риск клэмпится нулём, статус конечный.
 		Assert.That(metrics.RealRiskUsdt, Is.EqualTo(0m));
 		Assert.That(metrics.RealRiskStatus, Is.EqualTo(RealRiskStatus.Finite));
 	}

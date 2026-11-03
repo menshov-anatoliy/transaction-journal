@@ -345,11 +345,20 @@ builder.Services.AddSingleton<AgentRulesCatalog>();
 builder.Services.AddSingleton<IChatStore>(_ => new ChatStore(
 	Path.Combine(dataDirectory, "chats.db")));
 
+// Читатель хвостов истории результата: последний маркер каждой конструкции
+// для строк списка и превью — события журнала те же, что у полных историй
+// карточки, читатель берёт из них только время последнего события и суммы.
+// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+builder.Services.AddSingleton(sp => new ConstructionResultMarkersReader(
+	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
+	sp.GetRequiredService<PositionReadModel>()));
+
 // Read-модель экрана «Конструкции»: соединяет метрики аналитики журнала с именами
 // и ручными статусами конструкций, скрывая архивные из списка и его счётчика.
 builder.Services.AddSingleton(sp => new ConstructionListReadModel(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
-	sp.GetRequiredService<IJournalMetricsReadModel>()));
+	sp.GetRequiredService<IJournalMetricsReadModel>(),
+	sp.GetRequiredService<ConstructionResultMarkersReader>()));
 builder.Services.AddSingleton<IConstructionListReadModel>(sp => sp.GetRequiredService<ConstructionListReadModel>());
 
 // Read-модель экрана деталей конструкции: сводка метрик с периодом и отметкой

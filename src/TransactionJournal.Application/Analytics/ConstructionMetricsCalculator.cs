@@ -45,9 +45,7 @@ public sealed class ConstructionMetricsCalculator
 	/// открытых остатков на экспирации — выводится из структуры ног и средних цен
 	/// открытых остатков и от текущих котировок не зависит; в метрики он переносится
 	/// вместе со статусом, различающим конечный, неограниченный и нерассчитанный
-	/// риск, без изменения расчёта результата конструкции. Рядом публикуется
-	/// худший исход — реализованный результат плюс неклэмпированный минимум
-	/// платежа групп остатков — с тем же статусом, что и реальный риск. Рядом же
+	/// риск, без изменения расчёта результата конструкции. Рядом же
 	/// вычисляется диагностика незакрытых рисков из текущих открытых остатков:
 	/// в метрики попадает счётчик предупреждений, записи переносятся в контракты
 	/// превью и карточки; в базу ничего не пишется. Тем же проходом встраиваются
@@ -124,16 +122,6 @@ public sealed class ConstructionMetricsCalculator
 		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
 		var realRisk = _realRiskCalculator.CalculateResult(positionList);
 
-		// Худший исход — знаковая метрика рядом с реальным риском: реализованный
-		// результат плюс неклэмпированный минимум платежа групп остатков. Число
-		// есть только при конечном риске, статус переиспользуется у реального
-		// риска; без открытых остатков платёж нулевой и худший исход равен
-		// реализованному результату.
-		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-		decimal? worstCaseUsdt = realRisk.WorstPayoffUsdt == null
-			? null
-			: realizedPnL + realRisk.WorstPayoffUsdt.GetValueOrDefault();
-
 		// Диагностика незакрытых рисков — тот же проход по метрикам позиций,
 		// что и реальный риск: единый вызов вычислителя питает и счётчик бейджа,
 		// и перечень карточки, поэтому они не расходятся. Вычисление на лету без
@@ -204,7 +192,6 @@ public sealed class ConstructionMetricsCalculator
 			QuoteValue = quoteValue,
 			RealRiskUsdt = realRisk.Usdt,
 			RealRiskStatus = realRisk.Status,
-			WorstCaseUsdt = worstCaseUsdt,
 			RiskWarningsCount = riskDiagnostics.Count + expiryDiagnostics.Count,
 			RiskWarnings = warnings,
 			Lifetime = lifetimeEvaluation,

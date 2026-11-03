@@ -245,21 +245,6 @@ function groupMetrics(group: MetricGroupKey, card: ConstructionCard): React.Reac
 							)}
 						</MetricHint>
 					</Metric>
-					{/* Худший исход — знаковая граница насечки индикатора; null
-					    без конечного риска — прочерк. */}
-					{/* Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric */}
-					<Metric
-						label="худший исход"
-						valueClassName={`tabular-nums ${VALUE_PART} ${toneClass(metrics.worstCaseUsdt ?? 0)}`}
-					>
-						<MetricHint tooltip={METRIC_TOOLTIPS.worstCase}>
-							{metrics.worstCaseUsdt === null ? (
-								<span className="text-text-muted">{DASH}</span>
-							) : (
-								`${formatSignedAmount(metrics.worstCaseUsdt)} USDT`
-							)}
-						</MetricHint>
-					</Metric>
 				</>
 			);
 		case "time":
@@ -714,22 +699,24 @@ export function ConstructionMetricStrip({
 				)}
 			</div>
 
-			{/* Полный индикатор финансового результата: зоны планового риска и
-			    профита, насечка худшего исхода конструкции, маркер результата
-			    (§9); граница шкалы именуется худшим исходом по ADR-0015, а не
-			    величиной реального риска. */}
+			{/* Полный (или средний на узком экране) индикатор финансового
+			    результата: зоны планового риска и профита, маркеры изменения
+			    результата над полосой, маркер текущего результата под ней.
+			    Полный вид показывает бейджи маркеров с суммами и область
+			    описания под индикатором, средний — только последний маркер
+			    штрихом. */}
 			{/* Подсказка чтения индикатора карточки: «?» в правом верхнем
 			    углу блока индикатора, выше текстовых меток, по клику
 			    открывает попап с пояснением чтения шкалы — зоны планового
-			    риска, профита и сверхприбыли, насечка худшего исхода
-			    конструкции к экспирации, маркер результата и состояния
-			    вне шкалы; закрывается кликом вне, Esc и повторным кликом
-			    по триггеру. Подсказка живёт только в карточке: компактный
-			    вид таблиц и краткая карточка контекстной панели её не
-			    получают и сохраняют доступные названия состояний риска
-			    (aria-label/title компактного вида). */}
+			    риска, профита и сверхприбыли, маркеры изменения результата,
+			    маркер текущего результата и состояния вне шкалы;
+			    закрывается кликом вне, Esc и повторным кликом по триггеру.
+			    Подсказка живёт только в карточке: компактный вид таблиц и
+			    краткая карточка контекстной панели её не получают и сохраняют
+			    доступные названия состояний риска (aria-label/title
+			    компактного вида). */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-opens */}
-			{/* Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model */}
+			{/* Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-indicator-reading-tooltip */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-closes */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-card-only */}
 			<div className="relative -mt-4 pt-[26px]">
@@ -749,14 +736,17 @@ export function ConstructionMetricStrip({
 						// котировок не делает индикатор неполным.
 						// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 						hasOpenResidual: card.hasOpenResidual,
-						// Пара «число + статус» из контракта API: конечный риск
-						// даёт насечку, unbounded/unavailable — состояние
-						// без насечки. Худший исход ставит позицию границы.
+						// Пара «число + статус» из контракта API: unbounded и
+						// unavailable дают состояние без числа; маркеры истории
+						// и маркер итога рисуются независимо от состояния риска.
 						// Traceability: openspec:ui/screens#requirement-risk-profit-hint
 						// Traceability: change:show-unbounded-finresult-risk/design#d1
-						realRisk: metrics.realRiskUsdt,
-						worstCase: metrics.worstCaseUsdt,
 						realRiskStatus: metrics.realRiskStatus,
+						// Выведенные маркеры изменения результата из контракта
+						// карточки: порог и нумерация посчитаны на сервере,
+						// фронтенд рендерит как есть.
+						// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
+						resultMarkers: card.resultMarkers,
 					}}
 				/>
 				{/* Триггер стоит в отдельном верхнем ряду блока индикатора:
@@ -786,10 +776,10 @@ export function ConstructionMetricStrip({
 					>
 						<CircleHelp className="size-3.5" aria-hidden="true" />
 					</PopoverTrigger>
-					{/* Состав пояснения дословно повторяет мастер design.pen
+					{/* Состав пояснения повторяет мастер design.pen
 					    «Подсказка/Чтение индикатора»: заголовок, свотчи зон,
-					    насечка худшего исхода, маркер результата и примечание
-					    про состояния вне шкалы. */}
+					    ряд маркеров изменения результата, маркер текущего
+					    результата и примечание про состояния вне шкалы. */}
 					<PopoverContent
 						side="bottom"
 						align="end"
@@ -809,28 +799,24 @@ export function ConstructionMetricStrip({
 							<span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] bg-super-zone" />
 							<span>сверхприбыль — золотая зона за +Профит</span>
 						</div>
-						{/* Насечка может стоять правее маркера результата при
-						    фиксации остатков синтетикой: гарантия платежа остатков,
-						    в частности синтетическая фиксация по правилу ac-43;
-						    величина зафиксированного видна в зоне синтетики
-						    карточки. При полной синтетической фиксации маркер
-						    может стоять левее насечки: рыночная оценка «сейчас»
-						    несёт временную стоимость встречного опциона, спред и
-						    свежесть котировок — к экспирации значения сходятся.
-						    Новых визуальных элементов нет — дополнен текст
-						    существующей строки насечки. */}
-						{/* Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-tooltip-explains-full-fix-divergence */}
-						{/* Traceability: change:unify-current-result/specs/ui/screens/spec#requirement-indicator-tooltip-synthetic-mention */}
+						{/* Маркеры изменения результата — история накопленного
+						    зафиксированного результата по событиям журнала; локи
+						    действующих связок входят в значение, а зафиксированная
+						    синтетикой часть видна в строке «зафиксировано
+						    синтетикой» и сводной величине зоны синтетики карточки. */}
+						{/* Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model */}
 						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
-							<span aria-hidden="true" className="h-[14px] w-[3px] shrink-0 bg-text-primary" />
-							<span>насечка — худший исход конструкции к экспирации, подпись «худший исход · X USDT · N%» от плановой границы зоны (насечка может стоять правее реализованного результата, а при фиксации остатков синтетикой — и правее маркера: гарантия платежа остатков, в частности синтетическая фиксация по правилу ac-43; величина зафиксированного видна в зоне синтетики карточки). При полной синтетической фиксации маркер может стоять левее насечки: рыночная оценка «сейчас» несёт временную стоимость встречного опциона, спред и свежесть котировок — к экспирации значения сходятся</span>
+							<span aria-hidden="true" className="flex h-[14px] shrink-0 items-center rounded-full border px-1 text-[8px] font-semibold text-[color:var(--fin-negative)]">
+								1
+							</span>
+							<span>маркеры изменения результата — номерные бейджи с суммами над полосой: история накопленного зафиксированного результата по событиям журнала с порогом проявления 5% планового риска; последний бейдж — текущий накопленный зафиксированный результат, в его значение входят локи действующих связок синтетического закрытия, а сама зафиксированная синтетикой часть видна в строке «зафиксировано синтетикой» и сводной величине зоны синтетики карточки</span>
 						</div>
 						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
 							<span aria-hidden="true" className="size-[11px] shrink-0 rounded-full bg-primary" />
-							<span>маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки</span>
+							<span>маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки, подпись под полосой; он отличается от последнего бейджа — история хранит зафиксированный результат, а маркер учитывает и нереализованную часть</span>
 						</div>
 						<p className="text-[10.5px] text-text-muted">
-							Состояния вне шкалы показывают отдельно от полосы: «риск не ограничен» и «не удалось рассчитать»; «риска нет» — при нулевом реальном риске.
+							Состояния вне шкалы показывают отдельно от полосы: «риск не ограничен» и «не удалось рассчитать».
 						</p>
 					</PopoverContent>
 				</Popover>

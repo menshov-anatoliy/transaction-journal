@@ -26,8 +26,8 @@ namespace TransactionJournal.Application;
 /// <param name="QuoteValue">Стоимость открытых позиций конструкции по котировкам; null при закрытой конструкции или недоступной оценке котировок.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала — стоимость в процентах от капитала; null без базы процентов или стоимости.</param>
 /// <param name="RealRiskUsdt">Реальный риск конструкции в USDT — наихудший результат открытых остатков на экспирации; null, когда худший случай неограничен или символ остатка не разобран — причина различима статусом.</param>
-/// <param name="WorstCaseUsdt">Худший исход конструкции в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: конечный (`finite`), неограниченный (`unbounded`) или нерассчитанный (`unavailable`); незаданный читается как «не рассчитан», а не как конечный.</param>
+/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный денежный итог (реализованный плюс локи плюс корректировки минус входная стоимость открытых остатков) и время события; null, когда событий истории у конструкции ещё нет.</param>
 /// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков — счётчик бейджа «⚠ N» строки; ноль — предупреждений нет.</param>
 /// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
 /// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
@@ -50,10 +50,10 @@ namespace TransactionJournal.Application;
 // надо различать, а конечный ноль не превращать в отсутствие величины.
 // Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
 // Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
-// Худший исход идёт рядом с реальным риском со знаком и тем же статусом:
-// насечке индикатора нужна знаковая величина, а не клэмпированные потери.
-// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
+// Последний маркер истории результата идёт в строку списка готовой парой:
+// накопленный зафиксированный итог и время события вычислены при чтении,
+// полный список маркеров остаётся в карточке конструкции.
+// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
 // Счётчик предупреждений переносится из метрик аналитики как есть: расчёт по
 // открытым остаткам остаётся в аналитике, строка списка и превью показывают
 // число бейджем; ноль означает отсутствие бейджа.
@@ -84,7 +84,7 @@ public sealed record ConstructionListItem(
 	decimal? QuoteValue = null,
 	decimal? CapitalUsagePercent = null,
 	decimal? RealRiskUsdt = null,
-	decimal? WorstCaseUsdt = null,
+	ResultMarkerSummary? LastResultMarker = null,
 	RealRiskStatus RealRiskStatus = RealRiskStatus.Unavailable,
 	int RiskWarningsCount = 0,
 	int? DaysToNearestExpiry = null,

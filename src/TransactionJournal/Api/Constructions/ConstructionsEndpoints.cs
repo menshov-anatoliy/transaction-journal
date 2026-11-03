@@ -87,14 +87,16 @@ public static class ConstructionsEndpoints
 					item.QuoteValue,
 					item.CapitalUsagePercent,
 					item.RealRiskUsdt,
-					// Худший исход публикуется рядом с реальным риском: знаковая
-					// величина со статусом состояния переиспользуется без пересчёта.
-					// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-					item.WorstCaseUsdt,
 					// Статус проходит рядом с величиной: конечный риск отличим от
 					// неограниченного хвоста и неполных данных без догадок по null.
 					// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt, item.WorstCaseUsdt),
+					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt),
+					// Последний маркер истории результата проходит в строку готовой
+					// парой «итог + время»: полный список маркеров остаётся в карточке.
+					// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+					item.LastResultMarker is null
+						? null
+						: new ResultMarkerSummaryResponse(item.LastResultMarker.TotalUsdt, item.LastResultMarker.EventAt),
 					item.OpenedAt,
 					item.ClosedAt,
 					liveCounts.GetValueOrDefault(item.ConstructionId),
@@ -163,15 +165,16 @@ public static class ConstructionsEndpoints
 				data.Metrics.QuoteValue,
 				data.Metrics.CapitalUsagePercent,
 				data.Metrics.RealRiskUsdt,
-				// Худший исход публикуется рядом с реальным риском: знаковая
-				// величина границы индикатора со статусом состояния проходит
-				// из метрик аналитики без пересчёта.
-				// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-				data.Metrics.WorstCaseUsdt,
 				// Статус проходит рядом с величиной: конечный риск отличим от
 				// неограниченного хвоста и неполных данных без догадок по null.
 				// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt, data.Metrics.WorstCaseUsdt),
+				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
+				// Последний маркер истории результата проходит в превью готовой
+				// парой «итог + время» из той же истории, что публикует карточка.
+				// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+				data.ResultMarkers?.LastMarker is { } lastMarker
+					? new ResultMarkerSummaryResponse(lastMarker.TotalUsdt, lastMarker.EventTime)
+					: null,
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
 				data.QuotesAsOf,
@@ -246,8 +249,8 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="QuoteValue">Стоимость открытых позиций по котировкам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
-/// <param name="WorstCaseUsdt">Худший исход в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
+/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный итог и время события; null, когда событий истории у конструкции ещё нет.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="LiveHintCount">Число живых подсказок конструкции для бейджа строки.</param>
@@ -256,13 +259,14 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
 /// <param name="TotalIntrinsicValueUsdt">Суммарная внутренняя стоимость открытых опционных остатков; null без опционных ног или без тикеров.</param>
 // Реальный риск входит в контракт строки списка со статусом состояния:
-// SPA рисует насечку только конечного риска и различает неограниченный
-// хвост и неполные данные без догадок по null.
+// насечка удалена вместе с худшим исходом (ADR-0021) — SPA различает
+// неограниченный хвост и неполные данные бейджами «∞»/«?» без догадок
+// по null.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
-// Худший исход входит в контракт рядом с реальным риском: насечке индикатора
-// строки нужна знаковая величина со статусом состояния.
-// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+// Последний маркер входит в контракт строки аддитивно: компактный вид и
+// средний вид индикатора рисуют только его, без номера и сумм бейджей.
+// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
 // Счётчик предупреждений входит в контракт строки аддитивно: бейдж «⚠ N»
 // строится по числу из метрик аналитики, ноль — бейдж скрыт.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
@@ -286,8 +290,8 @@ public sealed record ConstructionRowResponse(
 	decimal? QuoteValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
-	decimal? WorstCaseUsdt,
 	string RealRiskStatus,
+	ResultMarkerSummaryResponse? LastResultMarker,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	int LiveHintCount,
@@ -295,6 +299,16 @@ public sealed record ConstructionRowResponse(
 	int? DaysToNearestExpiry,
 	decimal? NetDailyDecayUsdt,
 	decimal? TotalIntrinsicValueUsdt);
+
+/// <summary>Последний маркер изменения результата в контракте списка и превью.</summary>
+/// <param name="TotalUsdt">Накопленный зафиксированный итог конструкции на момент события в USDT.</param>
+/// <param name="EventAt">Время события журнала, породившего последний маркер.</param>
+// Пара «итог + время» публикуется без номера: компактные виды рисуют
+// последний маркер без бейджа нумерации.
+// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+public sealed record ResultMarkerSummaryResponse(
+	decimal TotalUsdt,
+	DateTimeOffset EventAt);
 
 /// <summary>Состояние недоступности журнала: обзор не собран, причина — в тексте.</summary>
 /// <param name="Error">Человекочитаемая причина недоступности.</param>
@@ -317,8 +331,8 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="QuoteValue">Стоимость открытых позиций по котировкам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
-/// <param name="WorstCaseUsdt">Худший исход в USDT — знаковая величина: реализованный результат плюс неклэмпированный минимум платежа групп открытых остатков; null вместе с реальным риском в состояниях `unbounded`/`unavailable`.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
+/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный итог и время события; null, когда событий истории у конструкции ещё нет.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="QuotesAsOf">Отметка времени котировок оценки; null при сбое или без остатков.</param>
@@ -327,13 +341,12 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков; ноль — предупреждений нет.</param>
 /// <param name="RiskWarnings">Полный перечень текстов предупреждений краткой карточки; пустой список без предупреждений.</param>
 // Реальный риск входит в контракт превью со статусом состояния: правая
-// область строит полный индикатор финрезультата с насечкой только
-// конечного риска.
+// область строит полный индикатор финрезультата только конечного риска.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
-// Худший исход входит в контракт превью рядом с реальным риском: граница
-// индикатора ставится знаковой величиной худшего исхода.
-// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
+// Последний маркер входит в контракт превью аддитивно: средний вид
+// индикатора рисует его без номера и сумм бейджей.
+// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
 // Предупреждения входят в контракт превью аддитивно: счётчик и полный
 // перечень текстов идут из одного вызова вычислителя с метриками.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
@@ -354,8 +367,8 @@ public sealed record ConstructionPreviewResponse(
 	decimal? QuoteValue,
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
-	decimal? WorstCaseUsdt,
 	string RealRiskStatus,
+	ResultMarkerSummaryResponse? LastResultMarker,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	DateTimeOffset? QuotesAsOf,

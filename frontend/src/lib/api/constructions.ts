@@ -11,6 +11,14 @@ export type ConstructionStatus = "open" | "closed" | "archived";
 /** Состояние реального риска: число величины выдаётся только конечному риску. */
 export type RealRiskStatus = "finite" | "unbounded" | "unavailable";
 
+/** Последний маркер изменения результата: накопленный итог и время события. */
+export interface ConstructionLastResultMarker {
+	/** Накопленный зафиксированный результат на момент события, USDT. */
+	readonly totalUsdt: number;
+	/** Время события журнала, ISO. */
+	readonly eventAt: string;
+}
+
 /** Сводка журнала для шапки раздела. */
 export interface ConstructionsSummary {
 	readonly totalPnL: number | null;
@@ -47,12 +55,10 @@ export interface ConstructionRow {
 	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
-	// Худший исход конструкции — знаковая величина рядом с реальным риском
-	// (реализованный результат плюс неклэмпированный минимум платежа групп
-	// остатков): число при том же статусе finite, null при
-	// unbounded/unavailable. Ставит границу индикатора финрезультата.
-	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-	readonly worstCaseUsdt: number | null;
+	// Последний маркер изменения результата строки: компактный вид
+	// индикатора рисует тёмный штрих в позиции накопленного итога.
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+	readonly lastResultMarker: ConstructionLastResultMarker | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly liveHintCount: number;
@@ -116,10 +122,10 @@ export interface ConstructionPreview {
 	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
-	// Худший исход конструкции — знаковая величина рядом с реальным риском:
-	// число при том же статусе finite, null при unbounded/unavailable.
-	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-	readonly worstCaseUsdt: number | null;
+	// Последний маркер изменения результата превью: средний вид индикатора
+	// показывает только его — тёмный штрих без номера и суммы.
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+	readonly lastResultMarker: ConstructionLastResultMarker | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly quotesAsOf: string | null;

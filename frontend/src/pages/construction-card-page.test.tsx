@@ -45,7 +45,6 @@ const card: ConstructionCard = {
 		quoteValue: 500,
 		capitalUsagePercent: 16.7,
 		realRiskUsdt: 45,
-		worstCaseUsdt: 15.25,
 		syntheticAdjustedTotalUsdt: null,
 		realRiskStatus: "finite",
 		openedAt: "2026-06-18T09:05:00+00:00",
@@ -125,6 +124,7 @@ const card: ConstructionCard = {
 		},
 	],
 	syntheticCloses: [],
+	resultMarkers: [],
 	riskWarnings: [],
 };
 
@@ -834,11 +834,11 @@ describe("карточка конструкции: примитивы дизай
 		// Act: карточка открытой конструкции с оценёнными котировками.
 		renderCardPage();
 
-		// Assert: 14 инстансов Метрики в пяти группах заголовка — ПЛАН (2),
-		// ПОЗИЦИЯ (5 при заданном капитале), РИСК (2), ВРЕМЯ (2), СТОИМОСТЬ (3).
+		// Assert: 13 инстансов Метрики в пяти группах заголовка — ПЛАН (2),
+		// ПОЗИЦИЯ (5 при заданном капитале), РИСК (1), ВРЕМЯ (2), СТОИМОСТЬ (3).
 		expect(await screen.findByText("текущий результат")).toBeInTheDocument();
 		const metrics = document.querySelectorAll('[data-slot="metric"]');
-		expect(metrics).toHaveLength(14);
+		expect(metrics).toHaveLength(13);
 
 		// Контейнер сводки — surface-карточка радиуса 12 с каймой, паддинги
 		// [14,18]: колонка с зазором 12; группы — подложки surface2 радиуса 8

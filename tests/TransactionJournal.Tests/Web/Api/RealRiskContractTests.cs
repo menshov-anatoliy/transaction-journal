@@ -10,9 +10,8 @@ using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttr
 /// <summary>
 /// Юнит-проверки сериализатора контракта реального риска: стабильные строки
 /// конечного, неограниченного и нерассчитанного риска и защита инварианта
-/// «число только при конечном риске» для обеих величин — величины риска и
-/// знакового худшего исхода. Нарушенная тройка read-модели не сериализуется,
-/// а падает с явной ошибкой.
+/// «число только при конечном риске». Нарушенная пара read-модели не
+/// сериализуется, а падает с явной ошибкой.
 /// </summary>
 [TestClass]
 public sealed class RealRiskContractTests
@@ -24,31 +23,13 @@ public sealed class RealRiskContractTests
 	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 	public void TryIfSerializesValidStatusPairs()
 	{
-		// Act: сериализация всех валидных троек — статус, риск и худший исход.
-		var finite = RealRiskContract.SerializeStatus(RealRiskStatus.Finite, 150m, -89.75m);
-		var unbounded = RealRiskContract.SerializeStatus(RealRiskStatus.Unbounded, null, null);
-		var unavailable = RealRiskContract.SerializeStatus(RealRiskStatus.Unavailable, null, null);
+		// Act: сериализация всех валидных пар — статус и величина риска.
+		var finite = RealRiskContract.SerializeStatus(RealRiskStatus.Finite, 150m);
+		var unbounded = RealRiskContract.SerializeStatus(RealRiskStatus.Unbounded, null);
+		var unavailable = RealRiskContract.SerializeStatus(RealRiskStatus.Unavailable, null);
 
 		// Assert: строки контракта стабильны.
 		Assert.That(finite, Is.EqualTo("finite"));
-		Assert.That(unbounded, Is.EqualTo("unbounded"));
-		Assert.That(unavailable, Is.EqualTo("unavailable"));
-	}
-
-	[TestMethod]
-	[Description("Худший исход без числа сериализуется статусом: unbounded и unavailable несут null")]
-	// Состояния без величины переиспользуют статус реального риска:
-	// неограниченный хвост и неполные данные идут без числа худшего
-	// исхода, потребителю достаточно статуса состояния.
-	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-	// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-	public void TryIfWorstCaseIsNullWithNonFiniteStatus()
-	{
-		// Act: сериализация состояний без числа худшего исхода.
-		var unbounded = RealRiskContract.SerializeStatus(RealRiskStatus.Unbounded, null, null);
-		var unavailable = RealRiskContract.SerializeStatus(RealRiskStatus.Unavailable, null, null);
-
-		// Assert: статус состояния проходит рядом с null худшего исхода.
 		Assert.That(unbounded, Is.EqualTo("unbounded"));
 		Assert.That(unavailable, Is.EqualTo("unavailable"));
 	}
@@ -62,8 +43,8 @@ public sealed class RealRiskContractTests
 	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	public void ThrowOnFiniteStatusWithoutNumber()
 	{
-		// Act: сериализация нарушенной пары конечного риска (худший исход валиден).
-		RealRiskContract.SerializeStatus(RealRiskStatus.Finite, null, -89.75m);
+		// Act: сериализация нарушенной пары конечного риска.
+		RealRiskContract.SerializeStatus(RealRiskStatus.Finite, null);
 	}
 
 	[TestMethod]
@@ -76,33 +57,19 @@ public sealed class RealRiskContractTests
 	public void ThrowOnUnboundedStatusWithNumber()
 	{
 		// Act: сериализация нарушенной пары неограниченного риска.
-		RealRiskContract.SerializeStatus(RealRiskStatus.Unbounded, 150m, null);
+		RealRiskContract.SerializeStatus(RealRiskStatus.Unbounded, 150m);
 	}
 
 	[TestMethod]
 	[ExpectedException(typeof(InvalidOperationException))]
-	[Description("Конечный риск без числа худшего исхода не сериализуется")]
-	// Инвариант «число только при finite» переиспользуется худшим исходом:
-	// конечное состояние без знаковой величины ломает пару индикатора
-	// (риск есть, худший исход потерян) — сериализатор падает.
-	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-	// Traceability: change:rework-finresult-border-worst-case/design#d1
-	public void ThrowOnFiniteStatusWithoutWorstCase()
+	[Description("Нерассчитанный риск с числом не сериализуется")]
+	// Число за неполными исходными данными дало бы потребителю ложную
+	// величину риска: пара unavailable + число не сериализуется.
+	// Traceability: openspec:analytics/performance#scenario-real-risk-missing-open-price-unavailable
+	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	public void ThrowOnUnavailableStatusWithNumber()
 	{
-		// Act: сериализация конечного риска без величины худшего исхода.
-		RealRiskContract.SerializeStatus(RealRiskStatus.Finite, 150m, null);
-	}
-
-	[TestMethod]
-	[ExpectedException(typeof(InvalidOperationException))]
-	[Description("Неограниченный риск с числом худшего исхода не сериализуется")]
-	// Худший исход не может быть числом там, где сам риск неограничен:
-	// число за статусом unbounded исказило бы границу индикатора.
-	// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-	// Traceability: change:rework-finresult-border-worst-case/design#d1
-	public void ThrowOnUnboundedStatusWithWorstCase()
-	{
-		// Act: сериализация неограниченного риска с числом худшего исхода.
-		RealRiskContract.SerializeStatus(RealRiskStatus.Unbounded, null, -89.75m);
+		// Act: сериализация нарушенной пары нерассчитанного риска.
+		RealRiskContract.SerializeStatus(RealRiskStatus.Unavailable, 150m);
 	}
 }

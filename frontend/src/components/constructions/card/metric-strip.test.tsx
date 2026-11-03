@@ -50,7 +50,6 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 			quoteValue: 500,
 			capitalUsagePercent: 16.7,
 			realRiskUsdt: 45,
-			worstCaseUsdt: 15.25,
 			syntheticAdjustedTotalUsdt: null,
 			realRiskStatus: "finite",
 			openedAt: "2026-10-01T09:05:00+00:00",
@@ -96,6 +95,7 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 		closingWarnings: [],
 		adjustments: [],
 		syntheticCloses: [],
+		resultMarkers: [],
 		riskWarnings: [],
 		...overrides,
 	};
@@ -216,7 +216,7 @@ describe("ConstructionMetricStrip: группы заголовка", () => {
 	});
 
 	// Состав групп по дельте спеки: плановые границы — в ПЛАНе, результат
-	// с частями и капиталом — в ПОЗИЦИИ, риск с худшим исходом — в РИСКе,
+	// с частями и капиталом — в ПОЗИЦИИ, реальный риск — в РИСКе,
 	// период с экспирацией — во ВРЕМЕНИ, стоимость опционов — в СТОИМОСТИ;
 	// денежные величины выводятся с единицей USDT.
 	// Traceability: openspec:ui/screens#scenario-detail-summary-metrics-period
@@ -234,7 +234,6 @@ describe("ConstructionMetricStrip: группы заголовка", () => {
 		expect(findMetric("нереализ. P&L")).toHaveTextContent("+40.25 USDT");
 		expect(findMetric("выделенный капитал")).toHaveTextContent("3000 USDT");
 		expect(findMetric("реальный риск")).toHaveTextContent("45 USDT");
-		expect(findMetric("худший исход")).toHaveTextContent("+15.25 USDT");
 		expect(findMetric("период")).toHaveTextContent("2026-10-01");
 		expect(findMetric("до экспирации")).toHaveTextContent("9 дн.");
 		expect(findMetric("внутренняя стоимость")).toHaveTextContent("+640 USDT");
@@ -292,18 +291,20 @@ describe("ConstructionMetricStrip: группы заголовка", () => {
 		expect(findMetric("реальный риск").textContent).not.toContain("USDT");
 	});
 
-	// Худший исход публикуется только при конечном реальном риске: null —
-	// прочерк в группе РИСК.
-	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-	it("показывает худший исход прочерком без конечного риска", () => {
-		// Arrange: неконечный реальный риск и худший исход null.
-		const base = makeCard();
+	// Метрика прежней границы удалена из сводки вместе с частью индикатора:
+	// группу РИСК покидает только «реальный риск», историю результата несут
+	// маркеры изменения результата.
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+	it("выводит в группе РИСК только реальный риск", () => {
+		// Arrange/Act: рендер сводки карточки по умолчанию.
+		renderStrip(makeCard());
 
-		// Act: рендер сводки карточки.
-		renderStrip({ ...base, metrics: { ...base.metrics, realRiskUsdt: null, realRiskStatus: "unbounded", worstCaseUsdt: null } });
-
-		// Assert: прочерк вместо величины.
-		expect(findMetric("худший исход")).toHaveTextContent("—");
+		// Assert: в группе РИСК единственная метрика — реальный риск.
+		const group = document.querySelector('[data-group="risk"]');
+		const labels = [
+			...(group?.querySelectorAll('[data-slot="metric"]') ?? []),
+		].map((metric) => metric.firstElementChild?.textContent);
+		expect(labels).toEqual(["реальный риск"]);
 	});
 
 	// Внутренняя стоимость деградирует как пара к временной: без опционных
@@ -905,7 +906,6 @@ describe("ConstructionMetricStrip: подсказки числовых метр�
 			["240 USDT", "plannedProfit"],
 			["3000 USDT", "allocatedCapital"],
 			["45 USDT", "realRisk"],
-			["+15.25 USDT", "worstCase"],
 			["9 дн.", "daysToExpiry"],
 			["+640 USDT", "intrinsic"],
 			["-6.8 USDT", "decayPerDay"],
@@ -1061,71 +1061,79 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(screen.getByText(/сверхприбыль — золотая зона за \+Профит/)).toBeTruthy();
 	});
 
-	it("поясняет насечку худшего исхода и маркер результата без устаревших формулировок", async () => {
-		// Сценарий «Пояснение отражает актуальную модель чтения»: подсказка
-		// объясняет насечку как худший исход конструкции к экспирации и
-		// маркер как текущий результат — реализованную часть, оценку
-		// остатков «заберу при ликвидации сейчас» и внешние корректировки;
-		// формулировки устаревшей модели («реальный риск минус
-		// реализованная прибыль», «граница строится от нуля», «оценка
-		// итога», «Общий P&L») в попапе отсутствуют.
-		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model
+	// Пояснение отражает актуальную модель чтения: подсказка объясняет
+	// маркеры изменения результата — номерные бейджи с суммами над полосой,
+	// историю накопленного зафиксированного результата по событиям журнала
+	// с порогом проявления 5% планового риска, где последний бейдж — текущий
+	// накопленный зафиксированный результат и в его значение входят локи
+	// действующих связок, — и маркер текущего результата, отличающийся от
+	// последнего бейджа нереализованной частью; формулировки устаревшей
+	// модели — подпись значения «X USDT · N%» от плановой границы зоны и
+	// прочие перечисленные ниже — в попапе отсутствуют.
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-marker-last-vs-current
+	it("поясняет маркеры изменения результата и маркер текущего результата без устаревших формулировок", async () => {
 		// Arrange: открытая подсказка чтения.
 		const user = userEvent.setup();
 		renderStrip(makeCard());
 		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
 		const popup = screen.getByRole("dialog");
 
-		// Assert: насечка объяснена худшим исходом конструкции к экспирации
-		// с подписью от плановой границы зоны, маркер — текущим результатом
-		// с разбивкой на части; устаревших формулировок во всём попапе нет.
-		expect(within(popup).getByText(/насечка — худший исход конструкции к экспирации/)).toBeTruthy();
-		expect(within(popup).getByText(/маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки/)).toBeTruthy();
-		expect(within(popup).queryByText(/оценка итога/)).toBeNull();
-		expect(within(popup).queryByText(/Общий P&L/)).toBeNull();
-		expect(within(popup).queryByText(/реальный риск минус реализованная прибыль/)).toBeNull();
-		expect(within(popup).queryByText(/граница строится от нуля/)).toBeNull();
+		// Assert: маркеры изменения результата объяснены историей
+		// зафиксированного результата с порогом и локами связок;
+		// зафиксированная синтетикой часть адресована зоной синтетики.
+		expect(within(popup).getByText(/маркеры изменения результата — номерные бейджи с суммами над полосой/)).toBeTruthy();
+		expect(within(popup).getByText(/с порогом проявления 5% планового риска/)).toBeTruthy();
+		expect(within(popup).getByText(/последний бейдж — текущий накопленный зафиксированный результат/)).toBeTruthy();
+		expect(within(popup).getByText(/в его значение входят локи действующих связок синтетического закрытия/)).toBeTruthy();
+		expect(within(popup).getByText(/видна в строке «зафиксировано синтетикой» и сводной величине зоны синтетики карточки/)).toBeTruthy();
+
+		// Assert: маркер текущего результата объяснен с отличием от
+		// последнего бейджа — нереализованной частью.
+		expect(within(popup).getByText(/маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки, подпись под полосой/)).toBeTruthy();
+		expect(within(popup).getByText(/история хранит зафиксированный результат, а маркер учитывает и нереализованную часть/)).toBeTruthy();
+
+		// Assert: устаревших формулировок во всём попапе нет — проверяем
+		// по полному тексту попапа, включая характерный шаблон подписи
+		// прежней границы «значение USDT · процент» и её отсылку к
+		// плановой границе зоны.
+		const popupText = popup.textContent ?? "";
+		expect(popupText).not.toContain("USDT ·");
+		expect(popupText).not.toContain("от плановой границы зоны");
+		expect(popupText).not.toContain("оценка итога");
+		expect(popupText).not.toContain("Общий P&L");
+		expect(popupText).not.toContain("реальный риск минус реализованная прибыль");
+		expect(popupText).not.toContain("граница строится от нуля");
+		expect(popupText).not.toContain("ac-43");
 	});
 
-	it("объясняет насечку правее маркера синтетической фиксацией остатков и отсылает к зоне синтетики", async () => {
-		// Сценарии «Подсказка объясняет насечку правее маркера» и
-		// «Подсказка отсылает к зоне синтетики»: случай «насечка правее
-		// маркера» объясняется гарантией платежа остатков, в частности
-		// синтетической фиксацией по правилу ac-43, а место
-		// зафиксированной части названо зоной синтетики карточки.
-		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-tooltip-explains-notch-right-of-marker
-		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-tooltip-points-to-synthetic-zone
-		// Arrange: открытая подсказка чтения.
-		const user = userEvent.setup();
-		renderStrip(makeCard());
-		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
-		const popup = screen.getByRole("dialog");
+	it("показывает бейджи маркеров и область описания в полном виде сводки", () => {
+		// Полный индикатор в сводке карточки получает выведенные маркеры
+		// из контракта: бейджи с суммами над полосой и область описания
+		// под индикатором с датой и типом операции каждой строки.
+		// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
+		// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-marker-description-area-lists-markers
+		// Arrange: карточка с историей из окна сборки и корректировки PnL.
+		renderStrip(makeCard({
+			resultMarkers: [
+				{ number: 1, eventTime: "2026-10-01T09:10:00", kind: "option-window", changeUsdt: -95, totalUsdt: -95 },
+				{ number: 2, eventTime: "2026-10-14T18:00:00", kind: "pnl-adjustment", changeUsdt: 5, totalUsdt: -90 },
+			],
+		}));
 
-		// Assert: насечка правее маркера объяснена синтетической фиксацией
-		// остатков по правилу ac-43; зафиксированная часть адресована
-		// зоной синтетики карточки.
-		expect(within(popup).getByText(/при фиксации остатков синтетикой — и правее маркера/)).toBeTruthy();
-		expect(within(popup).getByText(/синтетическая фиксация по правилу ac-43/)).toBeTruthy();
-		expect(within(popup).getByText(/величина зафиксированного видна в зоне синтетики карточки/)).toBeTruthy();
-	});
+		// Assert: бейджи с номерами и суммами над полосой.
+		const badges = document.querySelectorAll('[data-part="marker-badge"]');
+		expect(badges).toHaveLength(2);
+		expect(badges[0].textContent).toContain("−95");
+		expect(badges[1].textContent).toContain("−90");
 
-	it("объясняет расхождение насечки и маркера при полной синтетической фиксации", async () => {
-		// Сценарий «Подсказка объясняет расхождение при полной фиксации»:
-		// маркер может стоять левее насечки, потому что рыночная оценка
-		// «сейчас» несёт временную стоимость встречного опциона, спред и
-		// свежесть котировок — к экспирации значения сходятся.
-		// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-tooltip-explains-full-fix-divergence
-		// Arrange: открытая подсказка чтения.
-		const user = userEvent.setup();
-		renderStrip(makeCard());
-		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
-		const popup = screen.getByRole("dialog");
-
-		// Assert: причина расхождения названа через временную стоимость
-		// встречного опциона и сходимость к экспирации.
-		expect(within(popup).getByText(/маркер может стоять левее насечки/)).toBeTruthy();
-		expect(within(popup).getByText(/временную стоимость встречного опциона, спред и свежесть котировок/)).toBeTruthy();
-		expect(within(popup).getByText(/к экспирации значения сходятся/)).toBeTruthy();
+		// Assert: область описания перечисляет маркеры с типами операций.
+		const area = document.querySelector('[data-part="marker-description"]');
+		expect(area).not.toBeNull();
+		expect(area?.textContent).toContain("Окно исполнения");
+		expect(area?.textContent).toContain("Корректировка PnL");
+		expect(area?.textContent).toContain("2026-10-14 18:00");
+		expect(area?.textContent).toContain("−90 USDT");
 	});
 
 	it("закрывается по Esc", async () => {

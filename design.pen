@@ -2212,6 +2212,82 @@
                     },
                     {
                       "type": "frame",
+                      "id": "Tz80s",
+                      "name": "Маркеры изменения результата",
+                      "width": "fill_container",
+                      "gap": 8,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "KqGwk",
+                          "name": "Свотч-бейдж",
+                          "width": 46,
+                          "height": 16,
+                          "fill": "$surface",
+                          "cornerRadius": 8,
+                          "stroke": "$neg",
+                          "strokeWidth": 1,
+                          "gap": 3,
+                          "padding": [
+                            1,
+                            4,
+                            1,
+                            5
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "R5h3L",
+                              "name": "Num",
+                              "width": 10,
+                              "height": 10,
+                              "fill": "$neg",
+                              "cornerRadius": 5,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "GRWPB",
+                                  "name": "NumText",
+                                  "fill": "#FFFFFF",
+                                  "content": "1",
+                                  "fontFamily": "$font",
+                                  "fontSize": 7.5,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "text",
+                              "id": "kUOOs",
+                              "name": "Sum",
+                              "fill": "$neg",
+                              "content": "−100",
+                              "fontFamily": "$font",
+                              "fontSize": 9,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "lauHt",
+                          "name": "Описание",
+                          "fill": "$textSecondary",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "маркеры изменения результата — номерные бейджи с суммами над полосой: история накопленного зафиксированного результата по событиям журнала (окно исполнений, ролл, фьючерсная сделка, связка синтетики, корректировка PnL, закрывающая запись); промежуточное событие проявляется, когда отличие от последнего выведенного ≥ 5% планового риска, первый и последний бейджи безусловны; последний бейдж — текущий накопленный зафиксированный результат, в него входят локи действующих связок синтетического закрытия — зафиксированная часть видна в строке «зафиксировано синтетикой» и сводной «С учётом зафиксированного синтетикой»",
+                          "fontFamily": "$font",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
                       "id": "KiC5S",
                       "name": "Зона",
                       "width": "fill_container",
@@ -2235,36 +2311,6 @@
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
                           "content": "сверхприбыль — золотая зона за +Профит",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "Bj2JN",
-                      "name": "Насечка",
-                      "width": "fill_container",
-                      "gap": 8,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "rectangle",
-                          "id": "tWCT3",
-                          "name": "Насечка",
-                          "fill": "$textPrimary",
-                          "width": 3,
-                          "height": 14
-                        },
-                        {
-                          "type": "text",
-                          "id": "DdAIa",
-                          "name": "Описание",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "насечка — худший исход конструкции к экспирации, подпись «худший исход · X USDT · N%» от плановой границы зоны (насечка может стоять правее реализованного результата, а при фиксации остатков синтетикой — и правее маркера: гарантия платежа остатков, в частности синтетическая фиксация по правилу ac-43; величина зафиксированного видна в зоне синтетики карточки). При полной синтетической фиксации маркер может стоять левее насечки: рыночная оценка «сейчас» несёт временную стоимость встречного опциона, спред и свежесть котировок — к экспирации значения сходятся",
                           "fontFamily": "$font",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -4857,10 +4903,6 @@
                                       "width": 13.1,
                                       "enabled": false
                                     },
-                                    "kwS46": {
-                                      "x": 0,
-                                      "enabled": false
-                                    },
                                     "i9F80C": {
                                       "x": 3.6,
                                       "fill": "$neg",
@@ -5250,9 +5292,6 @@
                                     "n0VdC9": {
                                       "x": 7.9,
                                       "width": 6.1
-                                    },
-                                    "kwS46": {
-                                      "x": 23.7
                                     },
                                     "i9F80C": {
                                       "x": 15.1,
@@ -5644,9 +5683,6 @@
                                     "n0VdC9": {
                                       "enabled": false
                                     },
-                                    "kwS46": {
-                                      "x": 61.9
-                                    },
                                     "i9F80C": {
                                       "enabled": false,
                                       "x": 57.9,
@@ -6037,9 +6073,6 @@
                                       "x": 2.7,
                                       "width": 1.05
                                     },
-                                    "kwS46": {
-                                      "x": 25.1
-                                    },
                                     "i9F80C": {
                                       "x": 21.9,
                                       "enabled": false,
@@ -6428,9 +6461,6 @@
                                     "n0VdC9": {
                                       "enabled": false
                                     },
-                                    "kwS46": {
-                                      "x": 26.8
-                                    },
                                     "i9F80C": {
                                       "enabled": false,
                                       "x": 22.8,
@@ -6646,7 +6676,7 @@
       "name": "Экран/Карточка конструкции",
       "clip": true,
       "width": 1760,
-      "height": 1656,
+      "height": 1846,
       "fill": "$bg",
       "layout": "vertical",
       "children": [
@@ -7224,22 +7254,6 @@
                                         },
                                         "Q4NLmR": {
                                           "content": "250 USDT",
-                                          "fontSize": 14
-                                        }
-                                      }
-                                    },
-                                    {
-                                      "id": "CUUWS",
-                                      "type": "ref",
-                                      "ref": "jtDmV",
-                                      "name": "Метрика · худший исход",
-                                      "descendants": {
-                                        "bGGN9": {
-                                          "content": "худший исход"
-                                        },
-                                        "Q4NLmR": {
-                                          "content": "−9,80 USDT",
-                                          "fill": "$neg",
                                           "fontSize": 14
                                         }
                                       }
@@ -7909,6 +7923,622 @@
                               "fontFamily": "$font",
                               "fontSize": 12,
                               "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Rr3ws",
+                      "name": "Область описания маркеров",
+                      "width": "fill_container",
+                      "fill": "$surface",
+                      "cornerRadius": 12,
+                      "stroke": "$border",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": [
+                        12,
+                        18
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "IH5rQ",
+                          "name": "Head",
+                          "width": "fill_container",
+                          "gap": 8,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "shmbU",
+                              "name": "Title",
+                              "fill": "$textPrimary",
+                              "content": "Маркеры изменения результата",
+                              "fontFamily": "$font",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "OPsuy",
+                              "name": "Spacer",
+                              "width": "fill_container",
+                              "height": 1
+                            },
+                            {
+                              "type": "text",
+                              "id": "nwYih",
+                              "name": "Count",
+                              "fill": "$textMuted",
+                              "content": "6",
+                              "fontFamily": "$font",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "mO6bw",
+                          "name": "HeaderRow",
+                          "width": 1060,
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "qyGJy",
+                              "name": "H:№",
+                              "fill": "$textMuted",
+                              "content": "№",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "srwHN",
+                              "name": "H:Дата",
+                              "fill": "$textMuted",
+                              "content": "Дата",
+                              "textAlign": "right",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "s5RxlZ",
+                              "name": "H:Тип операции",
+                              "fill": "$textMuted",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Тип операции",
+                              "textAlign": "right",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "uIT9Z",
+                              "name": "H:Изменение",
+                              "fill": "$textMuted",
+                              "content": "Изменение",
+                              "textAlign": "right",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "lbaiI",
+                              "name": "H:Накопленный итог",
+                              "fill": "$textMuted",
+                              "content": "Накопленный итог",
+                              "textAlign": "right",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "onG10",
+                          "name": "RowsWrap",
+                          "width": "fill_container",
+                          "height": 104,
+                          "layout": "none",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "RCFuB",
+                              "x": 0,
+                              "y": 0,
+                              "name": "Rows",
+                              "clip": true,
+                              "width": 1060,
+                              "layout": "vertical",
+                              "gap": 6,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "uOD9T",
+                                  "name": "Row:1",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "R6ztmy",
+                                      "name": "N",
+                                      "width": 14,
+                                      "height": 14,
+                                      "fill": "$neg",
+                                      "cornerRadius": 7,
+                                      "justifyContent": "center",
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "Ows3z",
+                                          "name": "NT",
+                                          "fill": "#FFFFFF",
+                                          "content": "1",
+                                          "fontFamily": "$font",
+                                          "fontSize": 9,
+                                          "fontWeight": "700"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "b1rOzA",
+                                      "name": "D",
+                                      "fill": "$textSecondary",
+                                      "content": "03.11 · 14:02",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "eUyQQ",
+                                      "name": "O",
+                                      "fill": "$textPrimary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "Окно исполнения — покупка стреддла",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "muNNl",
+                                      "name": "Ch",
+                                      "fill": "$neg",
+                                      "content": "−180",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "BQC0Z",
+                                      "name": "T",
+                                      "fill": "$neg",
+                                      "content": "−180",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "L8u4N2",
+                                  "name": "Row:2",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "KyHSa",
+                                      "name": "N",
+                                      "width": 14,
+                                      "height": 14,
+                                      "fill": "$neg",
+                                      "cornerRadius": 7,
+                                      "justifyContent": "center",
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "zhpMf",
+                                          "name": "NT",
+                                          "fill": "#FFFFFF",
+                                          "content": "2",
+                                          "fontFamily": "$font",
+                                          "fontSize": 9,
+                                          "fontWeight": "700"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "w045Q",
+                                      "name": "D",
+                                      "fill": "$textSecondary",
+                                      "content": "03.11 · 15:07",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "Y8rpSK",
+                                      "name": "O",
+                                      "fill": "$textPrimary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "Ролл",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "uA6H5",
+                                      "name": "Ch",
+                                      "fill": "$accentStrong",
+                                      "content": "+80",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "SQ89S",
+                                      "name": "T",
+                                      "fill": "$neg",
+                                      "content": "−100",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "usNpY",
+                                  "name": "Row:3",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "s5EtW",
+                                      "name": "N",
+                                      "width": 14,
+                                      "height": 14,
+                                      "fill": "$neg",
+                                      "cornerRadius": 7,
+                                      "justifyContent": "center",
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "mCWH0",
+                                          "name": "NT",
+                                          "fill": "#FFFFFF",
+                                          "content": "3",
+                                          "fontFamily": "$font",
+                                          "fontSize": 9,
+                                          "fontWeight": "700"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "keMoV",
+                                      "name": "D",
+                                      "fill": "$textSecondary",
+                                      "content": "03.11 · 16:31",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "jch2v",
+                                      "name": "O",
+                                      "fill": "$textPrimary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "Фьючерсная сделка",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "ZaTI0",
+                                      "name": "Ch",
+                                      "fill": "$accentStrong",
+                                      "content": "+45",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "ZIZVJ",
+                                      "name": "T",
+                                      "fill": "$neg",
+                                      "content": "−55",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "LyXsX",
+                                  "name": "Row:4",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "IoxLH",
+                                      "name": "N",
+                                      "width": 14,
+                                      "height": 14,
+                                      "fill": "$accent",
+                                      "cornerRadius": 7,
+                                      "justifyContent": "center",
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "ojKgP",
+                                          "name": "NT",
+                                          "fill": "#FFFFFF",
+                                          "content": "4",
+                                          "fontFamily": "$font",
+                                          "fontSize": 9,
+                                          "fontWeight": "700"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "y5zaAJ",
+                                      "name": "D",
+                                      "fill": "$textSecondary",
+                                      "content": "03.11 · 17:45",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "eUNPg",
+                                      "name": "O",
+                                      "fill": "$textPrimary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "Связка синтетики",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "RbRW6",
+                                      "name": "Ch",
+                                      "fill": "$accentStrong",
+                                      "content": "+79",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "l74jF5",
+                                      "name": "T",
+                                      "fill": "$accentStrong",
+                                      "content": "+24",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "c4aEM",
+                                  "name": "Row:5",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "rkvyc",
+                                      "name": "N",
+                                      "width": 14,
+                                      "height": 14,
+                                      "fill": "$accent",
+                                      "cornerRadius": 7,
+                                      "justifyContent": "center",
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "GCHDj",
+                                          "name": "NT",
+                                          "fill": "#FFFFFF",
+                                          "content": "5",
+                                          "fontFamily": "$font",
+                                          "fontSize": 9,
+                                          "fontWeight": "700"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "OSoLw",
+                                      "name": "D",
+                                      "fill": "$textSecondary",
+                                      "content": "03.11 · 18:12",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "SSIK6",
+                                      "name": "O",
+                                      "fill": "$textPrimary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "Корректировка PnL",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "sV0eR",
+                                      "name": "Ch",
+                                      "fill": "$accentStrong",
+                                      "content": "+156",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "TScNe",
+                                      "name": "T",
+                                      "fill": "$accentStrong",
+                                      "content": "+180",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "O3kg5e",
+                                  "name": "Row:6",
+                                  "width": "fill_container",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "JDaRn",
+                                      "name": "N",
+                                      "width": 14,
+                                      "height": 14,
+                                      "fill": "$accent",
+                                      "cornerRadius": 7,
+                                      "justifyContent": "center",
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "c0FQx",
+                                          "name": "NT",
+                                          "fill": "#FFFFFF",
+                                          "content": "6",
+                                          "fontFamily": "$font",
+                                          "fontSize": 9,
+                                          "fontWeight": "700"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "z2E2SD",
+                                      "name": "D",
+                                      "fill": "$textSecondary",
+                                      "content": "03.11 · 18:40",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "WtUvt",
+                                      "name": "O",
+                                      "fill": "$textPrimary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "Фьючерсная сделка",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "xeJs4",
+                                      "name": "Ch",
+                                      "fill": "$accentStrong",
+                                      "content": "+64",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "X9OomF",
+                                      "name": "T",
+                                      "fill": "$accentStrong",
+                                      "content": "+244",
+                                      "textAlign": "right",
+                                      "fontFamily": "$font",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "rectangle",
+                              "cornerRadius": 1.5,
+                              "id": "JeiUG",
+                              "x": 1057,
+                              "y": 4,
+                              "name": "ScrollThumb",
+                              "fill": "$border",
+                              "width": 3,
+                              "height": 36
                             }
                           ]
                         }
@@ -17177,22 +17807,8 @@
               "ref": "onchD",
               "name": "Full",
               "descendants": {
-                "RVdBP": {
-                  "x": 0
-                },
                 "tZ9yY": {
                   "x": 224,
-                  "fill": "$neg"
-                },
-                "sl7bE": {
-                  "x": -57
-                },
-                "AZbXs": {
-                  "content": "риск есть",
-                  "fill": "$neg"
-                },
-                "ib7Ti": {
-                  "content": "300 USDT · 100%",
                   "fill": "$neg"
                 },
                 "vuPkg": {
@@ -17215,9 +17831,6 @@
                   "ref": "FMghY",
                   "name": "Cmp",
                   "descendants": {
-                    "kwS46": {
-                      "x": 0
-                    },
                     "i9F80C": {
                       "x": 28.6,
                       "fill": "$neg"
@@ -17265,22 +17878,8 @@
               "ref": "onchD",
               "name": "Full",
               "descendants": {
-                "RVdBP": {
-                  "x": 39
-                },
                 "tZ9yY": {
                   "x": 39,
-                  "fill": "$neg"
-                },
-                "sl7bE": {
-                  "x": -18
-                },
-                "AZbXs": {
-                  "content": "риск есть",
-                  "fill": "$neg"
-                },
-                "ib7Ti": {
-                  "content": "250 USDT · 83%",
                   "fill": "$neg"
                 },
                 "vuPkg": {
@@ -17304,9 +17903,6 @@
                   "ref": "FMghY",
                   "name": "Cmp",
                   "descendants": {
-                    "kwS46": {
-                      "x": 5.5
-                    },
                     "i9F80C": {
                       "x": 1.5,
                       "fill": "$neg"
@@ -17354,22 +17950,8 @@
               "ref": "onchD",
               "name": "Full",
               "descendants": {
-                "RVdBP": {
-                  "x": 39
-                },
                 "tZ9yY": {
                   "x": 172.7,
-                  "fill": "$neg"
-                },
-                "sl7bE": {
-                  "x": -18
-                },
-                "AZbXs": {
-                  "content": "риск есть",
-                  "fill": "$neg"
-                },
-                "ib7Ti": {
-                  "content": "250 USDT · 83%",
                   "fill": "$neg"
                 },
                 "vuPkg": {
@@ -17392,9 +17974,6 @@
                   "ref": "FMghY",
                   "name": "Cmp",
                   "descendants": {
-                    "kwS46": {
-                      "x": 5.5
-                    },
                     "i9F80C": {
                       "x": 21.3,
                       "fill": "$neg"
@@ -17496,22 +18075,8 @@
               "ref": "onchD",
               "name": "Full",
               "descendants": {
-                "RVdBP": {
-                  "x": 351
-                },
                 "tZ9yY": {
                   "x": 890.2
-                },
-                "sl7bE": {
-                  "x": 294
-                },
-                "AZbXs": {
-                  "content": "риска нет",
-                  "fill": "$accentStrong"
-                },
-                "ib7Ti": {
-                  "content": "150 USDT · 50%",
-                  "fill": "$accentStrong"
                 },
                 "vuPkg": {
                   "content": "+1 100",
@@ -17533,9 +18098,6 @@
                   "ref": "FMghY",
                   "name": "Cmp",
                   "descendants": {
-                    "kwS46": {
-                      "x": 49.5
-                    },
                     "i9F80C": {
                       "x": 122.5
                     }
@@ -17604,22 +18166,8 @@
                   "x": 774.6,
                   "width": 161.4
                 },
-                "RVdBP": {
-                  "x": 290.5
-                },
                 "tZ9yY": {
                   "x": 924
-                },
-                "sl7bE": {
-                  "x": 233
-                },
-                "AZbXs": {
-                  "content": "риска нет",
-                  "fill": "$accentStrong"
-                },
-                "ib7Ti": {
-                  "content": "150 USDT · 50%",
-                  "fill": "$accentStrong"
                 },
                 "vuPkg": {
                   "content": "+1 400",
@@ -17641,9 +18189,6 @@
                   "ref": "FMghY",
                   "name": "Cmp",
                   "descendants": {
-                    "kwS46": {
-                      "x": 41
-                    },
                     "i9F80C": {
                       "x": 124
                     }
@@ -17712,22 +18257,8 @@
                   "x": 897.5,
                   "width": 38.5
                 },
-                "RVdBP": {
-                  "x": 932
-                },
                 "tZ9yY": {
                   "x": 926
-                },
-                "sl7bE": {
-                  "x": 875
-                },
-                "AZbXs": {
-                  "content": "риска нет",
-                  "fill": "$accentStrong"
-                },
-                "ib7Ti": {
-                  "content": "945 USDT · 315%",
-                  "fill": "$accentStrong"
                 },
                 "vuPkg": {
                   "content": "+1 200",
@@ -17750,9 +18281,6 @@
                   "ref": "FMghY",
                   "name": "Cmp",
                   "descendants": {
-                    "kwS46": {
-                      "x": 128
-                    },
                     "i9F80C": {
                       "x": 124
                     }
@@ -17764,6 +18292,151 @@
                   "name": "Note",
                   "fill": "$textMuted",
                   "content": "в золотой зоне граница, а не маркер",
+                  "fontFamily": "$font",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "K5CurA",
+          "name": "Cell:8 · Маркеры изменения результата: пустое состояние — нет выведенных маркеров, полоса без бейджей",
+          "width": "fill_container",
+          "fill": "$bg",
+          "cornerRadius": 10,
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "R1Yur",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Маркеры изменения результата: пустое состояние — полоса без бейджей и штрихов, область описания пуста",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "id": "b6lK4",
+              "type": "ref",
+              "ref": "onchD",
+              "name": "Full",
+              "width": 936,
+              "descendants": {
+                "T2Cco": {
+                  "enabled": false
+                },
+                "sCszM": {
+                  "enabled": false
+                }
+              }
+            },
+            {
+              "type": "text",
+              "id": "PqKej",
+              "name": "Cap2",
+              "fill": "$textSecondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Средний и компактный виды без последнего маркера (появляется с первым выведенным):",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "F5fesY",
+              "name": "EmptyDescription",
+              "width": 936,
+              "fill": "$surface",
+              "cornerRadius": 12,
+              "stroke": "$border",
+              "layout": "vertical",
+              "gap": 6,
+              "padding": [
+                12,
+                18
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "l2c7o",
+                  "name": "Head",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "KE4pf",
+                      "name": "Title",
+                      "fill": "$textPrimary",
+                      "content": "Маркеры изменения результата",
+                      "fontFamily": "$font",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "H3KTDK",
+                      "name": "Spacer",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "text",
+                      "id": "t0eWB",
+                      "name": "Count",
+                      "fill": "$textMuted",
+                      "content": "0",
+                      "fontFamily": "$font",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "mly2C",
+                  "name": "EmptyText",
+                  "fill": "$textMuted",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Нет выведенных маркеров — история появится с первым событием журнала: окно исполнений, фьючерсная сделка, связка синтетики, корректировка PnL или закрывающая запись",
+                  "fontFamily": "$font",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "C9Bvi",
+              "name": "CompactRow",
+              "width": 417,
+              "height": 24,
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "QA3RS",
+                  "type": "ref",
+                  "ref": "FMghY",
+                  "name": "Cmp"
+                },
+                {
+                  "type": "text",
+                  "id": "U3wez",
+                  "name": "Note",
+                  "fill": "$textMuted",
+                  "content": "компактный вид — состояние риска сохраняется",
                   "fontFamily": "$font",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -18560,10 +19233,6 @@
                       "width": 13.1,
                       "enabled": false
                     },
-                    "kwS46": {
-                      "x": 0,
-                      "enabled": false
-                    },
                     "i9F80C": {
                       "x": 3.6,
                       "fill": "$neg",
@@ -18682,9 +19351,6 @@
                     },
                     "n0VdC9": {
                       "enabled": false
-                    },
-                    "kwS46": {
-                      "x": 61.9
                     },
                     "i9F80C": {
                       "enabled": false,
@@ -19000,17 +19666,6 @@
               ]
             },
             {
-              "type": "rectangle",
-              "cornerRadius": 1,
-              "id": "kwS46",
-              "x": 31.9,
-              "y": 5,
-              "name": "Граница",
-              "fill": "#17171E",
-              "width": 2,
-              "height": 14
-            },
-            {
               "type": "ellipse",
               "id": "i9F80C",
               "x": 43.85,
@@ -19075,6 +19730,17 @@
                   "fontWeight": "700"
                 }
               ]
+            },
+            {
+              "type": "rectangle",
+              "cornerRadius": 1,
+              "id": "xXnre",
+              "x": 34.9,
+              "y": 5,
+              "name": "LastResultTick",
+              "fill": "$textPrimary",
+              "width": 2,
+              "height": 14
             }
           ]
         },
@@ -19084,7 +19750,7 @@
           "name": "Индикатор/Полный",
           "reusable": true,
           "width": 936,
-          "height": 80,
+          "height": 131,
           "layout": "vertical",
           "gap": 9,
           "children": [
@@ -19144,6 +19810,352 @@
                   "fontFamily": "$font",
                   "fontSize": 11.5,
                   "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "T2Cco",
+              "name": "MarkerBadges",
+              "width": "fill_container",
+              "height": 40,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "u6AxN",
+                  "x": 63.8,
+                  "y": 0,
+                  "name": "Badge:1",
+                  "width": 59.6,
+                  "height": 18,
+                  "fill": "$surface",
+                  "cornerRadius": 9,
+                  "stroke": "$neg",
+                  "strokeWidth": 1,
+                  "gap": 4,
+                  "padding": [
+                    2,
+                    5,
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "nwp4r",
+                      "name": "Num",
+                      "width": 12,
+                      "height": 12,
+                      "fill": "$neg",
+                      "cornerRadius": 6,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Iw4Iw",
+                          "name": "NumText",
+                          "fill": "#FFFFFF",
+                          "content": "1",
+                          "fontFamily": "$font",
+                          "fontSize": 8.5,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "D6ZMJv",
+                      "name": "Sum",
+                      "fill": "$neg",
+                      "content": "−180",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "cgoTX",
+                  "x": 126.2,
+                  "y": 0,
+                  "name": "Badge:2",
+                  "width": 59.6,
+                  "height": 18,
+                  "fill": "$surface",
+                  "cornerRadius": 9,
+                  "stroke": "$neg",
+                  "strokeWidth": 1,
+                  "gap": 4,
+                  "padding": [
+                    2,
+                    5,
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "XDapb",
+                      "name": "Num",
+                      "width": 12,
+                      "height": 12,
+                      "fill": "$neg",
+                      "cornerRadius": 6,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "uIaHZ",
+                          "name": "NumText",
+                          "fill": "#FFFFFF",
+                          "content": "2",
+                          "fontFamily": "$font",
+                          "fontSize": 8.5,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "SvKop",
+                      "name": "Sum",
+                      "fill": "$neg",
+                      "content": "−100",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "bXZfe",
+                  "x": 164.4,
+                  "y": 22,
+                  "name": "Badge:3",
+                  "width": 53.2,
+                  "height": 18,
+                  "fill": "$surface",
+                  "cornerRadius": 9,
+                  "stroke": "$neg",
+                  "strokeWidth": 1,
+                  "gap": 4,
+                  "padding": [
+                    2,
+                    5,
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "XBfNl",
+                      "name": "Num",
+                      "width": 12,
+                      "height": 12,
+                      "fill": "$neg",
+                      "cornerRadius": 6,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "gFrRr",
+                          "name": "NumText",
+                          "fill": "#FFFFFF",
+                          "content": "3",
+                          "fontFamily": "$font",
+                          "fontSize": 8.5,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "FJeJ0",
+                      "name": "Sum",
+                      "fill": "$neg",
+                      "content": "−55",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ZGbaE",
+                  "x": 226.1,
+                  "y": 0,
+                  "name": "Badge:4",
+                  "width": 53.2,
+                  "height": 18,
+                  "fill": "$surface",
+                  "cornerRadius": 9,
+                  "stroke": "$accentStrong",
+                  "strokeWidth": 1,
+                  "gap": 4,
+                  "padding": [
+                    2,
+                    5,
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "jzTDz",
+                      "name": "Num",
+                      "width": 12,
+                      "height": 12,
+                      "fill": "$accentStrong",
+                      "cornerRadius": 6,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "O3aDt",
+                          "name": "NumText",
+                          "fill": "#FFFFFF",
+                          "content": "4",
+                          "fontFamily": "$font",
+                          "fontSize": 8.5,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "y5O0mP",
+                      "name": "Sum",
+                      "fill": "$accentStrong",
+                      "content": "+24",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Nh91w",
+                  "x": 344.7,
+                  "y": 0,
+                  "name": "Badge:5",
+                  "width": 59.6,
+                  "height": 18,
+                  "fill": "$surface",
+                  "cornerRadius": 9,
+                  "stroke": "$accentStrong",
+                  "strokeWidth": 1,
+                  "gap": 4,
+                  "padding": [
+                    2,
+                    5,
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "fQcqJ",
+                      "name": "Num",
+                      "width": 12,
+                      "height": 12,
+                      "fill": "$accentStrong",
+                      "cornerRadius": 6,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "s9q1T",
+                          "name": "NumText",
+                          "fill": "#FFFFFF",
+                          "content": "5",
+                          "fontFamily": "$font",
+                          "fontSize": 8.5,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "sLsMw",
+                      "name": "Sum",
+                      "fill": "$accentStrong",
+                      "content": "+180",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "b6xF7z",
+                  "x": 394.3,
+                  "y": 22,
+                  "name": "Badge:6",
+                  "width": 59.6,
+                  "height": 18,
+                  "fill": "$surface",
+                  "cornerRadius": 9,
+                  "stroke": "$accentStrong",
+                  "strokeWidth": 1,
+                  "gap": 4,
+                  "padding": [
+                    2,
+                    5,
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "G2GU3",
+                      "name": "Num",
+                      "width": 12,
+                      "height": 12,
+                      "fill": "$accentStrong",
+                      "cornerRadius": 6,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "poskn",
+                          "name": "NumText",
+                          "fill": "#FFFFFF",
+                          "content": "6",
+                          "fontFamily": "$font",
+                          "fontSize": 8.5,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "h0sdTJ",
+                      "name": "Sum",
+                      "fill": "$accentStrong",
+                      "content": "+244",
+                      "fontFamily": "$font",
+                      "fontSize": 10.5,
+                      "fontWeight": "600"
+                    }
+                  ]
                 }
               ]
             },
@@ -19223,15 +20235,82 @@
                   ]
                 },
                 {
-                  "type": "rectangle",
-                  "cornerRadius": 1,
-                  "id": "RVdBP",
-                  "x": 225.2,
-                  "y": -4,
-                  "name": "Граница",
-                  "fill": "#17171E",
-                  "width": 2,
-                  "height": 22
+                  "type": "frame",
+                  "id": "sCszM",
+                  "x": 0,
+                  "y": 0,
+                  "name": "HistoryTicks",
+                  "width": 936,
+                  "height": 14,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 1,
+                      "id": "O0oRdc",
+                      "x": 92.6,
+                      "y": 0,
+                      "name": "Tick:1",
+                      "fill": "$textPrimary",
+                      "width": 2,
+                      "height": 14
+                    },
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 1,
+                      "id": "zFdjS",
+                      "x": 155,
+                      "y": 0,
+                      "name": "Tick:2",
+                      "fill": "$textPrimary",
+                      "width": 2,
+                      "height": 14
+                    },
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 1,
+                      "id": "I9ICS0",
+                      "x": 190,
+                      "y": 0,
+                      "name": "Tick:3",
+                      "fill": "$textPrimary",
+                      "width": 2,
+                      "height": 14
+                    },
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 1,
+                      "id": "p0BrDb",
+                      "x": 251.7,
+                      "y": 0,
+                      "name": "Tick:4",
+                      "fill": "$textPrimary",
+                      "width": 2,
+                      "height": 14
+                    },
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 1,
+                      "id": "nUf2A",
+                      "x": 373.5,
+                      "y": 0,
+                      "name": "Tick:5",
+                      "fill": "$textPrimary",
+                      "width": 2,
+                      "height": 14
+                    },
+                    {
+                      "type": "rectangle",
+                      "cornerRadius": 1,
+                      "id": "gLwAD",
+                      "x": 423.1,
+                      "y": 0,
+                      "name": "Tick:6",
+                      "fill": "$textPrimary",
+                      "width": 2,
+                      "height": 14
+                    }
+                  ]
                 },
                 {
                   "type": "ellipse",
@@ -19255,39 +20334,6 @@
               "height": 34,
               "layout": "none",
               "children": [
-                {
-                  "type": "frame",
-                  "id": "sl7bE",
-                  "x": 168,
-                  "y": 0,
-                  "name": "BorderLabel",
-                  "width": 116,
-                  "layout": "vertical",
-                  "gap": 1,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "AZbXs",
-                      "name": "B1",
-                      "fill": "$neg",
-                      "content": "риск есть",
-                      "fontFamily": "$font",
-                      "fontSize": 10.5,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "ib7Ti",
-                      "name": "B2",
-                      "fill": "$neg",
-                      "content": "11 USDT · 4%",
-                      "fontFamily": "$font",
-                      "fontSize": 12,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
                 {
                   "type": "text",
                   "id": "vuPkg",
@@ -19466,17 +20512,6 @@
                   ]
                 },
                 {
-                  "type": "rectangle",
-                  "cornerRadius": 1,
-                  "id": "D5B88Y",
-                  "x": 75.4,
-                  "y": -4,
-                  "name": "Граница",
-                  "fill": "#17171E",
-                  "width": 2,
-                  "height": 22
-                },
-                {
                   "type": "ellipse",
                   "id": "a5MBtQ",
                   "x": 108.1,
@@ -19487,6 +20522,17 @@
                   "height": 10,
                   "stroke": "#FFFFFF",
                   "strokeWidth": 1.5
+                },
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 1,
+                  "id": "AhGE9",
+                  "x": 62.7,
+                  "y": -2,
+                  "name": "LastResultTick",
+                  "fill": "$textPrimary",
+                  "width": 2,
+                  "height": 18
                 }
               ]
             },
@@ -19498,39 +20544,6 @@
               "height": 30,
               "layout": "none",
               "children": [
-                {
-                  "type": "frame",
-                  "id": "o5F5K",
-                  "x": 33,
-                  "y": 0,
-                  "name": "BorderLabel",
-                  "width": 86,
-                  "layout": "vertical",
-                  "gap": 1,
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "De49b",
-                      "name": "B1",
-                      "fill": "$neg",
-                      "content": "риск есть",
-                      "fontFamily": "$font",
-                      "fontSize": 9.5,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "text",
-                      "id": "K1syR",
-                      "name": "B2",
-                      "fill": "$neg",
-                      "content": "250 · 83%",
-                      "fontFamily": "$font",
-                      "fontSize": 10.5,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
                 {
                   "type": "text",
                   "id": "vVY6E",
@@ -26712,7 +27725,7 @@
       "name": "Экран/Карточка конструкции · подсказка чтения открыта",
       "clip": true,
       "width": 1240,
-      "height": 560,
+      "height": 620,
       "fill": "$bg",
       "layout": "none",
       "children": [
@@ -29532,12 +30545,7 @@
               "id": "h37zN",
               "type": "ref",
               "ref": "onchD",
-              "name": "Индикатор полный",
-              "descendants": {
-                "ib7Ti": {
-                  "content": "−9,80 USDT · 3%"
-                }
-              }
+              "name": "Индикатор полный"
             }
           ]
         },
@@ -31893,12 +32901,7 @@
               "id": "y6oem7",
               "type": "ref",
               "ref": "onchD",
-              "name": "Индикатор полный",
-              "descendants": {
-                "ib7Ti": {
-                  "content": "−9,80 USDT · 3%"
-                }
-              }
+              "name": "Индикатор полный"
             }
           ]
         },
@@ -32831,12 +33834,7 @@
               "id": "g6q2aW",
               "type": "ref",
               "ref": "onchD",
-              "name": "Индикатор полный",
-              "descendants": {
-                "ib7Ti": {
-                  "content": "−9,80 USDT · 3%"
-                }
-              }
+              "name": "Индикатор полный"
             }
           ]
         },
@@ -33660,12 +34658,7 @@
               "id": "iwHPI",
               "type": "ref",
               "ref": "onchD",
-              "name": "Индикатор полный",
-              "descendants": {
-                "ib7Ti": {
-                  "content": "−9,80 USDT · 3%"
-                }
-              }
+              "name": "Индикатор полный"
             }
           ]
         },
@@ -34516,12 +35509,7 @@
               "id": "kSxKA",
               "type": "ref",
               "ref": "onchD",
-              "name": "Индикатор полный",
-              "descendants": {
-                "ib7Ti": {
-                  "content": "−9,80 USDT · 3%"
-                }
-              }
+              "name": "Индикатор полный"
             }
           ]
         }

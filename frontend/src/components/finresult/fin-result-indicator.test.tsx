@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import { computeFinResultGeometry } from "@/lib/finresult/geometry";
+import type { FinResultInput } from "@/lib/finresult/geometry";
 import {
 	CompactFinResultIndicator,
 	FullFinResultIndicator,
@@ -17,15 +18,14 @@ function renderIndicator(ui: Parameters<typeof render>[0]) {
 }
 
 // Смоук-проверки компонентов индикатора финрезультата: рендер строится на
-// геометрии калькулятора (юнит-эталоны C1–C7 покрыты в geometry.test.ts),
-// здесь проверяем публичный контракт представлений — какие подписи, части
-// и доступность выдаёт каждый из трёх видов.
-// Traceability: doc:.wf-research/ui-concept/concept.md#9-индикатор-финансового-результата-конструкции
+// геометрии калькулятора (юнит-эталоны покрыты в geometry.test.ts), здесь
+// проверяем публичный контракт представлений — какие бейджи, подписи, штрихи
+// и области выдаёт каждый из трёх видов.
+// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-risk-profit-hint
 
-// Вход кейса C3: граница худшего исхода прижата к левому краю
-// (−550 = −250 − 300), маркер — итог −70, подписи «худший исход /
-// −550 USDT · 183%» и «−70».
-const CASE_C3 = {
+// Вход кейса C3: маркер текущего результата — итог −70, подписи плановых
+// делений «−300 / 0 / +900»; маркеров истории нет.
+const CASE_C3: FinResultInput = {
 	plannedRisk: 300,
 	plannedProfit: 900,
 	realized: -250,
@@ -33,14 +33,13 @@ const CASE_C3 = {
 	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
-	realRisk: 300,
-	worstCase: -550,
 	realRiskStatus: "finite",
-} as const;
+	resultMarkers: [],
+};
 
 // Вход кейса C6: сверхприбыль — итог +1 400 растягивает золотую зону,
 // маркер стоит на краю шкалы и подписан итогом.
-const CASE_C6 = {
+const CASE_C6: FinResultInput = {
 	plannedRisk: 300,
 	plannedProfit: 900,
 	realized: 150,
@@ -48,15 +47,32 @@ const CASE_C6 = {
 	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
-	realRisk: 300,
-	worstCase: -150,
 	realRiskStatus: "finite",
-} as const;
+	resultMarkers: [],
+};
+
+// Вход истории результата: окно сборки −100 и связка синтетики +30 —
+// последний бейдж −70, текущий результат −40 за счёт нереализованной части.
+// Время события без зоны — формат даты стабилен в любой часовой зоне.
+const CASE_MARKERS: FinResultInput = {
+	plannedRisk: 300,
+	plannedProfit: 900,
+	realized: -70,
+	unrealized: 30,
+	adjustments: 0,
+	quotesDegraded: false,
+	hasOpenResidual: true,
+	realRiskStatus: "finite",
+	resultMarkers: [
+		{ number: 1, eventTime: "2026-06-20T14:30:00", kind: "option-window", changeUsdt: -100, totalUsdt: -100 },
+		{ number: 2, eventTime: "2026-06-25T10:05:00", kind: "synthetic-link", changeUsdt: 30, totalUsdt: -70 },
+	],
+};
 
 // Вход сценария finresult-unbounded-risk: открытый нетто-короткий колл,
 // плановый риск 400, положительный итог +5 942.16 — хвост не ограничен,
-// числа реального риска и худшего исхода в контракте нет.
-const CASE_UNBOUNDED = {
+// числа реального риска в контракте нет.
+const CASE_UNBOUNDED: FinResultInput = {
 	plannedRisk: 400,
 	plannedProfit: 900,
 	realized: 5942.16,
@@ -64,14 +80,13 @@ const CASE_UNBOUNDED = {
 	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
-	realRisk: null,
-	worstCase: null,
 	realRiskStatus: "unbounded",
-} as const;
+	resultMarkers: [],
+};
 
 // Вход сценария finresult-unavailable-risk: исходные данные позиции
 // неполны, расчёт реального риска не удался.
-const CASE_UNAVAILABLE = {
+const CASE_UNAVAILABLE: FinResultInput = {
 	plannedRisk: 300,
 	plannedProfit: 900,
 	realized: 200,
@@ -79,14 +94,13 @@ const CASE_UNAVAILABLE = {
 	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
-	realRisk: null,
-	worstCase: null,
 	realRiskStatus: "unavailable",
-} as const;
+	resultMarkers: [],
+};
 
 // Вход сценария finresult-risk-state-without-plan: плановых границ нет,
 // состояние риска при этом остаётся видимым.
-const CASE_UNBOUNDED_WITHOUT_PLAN = {
+const CASE_UNBOUNDED_WITHOUT_PLAN: FinResultInput = {
 	plannedRisk: null,
 	plannedProfit: null,
 	realized: 100,
@@ -94,44 +108,86 @@ const CASE_UNBOUNDED_WITHOUT_PLAN = {
 	adjustments: 0,
 	quotesDegraded: false,
 	hasOpenResidual: true,
-	realRisk: null,
-	worstCase: null,
 	realRiskStatus: "unbounded",
-} as const;
+	resultMarkers: [],
+};
 
 describe("полный индикатор", () => {
-	// Граница прижата к левому краю, но подписывается значением худшего
-	// исхода целиком с честным процентом; маркер подписан итогом.
-	// Traceability: openspec:ui/screens#scenario-finresult-border-left-clip
-	it("показывает подписи шкалы, границы и маркера кейса C3", () => {
-		// Act: полный вид для карточки и превью конструкции.
-		renderIndicator(<FullFinResultIndicator input={CASE_C3} />);
+	it("показывает подписи шкалы и маркер текущего результата на полосе", () => {
+		// Act: полный вид для карточки конструкции.
+		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_C3} />);
 
-		// Assert: деления шкалы «−300 / 0 / +900» и подписи кейса.
+		// Assert: деления шкалы «−300 / 0 / +900» и подпись итога.
 		expect(screen.getByText("−300")).toBeInTheDocument();
 		expect(screen.getByText("0")).toBeInTheDocument();
 		expect(screen.getByText("+900")).toBeInTheDocument();
-		expect(screen.getByText("худший исход")).toBeInTheDocument();
-		expect(screen.getByText("−550 USDT · 183%")).toBeInTheDocument();
 		expect(screen.getByText("−70")).toBeInTheDocument();
+
+		// Assert: частей прежней границы в полосе и подписях нет.
+		expect(container.querySelector('[data-part="border"]')).toBeNull();
+		expect(container.querySelector('[data-part="border-label"]')).toBeNull();
+		expect(container.querySelector('[data-part="marker-tick"]')).toBeNull();
 	});
 
-	// Подсказка числа сосуществует с попапом чтения: наведение на подпись
-	// границы открывает подсказку худшего исхода из справочника, попап
-	// «Как читать индикатор» остаётся доступен по своему триггеру карточки
+	// Каждый маркер истории показан номерным бейджем с суммой над полосой,
+	// номера идут подряд без пропусков.
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
+	it("рисует номерные бейджи маркеров с суммами над полосой", () => {
+		// Act: история из двух событий.
+		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_MARKERS} />);
+
+		// Assert: два бейджа с тонами по знаку суммы; номера 1 и 2 идут
+		// подряд, суммы — накопленные итоги точек.
+		const badges = container.querySelectorAll<HTMLElement>('[data-part="marker-badge"]');
+		expect(badges).toHaveLength(2);
+		expect(badges[0]).toHaveTextContent("1");
+		expect(badges[0]).toHaveTextContent("−100");
+		expect(badges[0].dataset.tone).toBe("negative");
+		expect(badges[1]).toHaveTextContent("2");
+		expect(badges[1]).toHaveTextContent("−70");
+		expect(badges[1].dataset.tone).toBe("negative");
+
+		// Assert: под каждым бейджем — тёмный штрих на полосе.
+		expect(container.querySelectorAll('[data-part="marker-tick"]')).toHaveLength(2);
+	});
+
+	// Последняя метка отличается от маркера текущего результата: бейдж
+	// подписывает зафиксированный итог над полосой, маркер — текущий
+	// результат под полосой.
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-marker-last-vs-current
+	it("показывает последний бейдж −70 над полосой и маркер −40 под ней", () => {
+		// Act: история до −70, нереализованная часть подняла итог до −40.
+		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_MARKERS} />);
+
+		// Assert: подпись маркера текущего результата −40 живёт в стеке под
+		// полосой, последний бейдж −70 — в стеке над полосой.
+		const markerLabel = container.querySelector<HTMLElement>('[data-part="marker-label"]');
+		expect(markerLabel).toHaveTextContent("−40");
+		const belowStack = markerLabel?.parentElement;
+		const badges = container.querySelectorAll<HTMLElement>('[data-part="marker-badge"]');
+		const lastBadge = badges[badges.length - 1];
+		expect(lastBadge).toHaveTextContent("−70");
+		expect(lastBadge.parentElement).not.toBe(belowStack);
+	});
+
+	// Подсказка числа сосуществует с попапом чтения: наведение на сумму
+	// маркера открывает подсказку о накопленном зафиксированном результате;
+	// попап «Как читать индикатор» доступен по своему триггеру карточки
 	// (его открытие проверяют тесты metric-strip).
-	// Traceability: openspec:ui/screens#scenario-indicator-number-tooltip-coexists
-	it("открывает подсказку худшего исхода наведением на подпись границы", async () => {
-		// Arrange: полный вид кейса C3 с подписью границы.
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-indicator-number-tooltip-coexists
+	it("открывает подсказку суммы маркера наведением на бейдж", async () => {
+		// Arrange: полный вид с историей результата.
 		const user = userEvent.setup();
-		renderIndicator(<FullFinResultIndicator input={CASE_C3} />);
+		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_MARKERS} />);
 
-		// Act: наведение на значение подписи границы.
-		await user.hover(screen.getByText("−550 USDT · 183%"));
+		// Act: наведение на сумму первого бейджа.
+		const badge = container.querySelector<HTMLElement>('[data-part="marker-badge"]');
+		await user.hover(within(badge!).getByText("−100"));
 
-		// Assert: подсказка по роли tooltip называет худший исход.
+		// Assert: подсказка по роли tooltip называет маркер изменения
+		// результата.
 		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
-		expect(screen.getByRole("tooltip")).toHaveTextContent(METRIC_TOOLTIPS.worstCase.title);
+		expect(screen.getByRole("tooltip")).toHaveTextContent(METRIC_TOOLTIPS.resultMarker.title);
 	});
 
 	it("позиционирует маркер по доле геометрии", () => {
@@ -148,7 +204,7 @@ describe("полный индикатор", () => {
 		// Act: итог отрицательный (кейс C3).
 		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_C3} />);
 
-		// Assert: маркер и подписи в отрицательном тоне.
+		// Assert: маркер в отрицательном тоне.
 		const marker = container.querySelector<HTMLElement>('[data-part="marker"]');
 		expect(marker?.dataset.tone).toBe("negative");
 	});
@@ -167,132 +223,10 @@ describe("полный индикатор", () => {
 		expect(screen.getByText("+1 400")).toBeInTheDocument();
 	});
 
-	// Свежая позиция: ликвидация вернёт около нуля, весь реальный риск (120)
-	// впереди — граница стоит на −реальныйРиск со своим значением.
-	// Traceability: openspec:ui/screens#scenario-finresult-fresh-position-real-risk
-	it("показывает свежую позицию: маркер «≈ 0», граница по метрике риска", () => {
-		// Act: сделок закрытия нет, метрика реального риска доступна.
-		renderIndicator(<FullFinResultIndicator
-				input={{
-					plannedRisk: 300,
-					plannedProfit: 900,
-					realized: 0,
-					unrealized: 0,
-					adjustments: 0,
-					quotesDegraded: false,
-					hasOpenResidual: true,
-					realRisk: 120,
-					worstCase: -120,
-					realRiskStatus: "finite",
-				}}
-			/>,
-		);
-
-		// Assert: маркер «≈ 0», граница подписана значением худшего исхода
-		// со знаком и процентом от планового риска.
-		expect(screen.getByText("≈ 0")).toBeInTheDocument();
-		expect(screen.getByText("худший исход")).toBeInTheDocument();
-		expect(screen.getByText("−120 USDT · 40%")).toBeInTheDocument();
-	});
-
-	// Закрытая конструкция: реального риска нет — граница на realized с
-	// подписью «риска нет» и значением худшего исхода (равен реализованному).
-	// Traceability: openspec:ui/screens#scenario-finresult-closed-no-risk
-	it("показывает закрытую позицию: «риска нет», граница на realized", () => {
-		// Act: остатков нет, реализованная выше целевого профита, риск 0.
-		renderIndicator(<FullFinResultIndicator
-				input={{
-					plannedRisk: 300,
-					plannedProfit: 900,
-					realized: 945,
-					unrealized: null,
-					adjustments: 0,
-					quotesDegraded: false,
-					hasOpenResidual: false,
-					realRisk: 0,
-					worstCase: 945,
-					realRiskStatus: "finite",
-				}}
-			/>,
-		);
-
-		// Assert: подпись «риска нет», значение +945 и итог на краю шкалы.
-		expect(screen.getByText("риска нет")).toBeInTheDocument();
-		expect(screen.getByText("+945 USDT · 105%")).toBeInTheDocument();
-		expect(screen.getByText("+945")).toBeInTheDocument();
-	});
-
-	// Тон подписи границы — по знаку худшего исхода, не по знаку итога:
-	// при плюсовом итоге отрицательный исход подписан красным.
-	// Traceability: openspec:ui/screens#requirement-risk-profit-hint
-	it("тонит подпись границы по знаку худшего исхода, а не итога", () => {
-		// Act: итог +849 положителен, худший исход −150 отрицателен.
-		const { container } = renderIndicator(<FullFinResultIndicator
-				input={{
-					plannedRisk: 300,
-					plannedProfit: 900,
-					realized: 150,
-					unrealized: 699,
-					adjustments: 0,
-					quotesDegraded: false,
-					hasOpenResidual: true,
-					realRisk: 300,
-					worstCase: -150,
-					realRiskStatus: "finite",
-				}}
-			/>,
-		);
-
-		// Assert: обе строки подписи границы красные, маркер итога зелёный.
-		// Строки подписи живут внутри триггера подсказки — тон проверяется
-		// по самим строкам, триггер лишь обёртка без собственного тона.
-		const borderLabel = container.querySelector<HTMLElement>('[data-part="border-label"]');
-		const borderLines = borderLabel?.querySelectorAll("span") ?? [];
-		expect(borderLines).toHaveLength(2);
-		expect(borderLines[0].className).toContain("fin-negative");
-		expect(borderLines[0].className).not.toContain("fin-positive-strong");
-		expect(borderLines[1].className).toContain("fin-negative");
-		const markerLabel = container.querySelector<HTMLElement>('[data-part="marker-label"]');
-		expect(markerLabel?.className).toContain("fin-positive-strong");
-	});
-
-	// Маркер итога не прижимается к границе худшего исхода: расхождение
-	// оценки ликвидации и худшего исхода показывается в истинных положениях.
-	// Traceability: openspec:ui/screens#scenario-finresult-marker-not-clamped
-	it("показывает маркер левее границы в истинном положении", () => {
-		// Act: устаревшая котировка опустила итог до −150 при худшем исходе −70.
-		const { container } = renderIndicator(<FullFinResultIndicator
-				input={{
-					plannedRisk: 300,
-					plannedProfit: 900,
-					realized: -250,
-					unrealized: 100,
-					adjustments: 0,
-					quotesDegraded: false,
-					hasOpenResidual: true,
-					realRisk: 70,
-					worstCase: -70,
-					realRiskStatus: "finite",
-				}}
-			/>,
-		);
-
-		// Assert: маркер стоит левее насечки — позиция итога −150 из шкалы
-		// −300…+900, а не прижата к границе −70.
-		const marker = container.querySelector<HTMLElement>('[data-part="marker"]');
-		const border = container.querySelector<HTMLElement>('[data-part="border"]');
-		const markerLeft = Number.parseFloat(marker?.style.left ?? "");
-		const borderLeft = Number.parseFloat(border?.style.left ?? "");
-		expect(markerLeft).toBeCloseTo((150 / 1200) * 100, 3);
-		expect(borderLeft).toBeCloseTo((230 / 1200) * 100, 3);
-		expect(markerLeft).toBeLessThan(borderLeft);
-	});
-
 	// Вертикальный разнос: метка нулевого уровня прижата к полосе одинаково
 	// с обеих сторон — верхней стороной стека под полосой и нижней стороной
-	// стека над полосой, — поэтому верхние числовые метки держат тот же отступ
-	// до линейки, что и нижние; внешний уровень уходит на свои строки от полосы.
-	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+	// стека над полосой; внешний уровень уходит на свои строки от полосы.
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
 	it("прижимает метки нулевого уровня к полосе одинаково с обеих сторон", () => {
 		// Arrange: в jsdom полоса не измеряется (ширина 0 даёт вырожденный
 		// разнос), поэтому фиксируем ширину явно — калькулятор в тесте и в
@@ -305,6 +239,8 @@ describe("полный индикатор", () => {
 				scaleWidthPx: 480,
 				aboveCharWidthPx: 7,
 				belowCharWidthPx: 6.5,
+				badgeChromePx: 30,
+				badgeRows: 2,
 			});
 			const placements = geometry.placements;
 			expect(placements).not.toBeNull();
@@ -314,7 +250,6 @@ describe("полный индикатор", () => {
 				"risk-scale": "risk",
 				"zero-scale": "zero",
 				"profit-scale": "profit",
-				"border-label": "border",
 				"marker-label": "marker",
 			} as const;
 			const lineHeight = 14;
@@ -335,12 +270,10 @@ describe("полный индикатор", () => {
 					const placement = placements![key];
 					expect(placement?.side).toBe(side);
 
-					// Подпись границы занимает две строки модели, остальные — одну.
-					const rows = key === "border" ? 2 : 1;
 					const expectedTop =
 						side === "below"
 							? placement!.level * lineHeight
-							: (stackRows - placement!.level - rows) * lineHeight;
+							: (stackRows - placement!.level - 1) * lineHeight;
 
 					// Assert: метка стоит на своём уровне, нулевой — вплотную к полосе.
 					expect(el.style.top).toBe(`${expectedTop}px`);
@@ -348,7 +281,7 @@ describe("полный индикатор", () => {
 						expect(el.style.top).toBe("0px");
 					}
 					if (placement!.level === 0 && side === "above") {
-						expect(Number.parseFloat(el.style.top) + rows * lineHeight).toBe(stackRows * lineHeight);
+						expect(Number.parseFloat(el.style.top) + lineHeight).toBe(stackRows * lineHeight);
 					}
 				}
 			}
@@ -358,21 +291,83 @@ describe("полный индикатор", () => {
 	});
 });
 
+describe("область описания маркеров", () => {
+	// Область перечисляет выведенные маркеры: номер, дата, тип операции,
+	// изменение, накопленный итог — в хронологическом порядке; при
+	// переполнении прокручивается, не растягивая карточку.
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-marker-description-area-lists-markers
+	it("выводит строку на каждый маркер с номером, датой, типом, изменением и итогом", () => {
+		// Act: полный вид с историей из двух событий.
+		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_MARKERS} />);
+
+		// Assert: список из двух строк, прокручивается при переполнении.
+		const area = container.querySelector<HTMLElement>('[data-part="marker-description"]');
+		expect(area).not.toBeNull();
+		expect(area).toHaveClass("overflow-y-auto");
+		expect(area?.style.maxHeight).toBe("96px");
+		const rows = within(area!).queryAllByRole("listitem");
+		expect(rows).toHaveLength(2);
+
+		// Assert: строка первого маркера — номер 1, дата, окно исполнения,
+		// изменение −100 и итог −100 USDT.
+		expect(rows[0]).toHaveTextContent("1");
+		expect(rows[0]).toHaveTextContent("2026-06-20 14:30");
+		expect(rows[0]).toHaveTextContent("Окно исполнения");
+		expect(rows[0]).toHaveTextContent("−100");
+		expect(rows[0]).toHaveTextContent("−100 USDT");
+
+		// Assert: строка второго маркера — связка синтетики +30 к итогу −70.
+		expect(rows[1]).toHaveTextContent("2");
+		expect(rows[1]).toHaveTextContent("2026-06-25 10:05");
+		expect(rows[1]).toHaveTextContent("Связка синтетики");
+		expect(rows[1]).toHaveTextContent("+30");
+		expect(rows[1]).toHaveTextContent("−70 USDT");
+	});
+
+	it("показывает пустое состояние без маркеров", () => {
+		// Act: истории ещё нет.
+		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_C3} />);
+
+		// Assert: списка нет, пустое состояние называет причину.
+		expect(container.querySelector('[data-part="marker-description"]')).toBeNull();
+		expect(screen.getByText(/маркеров изменения результата пока нет/)).toBeInTheDocument();
+	});
+});
+
 describe("средний индикатор", () => {
+	// Средний вид показывает только последний маркер истории — тёмный
+	// вертикальный штрих на полосе в его позиции, без номера, суммы и
+	// области описания.
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-medium-compact-last-marker-only
+	it("рисует только штрих последнего маркера без бейджей и описания", () => {
+		// Act: средний вид с полной историей карточки (мобильная сводка).
+		const { container } = renderIndicator(<MediumFinResultIndicator input={CASE_MARKERS} />);
+
+		// Assert: один штрих в позиции последнего маркера −70.
+		const ticks = container.querySelectorAll<HTMLElement>('[data-part="marker-tick"]');
+		expect(ticks).toHaveLength(1);
+		expect(Number.parseFloat(ticks[0]?.style.left ?? "")).toBeCloseTo((230 / 1200) * 100, 3);
+
+		// Assert: бейджей с номерами и суммами, области описания нет.
+		expect(container.querySelector('[data-part="marker-badge"]')).toBeNull();
+		expect(container.querySelector('[data-part="marker-description"]')).toBeNull();
+		expect(container.querySelector('[data-part="marker-description-empty"]')).toBeNull();
+	});
+
 	it("показывает шкалу и подписи в уменьшенном виде", () => {
 		// Act: средний вид для сводных карточек.
 		renderIndicator(<MediumFinResultIndicator input={CASE_C3} />);
 
 		// Assert: те же смысловые подписи, что и в полном виде; маркер — итог.
 		expect(screen.getByText("−300")).toBeInTheDocument();
-		expect(screen.getByText("худший исход")).toBeInTheDocument();
+		expect(screen.getByText("+900")).toBeInTheDocument();
 		expect(screen.getByText("−70")).toBeInTheDocument();
 	});
 
 	it("подписывает плановые границы приглушённо, в отличие от полного вида", () => {
 		// Средний вид краткой карточки (мастер rMxFZ): плановые границы
-		// риска и профита подписаны приглушённым тоном — цветными
-		// остаются только граница реального риска и маркер итога.
+		// риска и профита подписаны приглушённым тоном — цветным остаётся
+		// только маркер итога.
 		// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
 		// Act: один и тот же кейс в среднем и полном виде.
 		const { container: medium, unmount: unmountMedium } = renderIndicator(<MediumFinResultIndicator input={CASE_C3} />);
@@ -396,9 +391,9 @@ describe("средний индикатор", () => {
 describe("состояние риска в представлениях", () => {
 	// Полный вид показывает «риск не ограничен» отдельным статусом, плановое
 	// деление подписано плановым риском, при этом итог и золотая зона
-	// сохранены, а насечки и числовой подписи реального риска нет.
+	// сохранены, а числовой подписи реального риска нет.
 	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
-	it("полный: показывает «риск не ограничен» без насечки и без числа риска", () => {
+	it("полный: показывает «риск не ограничен» без числа риска", () => {
 		// Act: неограниченный хвост коротких коллов при плюсе +5 942.16.
 		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_UNBOUNDED} />);
 
@@ -408,11 +403,9 @@ describe("состояние риска в представлениях", () => 
 		expect(screen.getByText("+5 942.16")).toBeInTheDocument();
 		expect(container.querySelector('[data-part="super-zone"]')).not.toBeNull();
 
-		// Assert: числовой подписи реального риска, процента и насечки нет.
+		// Assert: числовой подписи реального риска и процента нет.
 		expect(screen.queryByText(/USDT/)).not.toBeInTheDocument();
 		expect(screen.queryByText(/%/)).not.toBeInTheDocument();
-		expect(container.querySelector('[data-part="border"]')).toBeNull();
-		expect(container.querySelector('[data-part="border-label"]')).toBeNull();
 	});
 
 	// Недоступность расчёта — своё состояние «не удалось рассчитать», план
@@ -420,14 +413,12 @@ describe("состояние риска в представлениях", () => 
 	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
 	it("полный: показывает «не удалось рассчитать» без числа реального риска", () => {
 		// Act.
-		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_UNAVAILABLE} />);
+		renderIndicator(<FullFinResultIndicator input={CASE_UNAVAILABLE} />);
 
-		// Assert: статус состояния и плановое деление; насечки и числа
-		// реального риска нет.
+		// Assert: статус состояния и плановое деление.
 		expect(screen.getByText("не удалось рассчитать")).toBeInTheDocument();
 		expect(screen.getByText("плановый риск −300")).toBeInTheDocument();
 		expect(screen.queryByText(/USDT/)).not.toBeInTheDocument();
-		expect(container.querySelector('[data-part="border"]')).toBeNull();
 	});
 
 	// Средний вид показывает то же состояние, что и полный.
@@ -436,7 +427,7 @@ describe("состояние риска в представлениях", () => 
 		// Act.
 		const { container } = renderIndicator(<MediumFinResultIndicator input={CASE_UNBOUNDED} />);
 
-		// Assert: статус есть, ложных «400 USDT · 100%» и насечки нет.
+		// Assert: статус есть, ложного процента рядом нет.
 		expect(screen.getByText("риск не ограничен")).toBeInTheDocument();
 		expect(screen.queryByText(/100%/)).not.toBeInTheDocument();
 		expect(container.querySelector('[data-part="border"]')).toBeNull();
@@ -444,7 +435,7 @@ describe("состояние риска в представлениях", () => 
 
 	// Метки не наплывают: статус состояния занимает собственную строку
 	// колонки, маркер остаётся в стеке под полосой.
-	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
 	it("полный: статус состояния и метка маркера занимают разные строки", () => {
 		// Act.
 		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_UNBOUNDED} />);
@@ -460,19 +451,18 @@ describe("состояние риска в представлениях", () => 
 		expect(markerLabel!.parentElement?.parentElement).toBe(root);
 	});
 
-	// Компакт различает ∞ и ? видимым бейджем поверх полосы: без насечки,
-	// без сдвига полосы 132px, состояние названо в title и aria-label
-	// отдельно от плановой границы.
+	// Компакт различает ∞ и ? видимым бейджем поверх полосы: без сдвига
+	// полосы 132px, состояние названо в title и aria-label отдельно от
+	// плановой границы.
 	// Traceability: openspec:ui/screens#scenario-finresult-compact-risk-state
-	it("компактный: различает ∞ и ? без насечки и называет состояние в title и aria-label", () => {
+	it("компактный: различает ∞ и ? и называет состояние в title и aria-label", () => {
 		// Act: неограниченный хвост в строке таблицы.
 		const { container, rerender } = renderIndicator(<CompactFinResultIndicator input={CASE_UNBOUNDED} />);
 
-		// Assert: бейдж ∞ поверх полосы, насечки нет, полоса и плановая
-		// зона на месте, ширина 132px сохранена.
+		// Assert: бейдж ∞ поверх полосы, полоса и плановая зона на месте,
+		// ширина 132px сохранена.
 		expect(container.firstElementChild).toHaveClass("w-[132px]");
 		expect(container.querySelector('[data-part="risk-state"]')).toHaveTextContent("∞");
-		expect(container.querySelector('[data-part="border"]')).toBeNull();
 		expect(container.querySelector('[data-part="bar"]')).not.toBeNull();
 		expect(container.querySelector('[data-part="risk-zone"]')).not.toBeNull();
 		const unbounded = screen.getByRole("img");
@@ -496,16 +486,14 @@ describe("состояние риска в представлениях", () => 
 
 		// Assert: зон нет, статус состояния на месте.
 		expect(full.container.querySelector('[data-part="risk-zone"]')).toBeNull();
-		expect(full.container.querySelector('[data-part="border"]')).toBeNull();
 		expect(screen.getByText("риск не ограничен")).toBeInTheDocument();
 		full.unmount();
 
 		// Act: компакт без плановых параметров.
 		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_UNBOUNDED_WITHOUT_PLAN} />);
 
-		// Assert: бейдж ∞, насечки нет, единая заливка нейтральной полосы.
+		// Assert: бейдж ∞, единая заливка нейтральной полосы.
 		expect(container.querySelector('[data-part="risk-state"]')).toHaveTextContent("∞");
-		expect(container.querySelector('[data-part="border"]')).toBeNull();
 		expect(container.querySelector('[data-part="fill-main"]')).not.toBeNull();
 	});
 
@@ -520,7 +508,8 @@ describe("состояние риска в представлениях", () => 
 		expect(screen.getByRole("img").getAttribute("aria-label")).toContain("неполный");
 	});
 
-	// Конечный риск сохраняет прежний вид всех трёх представлений.
+	// Конечный риск сохраняет прежний вид всех трёх представлений: без
+	// статуса и бейджа состояния.
 	// Traceability: change:show-unbounded-finresult-risk/design#d3
 	it("finite не выводит статус состояния и бейдж", () => {
 		// Arrange: конечный риск кейса C3 во всех представлениях.
@@ -530,51 +519,64 @@ describe("состояние риска в представлениях", () => 
 			// Act.
 			const { container, unmount } = renderIndicator(<View input={CASE_C3} />);
 
-			// Assert: ни статуса, ни бейджа; насечка конечного риска на месте.
+			// Assert: ни статуса, ни бейджа состояния.
 			expect(container.querySelector('[data-part="risk-state"]')).toBeNull();
-			expect(container.querySelector('[data-part="border"]')).not.toBeNull();
 			unmount();
 		}
 	});
 });
 
 describe("компактный индикатор", () => {
-	// Компакт сохраняет ширину 132px мастера и токенную насечку в любой ячейке.
+	// Компакт сохраняет ширину 132px мастера и токенные цвета в любой ячейке.
 	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
-	it("использует ширину макета и токенные цвета насечки и обводки", () => {
-		// Arrange / Act: компактный индикатор с отрицательным итогом.
-		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_C3} />);
+	it("использует ширину макета и токенный цвет штриха последнего маркера", () => {
+		// Arrange / Act: компактный индикатор с историей результата.
+		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_MARKERS} />);
 
-		// Assert: размер задаётся компонентом, цвета — дизайн-токенами.
+		// Assert: размер задаётся компонентом, штрих последнего маркера —
+		// тёмный токен textPrimary, обводка маркера итога — surface.
 		expect(container.firstElementChild).toHaveClass("w-[132px]");
-		expect(container.querySelector('[data-part="border"]')).toHaveClass("bg-text-primary");
+		expect(container.querySelector('[data-part="marker-tick"]')).toHaveClass("bg-text-primary");
 		expect(container.querySelector('[data-part="marker"]')).toHaveClass("border-surface");
 	});
 
 	it("рисует только полосу без текстовых подписей", () => {
-		// Act: компакт для строк таблицы конструкций.
-		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_C3} />);
+		// Act: компакт для строк таблицы конструкций с историей.
+		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_MARKERS} />);
 
-		// Assert: полоса с зонами и маркером, текстовых подписей нет.
+		// Assert: полоса с зонами, маркером и одним штрихом последнего
+		// маркера; текстовых подписей и бейджей нет.
 		expect(container.querySelector('[data-part="bar"]')).not.toBeNull();
 		expect(container.querySelector('[data-part="marker"]')).not.toBeNull();
-		expect(container.querySelector('[data-part="border"]')).not.toBeNull();
+		expect(container.querySelectorAll('[data-part="marker-tick"]')).toHaveLength(1);
+		expect(container.querySelector('[data-part="marker-badge"]')).toBeNull();
 		expect(container.textContent).toBe("");
 	});
 
-	it("нейтральная полоса не рисует зон", () => {
-		// Act: плановые границы не заданы.
-		const { container } = render(
+	it("нейтральная полоса не рисует зон и штрихов истории", () => {
+		// Act: плановые границы не заданы, история передана — на нейтральной
+		// полосе маркеры истории не выводятся.
+		const { container } = renderIndicator(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: null, plannedProfit: null, realized: -50, unrealized: 30, adjustments: 0, quotesDegraded: false, hasOpenResidual: true, realRisk: 300, worstCase: -350, realRiskStatus: "finite" }}
+				input={{
+					plannedRisk: null,
+					plannedProfit: null,
+					realized: -50,
+					unrealized: 30,
+					adjustments: 0,
+					quotesDegraded: false,
+					hasOpenResidual: true,
+					realRiskStatus: "finite",
+					resultMarkers: [{ totalUsdt: -100 }],
+				}}
 			/>,
 		);
 
-		// Assert: ни зон, ни границы — заполнение от нуля до края.
+		// Assert: ни зон, ни штрихов истории — заполнение от нуля до края.
 		expect(container.querySelector('[data-part="risk-zone"]')).toBeNull();
 		expect(container.querySelector('[data-part="profit-zone"]')).toBeNull();
-		expect(container.querySelector('[data-part="border"]')).toBeNull();
+		expect(container.querySelector('[data-part="marker-tick"]')).toBeNull();
 		expect(container.querySelector('[data-part="fill-main"]')).not.toBeNull();
 	});
 
@@ -583,9 +585,19 @@ describe("компактный индикатор", () => {
 		// отдают read-модели: нереализованная часть не оценена, но остатки
 		// открыты, поэтому скрывать есть что.
 		// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
-		const { container } = render(
+		const { container } = renderIndicator(
 			<CompactFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: -250, unrealized: null, adjustments: 0, quotesDegraded: true, hasOpenResidual: true, realRisk: 300, worstCase: -550, realRiskStatus: "finite" }}
+				input={{
+					plannedRisk: 300,
+					plannedProfit: 900,
+					realized: -250,
+					unrealized: null,
+					adjustments: 0,
+					quotesDegraded: true,
+					hasOpenResidual: true,
+					realRiskStatus: "finite",
+					resultMarkers: [{ totalUsdt: -550 }],
+				}}
 			/>,
 		);
 
@@ -596,42 +608,34 @@ describe("компактный индикатор", () => {
 		expect(container.querySelector('[data-part="fill-main"]')).not.toBeNull();
 	});
 
-	// Строки подписи границы рендерятся столбцом: модель разноса считает
-	// ширину по самой длинной строке (rows=2), инлайн-рендер давал одну
-	// строку шире модели — маркер наплывал на границу на узких видах.
-	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
-	it("рендерит две строки подписи границы столбцом", () => {
-		// Act.
-		renderIndicator(<FullFinResultIndicator input={CASE_C3} />);
-
-		// Assert: контейнер границы — flex-колонка; строки подписи живут
-		// внутри триггера подсказки худшего исхода, наследующего столбец.
-		const borderLabel = document.querySelector<HTMLElement>('[data-part="border-label"]');
-		expect(borderLabel).toHaveAttribute("data-part", "border-label");
-		expect(borderLabel).toHaveClass("flex", "flex-col");
-		const borderTrigger = borderLabel?.firstElementChild;
-		expect(borderTrigger?.tagName).toBe("BUTTON");
-		expect(borderTrigger).toHaveClass("flex-col");
-		expect(borderTrigger?.children).toHaveLength(2);
-	});
-
 	// Перенесённая калькулятором на другую сторону метка не теряется: стек
 	// собирается по фактической стороне из разноса, а не по канонической.
-	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
-	it("рендерит метку границы в стеке фактической стороны", () => {
-		// Act: итог +420 и граница +420 на одной позиции — нижний уровень
-		// занят маркером, граница уходит наверх.
-		const { container } = renderIndicator(<FullFinResultIndicator
-				input={{ plannedRisk: 300, plannedProfit: 900, realized: 520, unrealized: -100, adjustments: 0, quotesDegraded: false, hasOpenResidual: true, realRisk: 100, worstCase: 420, realRiskStatus: "finite" }}
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
+	it("рендерит метку маркера в стеке фактической стороны", () => {
+		// Act: итог +420 и метка профита на одной стороне — маркер ниже,
+		// деление профита уходит наверх.
+		const { container } = renderIndicator(
+			<FullFinResultIndicator
+				input={{
+					plannedRisk: 300,
+					plannedProfit: 900,
+					realized: 520,
+					unrealized: -100,
+					adjustments: 0,
+					quotesDegraded: false,
+					hasOpenResidual: true,
+					realRiskStatus: "finite",
+					resultMarkers: [],
+				}}
 			/>,
 		);
 
-		// Assert: подпись границы живёт в стеке над полосой (первый ребёнок
-		// корня), а не в стеке под полосой.
-		const borderLabel = container.querySelector<HTMLElement>('[data-part="border-label"]');
-		expect(borderLabel).not.toBeNull();
+		// Assert: подпись маркера живёт в стеке под полосой (третий ребёнок
+		// корня), а деление профита — в стеке над полосой.
+		const markerLabel = container.querySelector<HTMLElement>('[data-part="marker-label"]');
+		expect(markerLabel).not.toBeNull();
 		const root = container.firstElementChild as HTMLElement;
-		expect(borderLabel?.parentElement).toBe(root.firstElementChild);
+		expect(markerLabel?.parentElement).toBe(root.children[2]);
 	});
 });
 
@@ -706,8 +710,21 @@ describe("доступность индикатора", () => {
 		// Act.
 		renderIndicator(<FullFinResultIndicator input={CASE_C3} />);
 
-		// Assert: состояние озвучивается подписями границы и итога маркера.
-		const labelled = screen.getByRole("img", { name: /худший исход −550 USDT · 183%/ });
+		// Assert: состояние озвучивается итогом маркера текущего результата.
+		const labelled = screen.getByRole("img", { name: /результат −70/ });
 		expect(labelled).toHaveAttribute("aria-label", expect.stringContaining("−70"));
+	});
+
+	// Число маркеров истории названо в описании: пользователь скринридера
+	// слышит объём истории без чтения области описания.
+	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
+	it("называет число маркеров истории в описании", () => {
+		// Act.
+		renderIndicator(<FullFinResultIndicator input={CASE_MARKERS} />);
+
+		// Assert: в aria-label названы оба маркера истории.
+		expect(screen.getByRole("img").getAttribute("aria-label")).toContain(
+			"маркеров изменения результата 2",
+		);
 	});
 });

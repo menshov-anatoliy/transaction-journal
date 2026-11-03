@@ -70,7 +70,7 @@ Traceability ID: scenario-finresult-neutral-without-params
 #### Scenario: Задан один параметр — шкала односторонняя
 Traceability ID: scenario-finresult-single-bound
 - **WHEN** у конструкции задан только риск, а профит не введён
-- **THEN** индикатор показывает зону риска, заполнение по текущему результату и все маркеры изменения результата без порога проявления
+- **THEN** индикатор показывает зону риска, заполнение по текущему результату и маркеры изменения результата; порог проявления действует по плановому риску (`requirement-result-marker-threshold`), незаданный профит его не отменяет
 
 #### Scenario: Неограниченный риск не изображается конечной границей
 Traceability ID: scenario-finresult-unbounded-risk

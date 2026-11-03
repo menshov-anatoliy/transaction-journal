@@ -8,6 +8,7 @@ using TransactionJournal.Domain.Data;
 using TransactionJournal.Infrastructure.Data;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Domain;
+using TransactionJournal.Domain.Analytics;
 using TransactionJournal.Application.Materialization;
 using TransactionJournal.Application;
 using TransactionJournal.Infrastructure.ReadModels;
@@ -54,7 +55,12 @@ public class ConstructionListReadModelTests
 		}
 
 		_metrics = new Mock<IJournalMetricsReadModel>();
-		_readModel = new ConstructionListReadModel(CreateOptions(), _metrics.Object);
+		// Читатель хвостов истории результата работает с живой пустой базой:
+		// без журнала хвостов нет и строки не несут маркеров.
+		_readModel = new ConstructionListReadModel(
+			CreateOptions(),
+			_metrics.Object,
+			new ConstructionResultMarkersReader(CreateOptions(), new PositionReadModel(CreateOptions())));
 	}
 
 	[TestCleanup]
@@ -304,6 +310,7 @@ public class ConstructionListReadModelTests
 					MetricsOf(2, 60m, 5m),
 				],
 				Positions = [],
+				PositionEntries = new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<PositionFifoEntry>>>(),
 				TotalPnL = 221.12m,
 				RealizedPnL = 274.32m,
 				UnrealizedPnL = -53.2m,
@@ -395,7 +402,10 @@ public class ConstructionListReadModelTests
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
 		await new TradeBindingService(CreateOptions()).BindBatchAsync(1, ["exec-buy"]);
 		var metrics = new JournalMetricsReadModel(CreateOptions(), new FailingQuoteSource());
-		var readModel = new ConstructionListReadModel(CreateOptions(), metrics);
+		var readModel = new ConstructionListReadModel(
+			CreateOptions(),
+			metrics,
+			new ConstructionResultMarkersReader(CreateOptions(), new PositionReadModel(CreateOptions())));
 
 		// Act: чтение данных экрана «Конструкции» при сбойном провайдере.
 		var data = await readModel.ReadAsync();
@@ -441,7 +451,7 @@ public class ConstructionListReadModelTests
 	public void ThrowOnNullOptions()
 	{
 		// Arrange — Act — Assert
-		new ConstructionListReadModel(null!, _metrics.Object);
+		new ConstructionListReadModel(null!, _metrics.Object, new ConstructionResultMarkersReader(CreateOptions(), new PositionReadModel(CreateOptions())));
 	}
 
 	[TestMethod]
@@ -450,7 +460,82 @@ public class ConstructionListReadModelTests
 	public void ThrowOnNullMetrics()
 	{
 		// Arrange — Act — Assert
-		new ConstructionListReadModel(CreateOptions(), null!);
+		new ConstructionListReadModel(CreateOptions(), null!, new ConstructionResultMarkersReader(CreateOptions(), new PositionReadModel(CreateOptions())));
+	}
+
+	[TestMethod]
+	[Description("Null-читатель хвостов истории результата отклоняется конструктором")]
+	[ExpectedException(typeof(ArgumentNullException))]
+	public void ThrowOnNullResultMarkersReader()
+	{
+		// Arrange — Act — Assert
+		new ConstructionListReadModel(CreateOptions(), _metrics.Object, null!);
+	}
+
+	[TestMethod]
+	[Description("Строка списка несёт последний маркер истории результата из журнала конструкции")]
+	// Последний маркер строки — накопленный зафиксированный денежный итог
+	// (реализованный результат плюс корректировки минус входная стоимость
+	// открытых остатков) на момент последнего события журнала; у конструкции
+	// без событий маркера нет.
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-marker-open-residual-entry-cost-counts
+	public async Task TryIfOverviewRowCarriesLastResultMarkerFromJournal()
+	{
+		// Arrange: конструкция с фьючерсной сделкой 28-го числа (комиссия 1,
+		// реализует −1) и корректировкой +5 29-го числа; метрики аналитики
+		// читаются живой read-моделью по тем же записям журнала.
+		await SeedAsync(Header("Длинный BTC", ConstructionStatus.Open, 1000m));
+		await SeedLinearInstrumentAsync();
+		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
+		await new TradeBindingService(CreateOptions()).BindBatchAsync(1, ["exec-buy"]);
+		using (var db = new JournalDbContext(CreateOptions()))
+		{
+			db.PnLAdjustments.Add(new PnLAdjustment
+			{
+				ConstructionId = 1,
+				Date = new DateTimeOffset(2023, 12, 29, 9, 0, 0, TimeSpan.Zero),
+				Source = PnLAdjustmentSource.Manual,
+				AmountUsdt = 5m,
+			});
+			await db.SaveChangesAsync();
+		}
+
+		var metrics = new JournalMetricsReadModel(CreateOptions(), new EmptyFreshQuoteSource());
+		var readModel = new ConstructionListReadModel(
+			CreateOptions(),
+			metrics,
+			new ConstructionResultMarkersReader(CreateOptions(), new PositionReadModel(CreateOptions())));
+
+		// Act: чтение данных экрана «Конструкции».
+		var data = await readModel.ReadAsync();
+
+		// Assert: последний маркер строки — денежный итог −1 (комиссия) + 5
+		// (корректировка) − 4200 (входная стоимость открытого остатка 0.1 × 42000)
+		// = −4196 на момент последнего события (корректировка 29-го числа).
+		var row = data.Items.Single();
+		Assert.That(row.LastResultMarker, Is.Not.Null);
+		Assert.That(row.LastResultMarker!.TotalUsdt, Is.EqualTo(-4196m));
+		Assert.That(row.LastResultMarker!.EventAt, Is.EqualTo(new DateTimeOffset(2023, 12, 29, 9, 0, 0, TimeSpan.Zero)));
+	}
+
+	[TestMethod]
+	[Description("Конструкция без событий журнала идёт без последнего маркера")]
+	// Отсутствие событий истории — null в строке, а не ноль: отсутствующий
+	// маркер отличим от нулевого накопленного итога.
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+	public async Task TryIfRowWithoutEventsCarriesNoLastResultMarker()
+	{
+		// Arrange: конструкция без сделок, корректировок и закрывающих записей.
+		await SeedAsync(Header("Пустая", ConstructionStatus.Open, 1000m));
+		SetupMetrics(0m, MetricsOf(1, 0m, 0m));
+
+		// Act: чтение данных экрана «Конструкции».
+		var data = await _readModel.ReadAsync();
+
+		// Assert: маркера у строки нет.
+		var row = data.Items.Single();
+		Assert.That(row.LastResultMarker, Is.Null);
 	}
 
 	#region Помощники
@@ -519,6 +604,13 @@ public class ConstructionListReadModelTests
 			throw new HttpRequestException("публичные тикеры недоступны");
 	}
 
+	/// <summary>Заглушка без котировок: открытые остатки остаются без нереализованной оценки.</summary>
+	private sealed class EmptyFreshQuoteSource : IFreshInstrumentQuoteSource
+	{
+		public Task<InstrumentQuoteSnapshot?> GetFreshQuoteAsync(string symbol, CancellationToken cancellationToken = default) =>
+			Task.FromResult<InstrumentQuoteSnapshot?>(null);
+	}
+
 	/// <summary>Подменяет метрики журнала: итог и список метрик конструкций по идентификаторам.</summary>
 	private void SetupMetrics(decimal? totalPnL, params ConstructionMetrics[] constructions) =>
 		_metrics
@@ -527,6 +619,7 @@ public class ConstructionListReadModelTests
 			{
 				Constructions = constructions,
 				Positions = [],
+				PositionEntries = new Dictionary<long, IReadOnlyDictionary<string, IReadOnlyList<PositionFifoEntry>>>(),
 				TotalPnL = totalPnL,
 				// Разбивка списком не читается: слагаемые согласованы с итогом.
 				RealizedPnL = totalPnL ?? 0m,

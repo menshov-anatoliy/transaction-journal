@@ -17,6 +17,38 @@ export type ClosingEntryKind = "delivery" | "otm-expiry" | "manual-mark";
 /** Источник внешней корректировки PnL. */
 export type AdjustmentSource = "robot" | "manual";
 
+// Тип события маркера изменения результата в контракте API: окно
+// опционных исполнений (ролл — единое окно), фьючерсная сделка робота,
+// изменение набора действующих связок синтетического закрытия, внешняя
+// корректировка PnL, закрывающая запись (delivery, экспирация OTM,
+// ручная пометка). Бэкенд публикует строку-тип.
+// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
+export type ResultMarkerKind =
+	| "option-window"
+	| "futures-trade"
+	| "synthetic-link"
+	| "pnl-adjustment"
+	| "delivery"
+	| "otm-expiry"
+	| "manual-mark";
+
+/** Маркер изменения результата: точка истории накопленного зафиксированного результата. */
+// Контракт публикует уже выведенные маркеры: порог проявления и сквозная
+// нумерация посчитаны на сервере, фронтенд рендерит как есть.
+// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+export interface ResultMarker {
+	/** Порядковый номер среди выведенных маркеров — подряд без пропусков. */
+	readonly number: number;
+	/** Время события журнала, ISO. */
+	readonly eventTime: string;
+	/** Тип события журнала, породившего маркер. */
+	readonly kind: ResultMarkerKind;
+	/** Изменение накопленного итога от предыдущего выведенного маркера, USDT. */
+	readonly changeUsdt: number;
+	/** Накопленный зафиксированный результат на момент события, USDT. */
+	readonly totalUsdt: number;
+}
+
 /** Метрики карточки: сводка kstrip с периодом и длительностью. */
 export interface ConstructionCardMetrics {
 	readonly realizedPnL: number;
@@ -36,10 +68,6 @@ export interface ConstructionCardMetrics {
 	// Traceability: change:show-unbounded-finresult-risk/design#d1
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
-	// Худший исход конструкции — знаковая величина рядом с реальным риском:
-	// число при том же статусе finite, null при unbounded/unavailable.
-	// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-	readonly worstCaseUsdt: number | null;
 	// Сводная величина «с учётом зафиксированного синтетикой» —
 	// «Реализованный результат» + Σ локов действующих (неоспоренных)
 	// связок; null без действующих связок. Величина не меняет
@@ -209,6 +237,10 @@ export interface ConstructionCard {
 	// конструкции без связок, строка «зафиксировано синтетикой» не выводится.
 	// Traceability: openspec:ui/screens#requirement-detail-synthetic-close-line
 	readonly syntheticCloses: readonly ConstructionCardSyntheticClose[];
+	// Выведенные маркеры изменения результата в хронологическом порядке:
+	// порог и нумерация посчитаны на сервере, пустой список — истории ещё нет.
+	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
+	readonly resultMarkers: readonly ResultMarker[];
 	// Полный перечень предупреждений диагностики незакрытых рисков: секция
 	// «Предупреждения» карточки перечисляет все записи, а пустой список
 	// скрывает секцию целиком. Источник тот же вызов вычислителя, что у

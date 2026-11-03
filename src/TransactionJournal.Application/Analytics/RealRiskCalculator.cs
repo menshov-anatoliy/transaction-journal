@@ -20,7 +20,6 @@ namespace TransactionJournal.Application.Analytics;
 /// экспирация, базовый актив, знаковый остаток) и средней цены открытого
 /// остатка, поэтому сбой котировок на неё не влияет.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 // Traceability: change:show-unbounded-finresult-risk/design#d1
 // Traceability: change:show-unbounded-finresult-risk/design#d4
 /// </summary>
@@ -45,11 +44,8 @@ public sealed class RealRiskCalculator
 	/// достигает минимума в узле S = 0. Единицы — те
 	/// же, что у стоимости по котировкам: «цена × количество», без множителя
 	/// контракта. Группы суммируются консервативно: реальный риск равен сумме
-	/// минимумов групп с обратным знаком и не опускается ниже нуля; сам
-	/// неклэмпированный суммарный минимум возвращается рядом как худший платёж
-	/// остатков — он же задаёт вклад остатков в знаковый худший исход
-	/// конструкции. Без открытых остатков риск конечен и равен нулю,
-	/// худший платёж остатков нулевой.
+	/// минимумов групп с обратным знаком и не опускается ниже нуля.
+	/// Без открытых остатков риск конечен и равен нулю.
 	/// </summary>
 	/// <param name="positions">Метрики позиций конструкции.</param>
 	/// <returns>Типизированный результат: состояние риска и число только для конечного риска.</returns>
@@ -61,13 +57,11 @@ public sealed class RealRiskCalculator
 		var openPositions = positions.Where(position => position.Residual != 0m).ToList();
 
 		// Без открытых остатков худшего исхода на экспирацию больше нет: риск
-		// конечен и равен нулю, а худший платёж остатков нулевой — худший исход
-		// конструкции совпадает с реализованным результатом.
+		// конечен и равен нулю.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-zero-without-open-residuals
-		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
 		if (openPositions.Count == 0)
 		{
-			return RealRiskResult.Finite(0m, 0m);
+			return RealRiskResult.Finite(0m);
 		}
 
 		// Первый проход — классификация ног открытых остатков и полнота исходных
@@ -218,10 +212,7 @@ public sealed class RealRiskCalculator
 
 		// Реальный риск — худший платёж с обратным знаком; платёж, неотрицательный
 		// во всех узлах, риска не несёт, поэтому величина не уходит ниже нуля.
-		// Неклэмпированный минимум публикуется рядом: положительная сумма —
-		// гарантированная прибыль остатков, участница худшего исхода конструкции.
-		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-		return RealRiskResult.Finite(Math.Max(0m, -worst), worst);
+		return RealRiskResult.Finite(Math.Max(0m, -worst));
 	}
 
 	#region Вспомогательные методы

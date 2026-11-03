@@ -84,10 +84,6 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(row["quoteValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(row["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
 		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
-		// Худший исход соседствует с риском: знаковая величина границы
-		// индикатора проходит в контракт строки списка.
-		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-		Assert.That(row["worstCaseUsdt"]!.GetValue<decimal>(), Is.EqualTo(-89.75m));
 		// Статус соседствует с величиной: конечный риск отличим от
 		// неограниченного хвоста и неполных данных.
 		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
@@ -97,11 +93,15 @@ public sealed class ConstructionsSectionApiTests
 		var closedRow = payload["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.ClosedConstructionId)!;
 		Assert.That(closedRow["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(0m));
 		Assert.That(closedRow["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
-		// Без открытых остатков худший исход равен реализованному результату.
-		// Traceability: openspec:analytics/performance#scenario-worst-case-closed-equals-realized
-		Assert.That(closedRow["worstCaseUsdt"]!.GetValue<decimal>(), Is.EqualTo(0m));
 		Assert.That(row["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(row["closedAt"], Is.Null);
+		// Последний маркер истории результата входит в контракт строки: итог
+		// и время события идут парой рядом с прочими колонками.
+		// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+		Assert.That(row["lastResultMarker"]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-29.75m));
+		Assert.That(row["lastResultMarker"]!["eventAt"]!.GetValue<string>(), Is.EqualTo("2026-06-19T08:00:00+00:00"));
+		// Закрытая конструкция без событий истории идёт с null вместо пары.
+		Assert.That(closedRow["lastResultMarker"], Is.Null);
 	}
 
 	[TestMethod]
@@ -133,10 +133,10 @@ public sealed class ConstructionsSectionApiTests
 		// доступным, пока нереализованные величины гаснут в null.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
 		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
-		// Худший исход выводится из структуры ног и средних цен остатков,
-		// поэтому при сбое котировок он тоже остаётся доступным.
-		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-		Assert.That(row["worstCaseUsdt"]!.GetValue<decimal>(), Is.EqualTo(-89.75m));
+		// Последний маркер истории — величина из зафиксированных записей:
+		// сбой котировок на неё не влияет.
+		// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-marker-value-excludes-unrealized
+		Assert.That(row["lastResultMarker"]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-29.75m));
 		// Реализованная часть и корректировки при сбое котировок остаются видимыми.
 		Assert.That(row["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(60.25m));
 		Assert.That(row["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(0m));
@@ -254,10 +254,6 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(payload["quoteValue"]!.GetValue<decimal>(), Is.EqualTo(500m));
 		Assert.That(payload["capitalUsagePercent"]!.GetValue<decimal>(), Is.EqualTo(16.7m));
 		Assert.That(payload["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
-		// Худший исход проходит в превью рядом с риском: знаковая величина
-		// границы индикатора правой области.
-		// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-		Assert.That(payload["worstCaseUsdt"]!.GetValue<decimal>(), Is.EqualTo(-89.75m));
 		// Статус соседствует с величиной: конечный риск отличим от
 		// неограниченного хвоста и неполных данных.
 		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
@@ -270,6 +266,11 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(payload["counts"]!["openPositions"]!.GetValue<int>(), Is.EqualTo(1));
 		Assert.That(payload["counts"]!["trades"]!.GetValue<int>(), Is.EqualTo(3));
 		Assert.That(payload["counts"]!["adjustments"]!.GetValue<int>(), Is.EqualTo(1));
+		// Превью публикует последний маркер той же истории, что и карточка:
+		// накопленный итог и время события без номера.
+		// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+		Assert.That(payload["lastResultMarker"]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(65.25m));
+		Assert.That(payload["lastResultMarker"]!["eventAt"]!.GetValue<string>(), Is.EqualTo("2026-06-19T10:00:00+00:00"));
 	}
 
 	[TestMethod]
@@ -388,18 +389,12 @@ public sealed class ConstructionsSectionApiTests
 		var finite = payload!["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.OpenConstructionId)!;
 		Assert.That(finite["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
 		Assert.That(finite["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
-		Assert.That(finite["worstCaseUsdt"]!.GetValue<decimal>(), Is.EqualTo(-89.75m));
 		var unbounded = payload["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.UnboundedConstructionId)!;
 		Assert.That(unbounded["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unbounded"));
 		Assert.That(unbounded["realRiskUsdt"], Is.Null);
 		var unavailable = payload["items"]!.AsArray().Single(node => node!["constructionId"]!.GetValue<long>() == StubListReadModel.UnavailableConstructionId)!;
 		Assert.That(unavailable["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unavailable"));
 		Assert.That(unavailable["realRiskUsdt"], Is.Null);
-		// Худший исход переиспользует статус реального риска: число есть только
-		// у конечного состояния, unbounded и unavailable идут с null.
-		// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-		Assert.That(unbounded["worstCaseUsdt"], Is.Null);
-		Assert.That(unavailable["worstCaseUsdt"], Is.Null);
 		RealRiskContractChecks.AssertNumberOnlyWhenFinite(payload["items"]!.AsArray());
 	}
 
@@ -459,9 +454,6 @@ public sealed class ConstructionsSectionApiTests
 		// Assert: статус unbounded без числа, инвариант контракта соблюдён.
 		Assert.That(payload!["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unbounded"));
 		Assert.That(payload["realRiskUsdt"], Is.Null);
-		// Худший исход без величины переиспользует статус реального риска.
-		// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-		Assert.That(payload["worstCaseUsdt"], Is.Null);
 		RealRiskContractChecks.AssertNumberOnlyWhenFinite(payload);
 	}
 
@@ -483,9 +475,6 @@ public sealed class ConstructionsSectionApiTests
 		// Assert: статус unavailable без числа, инвариант контракта соблюдён.
 		Assert.That(payload!["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("unavailable"));
 		Assert.That(payload["realRiskUsdt"], Is.Null);
-		// Худший исход без величины переиспользует статус реального риска.
-		// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-		Assert.That(payload["worstCaseUsdt"], Is.Null);
 		RealRiskContractChecks.AssertNumberOnlyWhenFinite(payload);
 	}
 
@@ -966,9 +955,9 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					QuoteValue: 500m,
 					CapitalUsagePercent: 16.7m,
 					RealRiskUsdt: 150m,
-					// Худший исход открытой строки: реализованный результат
-					// 60.25 минус реальный риск 150.
-					WorstCaseUsdt: -89.75m,
+					// Последний маркер открытой строки: накопленный зафиксированный
+					// итог и время последнего события журнала.
+					LastResultMarker: new ResultMarkerSummary(-29.75m, new DateTimeOffset(2026, 6, 19, 8, 0, 0, TimeSpan.Zero)),
 					RealRiskStatus: RealRiskStatus.Finite),
 				new ConstructionListItem(
 					ConstructionId: ClosedConstructionId,
@@ -990,8 +979,7 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					CapitalUsagePercent: null,
 					// Закрытая конструкция без открытых остатков имеет нулевой конечный риск.
 					RealRiskUsdt: 0m,
-					// Без открытых остатков худший исход равен реализованному результату.
-					WorstCaseUsdt: 0m,
+					// Закрытая конструкция без событий истории идёт без маркера.
 					RealRiskStatus: RealRiskStatus.Finite),
 			]);
 	}
@@ -1026,7 +1014,6 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					QuoteValue: 500m,
 					CapitalUsagePercent: 16.7m,
 					RealRiskUsdt: 150m,
-					WorstCaseUsdt: -89.75m,
 					RealRiskStatus: RealRiskStatus.Finite),
 				new ConstructionListItem(
 					ConstructionId: UnboundedConstructionId,
@@ -1048,8 +1035,6 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					CapitalUsagePercent: 0m,
 					// Открытый нетто-короткий колл: число отсутствует, статус unbounded.
 					RealRiskUsdt: null,
-					// Худший исход неограничен вместе с риском: null со статусом.
-					WorstCaseUsdt: null,
 					RealRiskStatus: RealRiskStatus.Unbounded),
 				new ConstructionListItem(
 					ConstructionId: UnavailableConstructionId,
@@ -1071,8 +1056,6 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					CapitalUsagePercent: 0m,
 					// Неполные данные открытых остатков: число отсутствует, статус unavailable.
 					RealRiskUsdt: null,
-					// Неполные данные не дают и числа худшего исхода: null со статусом.
-					WorstCaseUsdt: null,
 					RealRiskStatus: RealRiskStatus.Unavailable),
 			]));
 
@@ -1080,10 +1063,9 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 	public static StubListReadModel WithBrokenRealRiskPair(RealRiskStatus status, decimal? usdt)
 	{
 		var data = CreateDefaultData();
-		// Худший исход держится согласованным со статусом: нарушение изолируется
-		// парой величины риска, инвариант худшего исхода проверен отдельно.
-		decimal? worstCaseUsdt = status == RealRiskStatus.Finite ? -89.75m : null;
-		var broken = data.Items[0] with { RealRiskUsdt = usdt, WorstCaseUsdt = worstCaseUsdt, RealRiskStatus = status };
+		// Нарушение изолируется парой величины риска: статус и величина
+		// расходятся, сериализатор обязан отказать в публикации.
+		var broken = data.Items[0] with { RealRiskUsdt = usdt, RealRiskStatus = status };
 		return new StubListReadModel(data with { Items = [broken] });
 	}
 
@@ -1117,8 +1099,8 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					QuoteValue: null,
 					CapitalUsagePercent: null,
 					RealRiskUsdt: 150m,
-					// Худший исход от котировок не зависит: величина остаётся при сбое.
-					WorstCaseUsdt: -89.75m,
+					// Последний маркер от котировок не зависит: величина остаётся при сбое.
+					LastResultMarker: new ResultMarkerSummary(-29.75m, new DateTimeOffset(2026, 6, 19, 8, 0, 0, TimeSpan.Zero)),
 					RealRiskStatus: RealRiskStatus.Finite),
 			]));
 
@@ -1203,10 +1185,6 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			// Число реального риска выдаётся только конечному состоянию:
 			// unbounded и unavailable идут с null, инвариант «число только при finite».
 			RealRiskUsdt = _realRiskStatus == RealRiskStatus.Finite ? 150m : null,
-			// Худший исход переиспользует то же правило: число только при
-			// конечном риске, иначе null со статусом состояния.
-			// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-			WorstCaseUsdt = _realRiskStatus == RealRiskStatus.Finite ? -89.75m : null,
 			RealRiskStatus = _realRiskStatus,
 			OpenedAt = openedAt,
 			ClosedAt = null,
@@ -1283,7 +1261,40 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			],
 			// Перечень предупреждений идёт из того же набора текущего чтения,
 			// что и счётчик метрик, — расхождение исключено.
-			RiskWarnings: _riskWarnings);
+			RiskWarnings: _riskWarnings,
+			// История маркеров выведена при чтении: нумерация сплошная, последний
+			// маркер равен накопленному зафиксированному итогу конструкции.
+			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
+			ResultMarkers: new ConstructionResultMarkers
+			{
+				Markers =
+				[
+					new ResultMarker
+					{
+						Number = 1,
+						EventTime = openedAt,
+						Kind = ResultMarkerKind.OptionWindow,
+						ChangeUsdt = -100m,
+						TotalUsdt = -100m,
+					},
+					new ResultMarker
+					{
+						Number = 2,
+						EventTime = new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero),
+						Kind = ResultMarkerKind.PnLAdjustment,
+						ChangeUsdt = 5m,
+						TotalUsdt = -95m,
+					},
+					new ResultMarker
+					{
+						Number = 3,
+						EventTime = new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero),
+						Kind = ResultMarkerKind.FuturesTrade,
+						ChangeUsdt = 160.25m,
+						TotalUsdt = 65.25m,
+					},
+				],
+			});
 		return Task.FromResult(data);
 	}
 }
@@ -1296,24 +1307,14 @@ internal static class RealRiskContractChecks
 	{
 		var status = payload!["realRiskStatus"]!.GetValue<string>();
 		var number = payload["realRiskUsdt"];
-		var worstCase = payload["worstCaseUsdt"];
 		if (status == "finite")
 		{
 			Assert.That(number, Is.Not.Null, "У конечного риска должно быть число realRiskUsdt.");
-			// Худший исход переиспользует то же правило числа: конечное
-			// состояние несёт знаковую величину рядом с реальным риском.
-			// Traceability: openspec:analytics/performance#requirement-worst-case-outcome-metric
-			Assert.That(worstCase, Is.Not.Null, "У конечного риска должно быть число worstCaseUsdt.");
 		}
 		else
 		{
 			Assert.That(status, Is.EqualTo("unbounded").Or.EqualTo("unavailable"), "Неизвестный статус реального риска.");
 			Assert.That(number, Is.Null, $"Статус {status} не должен сопровождаться числом realRiskUsdt.");
-			// Состояние без величины переиспользует статус реального риска:
-			// число худшего исхода за неограниченным хвостом или неполными
-			// данными исказило бы границу индикатора.
-			// Traceability: openspec:analytics/performance#scenario-worst-case-null-with-status
-			Assert.That(worstCase, Is.Null, $"Статус {status} не должен сопровождаться числом worstCaseUsdt.");
 		}
 	}
 

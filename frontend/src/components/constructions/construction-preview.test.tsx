@@ -29,7 +29,7 @@ const preview: ConstructionPreview = {
 	quoteValue: 500,
 	capitalUsagePercent: 16.7,
 	realRiskUsdt: 45,
-	worstCaseUsdt: 15.25,
+	lastResultMarker: { totalUsdt: 15.25, eventAt: "2026-06-18T09:05:00" },
 	realRiskStatus: "finite",
 	openedAt: "2026-06-18T09:05:00",
 	closedAt: null,
