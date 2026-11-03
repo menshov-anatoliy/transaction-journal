@@ -1,6 +1,7 @@
 namespace TransactionJournal.Tests.Chats;
 
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -24,8 +25,8 @@ public sealed class ChatToolArgsTracingTests
 	/// <summary>Имя события трассы с аргументами вызова тула.</summary>
 	private const string EventName = "tj.tool.args";
 
-	/// <summary>Предел длины JSON аргументов — 2 КБ, 2048 символов.</summary>
-	private const int MaxJsonLength = 2048;
+	/// <summary>Предел размера JSON аргументов — 2 КБ в UTF-8 байтах.</summary>
+	private const int MaxJsonBytes = 2048;
 
 	/// <summary>Маркер усечения, дописываемый к обрезанному JSON.</summary>
 	private const string TruncationMarker = "…[truncated]";
@@ -71,7 +72,7 @@ public sealed class ChatToolArgsTracingTests
 	}
 
 	[TestMethod]
-	[Description("Аргументы больше 2 КБ усекаются до 2048 символов с маркером усечения")]
+	[Description("Аргументы больше 2 КБ усекаются с маркером усечения")]
 	// Кап 2 КБ защищает файл трасс от раздувания: JSON обрезается, маркер
 	// делает усечение явным, признак дублируется атрибутом.
 	// Traceability: openspec:ops/agent-tracing#scenario-trace-tool-args-capped
@@ -85,13 +86,39 @@ public sealed class ChatToolArgsTracingTests
 		// Act: вызов тула с длинным аргументом.
 		var result = await harness.InvokeAsync(function, new AIFunctionArguments { ["cardId"] = new string('x', 3000) });
 
-		// Assert: JSON в пределах 2 КБ, оканчивается маркером, признак
-		// усечения выставлен; вызов тула при этом состоялся.
+		// Assert: JSON в пределах 2 КБ UTF-8 байт, оканчивается маркером,
+		// признак усечения выставлен; вызов тула при этом состоялся.
 		Assert.That(result, Is.Not.Null);
 		var activity = harness.Activity!;
 		var argsEvent = activity.Events.Single(e => e.Name == EventName);
 		var json = (string)argsEvent.Tags.Single(tag => tag.Key == "tj.tool.args.json").Value!;
-		Assert.That(json.Length, Is.LessThanOrEqualTo(MaxJsonLength));
+		Assert.That(Encoding.UTF8.GetByteCount(json), Is.LessThanOrEqualTo(MaxJsonBytes));
+		Assert.That(json, Does.EndWith(TruncationMarker));
+		Assert.That(argsEvent.Tags.Single(tag => tag.Key == "tj.tool.args.truncated").Value, Is.EqualTo(true));
+	}
+
+	[TestMethod]
+	[Description("Кириллические аргументы умещаются в предел по символам, но усекаются по UTF-8 байтам")]
+	// Кап считается в UTF-8 байтах, а не в символах: кириллица занимает два
+	// байта на символ, и JSON короче 2048 символов всё равно превышает 2 КБ.
+	// Traceability: openspec:ops/agent-tracing#scenario-trace-tool-args-capped
+	public async Task TryIfNonAsciiToolArgsCappedByByteBudget()
+	{
+		// Arrange: карточка в 1100 кириллических символов — по символам JSON
+		// меньше предела, по UTF-8 байтам превышает его.
+		using var harness = new ActivityHarness();
+		var function = CreateRuleCardTool(new ChatTracingOptions());
+
+		// Act: вызов тула с кириллическим аргументом.
+		var result = await harness.InvokeAsync(function, new AIFunctionArguments { ["cardId"] = new string('ф', 1100) });
+
+		// Assert: JSON усечён по байтовому пределу с маркером; признак
+		// усечения выставлен, вызов тула состоялся.
+		Assert.That(result, Is.Not.Null);
+		var activity = harness.Activity!;
+		var argsEvent = activity.Events.Single(e => e.Name == EventName);
+		var json = (string)argsEvent.Tags.Single(tag => tag.Key == "tj.tool.args.json").Value!;
+		Assert.That(Encoding.UTF8.GetByteCount(json), Is.LessThanOrEqualTo(MaxJsonBytes));
 		Assert.That(json, Does.EndWith(TruncationMarker));
 		Assert.That(argsEvent.Tags.Single(tag => tag.Key == "tj.tool.args.truncated").Value, Is.EqualTo(true));
 	}

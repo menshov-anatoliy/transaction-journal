@@ -10,8 +10,8 @@ using Microsoft.Extensions.AI;
 /// Захват аргументов тулов для операционной трассы: обёртка AIFunction в
 /// момент исполнения тула добавляет на текущую активность — встроенный спан
 /// execute_tool {name} — событие tj.tool.args с JSON аргументов вызова.
-/// Событие metadata-only в пределах компакта: JSON усекается до 2048
-/// символов с маркером усечения, а сериализация устойчива — значение, которое
+/// Событие metadata-only в пределах компакта: JSON усекается до 2 КБ
+/// UTF-8 байт с маркером усечения, а сериализация устойчива — значение, которое
 /// не сериализуется, деградирует в ToString, и сбой сериализации не ломает
 /// вызов тула. Полные тексты сообщений модели не пишутся никогда:
 /// EnableSensitiveData всегда false — задан в конвейере ChatAgent.
@@ -51,8 +51,8 @@ internal static class ChatToolArgsCapture
 		/// <summary>Атрибут события: признак усечения JSON до предела.</summary>
 		public const string TruncatedKey = "tj.tool.args.truncated";
 
-		/// <summary>Предел длины JSON аргументов в символах — 2 КБ.</summary>
-		public const int MaxJsonLength = 2048;
+		/// <summary>Предел размера JSON аргументов — 2 КБ UTF-8 байт, включая маркер усечения.</summary>
+		public const int MaxJsonBytes = 2048;
 
 		/// <summary>Маркер усечения, дописываемый к обрезанному JSON.</summary>
 		public const string TruncationMarker = "…[truncated]";
@@ -93,18 +93,12 @@ internal static class ChatToolArgsCapture
 				return;
 			}
 
-			var truncated = json.Length > MaxJsonLength;
+			// Кап считается в UTF-8 байтах: кириллический JSON занимает два
+			// байта на символ, поэтому предел по символам не защитил бы файл.
+			var truncated = Encoding.UTF8.GetByteCount(json) > MaxJsonBytes;
 			if (truncated)
 			{
-				// Усечение до предела с маркером; хвостовой старший суррогат
-				// обрезанной пары срезается, чтобы не оставлять символ без пары.
-				var head = json[..(MaxJsonLength - TruncationMarker.Length)];
-				if (char.IsHighSurrogate(head[^1]) && (head.Length < 2 || char.IsLowSurrogate(head[^2]) == false))
-				{
-					head = head[..^1];
-				}
-
-				json = head + TruncationMarker;
+				json = TruncateToByteBudget(json, MaxJsonBytes - Encoding.UTF8.GetByteCount(TruncationMarker)) + TruncationMarker;
 			}
 
 			span.AddEvent(new ActivityEvent(
@@ -115,6 +109,43 @@ internal static class ChatToolArgsCapture
 					[ArgsJsonKey] = json,
 					[TruncatedKey] = truncated,
 				}));
+		}
+
+		/// <summary>
+		/// Максимальный префикс строки, чей UTF-8 размер укладывается в бюджет;
+		/// двоичный поиск по длине префикса — аргументы могут быть длинными.
+		/// Хвостовой старший суррогат обрезанной пары срезается, чтобы не
+		/// оставлять символ без пары.
+		/// </summary>
+		private static string TruncateToByteBudget(string value, int byteBudget)
+		{
+			if (byteBudget < 0)
+			{
+				byteBudget = 0;
+			}
+
+			var low = 0;
+			var high = value.Length;
+			while (low < high)
+			{
+				var middle = (low + high + 1) / 2;
+				if (Encoding.UTF8.GetByteCount(value[..middle]) <= byteBudget)
+				{
+					low = middle;
+				}
+				else
+				{
+					high = middle - 1;
+				}
+			}
+
+			var head = value[..low];
+			if (head.Length > 0 && char.IsHighSurrogate(head[^1]))
+			{
+				head = head[..^1];
+			}
+
+			return head;
 		}
 
 		/// <summary>

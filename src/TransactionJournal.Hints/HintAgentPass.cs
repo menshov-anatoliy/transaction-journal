@@ -267,7 +267,7 @@ public sealed class HintAgentPass : IHintPassRunner
 			return result;
 		}
 
-		passActivity.SetTag(HintAgentTracing.OutcomeTag, HintAgentTracing.SerializeOutcome(result.Outcome));
+		passActivity.SetTag(HintAgentTracing.OutcomeTag, HintPassOutcomes.Serialize(result.Outcome));
 		passActivity.SetTag(HintAgentTracing.CreatedTag, result.CreatedHints);
 		passActivity.SetTag(HintAgentTracing.ExpiredTag, result.ExpiredHints);
 		return result with { TraceId = passActivity.TraceId.ToHexString() };
@@ -426,6 +426,24 @@ public enum HintPassOutcome
 
 	/// <summary>Проход сломан невалидным корпусом правил до любых чтений журнала и рынка.</summary>
 	CorpusInvalid,
+}
+
+/// <summary>
+/// Стабильные строки исходов прохода — единый источник истины для атрибута
+/// трассы tj.hints.outcome и поля outcome ответа POST /api/hints/pass.
+// Traceability: openspec:ops/agent-tracing#requirement-trace-otel-two-surfaces
+/// </summary>
+public static class HintPassOutcomes
+{
+	/// <summary>Стабильная строка исхода прохода; неизвестный исход — ошибка программирования.</summary>
+	/// <param name="outcome">Исход прохода.</param>
+	public static string Serialize(HintPassOutcome outcome) => outcome switch
+	{
+		HintPassOutcome.Completed => "completed",
+		HintPassOutcome.SkippedMarketUnavailable => "skipped-market-unavailable",
+		HintPassOutcome.CorpusInvalid => "corpus-invalid",
+		_ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null),
+	};
 }
 
 /// <summary>Итог прохода агента: исход, отметка времени, счётчики записей и диагностика.</summary>

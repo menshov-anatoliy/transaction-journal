@@ -53,14 +53,4 @@ internal static class HintAgentTracing
 	/// <returns>Активность фазы; null — трассировка не слушается.</returns>
 	public static Activity? StartPhase(string phaseName) =>
 		Source.StartActivity(phaseName, ActivityKind.Internal);
-
-	/// <summary>Стабильная строка исхода прохода для атрибута tj.hints.outcome.</summary>
-	/// <param name="outcome">Исход прохода.</param>
-	public static string SerializeOutcome(HintPassOutcome outcome) => outcome switch
-	{
-		HintPassOutcome.Completed => "completed",
-		HintPassOutcome.SkippedMarketUnavailable => "skipped-market-unavailable",
-		HintPassOutcome.CorpusInvalid => "corpus-invalid",
-		_ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null),
-	};
 }

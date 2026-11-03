@@ -74,7 +74,7 @@ public static class HintsEndpoints
 			// строки трассы и созданные записи прохода; null у проходов без трассы.
 			// Traceability: openspec:hints/engine-pass#scenario-engine-pass-response-trace-id
 			return Results.Json(new HintPassResponse(
-				SerializeOutcome(result.Outcome),
+				HintPassOutcomes.Serialize(result.Outcome),
 				result.AsOf,
 				result.CreatedHints,
 				result.ExpiredHints,
@@ -221,15 +221,6 @@ public static class HintsEndpoints
 		HintSubjectKind.Journal => "journal",
 		HintSubjectKind.Construction => "construction",
 		_ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
-	};
-
-	/// <summary>Стабильная строка исхода прохода в контракте API.</summary>
-	private static string SerializeOutcome(HintPassOutcome outcome) => outcome switch
-	{
-		HintPassOutcome.Completed => "completed",
-		HintPassOutcome.SkippedMarketUnavailable => "skipped-market-unavailable",
-		HintPassOutcome.CorpusInvalid => "corpus-invalid",
-		_ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, null),
 	};
 
 	/// <summary>Разбирает статус фильтра журнала из строкового контракта API.</summary>
