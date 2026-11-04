@@ -20,13 +20,13 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 
 	private readonly IJournalMetricsReadModel _metrics;
 
-	/// <summary>Читатель хвостов истории результата: последний маркер каждой конструкции для строк списка.</summary>
+	/// <summary>Читатель последних маркеров истории результата: последний маркер каждой конструкции для строк списка.</summary>
 	private readonly ConstructionResultMarkersReader _resultMarkers;
 
-	/// <summary>Создаёт read-модель списка над опциями контекста журнала, read-моделью метрик и читателем хвостов истории результата; база развёрнута миграциями.</summary>
+	/// <summary>Создаёт read-модель списка над опциями контекста журнала, read-моделью метрик и читателем последних маркеров истории результата; база развёрнута миграциями.</summary>
 	/// <param name="options">Опции EF-контекста журнала.</param>
 	/// <param name="metrics">Read-модель метрик журнала аналитики.</param>
-	/// <param name="resultMarkers">Читатель хвостов истории результата конструкций.</param>
+	/// <param name="resultMarkers">Читатель последних маркеров истории результата конструкций.</param>
 	/// <exception cref="ArgumentNullException">Аргументы не заданы.</exception>
 	public ConstructionListReadModel(
 		DbContextOptions<JournalDbContext> options,
@@ -45,21 +45,13 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 		// список не кэширует их и собственных расчётов не добавляет.
 		var metrics = await _metrics.ReadAsync(cancellationToken).ConfigureAwait(false);
 		var metricsById = metrics.Constructions.ToDictionary(item => item.ConstructionId);
-		// Хвосты истории результата читаются тем же чтением списка: по хвосту на
-		// конструкцию, без полных историй — они остаются в карточке.
-		// Traceability: change:add-finresult-result-history-markers/design#d4
-		var markerTails = (await _resultMarkers.ReadAsync(cancellationToken).ConfigureAwait(false))
+		// Последние маркеры истории результата читаются тем же чтением списка:
+		// по одному последнему маркеру на конструкцию, без полных историй —
+		// они остаются в карточке. Потоки позиций из того же чтения метрик
+		// передаются читателю: итог последнего маркера сходится с карточкой.
+		// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
+		var markerTails = (await _resultMarkers.ReadAsync(metrics.PositionEntries, cancellationToken).ConfigureAwait(false))
 			.ToDictionary(tail => tail.ConstructionId);
-		// Входная стоимость открытых остатков по конструкциям — из метрик позиций
-		// аналитики: средняя цена открытого FIFO-слоя на остаток, паритет с срезами
-		// вычислителя полных историй без повторного прогона FIFO.
-		// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-marker-open-residual-entry-cost-counts
-		var openEntryCostByConstruction = metrics.Positions
-			.Where(position => position.Residual != 0m && position.AverageOpenPrice is not null)
-			.GroupBy(position => position.ConstructionId)
-			.ToDictionary(
-				group => group.Key,
-				group => group.Sum(position => Math.Abs(position.Residual) * position.AverageOpenPrice!.Value));
 
 		using var db = new JournalDbContext(_options);
 		var headers = await db.Constructions
@@ -93,27 +85,11 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 			var profit = ConstructionTargetConverter.Convert(header.ProfitValue, header.ProfitUnit, header.AllocatedCapitalUsdt);
 
 			// Последний маркер истории результата строки: накопленный
-			// зафиксированный денежный итог — сводная «с учётом зафиксированного
-			// синтетикой» плюс корректировки минус входная стоимость открытых
-			// остатков (премия открытия числится в истории исходящим потоком до
-			// закрытия остатка). Время — последнее событие журнала конструкции;
-			// у конструкции без событий маркера нет: null, а не ноль.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-marker-open-residual-entry-cost-counts
-			ResultMarkerSummary? lastResultMarker = null;
-			if (markerTails.TryGetValue(header.Id, out var tail) && tail.LastEventAt is { } tailMoment)
-			{
-				lastResultMarker = new ResultMarkerSummary(
-					item.RealizedPnL
-						+ tail.LockedTotalUsdt
-						+ tail.AdjustmentsTotalUsdt
-						// Входная стоимость открытых остатков та же, что вычитает
-						// вычислитель полных историй: средние цены открытых слоёв
-						// метрик позиций — паритет с последним маркером карточки.
-						// Traceability: change:add-finresult-result-history-markers/design#d1
-						- openEntryCostByConstruction.GetValueOrDefault(header.Id),
-					tailMoment);
-			}
+			// зафиксированный денежный итог — сумма вкладов операций последнего
+			// выведенного маркера; перечень операций расшифровки публикуется
+			// рядом. У конструкции без выведенных маркеров поле null, а не ноль.
+			// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
+			var lastResultMarker = markerTails.GetValueOrDefault(header.Id)?.LastMarker;
 
 			// Реальный риск проходит из метрик аналитики без пересчёта: расчёт из
 			// структуры ног и правила null (неограниченный случай, неразобранный
@@ -145,8 +121,9 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				item.CapitalUsagePercent,
 				item.RealRiskUsdt,
 				// Последний маркер истории результата проходит в строку готовой
-				// парой «итог + время»: полный список маркеров остаётся в карточке.
-				// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+				// сводкой «итог + время + перечень операций расшифровки»:
+				// полный список маркеров остаётся в карточке.
+				// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 				lastResultMarker,
 				item.RealRiskStatus,
 				// Счётчик предупреждений проходит из метрик без пересчёта: бейдж

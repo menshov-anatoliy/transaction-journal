@@ -1,8 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { MetricHint } from "@/components/ui/metric-tooltip";
-import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
-import { formatMoment } from "@/lib/format/display-time";
+import { METRIC_TOOLTIPS, resultMarkerBreakdownTooltip } from "@/lib/metric-tooltips";
 import {
 	computeFinResultGeometry,
 	formatFinAmount,
@@ -23,16 +22,18 @@ import {
 // размеров: полоса с зонами планового риска/профита/сверхприбыли, заливка
 // результата, маркер текущего результата и маркеры изменения результата.
 // Полный вид показывает маркеры изменения результата номерными бейджами
-// с суммами над полосой (тёмный штрих на полосе под каждым бейджем) и область
-// описания маркеров под индикатором; средний и компактный виды рисуют только
-// последний маркер — тёмный вертикальный штрих на полосе без номера и суммы.
+// с суммами над полосой (тёмный штрих на полосе под каждым бейджем); у
+// каждого бейджа — подсказка-расшифровка метки: перечень операций изменения
+// с предыдущей выведенной метки; средний и компактный виды рисуют только
+// последний маркер — тёмный вертикальный штрих на полосе без номера и
+// суммы, с той же подсказкой-расшифровкой на области последнего маркера.
 // У полного и среднего видов подписи (деления шкалы над полосой, маркер под
 // ней) размещает калькулятор: разнос по сторонам полосы, вертикальным
 // уровням и выравниванию считается по измеренной ширине полосы. Состояние
 // не конечного риска (unbounded/unavailable) выводится отдельно от шкалы:
 // текстовый статус у полного и среднего видов, бейдж ∞/? у компактного —
 // обозначения зафиксированы в мастерах design.pen.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-risk-profit-hint
+// Traceability: openspec:ui/screens#requirement-risk-profit-hint
 
 /** Пропсы всех видов индикатора. */
 export interface FinResultIndicatorProps {
@@ -176,7 +177,7 @@ const COMPACT_PRESET: SizePreset = {
 	markerDisplay: "last-tick",
 };
 
-/** Полный индикатор для карточки конструкции: бейджи маркеров и область описания. */
+/** Полный индикатор для карточки конструкции: бейджи маркеров с подсказками-расшифровками. */
 export function FullFinResultIndicator({ input, className }: FinResultIndicatorProps) {
 	return <DetailedFinResultIndicator input={input} preset={FULL_PRESET} className={className} dataSlot="fin-result-full" />;
 }
@@ -219,7 +220,7 @@ export function CompactFinResultIndicator({ input, className }: FinResultIndicat
 			aria-label={describeForScreenReader(geometry)}
 			title={title}
 		>
-			<FinResultBar geometry={geometry} preset={COMPACT_PRESET} />
+			<FinResultBar geometry={geometry} preset={COMPACT_PRESET} lastMarker={input.resultMarkers[input.resultMarkers.length - 1]} />
 			{riskGlyph !== null && (
 				<span
 					data-part="risk-state"
@@ -266,7 +267,7 @@ function DetailedFinResultIndicator({
 			    внутри были бы скрыты от скринридеров вместе с содержимым img.
 			    Traceability: openspec:ui/screens#requirement-indicator-numbers-tooltips-alongside-reading-popover */}
 			<div role="img" aria-label={describeForScreenReader(geometry)}>
-				<FinResultBar geometry={geometry} preset={preset} />
+				<FinResultBar geometry={geometry} preset={preset} lastMarker={input.resultMarkers[input.resultMarkers.length - 1]} />
 			</div>
 			<LabelStack geometry={geometry} preset={preset} side="below" markers={input.resultMarkers} />
 			{geometry.labels.riskState !== null && (
@@ -286,12 +287,6 @@ function DetailedFinResultIndicator({
 					{geometry.labels.riskState}
 				</span>
 			)}
-			{preset.markerDisplay === "badges" && (
-				// Область описания маркеров — только у полного вида: список
-				// выведенных маркеров с прокруткой при переполнении.
-				// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-marker-description-area-lists-markers
-				<MarkerDescriptionArea markers={input.resultMarkers} />
-			)}
 		</div>
 	);
 }
@@ -301,7 +296,7 @@ function DetailedFinResultIndicator({
 // назначены калькулятором так, чтобы метки не пересекались, а крайние
 // прижимались внутрь шкалы. Высота стека считается по нижней границе самой
 // далёкой метки (уровень + строки), включая бейджи маркеров над полосой.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
+// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 function LabelStack({
 	geometry,
 	preset,
@@ -353,7 +348,7 @@ function LabelStack({
 				return (
 					<MarkerBadge
 						key={index}
-						number={marker?.number ?? index + 1}
+						marker={marker ?? { totalUsdt: point.total, number: index + 1 }}
 						point={point}
 						placement={placement}
 						preset={preset}
@@ -367,17 +362,20 @@ function LabelStack({
 // Бейдж маркера изменения результата: номер в кружке и сумма накопленного
 // зафиксированного результата в пилюле с рамкой по знаку итога; уровень
 // разноса отсчитывается от полосы, крайние бейджи прижимаются к краям
-// изнутри. Сумма несёт собственную подсказку метрики наряду с попапом
-// «Как читать индикатор».
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-indicator-number-tooltip-coexists
+// изнутри. Содержимое бейджа (номер и сумма) — триггер подсказки-расшифровки
+// метки: перечень операций изменения с предыдущей выведенной метки, включая
+// подавленные порогом, при переполнении перечень прокручивается; подсказки
+// чисел сосуществуют с попапом «Как читать индикатор», не заменяя его.
+// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
+// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
+// Traceability: openspec:ui/screens#scenario-indicator-number-tooltip-coexists
 function MarkerBadge({
-	number,
+	marker,
 	point,
 	placement,
 	preset,
 }: {
-	number: number;
+	marker: FinResultHistoryMarker;
 	point: FinResultMarkerPoint;
 	placement: FinResultBadgePlacement;
 	preset: SizePreset;
@@ -407,19 +405,24 @@ function MarkerBadge({
 				...badgeAnchorStyle(point.x, placement.align),
 			}}
 		>
-			<span
-				aria-hidden="true"
-				className={cn("flex shrink-0 items-center justify-center rounded-full font-semibold text-surface", circleClass)}
-				style={{ width: preset.badgeCirclePx, height: preset.badgeCirclePx, lineHeight: 1 }}
+			{/* Расшифровка метки строится по операциям контракта; скролл
+			    перечня при переполнении несёт попап подсказки. */}
+			<MetricHint
+				tooltip={resultMarkerBreakdownTooltip(marker)}
+				contentClassName="max-h-[240px] overflow-y-auto"
+				triggerAsChild
 			>
-				{number}
-			</span>
-			{/* Сумма — накопленный зафиксированный результат на момент события:
-			    собственная подсказка метрики, сосуществующая с попапом чтения. */}
-			{/* Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-indicator-number-tooltip-coexists */}
-			<MetricHint tooltip={METRIC_TOOLTIPS.resultMarker} triggerAsChild>
-				<span tabIndex={0} className="font-semibold tabular-nums">
-					{formatFinAmount(point.total)}
+				<span tabIndex={0} className="flex items-center gap-1">
+					<span
+						aria-hidden="true"
+						className={cn("flex shrink-0 items-center justify-center rounded-full font-semibold text-surface", circleClass)}
+						style={{ width: preset.badgeCirclePx, height: preset.badgeCirclePx, lineHeight: 1 }}
+					>
+						{marker.number ?? 0}
+					</span>
+					<span className="font-semibold tabular-nums">
+						{formatFinAmount(point.total)}
+					</span>
 				</span>
 			</MetricHint>
 		</span>
@@ -438,89 +441,6 @@ function badgeAnchorStyle(x: number, align: FinResultLabelAlign): React.CSSPrope
 	}
 
 	return { left: `${x * 100}%`, transform: "translateX(-50%)" };
-}
-
-// Область описания маркеров под полным индикатором: список выведенных
-// маркеров — номер, дата, тип операции, изменение, накопленный итог —
-// в хронологическом порядке; при переполнении прокручивается, не растягивая
-// карточку; пустое состояние — когда выведенных маркеров нет.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-marker-description-area-lists-markers
-function MarkerDescriptionArea({ markers }: { markers: readonly FinResultHistoryMarker[] }) {
-	if (markers.length === 0) {
-		return (
-			<p data-part="marker-description-empty" className="text-[11px] leading-[normal] text-text-muted">
-				маркеров изменения результата пока нет — история появится после первой операции конструкции
-			</p>
-		);
-	}
-
-	return (
-		<div
-			data-part="marker-description"
-			role="list"
-			aria-label="Маркеры изменения результата"
-			className="flex flex-col gap-1 overflow-y-auto pr-1"
-			style={{ maxHeight: 96 }}
-		>
-			{markers.map((marker, index) => {
-				const change = marker.changeUsdt ?? 0;
-
-				return (
-					<div
-						key={marker.number ?? index}
-						role="listitem"
-						data-part="marker-description-row"
-						className="flex min-w-0 items-baseline gap-2 text-[11px] leading-[normal]"
-					>
-						<span
-							aria-hidden="true"
-							className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-text-primary text-[9px] font-semibold tabular-nums text-surface"
-							style={{ lineHeight: 1 }}
-						>
-							{marker.number ?? index + 1}
-						</span>
-						<span className="shrink-0 tabular-nums text-text-secondary">
-							{formatMoment(marker.eventTime ?? marker.eventAt)}
-						</span>
-						<span className="min-w-0 truncate text-text-secondary">{resultMarkerKindLabel(marker.kind)}</span>
-						<span
-							className={cn(
-								"ml-auto shrink-0 font-semibold tabular-nums",
-								change > 0
-									? "text-[color:var(--fin-positive-strong)]"
-									: change < 0
-										? "text-[color:var(--fin-negative)]"
-										: "text-text-secondary",
-							)}
-						>
-							{formatFinAmount(change)}
-						</span>
-						<span className="shrink-0 tabular-nums text-text-secondary">{`${formatFinAmount(marker.totalUsdt)} USDT`}</span>
-					</div>
-				);
-			})}
-		</div>
-	);
-}
-
-// Человекочитаемая подпись типа события маркера: термины глоссария
-// («окно опционных исполнений», «фьючерсная сделка», «связка синтетики»,
-// «корректировка PnL») и канон подписей закрывающих записей таблицы
-// карточки («delivery», «экспирация OTM», «ручная пометка»); неизвестная
-// строка из контракта выводится как есть.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
-function resultMarkerKindLabel(kind: string | undefined): string {
-	const labels: { readonly [key: string]: string } = {
-		"option-window": "Окно исполнения",
-		"futures-trade": "Фьючерсная сделка",
-		"synthetic-link": "Связка синтетики",
-		"pnl-adjustment": "Корректировка PnL",
-		delivery: "delivery",
-		"otm-expiry": "экспирация OTM",
-		"manual-mark": "ручная пометка",
-	};
-
-	return kind === undefined ? "Событие журнала" : (labels[kind] ?? kind);
 }
 
 // Метки стороны: деления шкалы (риск, ноль, профит) и маркер; у каждой —
@@ -556,7 +476,7 @@ interface LabelItemView {
 // Числовые подписи (кроме нулевого деления) снабжаются подсказками метрик
 // рядом с попапом «Как читать индикатор»: попап поясняет чтение шкалы
 // целиком и остаётся без изменений, подсказка — только отдельное число.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
+// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 // Traceability: openspec:ui/screens#requirement-indicator-numbers-tooltips-alongside-reading-popover
 function collectLabelItems(
 	geometry: FinResultGeometry,
@@ -672,13 +592,23 @@ function labelAnchorStyle(
 // Полоса: тонируемые зоны в скруглённой маске, единая заливка результата,
 // тёмные штрихи маркеров изменения результата и маркер итога поверх.
 // Полный вид ставит штрих под каждым бейджем, средний и компактный — только
-// под последним маркером (без номера и суммы).
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-risk-profit-hint
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-medium-compact-last-marker-only
-function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; preset: SizePreset }) {
+// под последним маркером (без номера и суммы), а область последнего маркера
+// снабжается той же подсказкой-расшифровкой, что и бейджи полного вида.
+// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+// Traceability: openspec:ui/screens#scenario-medium-compact-last-marker-only
+function FinResultBar({
+	geometry,
+	preset,
+	lastMarker,
+}: {
+	geometry: FinResultGeometry;
+	preset: SizePreset;
+	/** Последний маркер истории — источник расшифровки для среднего и компактного видов. */
+	readonly lastMarker?: FinResultHistoryMarker;
+}) {
 	// Штрих на полосе стоит в истинной позиции маркера; полный вид штрихует
 	// все точки истории, остальные виды — только последнюю.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
+	// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
 	const tickPoints =
 		preset.markerDisplay === "badges" ? geometry.markerPoints : geometry.markerPoints.slice(-1);
 
@@ -726,17 +656,44 @@ function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; prese
 						style={spanStyle(geometry.fillMain)}
 					/>
 				)}
-				{tickPoints.map((point, index) => (
-					// Тёмный штрих 2px в позиции маркера: стоит в истинной точке
-					// истории, бейдж с суммой при коллизии уходит вверх от него.
-					// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-					<span
-						key={index}
-						data-part="marker-tick"
-						className="absolute top-0 bottom-0 -translate-x-1/2 rounded-[1px] bg-text-primary"
-						style={{ left: percent(point.x), width: 2 }}
-					/>
-				))}
+				{tickPoints.map((point, index) =>
+					preset.markerDisplay === "last-tick" && lastMarker !== undefined ? (
+						// Последний маркер среднего/компактного вида несёт ту же
+						// подсказку-расшифровку, что и бейджи полного вида:
+						// триггер — хит-зона вокруг штриха, доступная с клавиатуры.
+						// Traceability: openspec:ui/screens#scenario-medium-compact-last-marker-only
+						<MetricHint
+							key={index}
+							tooltip={resultMarkerBreakdownTooltip(lastMarker)}
+							contentClassName="max-h-[240px] overflow-y-auto"
+							triggerAsChild
+						>
+							<span
+								tabIndex={0}
+								role="button"
+								data-part="marker-tick-trigger"
+								aria-label="Расшифровка последней метки изменения результата"
+								className="absolute inset-y-0 -translate-x-1/2 flex items-center justify-center"
+								style={{ left: percent(point.x), width: 12 }}
+							>
+								<span
+									data-part="marker-tick"
+									className="h-full w-[2px] rounded-[1px] bg-text-primary"
+								/>
+							</span>
+						</MetricHint>
+					) : (
+						// Тёмный штрих 2px в позиции маркера: стоит в истинной точке
+						// истории, бейдж с суммой при коллизии уходит вверх от него.
+						// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
+						<span
+							key={index}
+							data-part="marker-tick"
+							className="absolute top-0 bottom-0 -translate-x-1/2 rounded-[1px] bg-text-primary"
+							style={{ left: percent(point.x), width: 2 }}
+						/>
+					),
+				)}
 			</div>
 
 			{geometry.markerAt !== null && (

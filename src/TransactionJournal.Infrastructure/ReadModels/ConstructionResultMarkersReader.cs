@@ -12,50 +12,46 @@ using TransactionJournal.Infrastructure.UseCases;
 namespace TransactionJournal.Infrastructure.ReadModels;
 
 /// <summary>
-/// Хвост истории результата конструкции — компактный итог для строк списка
-/// и превью, где полная история маркеров не публикуется: время последнего
-/// события журнала конструкции, сумма локов действующих связок и сумма
-/// внешних корректировок. Накопленный зафиксированный денежный итог строки
-/// вычисляет read-модель списка поверх готовых метрик: реализованный
-/// результат плюс хвостовые суммы минус входная стоимость открытых остатков —
-/// та же формула, что у вычислителя полных историй карточки; источник один —
-/// журнал, поэтому время и итог последнего маркера списка совпадают
-/// с карточкой.
+/// Последний маркер истории результата конструкции — компактная запись для
+/// строк списка и превью, где полная история маркеров не публикуется:
+/// накопленный зафиксированный денежный итог — сумма вкладов операций
+/// последнего выведенного маркера, время события и перечень операций
+/// расшифровки. null вместо маркера означает отсутствие выведенных маркеров,
+/// а не нулевой итог.
 /// </summary>
 /// <remarks>
-/// Хвост вычисляется при чтении из тех же событий журнала, что и полные
-/// истории карточки; хранением не живёт.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
-// Traceability: change:add-finresult-result-history-markers/design#d4
+/// Итог и перечень вычисляются вычислителем при чтении из тех же событий
+/// журнала, что и полные истории карточки; хранением не живут.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
 /// </remarks>
 public sealed record ConstructionResultMarkerTail
 {
-	/// <summary>Конструкция, к которой относится хвост истории.</summary>
+	/// <summary>Конструкция, к которой относится последний маркер истории.</summary>
 	public required long ConstructionId { get; init; }
 
-	/// <summary>Время последнего события журнала конструкции; null, когда событий истории ещё нет.</summary>
-	public required DateTimeOffset? LastEventAt { get; init; }
-
-	/// <summary>Сумма локов действующих связок синтетического закрытия: оспоренные не входят, ручные входят наравне с распознанными.</summary>
-	public required decimal LockedTotalUsdt { get; init; }
-
-	/// <summary>Сумма внешних корректировок PnL конструкции.</summary>
-	public required decimal AdjustmentsTotalUsdt { get; init; }
+	/// <summary>Последний выведенный маркер истории — итог, время события и перечень операций расшифровки; null, когда выведенных маркеров нет.</summary>
+	public required ResultMarkerSummary? LastMarker { get; init; }
 }
 
 /// <summary>
-/// Читатель хвостов истории результата по всем конструкциям журнала: события
-/// истории — окна опционных исполнений по правилам сборки v5, фьючерсные
-/// сделки, границы интервалов связок, корректировки и действующие закрывающие
-/// записи — те же, что у вычислителя полных историй; читатель берёт из них
-/// только время последнего события и текущие суммы. Вычисляется при чтении,
-/// в базе не хранится; спор связки задним числом меняет и хвост.
+/// Читатель последних маркеров истории результата по всем конструкциям
+/// журнала: для каждой конструкции собирается полный вход вычислителя —
+/// потоки позиций, привязанные сделки, действующие закрывающие записи,
+/// интервалы связок и корректировки — и прогоняется
+/// <see cref="ConstructionResultMarkersCalculator"/>; из выведенной истории
+/// берётся последний маркер с итогом, временем и перечнем операций
+/// расшифровки. Потоки FIFO-записей передаются чтением метрик журнала — тем
+/// же источником, что питает карточку, поэтому итог последнего маркера списка
+/// сходится с карточкой без второго конвейера. Вычисляется при чтении,
+/// в базе не хранится; спор связки задним числом меняет и последний маркер.
 /// </summary>
 /// <remarks>
-/// Хвосты строятся из тех же событий, что и полные истории карточки:
-/// правила окон и ключей объявлены один раз в общем материале хронологии.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
-// Traceability: change:add-finresult-result-history-markers/design#d1
+/// Правила окон и ключей объявлены один раз в общем материале хронологии —
+/// последние маркеры читателя выведены из тех же событий, что и полные
+/// истории карточки.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+// Traceability: openspec:analytics/performance#requirement-result-marker-value
 /// </remarks>
 public sealed class ConstructionResultMarkersReader
 {
@@ -74,16 +70,25 @@ public sealed class ConstructionResultMarkersReader
 	}
 
 	/// <summary>
-	/// Читает хвосты истории результата всех конструкций журнала. Закрывающие
-	/// записи берутся из единого потока read-модели позиций — только применённые
-	/// записи попадали и в потоки аналитики; связки вычисляются чистым
+	/// Читает последние маркеры истории результата всех конструкций журнала.
+	/// Потоки FIFO-записей позиций передаются чтением метрик журнала — тем же
+	/// источником, что питает карточку; привязанные сделки, закрывающие записи,
+	/// связки и корректировки читатель собирает сам. Закрывающие записи берутся
+	/// из единого потока read-модели позиций — только применённые записи
+	/// попадали и в потоки аналитики; связки вычисляются чистым
 	/// распознавателем над привязанными биржевыми сделками с ручными поверх
-	/// прогона, лок спорной связки в суммы не входит.
+	/// прогона, лок спорной связки в историю после спора не входит.
 	/// </summary>
+	/// <param name="positionEntries">Потоки FIFO-записей позиций по конструкциям и инструментам — те же потоки, из которых метрики считают реализованный результат.</param>
 	/// <param name="cancellationToken">Токен отмены.</param>
-	/// <returns>По одному хвосту на конструкцию, упорядоченные по идентификатору.</returns>
-	public async Task<IReadOnlyList<ConstructionResultMarkerTail>> ReadAsync(CancellationToken cancellationToken = default)
+	/// <returns>По одному последнему маркеру на конструкцию, упорядоченные по идентификатору.</returns>
+	/// <exception cref="ArgumentNullException">Потоки позиций не заданы.</exception>
+	public async Task<IReadOnlyList<ConstructionResultMarkerTail>> ReadAsync(
+		IReadOnlyDictionary<long, IReadOnlyDictionary<string, IReadOnlyList<PositionFifoEntry>>> positionEntries,
+		CancellationToken cancellationToken = default)
 	{
+		ArgumentNullException.ThrowIfNull(positionEntries);
+
 		using var db = new JournalDbContext(_options);
 		var constructions = await db.Constructions
 			.AsNoTracking()
@@ -154,96 +159,62 @@ public sealed class ConstructionResultMarkersReader
 			.GroupBy(adjustment => adjustment.ConstructionId)
 			.ToDictionary(group => group.Key, group => group.ToList());
 
+		var calculator = new ConstructionResultMarkersCalculator();
 		var tails = new List<ConstructionResultMarkerTail>(constructions.Count);
 		foreach (var construction in constructions)
 		{
 			var constructionTrades = boundTradesByConstruction.GetValueOrDefault(construction.Id, []);
-			var constructionClosings = closingsByConstruction.GetValueOrDefault(construction.Id, []);
 			var intervals = BuildLinkIntervals(
 				constructionTrades,
 				disputesByConstruction.GetValueOrDefault(construction.Id, []),
 				manualLinksByConstruction.GetValueOrDefault(construction.Id, []));
 
-			// Последнее событие журнала конструкции: максимум по времени всех
-			// видов событий — окон, фьючерсных сделок, границ связок,
-			// корректировок и закрывающих записей.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
-			DateTimeOffset? lastEventAt = null;
-			foreach (var moment in EventMoments(constructionTrades, constructionClosings, intervals, adjustmentsByConstruction.GetValueOrDefault(construction.Id, [])))
-			{
-				lastEventAt = lastEventAt is null || moment > lastEventAt ? moment : lastEventAt;
-			}
+			// Плановый риск конструкции — база порога проявления вычислителя:
+			// тот же плановый риск, что у границ индикатора сводки карточки.
+			var plannedRisk = ConstructionTargetConverter.Convert(
+				construction.RiskValue,
+				construction.RiskUnit,
+				construction.AllocatedCapitalUsdt);
 
+			// Полная история маркеров вычисляется чистым калькулятором над тем
+			// же входом, что и в карточке: читатель берёт из выведенной истории
+			// только последний маркер — итог, время и перечень операций
+			// расшифровки, включая подавленные порогом операции.
+			// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+			var markers = calculator.Calculate(new ResultMarkersInput
+			{
+				EntriesBySymbol = positionEntries.GetValueOrDefault(construction.Id)
+					?? new Dictionary<string, IReadOnlyList<PositionFifoEntry>>(StringComparer.Ordinal),
+				Trades = constructionTrades,
+				ClosingEntries = closingsByConstruction.GetValueOrDefault(construction.Id, []),
+				Links = intervals,
+				Adjustments = adjustmentsByConstruction
+					.GetValueOrDefault(construction.Id, [])
+					.Select(adjustment => new ResultMarkerAdjustment
+					{
+						AdjustmentId = adjustment.Id,
+						Date = adjustment.Date,
+						AmountUsdt = adjustment.AmountUsdt,
+					})
+					.ToList(),
+				PlannedRiskUsdt = plannedRisk.Usdt,
+			});
+
+			// Последний маркер выводится безусловно и равен сумме вкладов всех
+			// операций — текущему накопленному зафиксированному результату;
+			// у конструкции без событий истории маркеров нет: null, а не ноль.
+			// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
 			tails.Add(new ConstructionResultMarkerTail
 			{
 				ConstructionId = construction.Id,
-				LastEventAt = lastEventAt,
-				// Действующие связки — интервалы без снятия спором: их лок входит
-				// в накопленный итог последнего маркера.
-				// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-synthetic-link-change-marker
-				LockedTotalUsdt = intervals.Where(interval => interval.Until is null).Sum(interval => interval.LockedValueUsdt),
-				AdjustmentsTotalUsdt = adjustmentsByConstruction
-					.GetValueOrDefault(construction.Id, [])
-					.Sum(adjustment => adjustment.AmountUsdt),
+				LastMarker = markers.LastMarker is { } lastMarker
+					? new ResultMarkerSummary(lastMarker.TotalUsdt, lastMarker.EventTime, lastMarker.Operations)
+					: null,
 			});
 		}
 
 		return tails;
 	}
-
-	#region События хвоста
-
-	/// <summary>
-	/// Времена всех событий журнала конструкции: последние исполнения окон
-	/// опционных сделок (правила сборки v5 из общего материала хронологии,
-	/// разрыв на закрывающих записях экспираций), моменты фьючерсных сделок,
-	/// границы интервалов связок, даты корректировок и моменты закрывающих
-	/// записей.
-	/// </summary>
-	private static IEnumerable<DateTimeOffset> EventMoments(
-		IReadOnlyList<MaterializedTrade> trades,
-		IReadOnlyList<PositionClosingEntry> closingEntries,
-		IReadOnlyList<ResultMarkerLinkInterval> intervals,
-		IReadOnlyList<PnLAdjustment> adjustments)
-	{
-		// Те же окна, что у вычислителя полных историй: правила объявлены
-		// один раз в общем материале хронологии, время последнего события
-		// списка совпадает с карточкой.
-		// Traceability: change:add-finresult-result-history-markers/design#d2
-		foreach (var window in ResultMarkerJournalMaterial.BuildOptionWindows(trades, closingEntries))
-		{
-			yield return DateTimeOffset.FromUnixTimeMilliseconds(window.Executions[^1].ExecTimeMs);
-		}
-
-		foreach (var trade in trades)
-		{
-			if (string.Equals(trade.Category, ResultMarkerJournalMaterial.LinearCategory, StringComparison.Ordinal))
-			{
-				yield return trade.ExecutedAt;
-			}
-		}
-
-		foreach (var interval in intervals)
-		{
-			yield return interval.Since;
-			if (interval.Until is { } until)
-			{
-				yield return until;
-			}
-		}
-
-		foreach (var adjustment in adjustments)
-		{
-			yield return adjustment.Date;
-		}
-
-		foreach (var closing in closingEntries)
-		{
-			yield return closing.ClosedAt;
-		}
-	}
-
-	#endregion
 
 	#region Интервалы связок
 
@@ -276,9 +247,9 @@ public sealed class ConstructionResultMarkersReader
 			.ToArray();
 		foreach (var link in SyntheticCloseRecognizer.Recognize(assemblies))
 		{
-			// Спор снимает связку с момента записи оспаривания: лок выходит
-			// из логического слоя и из истории результата.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-link-dispute-recomputes-history
+			// Спор снимает связку с момента записи оспаривания: снятие даёт
+			// операцию с обратным вкладом и пересчитывает последующие маркеры.
+			// Traceability: openspec:analytics/performance#scenario-link-dispute-recomputes-history
 			var until = disputes.FirstOrDefault(dispute => dispute.LinearExecId == link.LinearExecId
 				&& dispute.CounterOptionExecId == link.CounterOptionExecId)?.DisputedAt;
 			intervals.Add(IntervalOf(link, until, trades));
@@ -345,7 +316,7 @@ public sealed class ConstructionResultMarkersReader
 	/// <summary>Сделка связки по единому ключу; сделка приходит из того же потока привязанных сделок конструкции.</summary>
 	private static MaterializedTrade TradeOf(string tradeKey, IReadOnlyList<MaterializedTrade> trades) =>
 		SyntheticCloseManualLinkMaterial.FindTrade(trades, tradeKey)
-		?? throw new InvalidOperationException($"Сделка «{tradeKey}» не найдена в конструкции при вычислении хвоста истории.");
+		?? throw new InvalidOperationException($"Сделка «{tradeKey}» не найдена в конструкции при вычислении истории результата.");
 
 	/// <summary>Записи FIFO закрываемой ноги связки: сделки ноги из потока привязанных сделок в хронологии исполнения.</summary>
 	private static SyntheticCloseValuation ValuationOf(SyntheticCloseLink link, IReadOnlyList<MaterializedTrade> trades)

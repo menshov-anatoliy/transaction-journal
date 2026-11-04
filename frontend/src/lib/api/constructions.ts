@@ -1,4 +1,5 @@
 import { apiFetch } from "./http";
+import type { ResultMarkerOperation } from "./construction-card";
 
 // Контракты раздела «Конструкции» единого API: обзор списка со сводкой,
 // превью выделенной конструкции. Величины недоступные из-за сбоя котировок
@@ -11,12 +12,18 @@ export type ConstructionStatus = "open" | "closed" | "archived";
 /** Состояние реального риска: число величины выдаётся только конечному риску. */
 export type RealRiskStatus = "finite" | "unbounded" | "unavailable";
 
-/** Последний маркер изменения результата: накопленный итог и время события. */
+/** Последний маркер изменения результата: накопленный итог, время и расшифровка события. */
+// Контракт списка и превью публикует тот же перечень операций, что и
+// карточка: расшифровка последней метки доступна в среднем и компактном
+// видах индикатора — подсказкой на последнем маркере.
+// Traceability: change:fix-finresult-marker-contributions/design#d4
 export interface ConstructionLastResultMarker {
 	/** Накопленный зафиксированный результат на момент события, USDT. */
 	readonly totalUsdt: number;
 	/** Время события журнала, ISO. */
 	readonly eventAt: string;
+	/** Расшифровка изменения последней метки: операции с предыдущего выведенного маркера. */
+	readonly operations: readonly ResultMarkerOperation[];
 }
 
 /** Сводка журнала для шапки раздела. */

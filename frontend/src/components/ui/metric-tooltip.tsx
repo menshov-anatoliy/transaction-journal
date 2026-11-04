@@ -13,8 +13,10 @@ import { cn } from "@/lib/utils";
 
 // Содержимое попапа по паттерну макета: заголовок метрики (12.5/600),
 // назначение — всегда, метод расчёта — когда зафиксирован в справочнике,
-// и по разделу на каждый показатель многопоказательной метрики
-// (показатель 11/600 вторичным тоном + описание 11 обычное).
+// по разделу на каждый показатель многопоказательной метрики
+// (показатель 11/600 вторичным тоном + описание 11 обычное), построчные
+// записи перечня (например, расшифровка метки маркера) и примечание
+// в конце подсказки.
 export function MetricTooltipContent({
 	tooltip,
 	className,
@@ -25,7 +27,7 @@ export function MetricTooltipContent({
 	return (
 		<span data-slot="metric-tooltip-content" className={cn("flex flex-col gap-2", className)}>
 			<span className="text-[12.5px] font-semibold">{tooltip.title}</span>
-			<span className="text-text-secondary">{tooltip.purpose}</span>
+			{tooltip.purpose ? <span className="text-text-secondary">{tooltip.purpose}</span> : null}
 			{tooltip.method ? (
 				<span className="text-text-secondary">{tooltip.method}</span>
 			) : null}
@@ -35,6 +37,10 @@ export function MetricTooltipContent({
 					<span className="text-text-secondary">{section.text}</span>
 				</span>
 			))}
+			{tooltip.rows?.map((row) => (
+				<span className="text-text-secondary" key={row}>{row}</span>
+			))}
+			{tooltip.note ? <span className="text-text-muted">{tooltip.note}</span> : null}
 		</span>
 	);
 }

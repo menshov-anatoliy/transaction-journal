@@ -91,12 +91,13 @@ public static class ConstructionsEndpoints
 					// неограниченного хвоста и неполных данных без догадок по null.
 					// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt),
-					// Последний маркер истории результата проходит в строку готовой
-					// парой «итог + время»: полный список маркеров остаётся в карточке.
-					// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+					// Последний маркер истории результата проходит в строку с
+					// перечнем операций расшифровки: тот же перечень последнего
+					// маркера, что публикует карточка.
+					// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
 					item.LastResultMarker is null
 						? null
-						: new ResultMarkerSummaryResponse(item.LastResultMarker.TotalUsdt, item.LastResultMarker.EventAt),
+						: ResultMarkerContract.ToSummaryResponse(item.LastResultMarker),
 					item.OpenedAt,
 					item.ClosedAt,
 					liveCounts.GetValueOrDefault(item.ConstructionId),
@@ -169,11 +170,11 @@ public static class ConstructionsEndpoints
 				// неограниченного хвоста и неполных данных без догадок по null.
 				// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
-				// Последний маркер истории результата проходит в превью готовой
-				// парой «итог + время» из той же истории, что публикует карточка.
-				// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+				// Последний маркер истории результата проходит в превью с перечнем
+				// операций расшифровки из той же истории, что публикует карточка.
+				// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
 				data.ResultMarkers?.LastMarker is { } lastMarker
-					? new ResultMarkerSummaryResponse(lastMarker.TotalUsdt, lastMarker.EventTime)
+					? ResultMarkerContract.ToSummaryResponse(lastMarker)
 					: null,
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
@@ -250,7 +251,7 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
-/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный итог и время события; null, когда событий истории у конструкции ещё нет.</param>
+/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный итог, время события и перечень операций расшифровки; null, когда выведенных маркеров у конструкции ещё нет.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="LiveHintCount">Число живых подсказок конструкции для бейджа строки.</param>
@@ -265,8 +266,9 @@ public sealed record ConstructionsSummaryResponse(
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
 // Последний маркер входит в контракт строки аддитивно: компактный вид и
-// средний вид индикатора рисуют только его, без номера и сумм бейджей.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+// средний вид индикатора рисуют только его, без номера и сумм бейджей;
+// перечень операций расшифровки идёт рядом с итогом.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 // Счётчик предупреждений входит в контракт строки аддитивно: бейдж «⚠ N»
 // строится по числу из метрик аналитики, ноль — бейдж скрыт.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
@@ -303,12 +305,28 @@ public sealed record ConstructionRowResponse(
 /// <summary>Последний маркер изменения результата в контракте списка и превью.</summary>
 /// <param name="TotalUsdt">Накопленный зафиксированный итог конструкции на момент события в USDT.</param>
 /// <param name="EventAt">Время события журнала, породившего последний маркер.</param>
+/// <param name="Operations">Перечень операций расшифровки последнего маркера — все операции после предыдущего выведенного маркера, включая подавленные порогом.</param>
 // Пара «итог + время» публикуется без номера: компактные виды рисуют
-// последний маркер без бейджа нумерации.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+// последний маркер без бейджа нумерации; перечень операций расшифровки
+// идёт рядом, сервер формирует его целиком.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
 public sealed record ResultMarkerSummaryResponse(
 	decimal TotalUsdt,
-	DateTimeOffset EventAt);
+	DateTimeOffset EventAt,
+	IReadOnlyList<ResultMarkerOperationResponse> Operations);
+
+/// <summary>Операция расшифровки маркера изменения результата в контрактах API.</summary>
+/// <param name="Kind">Вид операции: те же kebab-case строки, что у типа события маркера.</param>
+/// <param name="Date">Момент события журнала, породившего операцию.</param>
+/// <param name="ContributionUsdt">Знаковый вклад операции в накопленный результат в USDT.</param>
+// Сумма вкладов перечня равна изменению маркера: UI сверяет расшифровку
+// сложением и не знает о подавленных событиях вне перечня.
+// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+public sealed record ResultMarkerOperationResponse(
+	string Kind,
+	DateTimeOffset Date,
+	decimal ContributionUsdt);
 
 /// <summary>Состояние недоступности журнала: обзор не собран, причина — в тексте.</summary>
 /// <param name="Error">Человекочитаемая причина недоступности.</param>
@@ -332,7 +350,7 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
-/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный итог и время события; null, когда событий истории у конструкции ещё нет.</param>
+/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный итог, время события и перечень операций расшифровки; null, когда выведенных маркеров у конструкции ещё нет.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="QuotesAsOf">Отметка времени котировок оценки; null при сбое или без остатков.</param>
@@ -345,8 +363,9 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
 // Последний маркер входит в контракт превью аддитивно: средний вид
-// индикатора рисует его без номера и сумм бейджей.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+// индикатора рисует его без номера и сумм бейджей, перечень операций
+// расшифровки идёт рядом с итогом.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 // Предупреждения входят в контракт превью аддитивно: счётчик и полный
 // перечень текстов идут из одного вызова вычислителя с метриками.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals

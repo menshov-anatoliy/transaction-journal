@@ -582,11 +582,12 @@ public sealed class ConstructionCardApiTests
 	}
 
 	[TestMethod]
-	[Description("Карточка публикует список маркеров изменения результата с номером, типом, изменением и итогом")]
+	[Description("Карточка публикует список маркеров изменения результата с номером, типом, изменением, итогом и перечнем операций")]
 	// Область описания маркеров строится по контракту карточки: каждый
 	// выведенный маркер несёт порядковый номер, время события, тип события,
-	// изменение относительно предыдущего выведенного и накопленный итог.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
+	// изменение относительно предыдущего выведенного, накопленный итог
+	// и перечень операций расшифровки.
+	// Traceability: openspec:analytics/performance#scenario-card-contract-publishes-markers
 	public async Task TryIfCardPublishesResultMarkers()
 	{
 		// Arrange: стабильная read-модель деталей с тремя событиями истории.
@@ -601,7 +602,7 @@ public sealed class ConstructionCardApiTests
 		Assert.That(markers, Has.Count.EqualTo(3));
 		Assert.That(markers[0]!["number"]!.GetValue<int>(), Is.EqualTo(1));
 		Assert.That(markers[0]!["eventTime"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
-		Assert.That(markers[0]!["kind"]!.GetValue<string>(), Is.EqualTo("option-window"));
+		Assert.That(markers[0]!["kind"]!.GetValue<string>(), Is.EqualTo("opening"));
 		Assert.That(markers[0]!["changeUsdt"]!.GetValue<decimal>(), Is.EqualTo(-100m));
 		Assert.That(markers[0]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-100m));
 		Assert.That(markers[1]!["number"]!.GetValue<int>(), Is.EqualTo(2));
@@ -609,16 +610,57 @@ public sealed class ConstructionCardApiTests
 		Assert.That(markers[1]!["changeUsdt"]!.GetValue<decimal>(), Is.EqualTo(5m));
 		Assert.That(markers[1]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-95m));
 		Assert.That(markers[2]!["number"]!.GetValue<int>(), Is.EqualTo(3));
-		Assert.That(markers[2]!["kind"]!.GetValue<string>(), Is.EqualTo("manual-mark"));
+		Assert.That(markers[2]!["kind"]!.GetValue<string>(), Is.EqualTo("closing"));
 		Assert.That(markers[2]!["changeUsdt"]!.GetValue<decimal>(), Is.EqualTo(160.25m));
 		Assert.That(markers[2]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(65.25m));
+		// Перечень операций расшифровки публикуется рядом с каждым маркером:
+		// вид, дата и знаковый вклад операции — те же kebab-case виды, что
+		// у типа события маркера.
+		// Traceability: openspec:analytics/performance#scenario-card-contract-publishes-markers
+		var firstOperations = markers[0]!["operations"]!.AsArray();
+		Assert.That(firstOperations, Has.Count.EqualTo(1));
+		Assert.That(firstOperations[0]!["kind"]!.GetValue<string>(), Is.EqualTo("opening"));
+		Assert.That(firstOperations[0]!["date"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
+		Assert.That(firstOperations[0]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(-100m));
+		var secondOperations = markers[1]!["operations"]!.AsArray();
+		Assert.That(secondOperations, Has.Count.EqualTo(2));
+		Assert.That(secondOperations[0]!["kind"]!.GetValue<string>(), Is.EqualTo("pnl-adjustment"));
+		Assert.That(secondOperations[0]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(8m));
+		Assert.That(secondOperations[1]!["kind"]!.GetValue<string>(), Is.EqualTo("futures-close"));
+		Assert.That(secondOperations[1]!["date"]!.GetValue<string>(), Is.EqualTo("2026-06-19T06:00:00+00:00"));
+		Assert.That(secondOperations[1]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(-3m));
+		var thirdOperations = markers[2]!["operations"]!.AsArray();
+		Assert.That(thirdOperations, Has.Count.EqualTo(1));
+		Assert.That(thirdOperations[0]!["kind"]!.GetValue<string>(), Is.EqualTo("closing"));
+		Assert.That(thirdOperations[0]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(160.25m));
+		// Инвариант расшифровки: подавленные порогом операции входят в перечень
+		// следующего выведенного маркера, сумма перечня равна изменению маркера,
+		// а итог предыдущего выведенного плюс сумма — итогу маркера.
+		// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+		var previousTotal = 0m;
+		foreach (var marker in markers)
+		{
+			var operationsSum = marker!["operations"]!.AsArray()
+				.Sum(operation => operation!["contributionUsdt"]!.GetValue<decimal>());
+			var change = marker["changeUsdt"]!.GetValue<decimal>();
+			var total = marker["totalUsdt"]!.GetValue<decimal>();
+			Assert.That(
+				operationsSum,
+				Is.EqualTo(change),
+				"Сумма перечня операций обязана равняться изменению маркера.");
+			Assert.That(
+				previousTotal + change,
+				Is.EqualTo(total),
+				"Итог предыдущего выведенного маркера плюс изменение обязаны давать итог маркера.");
+			previousTotal = total;
+		}
 	}
 
 	[TestMethod]
 	[Description("Карточка без событий истории отдаёт пустой список маркеров")]
 	// Пустая история — обычное состояние: контракт отдаёт явную пустоту,
-	// а не отсутствие поля, область описания показывает пустое состояние.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+	// а не отсутствие поля; индикатор показывает полосу без бейджей.
+	// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 	public async Task TryIfCardWithoutEventsServesEmptyResultMarkers()
 	{
 		// Arrange: стаб деталей с пустой историей маркеров.
@@ -1737,15 +1779,29 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	private decimal? _syntheticOpenQuantity;
 
 	/// <summary>История маркеров конструкции: выведенные маркеры проходят в контракт карточки.</summary>
+	/// <remarks>
+	/// Второй маркер несёт две операции: подавленная порогом корректировка +8
+	/// и фьючерсное закрытие −3 — сумма перечня равна изменению +5.
+	// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+	/// </remarks>
 	private IReadOnlyList<ResultMarker> _resultMarkers =
 	[
 		new ResultMarker
 		{
 			Number = 1,
 			EventTime = new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
-			Kind = ResultMarkerKind.OptionWindow,
+			Kind = ResultMarkerKind.Opening,
 			ChangeUsdt = -100m,
 			TotalUsdt = -100m,
+			Operations =
+			[
+				new ResultMarkerOperation
+				{
+					Kind = ResultMarkerKind.Opening,
+					EventTime = new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
+					AmountUsdt = -100m,
+				},
+			],
 		},
 		new ResultMarker
 		{
@@ -1754,14 +1810,38 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			Kind = ResultMarkerKind.PnLAdjustment,
 			ChangeUsdt = 5m,
 			TotalUsdt = -95m,
+			Operations =
+			[
+				new ResultMarkerOperation
+				{
+					Kind = ResultMarkerKind.PnLAdjustment,
+					EventTime = new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero),
+					AmountUsdt = 8m,
+				},
+				new ResultMarkerOperation
+				{
+					Kind = ResultMarkerKind.FuturesClose,
+					EventTime = new DateTimeOffset(2026, 6, 19, 6, 0, 0, TimeSpan.Zero),
+					AmountUsdt = -3m,
+				},
+			],
 		},
 		new ResultMarker
 		{
 			Number = 3,
 			EventTime = new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero),
-			Kind = ResultMarkerKind.ClosingManualMark,
+			Kind = ResultMarkerKind.Closing,
 			ChangeUsdt = 160.25m,
 			TotalUsdt = 65.25m,
+			Operations =
+			[
+				new ResultMarkerOperation
+				{
+					Kind = ResultMarkerKind.Closing,
+					EventTime = new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero),
+					AmountUsdt = 160.25m,
+				},
+			],
 		},
 	];
 
@@ -2023,7 +2103,7 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 			RiskWarnings: _riskWarnings,
 			// История маркеров идёт в контракт карточки набором текущего чтения:
 			// нумерация сплошная, последний маркер — накопленный зафиксированный итог.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
+			// Traceability: openspec:analytics/performance#scenario-card-contract-publishes-markers
 			ResultMarkers: new ConstructionResultMarkers { Markers = _resultMarkers });
 		return Task.FromResult(data);
 	}

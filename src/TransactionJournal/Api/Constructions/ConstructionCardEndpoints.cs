@@ -830,28 +830,20 @@ public static class ConstructionCardEndpoints
 		(data.RiskWarnings ?? []).Select(warning => new ConstructionRiskWarningResponse(warning)).ToArray(),
 		// История маркеров изменения результата публикуется списком выведенных
 		// маркеров с финальной нумерацией: порог проявления и перенумерация
-		// выполнены на сервере, UI получает готовый набор.
-		// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
-		// Traceability: change:add-finresult-result-history-markers/design#d3
+		// выполнены на сервере, UI получает готовый набор с перечнями операций
+		// расшифровки.
+		// Traceability: openspec:analytics/performance#scenario-card-contract-publishes-markers
 		(data.ResultMarkers?.Markers ?? []).Select(marker => new ConstructionCardResultMarkerResponse(
 			marker.Number,
 			marker.EventTime,
-			SerializeMarkerKind(marker.Kind),
+			ResultMarkerContract.SerializeKind(marker.Kind),
 			marker.ChangeUsdt,
-			marker.TotalUsdt)).ToArray());
-
-	/// <summary>Стабильная строка типа события маркера в контракте API.</summary>
-	private static string SerializeMarkerKind(ResultMarkerKind kind) => kind switch
-	{
-		ResultMarkerKind.OptionWindow => "option-window",
-		ResultMarkerKind.FuturesTrade => "futures-trade",
-		ResultMarkerKind.SyntheticLink => "synthetic-link",
-		ResultMarkerKind.PnLAdjustment => "pnl-adjustment",
-		ResultMarkerKind.ClosingDelivery => "delivery",
-		ResultMarkerKind.ClosingOtmExpiry => "otm-expiry",
-		ResultMarkerKind.ClosingManualMark => "manual-mark",
-		_ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
-	};
+			marker.TotalUsdt,
+			// Перечень операций расшифровки публикуется рядом с маркером: все
+			// события после предыдущего выведенного маркера, включая подавленные
+			// порогом; сумма вкладов равна изменению маркера.
+			// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+			ResultMarkerContract.SerializeOperations(marker.Operations))).ToArray());
 
 	/// <summary>Разбирает строку источника корректировки; null — неизвестное значение.</summary>
 	private static PnLAdjustmentSource? DeserializeAdjustmentSource(string? source) => source switch
@@ -990,9 +982,10 @@ public static class ConstructionCardEndpoints
 // Предупреждения диагностики входят в контракт карточки аддитивно: секция
 // «Предупреждения» над таблицами скрыта при пустом списке.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
-// История маркеров входит в контракт карточки аддитивно: область описания
-// маркеров под индикатором строится по списку, номера идут подряд.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+// История маркеров входит в контракт карточки аддитивно: перечень операций
+// расшифровки каждого маркера публикуется вместе с ним, UI не реконструирует
+// вклады и не знает о подавленных событиях вне перечня.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 public sealed record ConstructionCardResponse(
 	long ConstructionId,
 	string Name,
@@ -1075,19 +1068,22 @@ public sealed record ConstructionCardMetricsResponse(
 /// <summary>Маркер изменения результата в контракте карточки.</summary>
 /// <param name="Number">Порядковый номер выведенного маркера — подряд без пропусков.</param>
 /// <param name="EventTime">Время события журнала, породившего маркер.</param>
-/// <param name="Kind">Тип события: option-window, futures-trade, synthetic-link, pnl-adjustment, delivery, otm-expiry или manual-mark.</param>
+/// <param name="Kind">Тип события: opening, closing, roll, synthetic-close, synthetic-release, futures-close, pnl-adjustment или delivery.</param>
 /// <param name="ChangeUsdt">Изменение накопленного результата относительно предыдущего выведенного маркера; у первого — от нуля.</param>
 /// <param name="TotalUsdt">Накопленный зафиксированный итог на момент события в USDT.</param>
-// Номер, тип, изменение и итог публикуются как есть: сервер уже применил
-// порог проявления и перенумерацию, UI фильтрацию не повторяет.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
-// Traceability: change:add-finresult-result-history-markers/design#d3
+/// <param name="Operations">Перечень операций расшифровки — все события после предыдущего выведенного маркера, включая подавленные порогом; сумма вкладов равна изменению.</param>
+// Номер, тип, изменение, итог и перечень публикуются как есть: сервер уже
+// применил порог проявления и перенумерацию, UI фильтрацию и реконструкцию
+// вкладов не повторяет.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+// Traceability: openspec:analytics/performance#scenario-card-contract-publishes-markers
 public sealed record ConstructionCardResultMarkerResponse(
 	int Number,
 	DateTimeOffset EventTime,
 	string Kind,
 	decimal ChangeUsdt,
-	decimal TotalUsdt);
+	decimal TotalUsdt,
+	IReadOnlyList<ResultMarkerOperationResponse> Operations);
 
 /// <summary>Строка таблицы позиций карточки.</summary>
 /// <param name="Symbol">Инструмент позиции.</param>

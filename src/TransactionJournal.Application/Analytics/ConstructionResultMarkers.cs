@@ -5,55 +5,84 @@ using TransactionJournal.Domain;
 using TransactionJournal.Domain.Analytics;
 
 /// <summary>
-/// Тип события истории результата конструкции, образующего маркер изменения
-/// результата: окно опционных исполнений, фьючерсная сделка робота, изменение
-/// набора действующих связок синтетического закрытия, внешняя корректировка
-/// PnL и закрывающие записи трёх видов. Перечисление вычислительное — тип
-/// выводится из вида записи журнала, а не задаётся пользователем.
+/// Вид операции расшифровки маркера и события истории результата конструкции:
+/// открытие и закрытие опционных окон, ролл, связки синтетического закрытия,
+/// закрытие фьючерсной позиции, корректировка PnL и поставка. Вид
+/// вычислительный — выводится из вида записи журнала, а не задаётся
+/// пользователем; отдельный вид «Усреднение» не вводится, усредняющее окно
+/// неразличимо с открытием.
 /// </summary>
 /// <remarks>
-/// Тип события — вычислительное свойство записей журнала конструкции.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
+/// Вид операции — вычислительное свойство записей журнала конструкции.
+// Traceability: openspec:analytics/performance#requirement-result-markers-history-events
+// Traceability: change:fix-finresult-marker-contributions/design#d3
 /// </remarks>
 public enum ResultMarkerKind
 {
-	/// <summary>Окно опционных исполнений по правилам сборки v5 — ролл целиком одно событие.</summary>
-	OptionWindow,
+	/// <summary>Окно опционных исполнений без закрывающих сделок — открытие позиции; усреднение входит сюда же.</summary>
+	Opening,
 
-	/// <summary>Фьючерсная сделка робота — каждая сделка отдельное событие.</summary>
-	FuturesTrade,
+	/// <summary>Окно опционных исполнений с закрывающими сделками и без открывающих — закрытие позиций окна.</summary>
+	Closing,
 
-	/// <summary>Изменение набора действующих связок синтетического закрытия — появление или снятие.</summary>
-	SyntheticLink,
+	/// <summary>Окно опционных исполнений с закрывающими и открывающими сделками — ролл целиком одна операция.</summary>
+	Roll,
+
+	/// <summary>Активация связки синтетического закрытия — вклад «зафиксировано синтетикой».</summary>
+	SyntheticClose,
+
+	/// <summary>Снятие связки синтетического закрытия спором — вклад с обратным знаком.</summary>
+	SyntheticRelease,
+
+	/// <summary>Закрытие фьючерсной позиции до нулевого остатка — финрезультат цикла по FIFO с комиссиями.</summary>
+	FuturesClose,
 
 	/// <summary>Внешняя корректировка PnL.</summary>
 	PnLAdjustment,
 
-	/// <summary>Закрывающая запись — поставка delivery.</summary>
-	ClosingDelivery,
+	/// <summary>Закрывающая запись — поставка delivery по внутренней стоимости.</summary>
+	Delivery,
+}
 
-	/// <summary>Закрывающая запись — экспирация вне денег.</summary>
-	ClosingOtmExpiry,
+/// <summary>
+/// Операция расшифровки маркера: вид, момент события и знаковый вклад
+/// в накопленный зафиксированный результат. Перечень операций маркера
+/// охватывает все события после предыдущего выведенного маркера, включая
+/// подавленные порогом, — результат сверяется сложением строк расшифровки.
+/// </summary>
+/// <remarks>
+/// Сумма вкладов перечня равняется изменению маркера, а накопленный итог
+/// предыдущего выведенного маркера плюс сумма перечня — накопленному итогу
+/// маркера; оба инварианта проверяются тестами вычислителя.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+/// </remarks>
+public sealed record ResultMarkerOperation
+{
+	/// <summary>Вид операции: те же виды, что у событий истории результата.</summary>
+	public required ResultMarkerKind Kind { get; init; }
 
-	/// <summary>Закрывающая запись — ручная пометка пользователя.</summary>
-	ClosingManualMark,
+	/// <summary>Момент события журнала, породившего операцию.</summary>
+	public required DateTimeOffset EventTime { get; init; }
+
+	/// <summary>Знаковый вклад операции в накопленный результат в USDT.</summary>
+	public required decimal AmountUsdt { get; init; }
 }
 
 /// <summary>
 /// Маркер изменения результата — выведенная точка истории накопленного
 /// зафиксированного денежного результата конструкции. Номер присвоен только
 /// выведенным маркерам и идёт подряд без пропусков; изменение считается
-/// относительно предыдущего выведенного маркера (у первого — от нуля),
-/// накопленный итог — значение сводной «с учётом зафиксированного
-/// синтетикой» плюс внешние корректировки минус входная стоимость ещё
-/// открытых остатков на момент события: премия открытия фиксируется сразу,
-/// при закрытии всех остатков итог совпадает со сводной формулой.
+/// относительно предыдущего выведенного маркера (у первого — от нуля) и
+/// равняется сумме вкладов перечня операций; накопленный итог — сумма вкладов
+/// всех операций до события включительно. Значение выводится из вкладов
+/// операций, а не из среза сводной формулы.
 /// </summary>
 /// <remarks>
-/// Номер, изменение и итог вычисляются на сервере: порог проявления и
-/// перенумерация применены до публикации контракта.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-marker-value
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-marker-threshold
+/// Номер, изменение, итог и перечень операций вычисляются на сервере:
+/// порог проявления и перенумерация применены до публикации контракта.
+// Traceability: openspec:analytics/performance#requirement-result-marker-value
+// Traceability: openspec:analytics/performance#requirement-result-marker-threshold
 /// </remarks>
 public sealed record ResultMarker
 {
@@ -63,7 +92,7 @@ public sealed record ResultMarker
 	/// <summary>Время события журнала, породившего маркер.</summary>
 	public required DateTimeOffset EventTime { get; init; }
 
-	/// <summary>Тип события журнала.</summary>
+	/// <summary>Вид операции, породившей маркер.</summary>
 	public required ResultMarkerKind Kind { get; init; }
 
 	/// <summary>Изменение накопленного результата относительно предыдущего выведенного маркера; у первого — от нуля.</summary>
@@ -71,6 +100,13 @@ public sealed record ResultMarker
 
 	/// <summary>Накопленный зафиксированный результат на момент события в USDT.</summary>
 	public required decimal TotalUsdt { get; init; }
+
+	/// <summary>
+	/// Перечень операций расшифровки — все события после предыдущего
+	/// выведенного маркера, включая подавленные порогом; у первого маркера —
+	/// все события от начала истории. Сумма вкладов перечня равна изменению.
+	/// </summary>
+	public required IReadOnlyList<ResultMarkerOperation> Operations { get; init; }
 }
 
 /// <summary>
@@ -81,7 +117,7 @@ public sealed record ResultMarker
 /// </summary>
 /// <remarks>
 /// Нумерация сплошная по выведенным маркерам, подряд без пропусков.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-marker-threshold
+// Traceability: openspec:analytics/performance#requirement-result-marker-threshold
 /// </remarks>
 public sealed record ConstructionResultMarkers
 {
@@ -93,17 +129,23 @@ public sealed record ConstructionResultMarkers
 }
 
 /// <summary>
-/// Итоговая сводка последнего маркера — компактная пара «накопленный итог +
-/// время события» для контрактов списка и превью, где полная история не
-/// публикуется. Значение то же, что у последнего выведенного маркера карточки:
-/// текущий накопленный зафиксированный результат конструкции.
+/// Итоговая сводка последнего маркера — накопленный зафиксированный
+/// результат, время события и перечень операций расшифровки для контрактов
+/// списка и превью, где полная история не публикуется. Значение то же, что
+/// у последнего выведенного маркера карточки: накопленный зафиксированный
+/// результат конструкции — сумма вкладов операций перечня.
 /// </summary>
 /// <remarks>
-/// Пара публикуется без номера: компактные виды рисуют последний маркер
-/// без бейджа нумерации.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+/// Сводка публикуется без номера: компактные виды рисуют последний маркер
+/// без бейджа нумерации; перечень операций совпадает с перечнем последнего
+/// маркера карточки, сумма вкладов равна изменению маркера.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
 /// </remarks>
-public sealed record ResultMarkerSummary(decimal TotalUsdt, DateTimeOffset EventAt);
+public sealed record ResultMarkerSummary(
+	decimal TotalUsdt,
+	DateTimeOffset EventAt,
+	IReadOnlyList<ResultMarkerOperation> Operations);
 
 /// <summary>
 /// Интервал действия связки синтетического закрытия в истории маркеров:
@@ -112,9 +154,9 @@ public sealed record ResultMarkerSummary(decimal TotalUsdt, DateTimeOffset Event
 /// «зафиксировано синтетикой», что в строках связок карточки.
 /// </summary>
 /// <remarks>
-/// Интервалы связок — материал событий истории: появление и снятие спором
-/// дают маркеры с новым набором действующих связок.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
+/// Интервалы связок — материал событий истории: активация даёт вклад лока,
+/// снятие спором — тот же лок с обратным знаком.
+// Traceability: openspec:analytics/performance#requirement-result-markers-history-events
 /// </remarks>
 public sealed record ResultMarkerLinkInterval
 {
@@ -137,8 +179,8 @@ public sealed record ResultMarkerLinkInterval
 /// корректировки с равной датой между собой и с событиями того же момента.
 /// </summary>
 /// <remarks>
-/// Каждая корректировка образует отдельный маркер изменения результата.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
+/// Каждая корректировка образует отдельную операцию с вкладом — суммой.
+// Traceability: openspec:analytics/performance#requirement-result-markers-history-events
 /// </remarks>
 public sealed record ResultMarkerAdjustment
 {
@@ -153,28 +195,29 @@ public sealed record ResultMarkerAdjustment
 }
 
 /// <summary>
-/// Вход вычислителя маркеров изменения результата — срез журнала одной
-/// конструкции: потоки позиций для значений срезов, привязанные сделки,
+/// Вход вычислителя маркеров изменения результата — материал истории одной
+/// конструкции: потоки позиций для фьючерсных циклов, привязанные сделки,
 /// действующие закрывающие записи, интервалы связок, корректировки и
 /// плановый риск для порога проявления. Все данные производные, хранением
 /// не живут и пересчитываются при каждом чтении.
 /// </summary>
 /// <remarks>
-/// Значения срезов обязаны сходиться с итогами сводки и метрик позиций:
-/// потоки записей — те же, что питают аналитику.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-marker-value
+/// Вклады операций обязаны сходиться с итогами сводки и метрик позиций:
+/// сделки и закрывающие записи — те же, что питают аналитику.
+// Traceability: openspec:analytics/performance#requirement-result-marker-value
 /// </remarks>
 public sealed record ResultMarkersInput
 {
 	/// <summary>
 	/// Потоки FIFO-записей позиций конструкции по инструментам — те же записи,
-	/// из которых аналитика считает реализованный результат; срезы значения
-	/// маркера (реализованный результат и входная стоимость открытых слоёв)
-	/// обязаны сходиться с итогами сводки и метрик позиций.
+	/// из которых аналитика считает реализованный результат; по линейным
+	/// инструментам из них выводятся события закрытия фьючерсных циклов
+	/// с комиссиями. Потоки опционных символов вычислителем не читаются:
+	/// вклады окон считаются по сделкам.
 	/// </summary>
 	public required IReadOnlyDictionary<string, IReadOnlyList<PositionFifoEntry>> EntriesBySymbol { get; init; }
 
-	/// <summary>Привязанные сделки конструкции обоих источников — материал окон и фьючерсных событий.</summary>
+	/// <summary>Привязанные сделки конструкции обоих источников — материал окон, их классификации и вкладов.</summary>
 	public required IReadOnlyList<MaterializedTrade> Trades { get; init; }
 
 	/// <summary>Действующие закрывающие записи конструкции — delivery, OTM-экспирации и ручные пометки.</summary>

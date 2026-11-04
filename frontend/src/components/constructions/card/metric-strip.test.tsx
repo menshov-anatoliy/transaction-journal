@@ -1062,16 +1062,17 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 	});
 
 	// Пояснение отражает актуальную модель чтения: подсказка объясняет
-	// маркеры изменения результата — номерные бейджи с суммами над полосой,
-	// историю накопленного зафиксированного результата по событиям журнала
-	// с порогом проявления 5% планового риска, где последний бейдж — текущий
-	// накопленный зафиксированный результат и в его значение входят локи
-	// действующих связок, — и маркер текущего результата, отличающийся от
-	// последнего бейджа нереализованной частью; формулировки устаревшей
-	// модели — подпись значения «X USDT · N%» от плановой границы зоны и
-	// прочие перечисленные ниже — в попапе отсутствуют.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-reading-tooltip-explains-current-model
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-marker-last-vs-current
+	// зоны, маркеры изменения результата — номерные бейджи с суммами над
+	// полосой, историю накопленного зафиксированного результата, строящуюся
+	// из вкладов операций с порогом проявления 5% планового риска, где
+	// первый и последний бейджи безусловны, последний — текущий накопленный
+	// зафиксированный результат, расшифровка метки — подсказка бейджа
+	// с перечнем операций, — и маркер текущего результата, отличающийся
+	// от последнего бейджа нереализованной частью; формулировки устаревших
+	// моделей (насечка худшего исхода, модель среза сводной) в попапе
+	// отсутствуют.
+	// Traceability: openspec:ui/screens#scenario-reading-tooltip-explains-current-model
+	// Traceability: openspec:ui/screens#scenario-result-marker-last-vs-current
 	it("поясняет маркеры изменения результата и маркер текущего результата без устаревших формулировок", async () => {
 		// Arrange: открытая подсказка чтения.
 		const user = userEvent.setup();
@@ -1079,14 +1080,16 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
 		const popup = screen.getByRole("dialog");
 
-		// Assert: маркеры изменения результата объяснены историей
-		// зафиксированного результата с порогом и локами связок;
-		// зафиксированная синтетикой часть адресована зоной синтетики.
+		// Assert: маркеры изменения результата объяснены историей из вкладов
+		// операций с порогом и расшифровкой меток; зафиксированная
+		// синтетикой часть адресована строкой и сводной карточки.
 		expect(within(popup).getByText(/маркеры изменения результата — номерные бейджи с суммами над полосой/)).toBeTruthy();
+		expect(within(popup).getByText(/строящаяся из вкладов операций/)).toBeTruthy();
 		expect(within(popup).getByText(/с порогом проявления 5% планового риска/)).toBeTruthy();
-		expect(within(popup).getByText(/последний бейдж — текущий накопленный зафиксированный результат/)).toBeTruthy();
-		expect(within(popup).getByText(/в его значение входят локи действующих связок синтетического закрытия/)).toBeTruthy();
-		expect(within(popup).getByText(/видна в строке «зафиксировано синтетикой» и сводной величине зоны синтетики карточки/)).toBeTruthy();
+		expect(within(popup).getByText(/первый и последний бейджи безусловны/)).toBeTruthy();
+		expect(within(popup).getByText(/расшифровка каждой метки — подсказка бейджа/)).toBeTruthy();
+		expect(within(popup).getByText(/сумма перечня равна изменению метки/)).toBeTruthy();
+		expect(within(popup).getByText(/видна в строке «зафиксировано синтетикой» и сводной «С учётом зафиксированного синтетикой»/)).toBeTruthy();
 
 		// Assert: маркер текущего результата объяснен с отличием от
 		// последнего бейджа — нереализованной частью.
@@ -1094,9 +1097,9 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(within(popup).getByText(/история хранит зафиксированный результат, а маркер учитывает и нереализованную часть/)).toBeTruthy();
 
 		// Assert: устаревших формулировок во всём попапе нет — проверяем
-		// по полному тексту попапа, включая характерный шаблон подписи
-		// прежней границы «значение USDT · процент» и её отсылку к
-		// плановой границе зоны.
+		// по полному тексту попапа: шаблон подписи прежней границы
+		// «значение USDT · процент», формулировки устаревшей модели
+		// «насечка/худший исход» и модели среза сводной.
 		const popupText = popup.textContent ?? "";
 		expect(popupText).not.toContain("USDT ·");
 		expect(popupText).not.toContain("от плановой границы зоны");
@@ -1104,20 +1107,40 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(popupText).not.toContain("Общий P&L");
 		expect(popupText).not.toContain("реальный риск минус реализованная прибыль");
 		expect(popupText).not.toContain("граница строится от нуля");
+		expect(popupText).not.toContain("насечка");
+		expect(popupText).not.toContain("худший исход");
+		// Формулировка модели среза сводной «минус входная стоимость открытых
+		// остатков» проверяется частями, покрывая вариации формулирования.
+		expect(popupText).not.toContain("входная стоимость");
+		expect(popupText).not.toContain("открытых остатков");
 		expect(popupText).not.toContain("ac-43");
 	});
 
-	it("показывает бейджи маркеров и область описания в полном виде сводки", () => {
+	it("показывает бейджи маркеров с подсказками-расшифровками в полном виде сводки", () => {
 		// Полный индикатор в сводке карточки получает выведенные маркеры
-		// из контракта: бейджи с суммами над полосой и область описания
-		// под индикатором с датой и типом операции каждой строки.
-		// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-		// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-marker-description-area-lists-markers
-		// Arrange: карточка с историей из окна сборки и корректировки PnL.
+		// из контракта: бейджи с суммами над полосой; описательная область
+		// маркеров удалена — расшифровка живёт в подсказках бейджей.
+		// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
+		// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+		// Arrange: карточка с историей из окна открытия и корректировки PnL.
 		renderStrip(makeCard({
 			resultMarkers: [
-				{ number: 1, eventTime: "2026-10-01T09:10:00", kind: "option-window", changeUsdt: -95, totalUsdt: -95 },
-				{ number: 2, eventTime: "2026-10-14T18:00:00", kind: "pnl-adjustment", changeUsdt: 5, totalUsdt: -90 },
+				{
+					number: 1,
+					eventTime: "2026-10-01T09:10:00",
+					kind: "opening",
+					changeUsdt: -95,
+					totalUsdt: -95,
+					operations: [{ kind: "opening", date: "2026-10-01T09:10:00", contributionUsdt: -95 }],
+				},
+				{
+					number: 2,
+					eventTime: "2026-10-14T18:00:00",
+					kind: "pnl-adjustment",
+					changeUsdt: 5,
+					totalUsdt: -90,
+					operations: [{ kind: "pnl-adjustment", date: "2026-10-14T18:00:00", contributionUsdt: 5 }],
+				},
 			],
 		}));
 
@@ -1127,13 +1150,10 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(badges[0].textContent).toContain("−95");
 		expect(badges[1].textContent).toContain("−90");
 
-		// Assert: область описания перечисляет маркеры с типами операций.
-		const area = document.querySelector('[data-part="marker-description"]');
-		expect(area).not.toBeNull();
-		expect(area?.textContent).toContain("Окно исполнения");
-		expect(area?.textContent).toContain("Корректировка PnL");
-		expect(area?.textContent).toContain("2026-10-14 18:00");
-		expect(area?.textContent).toContain("−90 USDT");
+		// Assert: области описания маркеров под индикатором нет —
+		// расшифровка переехала в подсказки бейджей.
+		expect(document.querySelector('[data-part="marker-description"]')).toBeNull();
+		expect(document.querySelector('[data-part="marker-description-empty"]')).toBeNull();
 	});
 
 	it("закрывается по Esc", async () => {

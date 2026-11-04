@@ -345,10 +345,11 @@ builder.Services.AddSingleton<AgentRulesCatalog>();
 builder.Services.AddSingleton<IChatStore>(_ => new ChatStore(
 	Path.Combine(dataDirectory, "chats.db")));
 
-// Читатель хвостов истории результата: последний маркер каждой конструкции
-// для строк списка и превью — события журнала те же, что у полных историй
-// карточки, читатель берёт из них только время последнего события и суммы.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+// Читатель последних маркеров истории результата: последний маркер каждой
+// конструкции для строк списка и превью — вход вычислителя тот же, что у
+// полных историй карточки, читатель берёт из выведенной истории последний
+// маркер с итогом и перечнем операций расшифровки.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 builder.Services.AddSingleton(sp => new ConstructionResultMarkersReader(
 	new DbContextOptionsBuilder<JournalDbContext>().UseSqlite(connectionString).Options,
 	sp.GetRequiredService<PositionReadModel>()));

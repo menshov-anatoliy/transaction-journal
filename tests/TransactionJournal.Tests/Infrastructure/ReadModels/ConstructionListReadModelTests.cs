@@ -474,17 +474,17 @@ public class ConstructionListReadModelTests
 
 	[TestMethod]
 	[Description("Строка списка несёт последний маркер истории результата из журнала конструкции")]
-	// Последний маркер строки — накопленный зафиксированный денежный итог
-	// (реализованный результат плюс корректировки минус входная стоимость
-	// открытых остатков) на момент последнего события журнала; у конструкции
-	// без событий маркера нет.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-marker-open-residual-entry-cost-counts
+	// Последний маркер строки — накопленный зафиксированный денежный итог,
+	// равный сумме вкладов операций последнего выведенного маркера, время
+	// события и перечень операций расшифровки; незакрытая фьючерсная позиция
+	// в итог не входит, у конструкции без выведенных маркеров поле null.
+	// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
+	// Traceability: openspec:analytics/performance#scenario-futures-open-position-not-counted
 	public async Task TryIfOverviewRowCarriesLastResultMarkerFromJournal()
 	{
-		// Arrange: конструкция с фьючерсной сделкой 28-го числа (комиссия 1,
-		// реализует −1) и корректировкой +5 29-го числа; метрики аналитики
-		// читаются живой read-моделью по тем же записям журнала.
+		// Arrange: конструкция с открытой фьючерсной позицией (покупка 28-го
+		// числа) и корректировкой +5 29-го числа; метрики аналитики читаются
+		// живой read-моделью по тем же записям журнала.
 		await SeedAsync(Header("Длинный BTC", ConstructionStatus.Open, 1000m));
 		await SeedLinearInstrumentAsync();
 		await AddLinearTradeAsync("exec-buy", "Buy", "0.1", "42000", "1", ExecMs(2023, 12, 28, 10, 0));
@@ -510,20 +510,25 @@ public class ConstructionListReadModelTests
 		// Act: чтение данных экрана «Конструкции».
 		var data = await readModel.ReadAsync();
 
-		// Assert: последний маркер строки — денежный итог −1 (комиссия) + 5
-		// (корректировка) − 4200 (входная стоимость открытого остатка 0.1 × 42000)
-		// = −4196 на момент последнего события (корректировка 29-го числа).
+		// Assert: последний маркер строки — сумма вкладов операций: открытая
+		// фьючерсная покупка вклада не создаёт, корректировка даёт +5 на своё
+		// время; перечень операций расшифровки идёт рядом с итогом.
 		var row = data.Items.Single();
 		Assert.That(row.LastResultMarker, Is.Not.Null);
-		Assert.That(row.LastResultMarker!.TotalUsdt, Is.EqualTo(-4196m));
+		Assert.That(row.LastResultMarker!.TotalUsdt, Is.EqualTo(5m));
 		Assert.That(row.LastResultMarker!.EventAt, Is.EqualTo(new DateTimeOffset(2023, 12, 29, 9, 0, 0, TimeSpan.Zero)));
+		var operations = row.LastResultMarker!.Operations;
+		Assert.That(operations, Has.Count.EqualTo(1));
+		Assert.That(operations[0].Kind, Is.EqualTo(ResultMarkerKind.PnLAdjustment));
+		Assert.That(operations[0].EventTime, Is.EqualTo(new DateTimeOffset(2023, 12, 29, 9, 0, 0, TimeSpan.Zero)));
+		Assert.That(operations[0].AmountUsdt, Is.EqualTo(5m));
 	}
 
 	[TestMethod]
 	[Description("Конструкция без событий журнала идёт без последнего маркера")]
-	// Отсутствие событий истории — null в строке, а не ноль: отсутствующий
+	// Отсутствие выведенных маркеров — null в строке, а не ноль: отсутствующий
 	// маркер отличим от нулевого накопленного итога.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+	// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
 	public async Task TryIfRowWithoutEventsCarriesNoLastResultMarker()
 	{
 		// Arrange: конструкция без сделок, корректировок и закрывающих записей.

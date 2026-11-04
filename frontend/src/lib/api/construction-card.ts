@@ -17,25 +17,41 @@ export type ClosingEntryKind = "delivery" | "otm-expiry" | "manual-mark";
 /** Источник внешней корректировки PnL. */
 export type AdjustmentSource = "robot" | "manual";
 
-// Тип события маркера изменения результата в контракте API: окно
-// опционных исполнений (ролл — единое окно), фьючерсная сделка робота,
-// изменение набора действующих связок синтетического закрытия, внешняя
-// корректировка PnL, закрывающая запись (delivery, экспирация OTM,
-// ручная пометка). Бэкенд публикует строку-тип.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
+// Вид операции расшифровки маркера изменения результата в контракте API:
+// фиксированный набор вкладов модели вкладов операций — открытие/закрытие
+// опционного окна, ролл, синтетическое закрытие и его снятие, фьючерсный
+// цикл до нулевого остатка, внешняя корректировка PnL, закрывающая запись
+// (поставка). Бэкенд публикует kebab-case строку.
+// Traceability: change:fix-finresult-marker-contributions/design#d3
 export type ResultMarkerKind =
-	| "option-window"
-	| "futures-trade"
-	| "synthetic-link"
+	| "opening"
+	| "closing"
+	| "roll"
+	| "synthetic-close"
+	| "synthetic-release"
+	| "futures-close"
 	| "pnl-adjustment"
-	| "delivery"
-	| "otm-expiry"
-	| "manual-mark";
+	| "delivery";
+
+/** Операция в расшифровке маркера: один вклад в изменение накопленного итога. */
+// Перечень операций маркера N охватывает все события после события
+// маркера N−1, включая события, подавленные порогом проявления, —
+// сумма вкладов равна changeUsdt маркера, результат сверяется сложением.
+// Traceability: change:fix-finresult-marker-contributions/design#d4
+export interface ResultMarkerOperation {
+	/** Вид операции: элемент фиксированного набора вкладов. */
+	readonly kind: ResultMarkerKind;
+	/** Дата операции, ISO. */
+	readonly date: string;
+	/** Вклад операции в изменение накопленного итога, USDT. */
+	readonly contributionUsdt: number;
+}
 
 /** Маркер изменения результата: точка истории накопленного зафиксированного результата. */
 // Контракт публикует уже выведенные маркеры: порог проявления и сквозная
-// нумерация посчитаны на сервере, фронтенд рендерит как есть.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+// нумерация посчитаны на сервере, фронтенд рендерит как есть; рядом
+// с каждым маркером — расшифровка его изменения перечнем операций.
+// Traceability: change:fix-finresult-marker-contributions/design#d4
 export interface ResultMarker {
 	/** Порядковый номер среди выведенных маркеров — подряд без пропусков. */
 	readonly number: number;
@@ -47,6 +63,8 @@ export interface ResultMarker {
 	readonly changeUsdt: number;
 	/** Накопленный зафиксированный результат на момент события, USDT. */
 	readonly totalUsdt: number;
+	/** Расшифровка изменения: операции с предыдущего выведенного маркера, включая подавленные порогом. */
+	readonly operations: readonly ResultMarkerOperation[];
 }
 
 /** Метрики карточки: сводка kstrip с периодом и длительностью. */

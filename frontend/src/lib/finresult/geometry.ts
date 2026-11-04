@@ -1,4 +1,5 @@
 import type { RealRiskStatus } from "../api/constructions";
+import type { ResultMarkerOperation } from "../api/construction-card";
 
 // Калькулятор геометрии индикатора финансового результата конструкции.
 // Чистая функция без React: переводит плановые границы, маркеры изменения
@@ -22,6 +23,10 @@ type RiskState = Exclude<RealRiskStatus, "finite">;
 /** Точка истории результата из контракта API: позиция на шкале считается по накопленному итогу. */
 // Карточка публикует маркеры полями eventTime/kind/changeUsdt, список и
 // превью — последний маркер полями totalUsdt/eventAt; общая часть — итог.
+// Рядом с каждым маркером идёт расшифровка его изменения перечнем операций
+// (включая события, подавленные порогом) — подсказка бейджа сверяется
+// сложением; фронтенд перечни не реконструирует.
+// Traceability: change:fix-finresult-marker-contributions/design#d4
 export interface FinResultHistoryMarker {
 	/** Накопленный зафиксированный результат на момент события, USDT. */
 	readonly totalUsdt: number;
@@ -35,6 +40,8 @@ export interface FinResultHistoryMarker {
 	readonly kind?: string;
 	/** Изменение от предыдущего выведенного маркера, USDT. */
 	readonly changeUsdt?: number;
+	/** Операции расшифровки изменения: вид, дата, вклад. */
+	readonly operations?: readonly ResultMarkerOperation[];
 }
 
 /** Вход калькулятора: изначальные показатели конструкции и текущий результат. */
