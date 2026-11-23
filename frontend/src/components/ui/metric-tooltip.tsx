@@ -37,9 +37,24 @@ export function MetricTooltipContent({
 					<span className="text-text-secondary">{section.text}</span>
 				</span>
 			))}
-			{tooltip.rows?.map((row) => (
-				<span className="text-text-secondary" key={row}>{row}</span>
-			))}
+			{tooltip.rows?.map((row, index) => {
+				// Ряд может быть строкой либо вложенной детализацией: indent-ряд
+				// (строки сделок, период связки под строкой операции) рендерится
+				// с отступом, меньшим кеглем и приглушённым тоном, остальные —
+				// прежние.
+				// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
+				const item = typeof row === "string" ? { text: row } : row;
+
+				return item.indent ? (
+					<span className="pl-3 text-[10.5px] text-text-muted" key={`${index}:${item.text}`}>
+						{item.text}
+					</span>
+				) : (
+					<span className="text-text-secondary" key={`${index}:${item.text}`}>
+						{item.text}
+					</span>
+				);
+			})}
 			{tooltip.note ? <span className="text-text-muted">{tooltip.note}</span> : null}
 		</span>
 	);

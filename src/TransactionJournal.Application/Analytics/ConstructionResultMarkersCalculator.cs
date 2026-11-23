@@ -103,11 +103,19 @@ public sealed class ConstructionResultMarkersCalculator
 			// Traceability: openspec:analytics/performance#requirement-result-marker-value
 			// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
 			cumulativeTotal += operation.AmountUsdt;
+
+			// Детализация операции пронесается в перечень расшифровки как есть:
+			// сделки окна, записи фьючерсного цикла и периоды связок доходят
+			// до контрактов без пересборки.
+			// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 			pendingOperations.Add(new ResultMarkerOperation
 			{
 				Kind = operation.Kind,
 				EventTime = operation.Time,
 				AmountUsdt = operation.AmountUsdt,
+				Trades = operation.Trades,
+				PeriodSince = operation.PeriodSince,
+				PeriodUntil = operation.PeriodUntil,
 			});
 
 			// Первое событие и последнее выводятся безусловно; промежуточное —
@@ -147,8 +155,19 @@ public sealed class ConstructionResultMarkersCalculator
 
 	#region Хронология операций
 
-	/// <summary>Операция истории конструкции: момент, ключ стабильного порядка, вид и знаковый вклад.</summary>
-	private sealed record MarkerOperation(DateTimeOffset Time, string SortKey, ResultMarkerKind Kind, decimal AmountUsdt);
+	/// <summary>
+	/// Операция истории конструкции: момент, ключ стабильного порядка, вид,
+	/// знаковый вклад и детализация — сделки окна с их вкладами, записи
+	/// фьючерсного цикла без индивидуальных сумм либо период действия связки.
+	/// </summary>
+	private sealed record MarkerOperation(
+		DateTimeOffset Time,
+		string SortKey,
+		ResultMarkerKind Kind,
+		decimal AmountUsdt,
+		IReadOnlyList<ResultMarkerTradeDetail> Trades,
+		DateTimeOffset? PeriodSince = null,
+		DateTimeOffset? PeriodUntil = null);
 
 	/// <summary>
 	/// Строит хронологию операций конструкции с вкладами: окна опционных
@@ -195,32 +214,49 @@ public sealed class ConstructionResultMarkersCalculator
 	/// <summary>
 	/// Добавляет операции окон опционных исполнений: вклад окна — сумма
 	/// знаковых денежных потоков его сделок (покупка — расход, продажа —
-	/// приход, комиссия — расход). Вид окна выводится из состава сделок
-	/// по живому остатку: без закрывающих — Открытие, с закрывающими без
-	/// открывающих — Закрытие, с закрывающими и открывающими — Ролл.
-	/// Время операции — момент последнего исполнения окна, как в правилах
-	/// сборки v5: ролл, усреднение и открытие целиком живут в одном окне.
+	/// приход, комиссия — расход). Каждая операция окна детализируется всеми
+	/// его сделками с индивидуальными суммами вкладов, складывающимися во
+	/// вклад окна. Вид окна выводится из состава сделок по живому остатку:
+	/// без закрывающих — Открытие, с закрывающими без открывающих — Закрытие,
+	/// с закрывающими и открывающими — Ролл. Время операции — момент
+	/// последнего исполнения окна, как в правилах сборки v5: ролл, усреднение
+	/// и открытие целиком живут в одном окне.
 	/// </summary>
 	// Классификация окон переиспользует правило IsClosingTrade сборщика
 	// конструкций: сделка против ненулевого живого остатка аккаунта —
 	// закрывающая; правило объявлено один раз и не дублируется.
 	// Traceability: openspec:analytics/performance#scenario-first-window-gives-first-marker
 	// Traceability: openspec:analytics/performance#scenario-roll-window-single-marker
+	// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
 	// Traceability: change:fix-finresult-marker-contributions/design#d3
 	private static void AddOptionWindowOperations(ResultMarkersInput input, List<MarkerOperation> operations)
 	{
-		var cashFlowByTradeKey = CashFlowByTradeKey(input.Trades);
+		var tradesByKey = TradesByKey(input.Trades);
 		var closingByTradeKey = ClosingTradesByLiveResidual(input);
 		foreach (var window in ResultMarkerJournalMaterial.BuildOptionWindows(input.Trades, input.ClosingEntries))
 		{
 			decimal amount = 0m;
 			var hasClosing = false;
 			var hasOpening = false;
+			var trades = new List<ResultMarkerTradeDetail>(window.Executions.Count);
 			foreach (var execution in window.Executions)
 			{
-				if (cashFlowByTradeKey.TryGetValue(execution.ExecId, out var cashFlow))
+				var trade = tradesByKey.GetValueOrDefault(execution.ExecId);
+				if (trade is not null)
 				{
+					var cashFlow = TradeCashFlow(trade);
 					amount += cashFlow;
+
+					// Сумма вклада сделки — тот же знаковый денежный поток, что
+					// складывается во вклад окна: сумма расшифровки сходится со
+					// вкладом операции по построению.
+					// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+					trades.Add(new ResultMarkerTradeDetail(
+						trade.Symbol,
+						SideOf(trade.Quantity),
+						Math.Abs(trade.Quantity),
+						trade.Price,
+						cashFlow));
 				}
 
 				if (closingByTradeKey.GetValueOrDefault(execution.ExecId))
@@ -245,17 +281,18 @@ public sealed class ConstructionResultMarkersCalculator
 				time,
 				$"{TradeRank:00}|window:{last.ExecId}",
 				KindOfWindow(hasClosing, hasOpening),
-				amount));
+				amount,
+				trades));
 		}
 	}
 
-	/// <summary>Знаковые денежные потоки сделок по ключу сделки в потоке позиции.</summary>
-	private static Dictionary<string, decimal> CashFlowByTradeKey(IReadOnlyList<MaterializedTrade> trades)
+	/// <summary>Сделки конструкции по ключу сделки в потоке позиции — материал окон и их детализации.</summary>
+	private static Dictionary<string, MaterializedTrade> TradesByKey(IReadOnlyList<MaterializedTrade> trades)
 	{
-		var byKey = new Dictionary<string, decimal>(StringComparer.Ordinal);
+		var byKey = new Dictionary<string, MaterializedTrade>(StringComparer.Ordinal);
 		foreach (var trade in trades)
 		{
-			byKey[ResultMarkerJournalMaterial.TradeKey(trade)] = TradeCashFlow(trade);
+			byKey[ResultMarkerJournalMaterial.TradeKey(trade)] = trade;
 		}
 
 		return byKey;
@@ -348,15 +385,20 @@ public sealed class ConstructionResultMarkersCalculator
 				continue;
 			}
 
-			AddFuturesCycleOperations(operations, PositionFifoEngine.OrderByTimeline(entries));
+			AddFuturesCycleOperations(operations, symbol, PositionFifoEngine.OrderByTimeline(entries));
 		}
 	}
 
 	/// <summary>Прогоняет хронологию записей одного инструмента через FIFO и добавляет операции обнулений остатка.</summary>
-	private void AddFuturesCycleOperations(List<MarkerOperation> operations, IReadOnlyList<PositionFifoEntry> timeline)
+	// Записи цикла перечисляются в детализации от предыдущего нуля
+	// исключительно до текущего нуля включительно, без индивидуальных сумм:
+	// вклад принадлежит round-trip целиком.
+	// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+	private void AddFuturesCycleOperations(List<MarkerOperation> operations, string symbol, IReadOnlyList<PositionFifoEntry> timeline)
 	{
 		decimal residual = 0m;
 		decimal realizedAtLastZero = 0m;
+		var cycleStart = 0;
 		for (var count = 1; count <= timeline.Count; count++)
 		{
 			// Полный прогон движка по префиксу хронологии даёт остаток и
@@ -368,12 +410,26 @@ public sealed class ConstructionResultMarkersCalculator
 			if (cycleClosed)
 			{
 				var entry = timeline[count - 1];
+				var trades = new List<ResultMarkerTradeDetail>(count - cycleStart);
+				for (var index = cycleStart; index < count; index++)
+				{
+					var cycleEntry = timeline[index];
+					trades.Add(new ResultMarkerTradeDetail(
+						symbol,
+						SideOf(cycleEntry.Quantity),
+						Math.Abs(cycleEntry.Quantity),
+						cycleEntry.Price,
+						null));
+				}
+
 				operations.Add(new MarkerOperation(
 					entry.At,
 					$"{RankOf(entry.Kind):00}|futures:{entry.SourceKey}",
 					ResultMarkerKind.FuturesClose,
-					fifo.RealizedPnL - realizedAtLastZero));
+					fifo.RealizedPnL - realizedAtLastZero,
+					trades));
 				realizedAtLastZero = fifo.RealizedPnL;
+				cycleStart = count;
 			}
 
 			residual = fifo.Residual;
@@ -383,7 +439,9 @@ public sealed class ConstructionResultMarkersCalculator
 	/// <summary>
 	/// Добавляет операции границ интервалов связок: активация даёт вклад
 	/// «зафиксировано синтетикой», снятие спором — тот же лок с обратным
-	/// знаком. Реальное закрытие позиции связку автоматически не снимает —
+	/// знаком. Обе операции несут период действия связки: снятие — тот же
+	/// интервал, который перестал действовать, с моментом снятия в конце.
+	/// Реальное закрытие позиции связку автоматически не снимает —
 	/// вычислитель потребляет готовые интервалы read-модели.
 	/// </summary>
 	// Traceability: openspec:analytics/performance#scenario-synthetic-link-change-marker
@@ -392,18 +450,27 @@ public sealed class ConstructionResultMarkersCalculator
 	{
 		foreach (var link in links)
 		{
+			// Активация действует от Since до снятия; Until null — связка
+			// действует без конца, детализация сделками у связок не ведётся.
+			// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 			operations.Add(new MarkerOperation(
 				link.Since,
 				$"{EndOfMomentRank:00}|link:{link.LinkId}",
 				ResultMarkerKind.SyntheticClose,
-				link.LockedValueUsdt));
+				link.LockedValueUsdt,
+				[],
+				link.Since,
+				link.Until));
 			if (link.Until is { } until)
 			{
 				operations.Add(new MarkerOperation(
 					until,
 					$"{EndOfMomentRank:00}|dispute:{link.LinkId}",
 					ResultMarkerKind.SyntheticRelease,
-					-link.LockedValueUsdt));
+					-link.LockedValueUsdt,
+					[],
+					link.Since,
+					until));
 			}
 		}
 	}
@@ -418,7 +485,8 @@ public sealed class ConstructionResultMarkersCalculator
 				adjustment.Date,
 				$"{EndOfMomentRank:00}|adjustment:{adjustment.AdjustmentId.ToString(CultureInfo.InvariantCulture)}",
 				ResultMarkerKind.PnLAdjustment,
-				adjustment.AmountUsdt));
+				adjustment.AmountUsdt,
+				[]));
 		}
 	}
 
@@ -426,12 +494,14 @@ public sealed class ConstructionResultMarkersCalculator
 	/// Добавляет операции закрывающих записей: вклад — количество ×
 	/// эффективная цена в знаковом соглашении денежного потока записи
 	/// (поставка длинного остатка — приход, откуп короткого — расход).
-	/// Запись без эффективной цены и запись с нулевым по факту вкладом —
-	/// OTM-экспирация по нулевой цене — события не создают. Вид операции
-	/// выводится из вида записи: delivery — Поставка, ручная пометка —
-	/// Закрытие. Закрывающие записи фьючерсных символов событий не создают:
-	/// их экономика — цена × количество от нуля, а не финансовый результат, —
-	/// и входит в историю только закрытием фьючерсного цикла по FIFO.
+	/// Операция детализируется одной строкой «инструмент · количество ×
+	/// эффективная цена» без стороны и индивидуальной суммы. Запись без
+	/// эффективной цены и запись с нулевым по факту вкладом — OTM-экспирация
+	/// по нулевой цене — события не создают. Вид операции выводится из вида
+	/// записи: delivery — Поставка, ручная пометка — Закрытие. Закрывающие
+	/// записи фьючерсных символов событий не создают: их экономика — цена ×
+	/// количество от нуля, а не финансовый результат, — и входит в историю
+	/// только закрытием фьючерсного цикла по FIFO.
 	/// </summary>
 	// Эффективная цена delivery — внутренняя стоимость, ручной пометки — цена
 	// пользователя или последняя известная котировка: при появлении цены
@@ -467,9 +537,17 @@ public sealed class ConstructionResultMarkersCalculator
 				closing.ClosedAt,
 				$"{RankOfClosingKind(closing.Kind):00}|closing:{closing.SourceKey}",
 				KindOf(closing.Kind),
-				amount));
+				amount,
+
+				// Сторону закрывающей записи не выводим: расшифровка показывает
+				// «инструмент · количество × эффективная цена» без суммы.
+				// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+				[new ResultMarkerTradeDetail(closing.Symbol, null, Math.Abs(closing.Quantity), price, null)]));
 		}
 	}
+
+	/// <summary>Сторона сделки по знаку количества: покупка — buy, продажа — sell.</summary>
+	private static string SideOf(decimal quantity) => quantity >= 0m ? "buy" : "sell";
 
 	/// <summary>Вид окна по составу его сделок: закрывающие и открывающие — Ролл, только закрывающие — Закрытие, остальные — Открытие.</summary>
 	private static ResultMarkerKind KindOfWindow(bool hasClosing, bool hasOpening) => hasClosing

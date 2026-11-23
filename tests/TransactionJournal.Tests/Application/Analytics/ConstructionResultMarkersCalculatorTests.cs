@@ -265,6 +265,20 @@ public class ConstructionResultMarkersCalculatorTests
 		Assert.That(delivery.Kind, Is.EqualTo(ResultMarkerKind.Delivery));
 		Assert.That(delivery.ChangeUsdt, Is.EqualTo(20m));
 		Assert.That(delivery.TotalUsdt, Is.EqualTo(-76m));
+
+		// Поставка детализируется одной строкой «инструмент · количество ×
+		// эффективная цена»: без стороны и без индивидуальной суммы —
+		// вклад принадлежит записи целиком.
+		// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+		var deliveryOperation = delivery.Operations.Single();
+		Assert.That(deliveryOperation.Trades, Has.Count.EqualTo(1));
+		Assert.That(deliveryOperation.Trades[0].Symbol, Is.EqualTo(CallSymbol));
+		Assert.That(deliveryOperation.Trades[0].Side, Is.Null);
+		Assert.That(deliveryOperation.Trades[0].Quantity, Is.EqualTo(1m));
+		Assert.That(deliveryOperation.Trades[0].Price, Is.EqualTo(20m));
+		Assert.That(deliveryOperation.Trades[0].ContributionUsdt, Is.Null);
+		Assert.That(deliveryOperation.PeriodSince, Is.Null);
+		Assert.That(deliveryOperation.PeriodUntil, Is.Null);
 		AssertOperationsInvariants(history);
 	}
 
@@ -574,10 +588,17 @@ public class ConstructionResultMarkersCalculatorTests
 	public void TryIfMarkerOperationsSumToChange()
 	{
 		// Arrange: порог 20 (риск 400); окно открытия −100, корректировка +5
-		// подавлена, связка +30 выведена последним маркером.
+		// подавлена, фьючерсный цикл +1 подавлен, связка +30 выведена последним
+		// маркером.
 		var input = Input(
-			Trades(OptionTrade("exec-call", CallSymbol, BaseAt, 1m, 100m, 0m)),
-			Entries(TradeEntry(CallSymbol, "exec-call", BaseAt, 1m, 100m, 0m)),
+			Trades(
+				OptionTrade("exec-call", CallSymbol, BaseAt, 1m, 100m, 0m),
+				LinearTrade("exec-perp-buy", PerpSymbol, BaseAt.AddDays(1).AddMinutes(30), 0.5m, 3500m, 0m),
+				LinearTrade("exec-perp-sell", PerpSymbol, BaseAt.AddDays(1).AddMinutes(60), -0.5m, 3502m, 0m)),
+			Entries(
+				TradeEntry(CallSymbol, "exec-call", BaseAt, 1m, 100m, 0m),
+				TradeEntry(PerpSymbol, "exec-perp-buy", BaseAt.AddDays(1).AddMinutes(30), 0.5m, 3500m, 0m),
+				TradeEntry(PerpSymbol, "exec-perp-sell", BaseAt.AddDays(1).AddMinutes(60), -0.5m, 3502m, 0m)),
 			links:
 			[
 				new ResultMarkerLinkInterval { LinkId = "exec-put|exec-call", Since = BaseAt.AddDays(2), Until = null, LockedValueUsdt = 30m },
@@ -591,15 +612,131 @@ public class ConstructionResultMarkersCalculatorTests
 		// Act: вычисляем историю маркеров.
 		var history = _calculator.Calculate(input);
 
-		// Assert: два выведенных маркера; перечень второго содержит обе
-		// операции — подавленную корректировку +5 и связку +30.
+		// Assert: два выведенных маркера; перечень второго содержит три
+		// операции — подавленные корректировку +5 и фьючерсный цикл +1
+		// вместе со связкой +30.
 		Assert.That(history.Markers, Has.Count.EqualTo(2));
 		var last = history.LastMarker!;
-		Assert.That(last.Operations, Has.Count.EqualTo(2));
+		Assert.That(last.Operations, Has.Count.EqualTo(3));
 		Assert.That(last.Operations[0].Kind, Is.EqualTo(ResultMarkerKind.PnLAdjustment));
 		Assert.That(last.Operations[0].AmountUsdt, Is.EqualTo(5m));
-		Assert.That(last.Operations[1].Kind, Is.EqualTo(ResultMarkerKind.SyntheticClose));
-		Assert.That(last.Operations[1].AmountUsdt, Is.EqualTo(30m));
+		Assert.That(last.Operations[1].Kind, Is.EqualTo(ResultMarkerKind.FuturesClose));
+		Assert.That(last.Operations[1].AmountUsdt, Is.EqualTo(1m));
+		Assert.That(last.Operations[2].Kind, Is.EqualTo(ResultMarkerKind.SyntheticClose));
+		Assert.That(last.Operations[2].AmountUsdt, Is.EqualTo(30m));
+
+		// Сделки окна несут индивидуальные суммы, складывающиеся во вклад
+		// операции; фьючерсный цикл перечисляет записи цикла без сумм; связка
+		// несёт период действия; корректировка детализации не несёт.
+		// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+		// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+		var windowOperation = history.Markers[0].Operations.Single();
+		Assert.That(windowOperation.Trades, Has.Count.EqualTo(1));
+		Assert.That(windowOperation.Trades[0].Symbol, Is.EqualTo(CallSymbol));
+		Assert.That(windowOperation.Trades[0].Side, Is.EqualTo("buy"));
+		Assert.That(windowOperation.Trades[0].Quantity, Is.EqualTo(1m));
+		Assert.That(windowOperation.Trades[0].Price, Is.EqualTo(100m));
+		Assert.That(windowOperation.Trades[0].ContributionUsdt, Is.EqualTo(-100m));
+		Assert.That(windowOperation.Trades.Sum(trade => trade.ContributionUsdt), Is.EqualTo(windowOperation.AmountUsdt));
+		Assert.That(windowOperation.PeriodSince, Is.Null);
+		Assert.That(windowOperation.PeriodUntil, Is.Null);
+		var adjustmentOperation = last.Operations[0];
+		Assert.That(adjustmentOperation.Trades, Is.Empty);
+		Assert.That(adjustmentOperation.PeriodSince, Is.Null);
+		var futuresOperation = last.Operations[1];
+		Assert.That(futuresOperation.Trades, Has.Count.EqualTo(2));
+		Assert.That(futuresOperation.Trades[0].Symbol, Is.EqualTo(PerpSymbol));
+		Assert.That(futuresOperation.Trades[0].Side, Is.EqualTo("buy"));
+		Assert.That(futuresOperation.Trades[0].Quantity, Is.EqualTo(0.5m));
+		Assert.That(futuresOperation.Trades[0].Price, Is.EqualTo(3500m));
+		Assert.That(futuresOperation.Trades[0].ContributionUsdt, Is.Null);
+		Assert.That(futuresOperation.Trades[1].Symbol, Is.EqualTo(PerpSymbol));
+		Assert.That(futuresOperation.Trades[1].Side, Is.EqualTo("sell"));
+		Assert.That(futuresOperation.Trades[1].Quantity, Is.EqualTo(0.5m));
+		Assert.That(futuresOperation.Trades[1].Price, Is.EqualTo(3502m));
+		Assert.That(futuresOperation.Trades[1].ContributionUsdt, Is.Null);
+		var linkOperation = last.Operations[2];
+		Assert.That(linkOperation.PeriodSince, Is.EqualTo(BaseAt.AddDays(2)));
+		Assert.That(linkOperation.PeriodUntil, Is.Null);
+		Assert.That(linkOperation.Trades, Is.Empty);
+		AssertOperationsInvariants(history);
+	}
+
+	[TestMethod]
+	[Description("Многосделочное окно детализируется сделками с суммами, ролл — ликвидацией и новым открытием в одном перечне")]
+	// Окно стреддла с частичной продажей несёт три сделки: суммы денежных
+	// потоков складываются во вклад окна, стороны и модули количества
+	// корректны; ролл добавляет ликвидацию остатка и новое открытие в один
+	// перечень сделок того же окна.
+	// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+	// Traceability: openspec:analytics/performance#scenario-roll-window-single-marker
+	public void TryIfWindowTradesDetailSumToWindowContribution()
+	{
+		// Arrange: стреддл куплен двумя сделками (колл 60, пут 40), затем
+		// частичная продажа колла 0.5 по 50 в том же окне; через месяц ролл —
+		// продажа остатка по 45 и покупка новой ноги по 110 с комиссиями по 1.
+		var rollAt = BaseAt.AddDays(30);
+		var input = Input(
+			Trades(
+				OptionTrade("exec-call-open", CallSymbol, BaseAt, 1m, 60m, 0m),
+				OptionTrade("exec-put-open", PutSymbol, BaseAt.AddMinutes(1), 1m, 40m, 0m),
+				OptionTrade("exec-call-part", CallSymbol, BaseAt.AddMinutes(2), -0.5m, 50m, 0m),
+				OptionTrade("exec-call-roll-close", CallSymbol, rollAt, -0.5m, 45m, 1m),
+				OptionTrade("exec-call-roll-open", CallSymbol, rollAt.AddMinutes(5), 1m, 110m, 1m)),
+			Entries(
+				TradeEntry(CallSymbol, "exec-call-open", BaseAt, 1m, 60m, 0m),
+				TradeEntry(PutSymbol, "exec-put-open", BaseAt.AddMinutes(1), 1m, 40m, 0m),
+				TradeEntry(CallSymbol, "exec-call-part", BaseAt.AddMinutes(2), -0.5m, 50m, 0m),
+				TradeEntry(CallSymbol, "exec-call-roll-close", rollAt, -0.5m, 45m, 1m),
+				TradeEntry(CallSymbol, "exec-call-roll-open", rollAt.AddMinutes(5), 1m, 110m, 1m)),
+			plannedRiskUsdt: null);
+
+		// Act: вычисляем историю маркеров.
+		var history = _calculator.Calculate(input);
+
+		// Assert: два окна-ролла; первое несёт три сделки с суммами −60, −40
+		// и +25, складывающимися во вклад −75; второе — ликвидацию остатка
+		// +21.5 и новое открытие −111 во вкладе −89.5.
+		Assert.That(history.Markers, Has.Count.EqualTo(2));
+		var first = history.Markers[0];
+		Assert.That(first.Kind, Is.EqualTo(ResultMarkerKind.Roll));
+		Assert.That(first.ChangeUsdt, Is.EqualTo(-75m));
+		Assert.That(first.Operations, Has.Count.EqualTo(1));
+		var firstTrades = first.Operations[0].Trades;
+		Assert.That(firstTrades, Has.Count.EqualTo(3));
+		Assert.That(firstTrades[0].Symbol, Is.EqualTo(CallSymbol));
+		Assert.That(firstTrades[0].Side, Is.EqualTo("buy"));
+		Assert.That(firstTrades[0].Quantity, Is.EqualTo(1m));
+		Assert.That(firstTrades[0].Price, Is.EqualTo(60m));
+		Assert.That(firstTrades[0].ContributionUsdt, Is.EqualTo(-60m));
+		Assert.That(firstTrades[1].Symbol, Is.EqualTo(PutSymbol));
+		Assert.That(firstTrades[1].Side, Is.EqualTo("buy"));
+		Assert.That(firstTrades[1].Quantity, Is.EqualTo(1m));
+		Assert.That(firstTrades[1].Price, Is.EqualTo(40m));
+		Assert.That(firstTrades[1].ContributionUsdt, Is.EqualTo(-40m));
+		Assert.That(firstTrades[2].Symbol, Is.EqualTo(CallSymbol));
+		Assert.That(firstTrades[2].Side, Is.EqualTo("sell"));
+		Assert.That(firstTrades[2].Quantity, Is.EqualTo(0.5m));
+		Assert.That(firstTrades[2].Price, Is.EqualTo(50m));
+		Assert.That(firstTrades[2].ContributionUsdt, Is.EqualTo(25m));
+		Assert.That(firstTrades.Sum(trade => trade.ContributionUsdt), Is.EqualTo(first.Operations[0].AmountUsdt));
+		var roll = history.Markers[1];
+		Assert.That(roll.Kind, Is.EqualTo(ResultMarkerKind.Roll));
+		Assert.That(roll.ChangeUsdt, Is.EqualTo(-89.5m));
+		Assert.That(roll.Operations, Has.Count.EqualTo(1));
+		var rollTrades = roll.Operations[0].Trades;
+		Assert.That(rollTrades, Has.Count.EqualTo(2));
+		Assert.That(rollTrades[0].Symbol, Is.EqualTo(CallSymbol));
+		Assert.That(rollTrades[0].Side, Is.EqualTo("sell"));
+		Assert.That(rollTrades[0].Quantity, Is.EqualTo(0.5m));
+		Assert.That(rollTrades[0].Price, Is.EqualTo(45m));
+		Assert.That(rollTrades[0].ContributionUsdt, Is.EqualTo(21.5m));
+		Assert.That(rollTrades[1].Symbol, Is.EqualTo(CallSymbol));
+		Assert.That(rollTrades[1].Side, Is.EqualTo("buy"));
+		Assert.That(rollTrades[1].Quantity, Is.EqualTo(1m));
+		Assert.That(rollTrades[1].Price, Is.EqualTo(110m));
+		Assert.That(rollTrades[1].ContributionUsdt, Is.EqualTo(-111m));
+		Assert.That(rollTrades.Sum(trade => trade.ContributionUsdt), Is.EqualTo(roll.Operations[0].AmountUsdt));
 		AssertOperationsInvariants(history);
 	}
 
@@ -871,6 +1008,24 @@ public class ConstructionResultMarkersCalculatorTests
 		Assert.That(history.Markers, Has.Count.EqualTo(1));
 		Assert.That(history.Markers[0].Kind, Is.EqualTo(ResultMarkerKind.FuturesClose));
 		Assert.That(history.Markers[0].TotalUsdt, Is.EqualTo(100m));
+
+		// Детализация цикла при развороте: обе сделки закрывшего цикла
+		// перечислены без индивидуальных сумм — вклад принадлежит
+		// round-trip целиком; разворачивающая сделка входит в цикл тем
+		// объёмом, как исполнена (продажа 3), её остаток −2 открывает
+		// новый цикл и в этот перечень не входит.
+		// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+		var trades = history.Markers[0].Operations[0].Trades;
+		Assert.That(trades, Has.Count.EqualTo(2));
+		Assert.That(trades[0].Symbol, Is.EqualTo(PerpSymbol));
+		Assert.That(trades[0].Side, Is.EqualTo("buy"));
+		Assert.That(trades[0].Quantity, Is.EqualTo(1m));
+		Assert.That(trades[0].Price, Is.EqualTo(3500m));
+		Assert.That(trades[0].ContributionUsdt, Is.Null);
+		Assert.That(trades[1].Side, Is.EqualTo("sell"));
+		Assert.That(trades[1].Quantity, Is.EqualTo(3m));
+		Assert.That(trades[1].Price, Is.EqualTo(3600m));
+		Assert.That(trades[1].ContributionUsdt, Is.Null);
 	}
 
 	[TestMethod]
@@ -933,6 +1088,22 @@ public class ConstructionResultMarkersCalculatorTests
 			var operationsSum = marker.Operations.Sum(operation => operation.AmountUsdt);
 			Assert.That(operationsSum, Is.EqualTo(marker.ChangeUsdt), $"Сумма перечня операций маркера {marker.Number} должна равняться его изменению.");
 			Assert.That(previousTotal + operationsSum, Is.EqualTo(marker.TotalUsdt), $"Итог предыдущего маркера плюс сумма перечня должен равняться итогу маркера {marker.Number}.");
+
+			// Суммы сделок окна складываются во вклад операции: инвариант
+			// проверяется, когда все сделки детализации несут индивидуальные
+			// суммы — фьючерсный цикл и закрывающая запись суммы не несут.
+			// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+			foreach (var operation in marker.Operations)
+			{
+				if (operation.Trades.Count > 0 && operation.Trades.All(trade => trade.ContributionUsdt is not null))
+				{
+					Assert.That(
+						operation.Trades.Sum(trade => trade.ContributionUsdt!.Value),
+						Is.EqualTo(operation.AmountUsdt),
+						$"Сумма сделок детализации операции маркера {marker.Number} должна равняться вкладу операции.");
+				}
+			}
+
 			previousTotal = marker.TotalUsdt;
 		}
 	}

@@ -9,9 +9,10 @@ import {
 // шкалы, без React и DOM. Кейсы покрывают семантику маркеров изменения
 // результата: шкала охватывает плановые границы, маркер текущего результата
 // и все метки истории без клипа; маркер стоит на текущем результате
-// (реализованный + нереализованный + корректировки); бейджи истории
-// разносятся вертикально при коллизии.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-risk-profit-hint
+// (реализованный + нереализованный + корректировки); бейджи истории стоят
+// на накопленных итогах, подписываются изменением с предыдущей выведенной
+// метки и разносятся вертикально при коллизии.
+// Traceability: change:fix-finresult-marker-contributions/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
 
 // Полный индикатор макета: ширина полосы 936 px.
 const FULL_WIDTH = 936;
@@ -221,14 +222,14 @@ describe("шкала охватывает маркеры истории без �
 	it("маркер −520 за плановым риском 400 расширяет шкалу влево", () => {
 		// Act: плановый риск 400, первая метка истории −520.
 		const geometry = computeFinResultGeometry(
-			caseInput({ plannedRisk: 400, resultMarkers: [{ totalUsdt: -520 }] }),
+				caseInput({ plannedRisk: 400, resultMarkers: [{ totalUsdt: -520, changeUsdt: -520 }] }),
 		);
 
 		// Assert: шкала расширяется влево до −520, точка истории стоит на
 		// левом краю шкалы — истинная позиция, клипа и прижатия нет.
 		expect(geometry.scaleMin).toBe(-520);
 		expect(geometry.scaleMax).toBe(900);
-		expect(geometry.markerPoints).toEqual([{ x: 0, total: -520, tone: "negative" }]);
+			expect(geometry.markerPoints).toEqual([{ x: 0, total: -520, change: -520, tone: "negative" }]);
 
 		// Assert: плановая зона риска остаётся от −400 до нуля в новых долях.
 		expect(geometry.riskZone).toEqual({ from: 0, to: 520 / 1420 });
@@ -271,25 +272,32 @@ describe("шкала охватывает маркеры истории без �
 	});
 });
 
-describe("точки истории: порядок, тон и отличие от маркера итога", () => {
-	// Бейджи идут в порядке номеров, суммы — накопленный зафиксированный
-	// результат на момент события; последний бейдж и маркер текущего
-	// результата — разные точки: история хранит зафиксированную часть,
-	// маркер учитывает и нереализованную.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-marker-last-vs-current
-	it("точки идут в хронологическом порядке с тоном по знаку итога", () => {
-		// Act: история −100 → +150 → +300 при текущем итоге +240.
+describe("точки истории: порядок, изменение и отличие от маркера итога", () => {
+	// Бейджи идут в порядке номеров, позиция — накопленный зафиксированный
+	// результат на момент события, подпись и тон — изменение с предыдущей
+	// выведенной метки; последний бейдж и маркер текущего результата —
+	// разные точки: история хранит зафиксированную часть, маркер учитывает
+	// и нереализованную.
+	// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
+	// Traceability: openspec:ui/screens#scenario-result-marker-last-vs-current
+	it("точки идут в хронологическом порядке с тоном по знаку изменения", () => {
+		// Act: история −100 → +150 → +300 при текущем итоге +240; изменения
+		// меток заданы контрактом карточки.
 		const geometry = computeFinResultGeometry(
 			caseInput({
 				realized: 240,
 				unrealized: null,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: 150 }, { totalUsdt: 300 }],
+				resultMarkers: [
+					{ totalUsdt: -100, changeUsdt: -100 },
+					{ totalUsdt: 150, changeUsdt: 250 },
+					{ totalUsdt: 300, changeUsdt: 150 },
+				],
 			}),
 		);
 
-		// Assert: порядок входа сохранён, тон по знаку суммы каждой точки.
+		// Assert: порядок входа сохранён, тон по знаку изменения каждой точки.
 		expect(geometry.markerPoints.map((point) => point.total)).toEqual([-100, 150, 300]);
+		expect(geometry.markerPoints.map((point) => point.change)).toEqual([-100, 250, 150]);
 		expect(geometry.markerPoints.map((point) => point.tone)).toEqual([
 			"negative",
 			"positive",
@@ -302,33 +310,94 @@ describe("точки истории: порядок, тон и отличие о
 		expect(geometry.markerPoints[2]?.x).toBeCloseTo(600 / 1200, 4);
 	});
 
-	it("последний бейдж −70 стоит левее маркера текущего результата −40", () => {
-		// Act: история до −70, нереализованная часть +30 подняла текущий
+	// Изменение последней метки отличается от маркера текущего результата:
+	// бейдж стоит на накопленном итоге −70, подписан изменением −30 и тон
+	// по знаку изменения, маркер итога — −40 под полосой.
+	// Traceability: openspec:ui/screens#scenario-result-marker-last-vs-current
+	it("последний бейдж −70 подписан изменением −30 и стоит левее маркера −40", () => {
+		// Act: история −40 → −70, нереализованная часть +30 подняла текущий
 		// результат до −40.
 		const geometry = computeFinResultGeometry(
 			caseInput({
 				realized: -70,
 				unrealized: 30,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: -70 }],
+				resultMarkers: [
+					{ totalUsdt: -40, changeUsdt: -40 },
+					{ totalUsdt: -70, changeUsdt: -30 },
+				],
 			}),
 		);
 
-		// Assert: последний бейдж подписан суммой −70, маркер итога — −40.
-		expect(geometry.markerPoints[1]).toEqual({ x: 230 / 1200, total: -70, tone: "negative" });
+		// Assert: последний бейдж подписан изменением −30 с тоном negative,
+		// маркер итога — −40.
+		expect(geometry.markerPoints[1]).toEqual({
+			x: 230 / 1200,
+			total: -70,
+			change: -30,
+			tone: "negative",
+		});
 		expect(geometry.markerAt).toBeCloseTo(260 / 1200, 4);
 		expect(geometry.labels.marker).toBe("−40");
 		expect(geometry.markerPoints[1]!.x).toBeLessThan(geometry.markerAt ?? 0);
 	});
 
-	// Нулевой итог истории — нейтральный тон бейджа без тонировки по знаку.
-	it("нулевая сумма истории даёт нейтральный тон", () => {
-		// Act: метка с нулевым накопленным итогом.
+	// Нулевое изменение метки — нейтральный тон бейджа без тонировки
+	// по знаку, даже при ненулевом накопленном итоге.
+	it("нулевое изменение метки даёт нейтральный тон", () => {
+		// Act: метка с нулевым изменением на ненулевом итоге.
 		const geometry = computeFinResultGeometry(
-			caseInput({ resultMarkers: [{ totalUsdt: 0 }] }),
+			caseInput({ resultMarkers: [{ totalUsdt: 120, changeUsdt: 0 }] }),
 		);
 
 		// Assert: тон zero — ни красный, ни акцентный.
 		expect(geometry.markerPoints[0]?.tone).toBe("zero");
+	});
+
+	// Контракт последнего маркера списка/превью changeUsdt не публикует:
+	// изменением считается сумма перечня операций, включая подавленные
+	// порогом события.
+	// Traceability: openspec:ui/screens#scenario-result-marker-below-threshold-hidden
+	it("изменение без changeUsdt считается суммой перечня операций", () => {
+		// Act: метка списка/превью — только totalUsdt и операции; вклады
+		// +30 и −5 дают изменение +25.
+		const geometry = computeFinResultGeometry(
+			caseInput({
+				resultMarkers: [
+					{
+						totalUsdt: -75,
+						operations: [
+							{ kind: "closing", date: "2026-06-27T09:00:00", contributionUsdt: 30 },
+							{ kind: "futures-close", date: "2026-06-28T12:00:00", contributionUsdt: -5 },
+						],
+					},
+				],
+			}),
+		);
+
+		// Assert: изменение +25, тон positive, позиция — по итогу −75.
+		expect(geometry.markerPoints).toEqual([
+			{ x: 225 / 1200, total: -75, change: 25, tone: "positive" },
+		]);
+	});
+
+	// Тон бейджа определяется знаком изменения, а не знаком накопленного
+	// итога: положительное изменение на отрицательном итоге — акцентный тон.
+	// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
+	it("тон берётся по знаку изменения, а не по знаку итога", () => {
+		// Act: итог метки −70 отрицательный, изменение +30 положительное
+		// (синтетическое закрытие подняло результат).
+		const geometry = computeFinResultGeometry(
+			caseInput({
+				resultMarkers: [
+					{ totalUsdt: -100, changeUsdt: -100 },
+					{ totalUsdt: -70, changeUsdt: 30 },
+				],
+			}),
+		);
+
+		// Assert: последний бейдж положительный тон на отрицательной позиции.
+		expect(geometry.markerPoints[1]?.tone).toBe("positive");
+		expect(geometry.markerPoints[1]?.total).toBe(-70);
 	});
 });
 
@@ -445,7 +514,7 @@ describe("состояния риска", () => {
 				realized: 5942.16,
 				unrealized: null,
 				realRiskStatus: "unbounded",
-				resultMarkers: [{ totalUsdt: 300 }],
+				resultMarkers: [{ totalUsdt: 300, changeUsdt: 300 }],
 			}),
 		);
 
@@ -456,7 +525,9 @@ describe("состояния риска", () => {
 		expect(geometry.labels.risk).toBe("плановый риск −400");
 
 		// Assert: метка истории и итог на месте; шкала охватывает итог.
-		expect(geometry.markerPoints).toEqual([{ x: 700 / 6342.16, total: 300, tone: "positive" }]);
+		expect(geometry.markerPoints).toEqual([
+			{ x: 700 / 6342.16, total: 300, change: 300, tone: "positive" },
+		]);
 		expect(geometry.markerAt).toBe(1);
 		expect(geometry.labels.marker).toBe("+5\u00A0942.16");
 		expect(geometry.tone).toBe("positive");
@@ -522,7 +593,10 @@ describe("состояния риска", () => {
 				plannedProfit: null,
 				realized: -150,
 				unrealized: null,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: 50 }],
+				resultMarkers: [
+					{ totalUsdt: -100, changeUsdt: -100 },
+					{ totalUsdt: 50, changeUsdt: 150 },
+				],
 			}),
 		);
 
@@ -533,8 +607,8 @@ describe("состояния риска", () => {
 		expect(geometry.labels.risk).toBe("−300");
 		expect(geometry.labels.profit).toBeNull();
 		expect(geometry.markerPoints).toEqual([
-			{ x: 200 / 600, total: -100, tone: "negative" },
-			{ x: 350 / 600, total: 50, tone: "positive" },
+			{ x: 200 / 600, total: -100, change: -100, tone: "negative" },
+			{ x: 350 / 600, total: 50, change: 150, tone: "positive" },
 		]);
 	});
 });
@@ -551,7 +625,10 @@ describe("сбой котировок и закрытая конструкция
 				unrealized: null,
 				quotesDegraded: true,
 				hasOpenResidual: true,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: -250 }],
+				resultMarkers: [
+					{ totalUsdt: -100, changeUsdt: -100 },
+					{ totalUsdt: -250, changeUsdt: -150 },
+				],
 			}),
 		);
 
@@ -559,8 +636,8 @@ describe("сбой котировок и закрытая конструкция
 		// на доступной части −250.
 		expect(geometry.incomplete).toBe(true);
 		expect(geometry.markerPoints).toEqual([
-			{ x: 200 / 1200, total: -100, tone: "negative" },
-			{ x: 50 / 1200, total: -250, tone: "negative" },
+			{ x: 200 / 1200, total: -100, change: -100, tone: "negative" },
+			{ x: 50 / 1200, total: -250, change: -150, tone: "negative" },
 		]);
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.labels.marker).toBe("−250");
@@ -587,13 +664,21 @@ describe("сбой котировок и закрытая конструкция
 			caseInput({
 				realized: 30,
 				unrealized: null,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: 30 }],
+				resultMarkers: [
+					{ totalUsdt: -100, changeUsdt: -100 },
+					{ totalUsdt: 30, changeUsdt: 130 },
+				],
 			}),
 		);
 
 		// Assert: последняя точка истории совпадает с текущим зафиксированным
 		// результатом, позиции совпадают.
-		expect(geometry.markerPoints[1]).toEqual({ x: 330 / 1200, total: 30, tone: "positive" });
+		expect(geometry.markerPoints[1]).toEqual({
+			x: 330 / 1200,
+			total: 30,
+			change: 130,
+			tone: "positive",
+		});
 		expect(geometry.markerAt).toBeCloseTo(330 / 1200, 4);
 		expect(geometry.labels.marker).toBe("+30");
 	});

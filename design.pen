@@ -641,7 +641,7 @@
                       "id": "rgahC",
                       "name": "Заголовок",
                       "fill": "$textPrimary",
-                      "content": "Метка 5 · +125 USDT",
+                      "content": "Метка 5 · +180 USDT",
                       "fontFamily": "$font",
                       "fontSize": 12.5,
                       "fontWeight": "600"
@@ -653,7 +653,7 @@
                       "fill": "$textSecondary",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "изменение с метки 4: +65 USDT — операции расшифровки:",
+                      "content": "изменение с метки 4: +156 USDT — операции расшифровки:",
                       "fontFamily": "$font",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -662,94 +662,389 @@
                       "type": "frame",
                       "id": "SSXXd",
                       "name": "Перечень",
+                      "clip": true,
                       "width": "fill_container",
-                      "height": 74,
+                      "height": 200,
                       "layout": "vertical",
-                      "gap": 3,
+                      "gap": 4,
                       "children": [
                         {
-                          "type": "text",
-                          "id": "a22PXt",
-                          "name": "Оп:Открытие 12.05",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
+                          "type": "frame",
+                          "id": "W5CmC",
+                          "name": "Оп:Открытие 08.06",
                           "width": "fill_container",
-                          "content": "Открытие · 12.05 · −100",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
+                          "layout": "vertical",
+                          "gap": 1,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "A01h5m",
+                              "name": "Строка операции",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Открытие · 08.06 · −12",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ZMW4c",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "mWSVO",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "BTC-26SEP26-60000-C · buy · 1 × 11.60 · −11.70",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "wdljd",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "o6fwEs",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "BTC-26SEP26-50000-P · buy · 1 × 0.30 · −0.30",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
                         },
                         {
-                          "type": "text",
-                          "id": "Wv1Yx",
-                          "name": "Оп:Закрытие фьючерса 28.05",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
+                          "type": "frame",
+                          "id": "cuMo1",
+                          "name": "Оп:Ролл 12.06",
                           "width": "fill_container",
-                          "content": "Закрытие фьючерса · 28.05 · +40",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
+                          "layout": "vertical",
+                          "gap": 1,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "dO2ds",
+                              "name": "Строка операции",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Ролл · 12.06 · +35",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "OOD1z",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "KTcQz",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "BTC-26SEP26-60000-C · sell · 1 × 58.60 · +58.50",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Xi66l",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "JoeZq",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "BTC-30OCT26-70000-C · buy · 1 × 23.40 · −23.50",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
                         },
                         {
-                          "type": "text",
-                          "id": "HT6Xw",
-                          "name": "Оп:Снятие синтетики 02.06",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
+                          "type": "frame",
+                          "id": "dVWuZ",
+                          "name": "Оп:Закрытие фьючерса 16.06",
                           "width": "fill_container",
-                          "content": "Снятие синтетики · 02.06 · +30",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
+                          "layout": "vertical",
+                          "gap": 1,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Gaf2i",
+                              "name": "Строка операции",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Закрытие фьючерса · 16.06 · +40",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "syrbl",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "PeeX7",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "BTCUSDT · buy · 0.5 × 64 200",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "NhQEq",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "nzSC9",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "BTCUSDT · sell · 0.5 × 64 280",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
                         },
                         {
-                          "type": "text",
-                          "id": "ZzAYO",
-                          "name": "Оп:Закрытие фьючерса 11.06",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
+                          "type": "frame",
+                          "id": "P1ibi",
+                          "name": "Оп:Снятие синтетики 18.06",
                           "width": "fill_container",
-                          "content": "Закрытие фьючерса · 11.06 · +55",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
+                          "layout": "vertical",
+                          "gap": 1,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "POsbl",
+                              "name": "Строка операции",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Снятие синтетики · 18.06 · +30",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Q9Z0c",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "N4IbWK",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "период действия: 20.05–18.06",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
                         },
                         {
-                          "type": "text",
-                          "id": "zjkic",
-                          "name": "Оп:Корректировка PnL 14.06",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
+                          "type": "frame",
+                          "id": "L9Migh",
+                          "name": "Оп:Корректировка PnL 19.06",
                           "width": "fill_container",
-                          "content": "Корректировка PnL · 14.06 · +5",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
+                          "layout": "vertical",
+                          "gap": 1,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "HRDja",
+                              "name": "Строка операции",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Корректировка PnL · 19.06 · +5",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
                         },
                         {
-                          "type": "text",
-                          "id": "SYXOF",
-                          "name": "Оп:Ролл 21.06",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
+                          "type": "frame",
+                          "id": "cA93s",
+                          "name": "Оп:Закрытие фьючерса 21.06",
                           "width": "fill_container",
-                          "content": "Ролл · 21.06 · +35",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
+                          "layout": "vertical",
+                          "gap": 1,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "l5E4Lb",
+                              "name": "Строка операции",
+                              "fill": "$textSecondary",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Закрытие фьючерса · 21.06 · +58",
+                              "fontFamily": "$font",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "DVVXL",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "iBLcO",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "BTCUSDT · sell · 0.4 × 65 100",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "BKWlL",
+                              "name": "Сделка",
+                              "width": "fill_container",
+                              "padding": [
+                                0,
+                                0,
+                                0,
+                                12
+                              ],
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "rspnf",
+                                  "name": "Строка сделки",
+                                  "fill": "$textMuted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "BTCUSDT · buy · 0.4 × 64 955",
+                                  "fontFamily": "$font",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
                         },
                         {
                           "type": "rectangle",
                           "cornerRadius": 1.5,
-                          "id": "PS4gH",
+                          "id": "ONUlU",
                           "layoutPosition": "absolute",
-                          "x": 270,
-                          "y": 6,
+                          "x": 272,
+                          "y": 8,
                           "name": "ScrollThumb",
                           "fill": "$border",
                           "width": 3,
-                          "height": 30
+                          "height": 36
                         }
                       ]
                     },
@@ -760,7 +1055,7 @@
                       "fill": "$textSecondary",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Σ перечня = +65 = изменение метки; итог метки 4 (+60) + 65 = +125",
+                      "content": "Σ перечня = +156 = изменение метки; итог метки 4 (+24) + 156 = +180",
                       "fontFamily": "$font",
                       "fontSize": 11,
                       "fontWeight": "normal"
@@ -2423,7 +2718,7 @@
                           "fill": "$textSecondary",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "маркеры изменения результата — номерные бейджи с суммами над полосой: история накопленного зафиксированного результата, строящаяся из вкладов операций (открытия и закрытия опционных окон, роллы, синтетическое закрытие и его снятие, фьючерсы — только позиции, закрытые до нулевого остатка, закрывающие записи, корректировки PnL) с порогом проявления 5% планового риска; первый и последний бейджи безусловны, последний — текущий накопленный зафиксированный результат; расшифровка каждой метки — подсказка бейджа: перечень операций «вид · дата · сумма» с предыдущей выведенной метки, включая подавленные порогом, — сумма перечня равна изменению метки; зафиксированная синтетикой часть видна в строке «зафиксировано синтетикой» и сводной «С учётом зафиксированного синтетикой»",
+                          "content": "маркеры изменения результата — номерные бейджи с суммами изменения над полосой, стоящие на накопленных итогах: история накопленного зафиксированного результата, строящаяся из вкладов операций (открытия и закрытия опционных окон, роллы, синтетическое закрытие и его снятие, фьючерсы — только позиции, закрытые до нулевого остатка, закрывающие записи, корректировки PnL) с порогом проявления 5% планового риска; тон бейджа — по знаку изменения; первый и последний бейджи безусловны, последний — текущий накопленный зафиксированный результат; накопленный итог метки — в заголовке её расшифровки; расшифровка каждой метки — подсказка бейджа: перечень операций «вид · дата · сумма вклада» с предыдущей выведенной метки, включая подавленные порогом, со сделками каждой операции под её строкой — сумма перечня равна изменению метки; зафиксированная синтетикой часть видна в строке «зафиксировано синтетикой» и сводной «С учётом зафиксированного синтетикой»",
                           "fontFamily": "$font",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -17934,7 +18229,7 @@
               "fill": "$textSecondary",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Расшифровка метки — подсказка бейджа: перечень операций «вид · дата · сумма вклада» с предыдущей выведенной метки, включая подавленные порогом, без группировки; при переполнении перечень прокручивается:",
+              "content": "Расшифровка метки — подсказка бейджа: накопленный итог метки в заголовке, изменение и перечень операций «вид · дата · сумма вклада» с предыдущей выведенной метки, включая подавленные порогом, со строками сделок под строкой операции; при переполнении перечень прокручивается:",
               "fontFamily": "$font",
               "fontSize": 12,
               "fontWeight": "normal"
@@ -17944,7 +18239,7 @@
               "id": "fYNRr",
               "name": "FullWrap",
               "width": "fill_container",
-              "height": 260,
+              "height": 385,
               "layout": "none",
               "children": [
                 {
@@ -17991,7 +18286,7 @@
                   "id": "ZigXq",
                   "name": "CompactWrap",
                   "width": 470,
-                  "height": 200,
+                  "height": 320,
                   "layout": "none",
                   "children": [
                     {
@@ -19500,7 +19795,7 @@
                   "height": 18,
                   "fill": "$surface",
                   "cornerRadius": 9,
-                  "stroke": "$neg",
+                  "stroke": "$accentStrong",
                   "strokeWidth": 1,
                   "gap": 4,
                   "padding": [
@@ -19517,7 +19812,7 @@
                       "name": "Num",
                       "width": 12,
                       "height": 12,
-                      "fill": "$neg",
+                      "fill": "$accentStrong",
                       "cornerRadius": 6,
                       "justifyContent": "center",
                       "alignItems": "center",
@@ -19538,8 +19833,8 @@
                       "type": "text",
                       "id": "SvKop",
                       "name": "Sum",
-                      "fill": "$neg",
-                      "content": "−100",
+                      "fill": "$accentStrong",
+                      "content": "+80",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "600"
@@ -19549,7 +19844,7 @@
                 {
                   "type": "frame",
                   "id": "bXZfe",
-                  "x": 164.4,
+                  "x": 102.1,
                   "y": 22,
                   "name": "Badge:3",
                   "width": 53.2,
@@ -19595,7 +19890,7 @@
                       "id": "FJeJ0",
                       "name": "Sum",
                       "fill": "$neg",
-                      "content": "−55",
+                      "content": "−35",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "600"
@@ -19608,7 +19903,7 @@
                   "x": 226.1,
                   "y": 0,
                   "name": "Badge:4",
-                  "width": 53.2,
+                  "width": 59.6,
                   "height": 18,
                   "fill": "$surface",
                   "cornerRadius": 9,
@@ -19651,7 +19946,7 @@
                       "id": "y5O0mP",
                       "name": "Sum",
                       "fill": "$accentStrong",
-                      "content": "+24",
+                      "content": "+159",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "600"
@@ -19707,7 +20002,7 @@
                       "id": "sLsMw",
                       "name": "Sum",
                       "fill": "$accentStrong",
-                      "content": "+180",
+                      "content": "+156",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "600"
@@ -19763,7 +20058,7 @@
                       "id": "h0sdTJ",
                       "name": "Sum",
                       "fill": "$accentStrong",
-                      "content": "+244",
+                      "content": "+64",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "600"
@@ -19883,7 +20178,7 @@
                       "type": "rectangle",
                       "cornerRadius": 1,
                       "id": "I9ICS0",
-                      "x": 190,
+                      "x": 128.7,
                       "y": 0,
                       "name": "Tick:3",
                       "fill": "$textPrimary",

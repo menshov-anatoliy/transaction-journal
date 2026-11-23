@@ -79,6 +79,101 @@ public sealed class ResultMarkerContractTests
 	}
 
 	[TestMethod]
+	[Description("Пустой перечень операций сериализуется пустым списком контракта")]
+	// У маркера без операций расшифровки контракт пуст: пустой перечень —
+	// не ошибка и не null, «детализации нет» отличается от «операций нет».
+	// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+	public void TryIfSerializesEmptyOperationsToEmptyList()
+	{
+		// Act: сериализация пустого перечня.
+		var serialized = ResultMarkerContract.SerializeOperations([]);
+
+		// Assert: контракт отдаёт пустой список.
+		Assert.That(serialized, Is.Empty);
+	}
+
+	[TestMethod]
+	[Description("Перечень операций сериализует детализацию: сделки окна с суммами, записи фьючерсного цикла без сумм, периоды связок")]
+	// Окно несёт сделки с индивидуальными суммами, складывающимися во вклад;
+	// фьючерсный цикл — записи без сумм; связка — период действия; операция
+	// без детализации отдаёт null вместо пустого перечня — «детализации нет»
+	// отличимо от пустоты, прежние поля контракта не меняются.
+	// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+	// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+	public void TryIfSerializesOperationDetailTradesAndPeriods()
+	{
+		// Arrange: перечень из четырёх операций — окно с двумя сделками,
+		// фьючерсный цикл с двумя записями без сумм, связка с периодом
+		// и корректировка без детализации.
+		var at = new DateTimeOffset(2026, 9, 18, 10, 0, 0, TimeSpan.Zero);
+		var operations = new[]
+		{
+			new ResultMarkerOperation
+			{
+				Kind = ResultMarkerKind.Roll,
+				EventTime = at,
+				AmountUsdt = -35m,
+				Trades =
+				[
+					new ResultMarkerTradeDetail("ETH-25SEP26-1600-C-USDT", "buy", 1m, 60m, -60m),
+					new ResultMarkerTradeDetail("ETH-25SEP26-1600-P-USDT", "sell", 0.5m, 50m, 25m),
+				],
+			},
+			new ResultMarkerOperation
+			{
+				Kind = ResultMarkerKind.FuturesClose,
+				EventTime = at.AddHours(1),
+				AmountUsdt = 1m,
+				Trades =
+				[
+					new ResultMarkerTradeDetail("ETHUSDT", "buy", 0.5m, 3500m, null),
+					new ResultMarkerTradeDetail("ETHUSDT", "sell", 0.5m, 3502m, null),
+				],
+			},
+			new ResultMarkerOperation
+			{
+				Kind = ResultMarkerKind.SyntheticClose,
+				EventTime = at.AddHours(2),
+				AmountUsdt = 30m,
+				PeriodSince = at.AddHours(2),
+			},
+			new ResultMarkerOperation { Kind = ResultMarkerKind.PnLAdjustment, EventTime = at.AddHours(3), AmountUsdt = 5m },
+		};
+
+		// Act: сериализация перечня.
+		var serialized = ResultMarkerContract.SerializeOperations(operations);
+
+		// Assert: детализация проезжает в контракт построчно.
+		Assert.That(serialized, Has.Count.EqualTo(4));
+		var rollTrades = serialized[0].Trades!;
+		Assert.That(rollTrades, Has.Count.EqualTo(2));
+		Assert.That(rollTrades[0].Symbol, Is.EqualTo("ETH-25SEP26-1600-C-USDT"));
+		Assert.That(rollTrades[0].Side, Is.EqualTo("buy"));
+		Assert.That(rollTrades[0].Quantity, Is.EqualTo(1m));
+		Assert.That(rollTrades[0].Price, Is.EqualTo(60m));
+		Assert.That(rollTrades[0].ContributionUsdt, Is.EqualTo(-60m));
+		Assert.That(rollTrades[1].Symbol, Is.EqualTo("ETH-25SEP26-1600-P-USDT"));
+		Assert.That(rollTrades[1].Side, Is.EqualTo("sell"));
+		Assert.That(rollTrades[1].Quantity, Is.EqualTo(0.5m));
+		Assert.That(rollTrades[1].ContributionUsdt, Is.EqualTo(25m));
+		Assert.That(serialized[0].PeriodSince, Is.Null);
+		Assert.That(serialized[0].PeriodUntil, Is.Null);
+		var futuresTrades = serialized[1].Trades!;
+		Assert.That(futuresTrades, Has.Count.EqualTo(2));
+		Assert.That(futuresTrades[0].Symbol, Is.EqualTo("ETHUSDT"));
+		Assert.That(futuresTrades[0].Side, Is.EqualTo("buy"));
+		Assert.That(futuresTrades[0].ContributionUsdt, Is.Null);
+		Assert.That(futuresTrades[1].Side, Is.EqualTo("sell"));
+		Assert.That(futuresTrades[1].ContributionUsdt, Is.Null);
+		Assert.That(serialized[2].Trades, Is.Null);
+		Assert.That(serialized[2].PeriodSince, Is.EqualTo(at.AddHours(2)));
+		Assert.That(serialized[2].PeriodUntil, Is.Null);
+		Assert.That(serialized[3].Trades, Is.Null);
+		Assert.That(serialized[3].PeriodSince, Is.Null);
+		Assert.That(serialized[3].PeriodUntil, Is.Null);
+	}
+
+	[TestMethod]
 	[Description("Сводка последнего маркера сериализуется с перечнем операций расшифровки")]
 	// Хвост списка и последний маркер карточки публикуют одинаковый контракт:
 	// итог, время события и перечень операций — расшифровка доступна и в

@@ -599,7 +599,7 @@ public sealed class ConstructionCardApiTests
 
 		// Assert: список маркеров с полями контракта, номера идут подряд.
 		var markers = payload!["resultMarkers"]!.AsArray();
-		Assert.That(markers, Has.Count.EqualTo(3));
+		Assert.That(markers, Has.Count.EqualTo(4));
 		Assert.That(markers[0]!["number"]!.GetValue<int>(), Is.EqualTo(1));
 		Assert.That(markers[0]!["eventTime"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(markers[0]!["kind"]!.GetValue<string>(), Is.EqualTo("opening"));
@@ -633,6 +633,44 @@ public sealed class ConstructionCardApiTests
 		Assert.That(thirdOperations, Has.Count.EqualTo(1));
 		Assert.That(thirdOperations[0]!["kind"]!.GetValue<string>(), Is.EqualTo("closing"));
 		Assert.That(thirdOperations[0]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(160.25m));
+		// Детализация публикуется рядом с операцией: окно несёт сделки с
+		// суммами, складывающимися во вклад, фьючерсный цикл — записи без
+		// сумм, поставка — инструмент и количество × эффективная цена,
+		// корректировка детализации не несёт вовсе.
+		// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+		// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
+		var firstTrades = firstOperations[0]!["trades"]!.AsArray();
+		Assert.That(firstTrades, Has.Count.EqualTo(2));
+		Assert.That(firstTrades[0]!["symbol"]!.GetValue<string>(), Is.EqualTo("ETH-28JUN24-3200-C"));
+		Assert.That(firstTrades[0]!["side"]!.GetValue<string>(), Is.EqualTo("buy"));
+		Assert.That(firstTrades[0]!["quantity"]!.GetValue<decimal>(), Is.EqualTo(1m));
+		Assert.That(firstTrades[0]!["price"]!.GetValue<decimal>(), Is.EqualTo(60m));
+		Assert.That(firstTrades[0]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(-60m));
+		Assert.That(firstTrades[1]!["symbol"]!.GetValue<string>(), Is.EqualTo("ETH-28JUN24-3200-P"));
+		Assert.That(firstTrades[1]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(-40m));
+		Assert.That(secondOperations[0]!["trades"], Is.Null);
+		var futuresTrades = secondOperations[1]!["trades"]!.AsArray();
+		Assert.That(futuresTrades, Has.Count.EqualTo(2));
+		Assert.That(futuresTrades[0]!["symbol"]!.GetValue<string>(), Is.EqualTo("ETHUSDT"));
+		Assert.That(futuresTrades[0]!["side"]!.GetValue<string>(), Is.EqualTo("buy"));
+		Assert.That(futuresTrades[0]!["quantity"]!.GetValue<decimal>(), Is.EqualTo(0.5m));
+		Assert.That(futuresTrades[0]!["price"]!.GetValue<decimal>(), Is.EqualTo(3500m));
+		Assert.That(futuresTrades[0]!["contributionUsdt"], Is.Null);
+		Assert.That(futuresTrades[1]!["side"]!.GetValue<string>(), Is.EqualTo("sell"));
+		Assert.That(futuresTrades[1]!["contributionUsdt"], Is.Null);
+		var deliveryTrades = thirdOperations[0]!["trades"]!.AsArray();
+		Assert.That(deliveryTrades, Has.Count.EqualTo(1));
+		Assert.That(deliveryTrades[0]!["symbol"]!.GetValue<string>(), Is.EqualTo("ETH-28JUN24-3200-C"));
+		Assert.That(deliveryTrades[0]!["side"], Is.Null);
+		Assert.That(deliveryTrades[0]!["quantity"]!.GetValue<decimal>(), Is.EqualTo(2m));
+		Assert.That(deliveryTrades[0]!["price"]!.GetValue<decimal>(), Is.EqualTo(80.125m));
+		Assert.That(deliveryTrades[0]!["contributionUsdt"], Is.Null);
+		// Связка несёт период действия вместо детализации сделками.
+		var fourthOperations = markers[3]!["operations"]!.AsArray();
+		Assert.That(fourthOperations[0]!["kind"]!.GetValue<string>(), Is.EqualTo("synthetic-close"));
+		Assert.That(fourthOperations[0]!["periodSince"]!.GetValue<string>(), Is.EqualTo("2026-06-19T12:00:00+00:00"));
+		Assert.That(fourthOperations[0]!["periodUntil"]!.GetValue<string>(), Is.EqualTo("2026-06-19T15:00:00+00:00"));
+		Assert.That(fourthOperations[0]!["trades"], Is.Null);
 		// Инвариант расшифровки: подавленные порогом операции входят в перечень
 		// следующего выведенного маркера, сумма перечня равна изменению маркера,
 		// а итог предыдущего выведенного плюс сумма — итогу маркера.
@@ -1781,7 +1819,10 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 	/// <summary>История маркеров конструкции: выведенные маркеры проходят в контракт карточки.</summary>
 	/// <remarks>
 	/// Второй маркер несёт две операции: подавленная порогом корректировка +8
-	/// и фьючерсное закрытие −3 — сумма перечня равна изменению +5.
+	/// и фьючерсное закрытие −3 — сумма перечня равна изменению +5. Первый
+	/// маркер детализируется сделками окна с суммами, фьючерсное закрытие —
+	/// записями цикла без сумм, третий — закрывающей записью, четвёртый —
+	/// связкой с периодом действия.
 	// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
 	/// </remarks>
 	private IReadOnlyList<ResultMarker> _resultMarkers =
@@ -1800,6 +1841,13 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					Kind = ResultMarkerKind.Opening,
 					EventTime = new DateTimeOffset(2026, 6, 18, 9, 5, 0, TimeSpan.Zero),
 					AmountUsdt = -100m,
+
+					// Суммы сделок окна складываются во вклад операции −100.
+					Trades =
+					[
+						new ResultMarkerTradeDetail("ETH-28JUN24-3200-C", "buy", 1m, 60m, -60m),
+						new ResultMarkerTradeDetail("ETH-28JUN24-3200-P", "buy", 1m, 40m, -40m),
+					],
 				},
 			],
 		},
@@ -1823,6 +1871,14 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					Kind = ResultMarkerKind.FuturesClose,
 					EventTime = new DateTimeOffset(2026, 6, 19, 6, 0, 0, TimeSpan.Zero),
 					AmountUsdt = -3m,
+
+					// Вклад фьючерсного цикла принадлежит циклу целиком —
+					// записи детализации без индивидуальных сумм.
+					Trades =
+					[
+						new ResultMarkerTradeDetail("ETHUSDT", "buy", 0.5m, 3500m, null),
+						new ResultMarkerTradeDetail("ETHUSDT", "sell", 0.5m, 3520m, null),
+					],
 				},
 			],
 		},
@@ -1840,6 +1896,29 @@ internal sealed class StubCardDetailReadModel : IConstructionDetailReadModel
 					Kind = ResultMarkerKind.Closing,
 					EventTime = new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero),
 					AmountUsdt = 160.25m,
+
+					// Поставка детализируется инструментом и количеством ×
+					// эффективной ценой без стороны и индивидуальной суммы.
+					Trades = [new ResultMarkerTradeDetail("ETH-28JUN24-3200-C", null, 2m, 80.125m, null)],
+				},
+			],
+		},
+		new ResultMarker
+		{
+			Number = 4,
+			EventTime = new DateTimeOffset(2026, 6, 19, 12, 0, 0, TimeSpan.Zero),
+			Kind = ResultMarkerKind.SyntheticClose,
+			ChangeUsdt = 30m,
+			TotalUsdt = 95.25m,
+			Operations =
+			[
+				new ResultMarkerOperation
+				{
+					Kind = ResultMarkerKind.SyntheticClose,
+					EventTime = new DateTimeOffset(2026, 6, 19, 12, 0, 0, TimeSpan.Zero),
+					AmountUsdt = 30m,
+					PeriodSince = new DateTimeOffset(2026, 6, 19, 12, 0, 0, TimeSpan.Zero),
+					PeriodUntil = new DateTimeOffset(2026, 6, 19, 15, 0, 0, TimeSpan.Zero),
 				},
 			],
 		},

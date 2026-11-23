@@ -44,6 +44,17 @@ export interface FinResultHistoryMarker {
 	readonly operations?: readonly ResultMarkerOperation[];
 }
 
+// Изменение маркера с предыдущей выведенной метки: контракт карточки
+// публикует changeUsdt явно; у последнего маркера списка/превью его нет —
+// изменением считается сумма перечня операций по инварианту расшифровки.
+// Traceability: change:fix-finresult-marker-contributions/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
+export function markerChangeUsdt(marker: FinResultHistoryMarker): number {
+	return (
+		marker.changeUsdt ??
+		(marker.operations ?? []).reduce((sum, operation) => sum + operation.contributionUsdt, 0)
+	);
+}
+
 /** Вход калькулятора: изначальные показатели конструкции и текущий результат. */
 export interface FinResultInput {
 	/** Плановый риск конструкции в USDT; null — не задан. */
@@ -139,13 +150,19 @@ export type FinResultLabelPlacements = {
 /** Ключ метки в геометрии. */
 type LabelKey = "risk" | "zero" | "profit" | "marker";
 
-/** Точка маркера изменения результата на шкале: позиция, итог и тон по знаку. */
+/** Точка маркера изменения результата на шкале: позиция по итогу, изменение и тон по знаку изменения. */
+// Бейдж стоит на накопленном итоге (позиция x), но подписывается и
+// окрашивается суммой самого изменения с предыдущей выведенной метки —
+// тон по знаку изменения, не по знаку итога.
+// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
 export interface FinResultMarkerPoint {
 	/** Истинная позиция накопленного итога в долях шкалы — без клипа. */
 	readonly x: number;
-	/** Накопленный зафиксированный итог маркера, USDT. */
+	/** Накопленный зафиксированный итог маркера, USDT — позиция бейджа. */
 	readonly total: number;
-	/** Тон бейджа по знаку итога: акцент — плюс, риск — минус, ноль — нейтральный. */
+	/** Изменение с предыдущей выведенной метки, USDT — подпись и тон бейджа. */
+	readonly change: number;
+	/** Тон бейджа по знаку изменения: акцент — плюс, риск — минус, ноль — нейтральный. */
 	readonly tone: "positive" | "negative" | "zero";
 }
 
@@ -293,14 +310,21 @@ export function computeFinResultGeometry(
 	// всегда охватывает итог, поэтому клип и прижатие не нужны.
 	const markerAt = total === null ? null : toFraction(total);
 
-	// Точки маркеров изменения результата: истинные позиции накопленных
-	// итогов на расширенной шкале, тон бейджа — по знаку итога.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-	const markerPoints: readonly FinResultMarkerPoint[] = input.resultMarkers.map((marker) => ({
-		x: toFraction(marker.totalUsdt),
-		total: marker.totalUsdt,
-		tone: marker.totalUsdt > 0 ? "positive" : marker.totalUsdt < 0 ? "negative" : "zero",
-	}));
+	// Точки маркеров изменения результата: позиция — накопленный итог на
+	// расширенной шкале, подпись и тон — изменение с предыдущей выведенной
+	// метки (контракты без явного changeUsdt восстанавливают его из
+	// перечня операций).
+	// Traceability: change:fix-finresult-marker-contributions/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
+	const markerPoints: readonly FinResultMarkerPoint[] = input.resultMarkers.map((marker) => {
+		const change = markerChangeUsdt(marker);
+
+		return {
+			x: toFraction(marker.totalUsdt),
+			total: marker.totalUsdt,
+			change,
+			tone: change > 0 ? "positive" : change < 0 ? "negative" : "zero",
+		};
+	});
 
 	// Единая заливка итога: неположительный итог — один красный тон от нуля
 	// до маркера, без разложения на реализованную и нереализованную части;
@@ -608,7 +632,7 @@ function placeBadges(
 	occupied: OccupiedArea[],
 ): FinResultBadgePlacement[] {
 	return points.map((point) => {
-		const widthFraction = badgeWidthFraction(point.total, layout);
+		const widthFraction = badgeWidthFraction(point.change, layout);
 		const align = chooseAlign(point.x, widthFraction);
 		const [from, to] = labelRange(point.x, widthFraction, align);
 
@@ -631,10 +655,11 @@ function placeBadges(
 }
 
 // Ширина бейджа в долях: несумма пилюли (кружок номера, зазор, паддинги)
-// плюс текст суммы по ширине символа пресета — детерминированная функция
-// без DOM (табличные цифры, суммы короткие).
-function badgeWidthFraction(total: number, layout: FinResultLabelLayout): number {
-	const text = formatFinAmount(total);
+// плюс текст подписи бейджа по ширине символа пресета — детерминированная
+// функция без DOM (табличные цифры, суммы короткие). Подпись бейджа —
+// сумма изменения метки, ширина считается по ней.
+function badgeWidthFraction(change: number, layout: FinResultLabelLayout): number {
+	const text = formatFinAmount(change);
 
 	return (layout.badgeChromePx + text.length * layout.aboveCharWidthPx) / layout.scaleWidthPx;
 }

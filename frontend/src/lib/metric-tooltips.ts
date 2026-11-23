@@ -5,7 +5,8 @@
 // Traceability: openspec:ui/screens#requirement-metric-tooltip-text-sourced
 
 import type { FinResultHistoryMarker } from "./finresult/geometry";
-import { formatFinAmount } from "./finresult/geometry";
+import { formatFinAmount, formatFinMagnitude, markerChangeUsdt } from "./finresult/geometry";
+import type { ResultMarkerOperation, ResultMarkerTrade } from "./api/construction-card";
 import { formatDay } from "./format/display-time";
 
 // Раздел подсказки многопоказательной метрики: по одному разделу
@@ -15,16 +16,25 @@ export interface MetricTooltipSection {
 	readonly text: string;
 }
 
+/** Ряд перечня подсказки: текст; indent — вложенная детализация предыдущего ряда. */
+// Вложенные ряды (строки сделок, период связки под строкой операции)
+// рендерятся мельче и приглушённее с отступом — обычные ряды прежние.
+// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
+export interface MetricTooltipRow {
+	readonly text: string;
+	readonly indent?: boolean;
+}
+
 // Текст подсказки метрики: заголовок метрики, назначение — всегда,
 // метод расчёта — только когда он зафиксирован в источнике; построчные
 // записи rows — перечень внутри подсказки (например, операции расшифровки
-// метки), note — примечание в конце подсказки.
+// метки со сделками), note — примечание в конце подсказки.
 export interface MetricTooltip {
 	readonly title: string;
 	readonly purpose: string;
 	readonly method?: string;
 	readonly sections?: readonly MetricTooltipSection[];
-	readonly rows?: readonly string[];
+	readonly rows?: readonly (string | MetricTooltipRow)[];
 	readonly note?: string;
 }
 
@@ -578,14 +588,20 @@ function resultMarkerOperationKindLabel(kind: string | undefined): string {
 }
 
 // Подсказка-расшифровка метки маркера изменения результата: заголовок
-// «Метка N · итог USDT», подстрока изменения с предыдущей выведенной метки,
-// построчный перечень операций «вид · дата · сумма вклада» без группировки
-// и строка-инвариант «Σ перечня = изменение». Строится по операциям
-// конкретного маркера из контракта — статичного текста у расшифровки нет;
-// контракту последнего маркера списка/превью changeUsdt не публикуется —
-// изменением считается сумма его перечня операций.
-// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+// «Метка N · итог USDT» (накопленный итог метки), подстрока изменения
+// с предыдущей выведенной метки, построчный перечень операций «вид · дата ·
+// сумма вклада» без группировки; под строкой каждой операции — компактные
+// строки её сделок «инструмент · сторона · количество × цена · вклад»
+// (вклад null — сегмент опущен, у закрывающих записей без стороны сторона
+// опущена), у связок — строка «период действия: D1–D2» (конец null —
+// «действует»); корректировки PnL детализации не имеют. Инвариант в конце
+// сверяет перечень с изменением и восстанавливает накопленный итог.
+// Строится по операциям конкретного маркера из контракта — статичного
+// текста у расшифровки нет; контракту последнего маркера списка/превью
+// changeUsdt не публикуется — изменением считается сумма его перечня
+// операций.
 // Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
+// Traceability: openspec:ui/screens#scenario-marker-breakdown-no-grouping
 export function resultMarkerBreakdownTooltip(marker: FinResultHistoryMarker): MetricTooltip {
 	const total = formatFinAmount(marker.totalUsdt);
 	const number = marker.number;
@@ -594,9 +610,7 @@ export function resultMarkerBreakdownTooltip(marker: FinResultHistoryMarker): Me
 	// Изменение: контракт карточки публикует его явно, контракт последнего
 	// маркера списка/превью — только перечень операций, сумма которых по
 	// инварианту равна изменению.
-	const change =
-		marker.changeUsdt ??
-		(marker.operations ?? []).reduce((sum, operation) => sum + operation.contributionUsdt, 0);
+	const change = markerChangeUsdt(marker);
 	const purpose =
 		number === undefined || number <= 1
 			? `изменение с начала истории: ${formatFinAmount(change)} USDT`
@@ -604,15 +618,72 @@ export function resultMarkerBreakdownTooltip(marker: FinResultHistoryMarker): Me
 
 	// Построчный перечень: каждая операция отдельной строкой, без свёрток
 	// «×N»; подавленные порогом события сервер включает в перечень сам.
-	const rows = (marker.operations ?? []).map(
-		(operation) =>
+	// Под строкой операции — вложенные строки: сделки операции, затем
+	// период действия связки; корректировкам PnL и связкам без сделок
+	// детализация не положена.
+	const rows: (string | MetricTooltipRow)[] = [];
+	for (const operation of marker.operations ?? []) {
+		rows.push(
 			`${resultMarkerOperationKindLabel(operation.kind)} · ${formatDay(operation.date)} · ${formatFinAmount(operation.contributionUsdt)} USDT`,
-	);
+		);
+		for (const trade of operation.trades ?? []) {
+			rows.push({ text: formatResultMarkerTrade(trade), indent: true });
+		}
+		const period = formatResultMarkerPeriod(operation);
+		if (period !== null) {
+			rows.push({ text: period, indent: true });
+		}
+	}
+
+	// Инвариант расшифровки: сумма перечня равна изменению метки, а итог
+	// предыдущей выведенной метки плюс изменение — накопленному итогу.
+	// У первой метки и последнего маркера списка/превью предыдущей метки
+	// нет — инвариант без номера: перечень равен изменению с начала истории.
+	const note =
+		rows.length === 0
+			? undefined
+			: number === undefined || number <= 1
+				? "Σ перечня = изменение"
+				: `Σ перечня = ${formatFinAmount(change)} = изменение метки; итог метки ${number - 1} (${formatFinAmount(marker.totalUsdt - change)}) + ${formatFinAmount(change)} = ${total} USDT`;
 
 	return {
 		title,
 		purpose,
 		rows,
-		note: rows.length > 0 ? "Σ перечня = изменение" : undefined,
+		note,
 	};
+}
+
+// Компактная строка сделки под строкой операции: «инструмент · сторона ·
+// количество × цена · вклад»; вклад null опускает последний сегмент
+// (сделки цикла, чей вклад принадлежит round-trip целиком), сторона null —
+// сегмент стороны (закрывающие записи без стороны).
+function formatResultMarkerTrade(trade: ResultMarkerTrade): string {
+	const segments = [trade.symbol];
+	if (trade.side !== null && trade.side !== undefined) {
+		segments.push(trade.side);
+	}
+	segments.push(`${formatFinMagnitude(trade.quantity)} × ${formatFinMagnitude(trade.price)}`);
+	if (trade.contributionUsdt !== null && trade.contributionUsdt !== undefined) {
+		segments.push(`${formatFinAmount(trade.contributionUsdt)} USDT`);
+	}
+
+	return segments.join(" · ");
+}
+
+// Строка периода действия связки под операцией: «период действия: D1–D2»,
+// конец null — связка ещё действует. Только у synthetic-close/synthetic-release
+// с известным началом; остальным операциям строка не положена.
+function formatResultMarkerPeriod(operation: ResultMarkerOperation): string | null {
+	const isSyntheticLink = operation.kind === "synthetic-close" || operation.kind === "synthetic-release";
+	if (isSyntheticLink === false || operation.periodSince === null || operation.periodSince === undefined) {
+		return null;
+	}
+
+	const until =
+		operation.periodUntil === null || operation.periodUntil === undefined
+			? "действует"
+			: formatDay(operation.periodUntil);
+
+	return `период действия: ${formatDay(operation.periodSince)}–${until}`;
 }

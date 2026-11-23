@@ -320,13 +320,38 @@ public sealed record ResultMarkerSummaryResponse(
 /// <param name="Kind">Вид операции: те же kebab-case строки, что у типа события маркера.</param>
 /// <param name="Date">Момент события журнала, породившего операцию.</param>
 /// <param name="ContributionUsdt">Знаковый вклад операции в накопленный результат в USDT.</param>
+/// <param name="Trades">Детализация операции сделками; null — вид операции не раскладывает вклад по сделкам (связки, корректировки).</param>
+/// <param name="PeriodSince">Момент, с которого действует связка синтетического закрытия; null — операция не является связкой.</param>
+/// <param name="PeriodUntil">Момент снятия связки спором; null — связка действует без конца либо операция не является связкой.</param>
 // Сумма вкладов перечня равна изменению маркера: UI сверяет расшифровку
-// сложением и не знает о подавленных событиях вне перечня.
+// сложением и не знает о подавленных событиях вне перечня. Детализация
+// опциональна с null по умолчанию: прежние потребители контракта читают
+// вид, дату и вклад как раньше, новые поля не ломают связки и корректировки.
 // Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
 public sealed record ResultMarkerOperationResponse(
 	string Kind,
 	DateTimeOffset Date,
-	decimal ContributionUsdt);
+	decimal ContributionUsdt,
+	IReadOnlyList<ResultMarkerTradeResponse>? Trades = null,
+	DateTimeOffset? PeriodSince = null,
+	DateTimeOffset? PeriodUntil = null);
+
+/// <summary>Строка детализации операции расшифровки маркера сделкой.</summary>
+/// <param name="Symbol">Инструмент сделки либо закрывающей записи.</param>
+/// <param name="Side">Сторона по знаку количества: buy — покупка, sell — продажа; null — сторона не выводится (закрывающая запись).</param>
+/// <param name="Quantity">Количество по модулю.</param>
+/// <param name="Price">Цена сделки либо эффективная цена закрывающей записи.</param>
+/// <param name="ContributionUsdt">Знаковый вклад сделки в USDT; null — вклад операции не раскладывается по сделкам (фьючерсный цикл, закрывающая запись).</param>
+// Суммы сделок окна складываются во вклад операции: UI сверяет расшифровку
+// окна сложением строк; у фьючерсного цикла и закрывающей записи суммы нет —
+// вклад принадлежит циклу либо выводится из количества × цены.
+// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+public sealed record ResultMarkerTradeResponse(
+	string Symbol,
+	string? Side,
+	decimal Quantity,
+	decimal Price,
+	decimal? ContributionUsdt);
 
 /// <summary>Состояние недоступности журнала: обзор не собран, причина — в тексте.</summary>
 /// <param name="Error">Человекочитаемая причина недоступности.</param>

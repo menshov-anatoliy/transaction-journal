@@ -36,15 +36,29 @@ public static class ResultMarkerContract
 
 	/// <summary>Переводит перечень операций расшифровки маркера в контракт API: карточка, список и превью получают один и тот же маппинг.</summary>
 	/// <param name="operations">Операции расшифровки вычислителя истории результата.</param>
-	/// <returns>Строки перечня контракта с видом, моментом и вкладом.</returns>
+	/// <returns>Строки перечня контракта с видом, моментом, вкладом и детализацией.</returns>
 	// Единая точка маппинга исключает расхождение перечней карточки и хвостов
 	// списка/превью: сумма вкладов в любом контракте равна изменению маркера.
+	// Детализация проедет как есть: окна несут сделки с суммами, фьючерсный
+	// цикл — записи без сумм, связки — периоды; пустая детализация уходит
+	// null, чтобы «детализации нет» отличалось от пустого перечня.
 	// Traceability: openspec:analytics/performance#requirement-result-markers-contract
+	// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
 	public static IReadOnlyList<ResultMarkerOperationResponse> SerializeOperations(IReadOnlyList<ResultMarkerOperation> operations) =>
 		operations.Select(operation => new ResultMarkerOperationResponse(
 			SerializeKind(operation.Kind),
 			operation.EventTime,
-			operation.AmountUsdt)).ToArray();
+			operation.AmountUsdt,
+			operation.Trades.Count == 0
+				? null
+				: operation.Trades.Select(trade => new ResultMarkerTradeResponse(
+					trade.Symbol,
+					trade.Side,
+					trade.Quantity,
+					trade.Price,
+					trade.ContributionUsdt)).ToArray(),
+			operation.PeriodSince,
+			operation.PeriodUntil)).ToArray();
 
 	/// <summary>Переводит сводку последнего маркера списка в контракт вместе с перечнем операций расшифровки.</summary>
 	/// <param name="summary">Хвост истории результата строки списка.</param>

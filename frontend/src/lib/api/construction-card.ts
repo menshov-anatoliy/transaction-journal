@@ -33,6 +33,25 @@ export type ResultMarkerKind =
 	| "pnl-adjustment"
 	| "delivery";
 
+/** Сделка в детализации операции расшифровки маркера: компактная строка под строкой операции. */
+// Детализация уточняет вклад операции конкретными сделками: инструмент,
+// сторона, количество × цена и собственный вклад сделки; вклад null —
+// у сделок цикла, чей вклад принадлежит round-trip целиком, а сторона
+// null — у закрывающих записей без стороны.
+// Traceability: change:fix-finresult-marker-contributions/design#d4
+export interface ResultMarkerTrade {
+	/** Инструмент сделки. */
+	readonly symbol: string;
+	/** Сторона сделки; null у закрывающих записей без стороны. */
+	readonly side?: string | null;
+	/** Количество контрактов сделки. */
+	readonly quantity: number;
+	/** Цена сделки. */
+	readonly price: number;
+	/** Вклад сделки в изменение, USDT; null — вклад у операции целиком. */
+	readonly contributionUsdt?: number | null;
+}
+
 /** Операция в расшифровке маркера: один вклад в изменение накопленного итога. */
 // Перечень операций маркера N охватывает все события после события
 // маркера N−1, включая события, подавленные порогом проявления, —
@@ -45,6 +64,16 @@ export interface ResultMarkerOperation {
 	readonly date: string;
 	/** Вклад операции в изменение накопленного итога, USDT. */
 	readonly contributionUsdt: number;
+	// Детализация операции сделками: null или отсутствие — детализации
+	// нет (связки, корректировки PnL), фронтенд строк сделок не рисует.
+	// Traceability: change:fix-finresult-marker-contributions/design#d4
+	readonly trades?: readonly ResultMarkerTrade[] | null;
+	// Период действия синтетической связки: заполняется только у
+	// synthetic-close/synthetic-release; periodUntil null — связка ещё
+	// действует, дата — момент снятия.
+	// Traceability: change:fix-finresult-marker-contributions/design#d4
+	readonly periodSince?: string | null;
+	readonly periodUntil?: string | null;
 }
 
 /** Маркер изменения результата: точка истории накопленного зафиксированного результата. */
