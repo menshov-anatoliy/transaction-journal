@@ -2278,7 +2278,7 @@
                       "fill": "$textMuted",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Состояния вне шкалы показывают отдельно от полосы: «риск не ограничен» и «не удалось рассчитать».",
+                      "content": "Состояния риска: число на маркере; при сбое котировок — «?» на полосе, «не удалось рассчитать» и подпись планового риска на делении −Риск.",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "normal"
@@ -5977,8 +5977,8 @@
                                   "type": "text",
                                   "id": "Qzuqe",
                                   "name": "T",
-                                  "fill": "$accentStrong",
-                                  "content": "+25,45",
+                                  "fill": "$textMuted",
+                                  "content": "не удалось рассчитать",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
@@ -6001,6 +6001,9 @@
                                       "x": 21.9,
                                       "enabled": false,
                                       "fill": "$neg"
+                                    },
+                                    "Zt4oh": {
+                                      "enabled": true
                                     }
                                   }
                                 }
@@ -6581,6 +6584,23 @@
                   "name": "Превью",
                   "width": "fill_container",
                   "descendants": {
+                    "zwttk/YiUDF": {
+                      "content": "плановый риск −300"
+                    },
+                    "zwttk/a5MBtQ": {
+                      "enabled": false
+                    },
+                    "zwttk/vVY6E": {
+                      "enabled": false
+                    },
+                    "zwttk/DCBuR": {
+                      "enabled": true
+                    },
+                    "Fgj7T/Q4NLmR": {
+                      "content": "не удалось рассчитать",
+                      "fontSize": 12,
+                      "fill": "$textMuted"
+                    },
                     "CH9gv": {
                       "enabled": true
                     }
@@ -7797,6 +7817,32 @@
                             },
                             "gk36c": {
                               "content": "реализованный + нереализованный результат позиций и внешние корректировки PnL"
+                            }
+                          }
+                        },
+                        {
+                          "id": "vBCeF",
+                          "type": "ref",
+                          "ref": "CDitz",
+                          "name": "Подсказка «Реальный риск» открыта",
+                          "layoutPosition": "absolute",
+                          "x": 60,
+                          "y": 112,
+                          "descendants": {
+                            "GeVNN": {
+                              "content": "Реальный риск"
+                            },
+                            "so206": {
+                              "content": "Значение, USDT"
+                            },
+                            "gk36c": {
+                              "content": "минусовая часть текущего результата по текущим маркам: реализованный результат + стоимость открытых остатков + внешние корректировки PnL"
+                            },
+                            "BP8uh": {
+                              "content": "Метод"
+                            },
+                            "l8lnHC": {
+                              "content": "max(0, −(реализованный + нереализованный + корректировки)); при сбое котировок — «не удалось рассчитать» и «?» на полосе"
                             }
                           }
                         }
@@ -17071,6 +17117,7 @@
       "y": 5332,
       "name": "Стенд/Индикатор · состояния",
       "width": 1240,
+      "height": 1749,
       "fill": "$surface",
       "cornerRadius": 12,
       "stroke": "$border",
@@ -17083,7 +17130,7 @@
           "id": "sL7Bc",
           "name": "Title",
           "fill": "$textPrimary",
-          "content": "Индикатор финрезультата · 7 кейсов (полный + компактный)",
+          "content": "Индикатор финрезультата · 7 кейсов зон + недоступность риска (полный + компактный + средний)",
           "fontFamily": "$font",
           "fontSize": 15,
           "fontWeight": "600"
@@ -17605,6 +17652,146 @@
                   "fontWeight": "normal"
                 }
               ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "q7UrnE",
+          "name": "Cell:8 · Риск недоступен (сбой котировок) — полный и компактный",
+          "width": "fill_container",
+          "fill": "$bg",
+          "cornerRadius": 10,
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "tv4aF",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "content": "8 · Риск недоступен (сбой котировок): маркера и числа нет — «не удалось рассчитать», на делении −Риск остаётся подпись планового риска",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "id": "SUo57",
+              "type": "ref",
+              "ref": "onchD",
+              "name": "Full",
+              "descendants": {
+                "Ur0eD": {
+                  "content": "плановый риск −300",
+                  "x": 0
+                },
+                "tZ9yY": {
+                  "x": 224,
+                  "fill": "$neg",
+                  "enabled": false
+                },
+                "vuPkg": {
+                  "content": "≈ 0",
+                  "fill": "$neg",
+                  "x": 220,
+                  "enabled": false
+                },
+                "zOC3O": {
+                  "enabled": true
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "iEqWv",
+              "name": "CompactRow",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "M8rwrg",
+                  "type": "ref",
+                  "ref": "FMghY",
+                  "name": "Cmp",
+                  "descendants": {
+                    "i9F80C": {
+                      "x": 28.6,
+                      "fill": "$neg",
+                      "enabled": false
+                    },
+                    "Zt4oh": {
+                      "enabled": true
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "ZONQt",
+                  "name": "Note",
+                  "fill": "$textMuted",
+                  "content": "компактный вид — «?» на полосе вместо маркера",
+                  "fontFamily": "$font",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "KWrvD",
+          "name": "Cell:9 · Риск недоступен — средний вид",
+          "width": "fill_container",
+          "fill": "$bg",
+          "cornerRadius": 10,
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 14,
+          "children": [
+            {
+              "type": "text",
+              "id": "SGl9S",
+              "name": "Cap",
+              "fill": "$textSecondary",
+              "content": "9 · Риск недоступен · средний вид (превью, мобильный стрип): «не удалось рассчитать», на делении −Риск подпись планового риска",
+              "fontFamily": "$font",
+              "fontSize": 12,
+              "fontWeight": "600"
+            },
+            {
+              "id": "W4C0Gg",
+              "type": "ref",
+              "ref": "rMxFZ",
+              "name": "Индикатор средний · недоступный",
+              "width": 312,
+              "height": 76,
+              "descendants": {
+                "YiUDF": {
+                  "content": "плановый риск −300",
+                  "x": 0
+                },
+                "a5MBtQ": {
+                  "enabled": false
+                },
+                "vVY6E": {
+                  "enabled": false
+                },
+                "DCBuR": {
+                  "enabled": true
+                }
+              }
+            },
+            {
+              "type": "text",
+              "id": "puvTn",
+              "name": "Note",
+              "fill": "$textMuted",
+              "content": "граница и маркер на левом краю планового риска",
+              "fontFamily": "$font",
+              "fontSize": 11,
+              "fontWeight": "normal"
             }
           ]
         }
@@ -18400,6 +18587,9 @@
                       "x": 3.6,
                       "fill": "$neg",
                       "enabled": false
+                    },
+                    "Zt4oh": {
+                      "enabled": true
                     }
                   }
                 },
@@ -18416,7 +18606,7 @@
                       "id": "o4Y0JK",
                       "name": "I",
                       "fill": "$neg",
-                      "content": "итог −30,60",
+                      "content": "не удалось рассчитать",
                       "fontFamily": "$font",
                       "fontSize": 12,
                       "fontWeight": "600"
@@ -18842,35 +19032,8 @@
             },
             {
               "type": "frame",
-              "id": "KdPyN",
-              "x": 58,
-              "y": 6,
-              "name": "RiskStateBadge",
-              "enabled": false,
-              "width": 16,
-              "height": 12,
-              "fill": "$textPrimary",
-              "cornerRadius": 6,
-              "layout": "vertical",
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "D0eV8J",
-                  "name": "Glyph",
-                  "fill": "#FFFFFF",
-                  "content": "∞",
-                  "fontFamily": "$font",
-                  "fontSize": 9,
-                  "fontWeight": "700"
-                }
-              ]
-            },
-            {
-              "type": "frame",
               "id": "Zt4oh",
-              "x": 76,
+              "x": 58,
               "y": 6,
               "name": "UnavailableBadge",
               "enabled": false,
@@ -19077,22 +19240,9 @@
                 },
                 {
                   "type": "text",
-                  "id": "bYBwW",
-                  "x": 0,
-                  "y": 0,
-                  "name": "RiskStateLabel",
-                  "enabled": false,
-                  "fill": "$neg",
-                  "content": "риск не ограничен",
-                  "fontFamily": "$font",
-                  "fontSize": 10.5,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "text",
                   "id": "zOC3O",
                   "x": 0,
-                  "y": 16,
+                  "y": 0,
                   "name": "UnavailableLabel",
                   "enabled": false,
                   "fill": "$neg",
@@ -19275,22 +19425,9 @@
                 },
                 {
                   "type": "text",
-                  "id": "F1E8D4",
-                  "x": 0,
-                  "y": 0,
-                  "name": "RiskStateLabel",
-                  "enabled": false,
-                  "fill": "$neg",
-                  "content": "риск не ограничен",
-                  "fontFamily": "$font",
-                  "fontSize": 9.5,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "text",
                   "id": "DCBuR",
                   "x": 0,
-                  "y": 15,
+                  "y": 0,
                   "name": "UnavailableLabel",
                   "enabled": false,
                   "fill": "$neg",
@@ -21852,7 +21989,7 @@
                           "fill": "$risk",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "BTC-26DEC-100000-C · 1 контракт · убыток не ограничен",
+                          "content": "BTC-26DEC-100000-C · 1 контракт · убыток ограничен премией",
                           "fontFamily": "$font",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -26844,7 +26981,7 @@
                   "id": "A9eRgM",
                   "name": "Meta",
                   "fill": "$textMuted",
-                  "content": "плановый риск 300 / плановый профит 900 · реальный риск 250 · конечный · капитал 6 000 USDT · открыта 12 авг 2026, 10:04",
+                  "content": "плановый риск 300 / плановый профит 900 · реальный риск 250 · капитал 6 000 USDT · открыта 12 авг 2026, 10:04",
                   "fontFamily": "$font",
                   "fontSize": 12,
                   "fontWeight": "normal"
