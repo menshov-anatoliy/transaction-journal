@@ -1,6 +1,5 @@
 namespace TransactionJournal.Application.Analytics;
 
-using TransactionJournal.Domain.Analytics;
 
 /// <summary>
 /// Результат чтения метрик журнала: метрики всех конструкций и их позиций,
@@ -18,20 +17,6 @@ public sealed record JournalMetrics
 
 	/// <summary>Метрики позиций всех конструкций, упорядоченные по конструкции и инструменту.</summary>
 	public required IReadOnlyList<PositionMetrics> Positions { get; init; }
-
-	/// <summary>
-	/// Потоки FIFO-записей позиций по конструкциям и инструментам — те же записи,
-	/// из которых посчитаны метрики позиций. Единственный источник срезов
-	/// истории результата: значения маркеров, вычисленные по этим потокам,
-	/// гарантированно сходятся с реализованным результатом сводки. Производные
-	/// данные при каждом чтении, хранением не живут.
-	/// </summary>
-	/// <remarks>
-	/// Потоки строятся тем же проходом, что и метрики позиций, — второго
-	/// конвейера материализации нет.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-marker-value
-	/// </remarks>
-	public required IReadOnlyDictionary<long, IReadOnlyDictionary<string, IReadOnlyList<PositionFifoEntry>>> PositionEntries { get; init; }
 
 	/// <summary>
 	/// Итог по журналу — сумма итогов конструкций; null, пока сбой котировок оставил

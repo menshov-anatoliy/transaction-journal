@@ -827,23 +827,7 @@ public static class ConstructionCardEndpoints
 		// тексты идут из тех же метрик, что и счётчик бейджа списка, —
 		// расхождение перечня и счётчика исключено; пустой список вместо null.
 		// Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
-		(data.RiskWarnings ?? []).Select(warning => new ConstructionRiskWarningResponse(warning)).ToArray(),
-		// История маркеров изменения результата публикуется списком выведенных
-		// маркеров с финальной нумерацией: порог проявления и перенумерация
-		// выполнены на сервере, UI получает готовый набор с перечнями операций
-		// расшифровки.
-		// Traceability: openspec:analytics/performance#scenario-card-contract-publishes-markers
-		(data.ResultMarkers?.Markers ?? []).Select(marker => new ConstructionCardResultMarkerResponse(
-			marker.Number,
-			marker.EventTime,
-			ResultMarkerContract.SerializeKind(marker.Kind),
-			marker.ChangeUsdt,
-			marker.TotalUsdt,
-			// Перечень операций расшифровки публикуется рядом с маркером: все
-			// события после предыдущего выведенного маркера, включая подавленные
-			// порогом; сумма вкладов равна изменению маркера.
-			// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
-			ResultMarkerContract.SerializeOperations(marker.Operations))).ToArray());
+		(data.RiskWarnings ?? []).Select(warning => new ConstructionRiskWarningResponse(warning)).ToArray());
 
 	/// <summary>Разбирает строку источника корректировки; null — неизвестное значение.</summary>
 	private static PnLAdjustmentSource? DeserializeAdjustmentSource(string? source) => source switch
@@ -974,7 +958,6 @@ public static class ConstructionCardEndpoints
 /// <param name="Adjustments">Строки таблицы корректировок PnL.</param>
 /// <param name="SyntheticCloses">Строки распознанных синтетических закрытий конструкции; пустой список без связок.</param>
 /// <param name="RiskWarnings">Полный перечень предупреждений диагностики незакрытых рисков; пустой список без предупреждений.</param>
-/// <param name="ResultMarkers">Выведенные маркеры изменения результата конструкции с финальной нумерацией; пустой список без событий истории.</param>
 // Синтетические закрытия входят в контракт карточки аддитивно: новые поля
 // добавлены в конец записей, существующие потребители не ломаются.
 // Traceability: change:synthetic-close-logical-layer/specs/ui/screens/spec#requirement-detail-synthetic-close-line
@@ -982,10 +965,6 @@ public static class ConstructionCardEndpoints
 // Предупреждения диагностики входят в контракт карточки аддитивно: секция
 // «Предупреждения» над таблицами скрыта при пустом списке.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
-// История маркеров входит в контракт карточки аддитивно: перечень операций
-// расшифровки каждого маркера публикуется вместе с ним, UI не реконструирует
-// вклады и не знает о подавленных событиях вне перечня.
-// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 public sealed record ConstructionCardResponse(
 	long ConstructionId,
 	string Name,
@@ -1008,8 +987,7 @@ public sealed record ConstructionCardResponse(
 	IReadOnlyList<ConstructionCardClosingWarningResponse> ClosingWarnings,
 	IReadOnlyList<ConstructionCardAdjustmentResponse> Adjustments,
 	IReadOnlyList<ConstructionCardSyntheticCloseResponse> SyntheticCloses,
-	IReadOnlyList<ConstructionRiskWarningResponse> RiskWarnings,
-	IReadOnlyList<ConstructionCardResultMarkerResponse> ResultMarkers);
+	IReadOnlyList<ConstructionRiskWarningResponse> RiskWarnings);
 
 /// <summary>Метрики карточки: сводка kstrip с периодом и длительностью.</summary>
 /// <param name="RealizedPnL">Реализованный PnL конструкции.</param>
@@ -1064,26 +1042,6 @@ public sealed record ConstructionCardMetricsResponse(
 	decimal? TotalTimeValueUsdt,
 	decimal? TotalIntrinsicValueUsdt,
 	decimal? SyntheticAdjustedTotalUsdt);
-
-/// <summary>Маркер изменения результата в контракте карточки.</summary>
-/// <param name="Number">Порядковый номер выведенного маркера — подряд без пропусков.</param>
-/// <param name="EventTime">Время события журнала, породившего маркер.</param>
-/// <param name="Kind">Тип события: opening, closing, roll, synthetic-close, synthetic-release, futures-close, pnl-adjustment или delivery.</param>
-/// <param name="ChangeUsdt">Изменение накопленного результата относительно предыдущего выведенного маркера; у первого — от нуля.</param>
-/// <param name="TotalUsdt">Накопленный зафиксированный итог на момент события в USDT.</param>
-/// <param name="Operations">Перечень операций расшифровки — все события после предыдущего выведенного маркера, включая подавленные порогом; сумма вкладов равна изменению.</param>
-// Номер, тип, изменение, итог и перечень публикуются как есть: сервер уже
-// применил порог проявления и перенумерацию, UI фильтрацию и реконструкцию
-// вкладов не повторяет.
-// Traceability: openspec:analytics/performance#requirement-result-markers-contract
-// Traceability: openspec:analytics/performance#scenario-card-contract-publishes-markers
-public sealed record ConstructionCardResultMarkerResponse(
-	int Number,
-	DateTimeOffset EventTime,
-	string Kind,
-	decimal ChangeUsdt,
-	decimal TotalUsdt,
-	IReadOnlyList<ResultMarkerOperationResponse> Operations);
 
 /// <summary>Строка таблицы позиций карточки.</summary>
 /// <param name="Symbol">Инструмент позиции.</param>

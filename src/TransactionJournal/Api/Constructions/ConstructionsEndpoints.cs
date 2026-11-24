@@ -91,13 +91,6 @@ public static class ConstructionsEndpoints
 					// неограниченного хвоста и неполных данных без догадок по null.
 					// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt),
-					// Последний маркер истории результата проходит в строку с
-					// перечнем операций расшифровки: тот же перечень последнего
-					// маркера, что публикует карточка.
-					// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
-					item.LastResultMarker is null
-						? null
-						: ResultMarkerContract.ToSummaryResponse(item.LastResultMarker),
 					item.OpenedAt,
 					item.ClosedAt,
 					liveCounts.GetValueOrDefault(item.ConstructionId),
@@ -170,12 +163,6 @@ public static class ConstructionsEndpoints
 				// неограниченного хвоста и неполных данных без догадок по null.
 				// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
-				// Последний маркер истории результата проходит в превью с перечнем
-				// операций расшифровки из той же истории, что публикует карточка.
-				// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
-				data.ResultMarkers?.LastMarker is { } lastMarker
-					? ResultMarkerContract.ToSummaryResponse(lastMarker)
-					: null,
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
 				data.QuotesAsOf,
@@ -251,7 +238,6 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
-/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный итог, время события и перечень операций расшифровки; null, когда выведенных маркеров у конструкции ещё нет.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="LiveHintCount">Число живых подсказок конструкции для бейджа строки.</param>
@@ -265,10 +251,6 @@ public sealed record ConstructionsSummaryResponse(
 // по null.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
-// Последний маркер входит в контракт строки аддитивно: компактный вид и
-// средний вид индикатора рисуют только его, без номера и сумм бейджей;
-// перечень операций расшифровки идёт рядом с итогом.
-// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 // Счётчик предупреждений входит в контракт строки аддитивно: бейдж «⚠ N»
 // строится по числу из метрик аналитики, ноль — бейдж скрыт.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
@@ -293,7 +275,6 @@ public sealed record ConstructionRowResponse(
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
 	string RealRiskStatus,
-	ResultMarkerSummaryResponse? LastResultMarker,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	int LiveHintCount,
@@ -301,57 +282,6 @@ public sealed record ConstructionRowResponse(
 	int? DaysToNearestExpiry,
 	decimal? NetDailyDecayUsdt,
 	decimal? TotalIntrinsicValueUsdt);
-
-/// <summary>Последний маркер изменения результата в контракте списка и превью.</summary>
-/// <param name="TotalUsdt">Накопленный зафиксированный итог конструкции на момент события в USDT.</param>
-/// <param name="EventAt">Время события журнала, породившего последний маркер.</param>
-/// <param name="Operations">Перечень операций расшифровки последнего маркера — все операции после предыдущего выведенного маркера, включая подавленные порогом.</param>
-// Пара «итог + время» публикуется без номера: компактные виды рисуют
-// последний маркер без бейджа нумерации; перечень операций расшифровки
-// идёт рядом, сервер формирует его целиком.
-// Traceability: openspec:analytics/performance#requirement-result-markers-contract
-// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
-public sealed record ResultMarkerSummaryResponse(
-	decimal TotalUsdt,
-	DateTimeOffset EventAt,
-	IReadOnlyList<ResultMarkerOperationResponse> Operations);
-
-/// <summary>Операция расшифровки маркера изменения результата в контрактах API.</summary>
-/// <param name="Kind">Вид операции: те же kebab-case строки, что у типа события маркера.</param>
-/// <param name="Date">Момент события журнала, породившего операцию.</param>
-/// <param name="ContributionUsdt">Знаковый вклад операции в накопленный результат в USDT.</param>
-/// <param name="Trades">Детализация операции сделками; null — вид операции не раскладывает вклад по сделкам (связки, корректировки).</param>
-/// <param name="PeriodSince">Момент, с которого действует связка синтетического закрытия; null — операция не является связкой.</param>
-/// <param name="PeriodUntil">Момент снятия связки спором; null — связка действует без конца либо операция не является связкой.</param>
-// Сумма вкладов перечня равна изменению маркера: UI сверяет расшифровку
-// сложением и не знает о подавленных событиях вне перечня. Детализация
-// опциональна с null по умолчанию: прежние потребители контракта читают
-// вид, дату и вклад как раньше, новые поля не ломают связки и корректировки.
-// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
-public sealed record ResultMarkerOperationResponse(
-	string Kind,
-	DateTimeOffset Date,
-	decimal ContributionUsdt,
-	IReadOnlyList<ResultMarkerTradeResponse>? Trades = null,
-	DateTimeOffset? PeriodSince = null,
-	DateTimeOffset? PeriodUntil = null);
-
-/// <summary>Строка детализации операции расшифровки маркера сделкой.</summary>
-/// <param name="Symbol">Инструмент сделки либо закрывающей записи.</param>
-/// <param name="Side">Сторона по знаку количества: buy — покупка, sell — продажа; null — сторона не выводится (закрывающая запись).</param>
-/// <param name="Quantity">Количество по модулю.</param>
-/// <param name="Price">Цена сделки либо эффективная цена закрывающей записи.</param>
-/// <param name="ContributionUsdt">Знаковый вклад сделки в USDT; null — вклад операции не раскладывается по сделкам (фьючерсный цикл, закрывающая запись).</param>
-// Суммы сделок окна складываются во вклад операции: UI сверяет расшифровку
-// окна сложением строк; у фьючерсного цикла и закрывающей записи суммы нет —
-// вклад принадлежит циклу либо выводится из количества × цены.
-// Traceability: openspec:analytics/performance#requirement-result-markers-contract
-public sealed record ResultMarkerTradeResponse(
-	string Symbol,
-	string? Side,
-	decimal Quantity,
-	decimal Price,
-	decimal? ContributionUsdt);
 
 /// <summary>Состояние недоступности журнала: обзор не собран, причина — в тексте.</summary>
 /// <param name="Error">Человекочитаемая причина недоступности.</param>
@@ -375,7 +305,6 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
 /// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
 /// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
-/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный итог, время события и перечень операций расшифровки; null, когда выведенных маркеров у конструкции ещё нет.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="QuotesAsOf">Отметка времени котировок оценки; null при сбое или без остатков.</param>
@@ -387,10 +316,6 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 // область строит полный индикатор финрезультата только конечного риска.
 // Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
 // Traceability: change:show-unbounded-finresult-risk/design#d1
-// Последний маркер входит в контракт превью аддитивно: средний вид
-// индикатора рисует его без номера и сумм бейджей, перечень операций
-// расшифровки идёт рядом с итогом.
-// Traceability: openspec:analytics/performance#requirement-result-markers-contract
 // Предупреждения входят в контракт превью аддитивно: счётчик и полный
 // перечень текстов идут из одного вызова вычислителя с метриками.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
@@ -412,7 +337,6 @@ public sealed record ConstructionPreviewResponse(
 	decimal? CapitalUsagePercent,
 	decimal? RealRiskUsdt,
 	string RealRiskStatus,
-	ResultMarkerSummaryResponse? LastResultMarker,
 	DateTimeOffset? OpenedAt,
 	DateTimeOffset? ClosedAt,
 	DateTimeOffset? QuotesAsOf,

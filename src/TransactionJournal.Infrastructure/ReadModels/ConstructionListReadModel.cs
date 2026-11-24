@@ -20,22 +20,16 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 
 	private readonly IJournalMetricsReadModel _metrics;
 
-	/// <summary>Читатель последних маркеров истории результата: последний маркер каждой конструкции для строк списка.</summary>
-	private readonly ConstructionResultMarkersReader _resultMarkers;
-
-	/// <summary>Создаёт read-модель списка над опциями контекста журнала, read-моделью метрик и читателем последних маркеров истории результата; база развёрнута миграциями.</summary>
+	/// <summary>Создаёт read-модель списка над опциями контекста журнала и read-моделью метрик; база развёрнута миграциями.</summary>
 	/// <param name="options">Опции EF-контекста журнала.</param>
 	/// <param name="metrics">Read-модель метрик журнала аналитики.</param>
-	/// <param name="resultMarkers">Читатель последних маркеров истории результата конструкций.</param>
 	/// <exception cref="ArgumentNullException">Аргументы не заданы.</exception>
 	public ConstructionListReadModel(
 		DbContextOptions<JournalDbContext> options,
-		IJournalMetricsReadModel metrics,
-		ConstructionResultMarkersReader resultMarkers)
+		IJournalMetricsReadModel metrics)
 	{
 		_options = options ?? throw new ArgumentNullException(nameof(options));
 		_metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
-		_resultMarkers = resultMarkers ?? throw new ArgumentNullException(nameof(resultMarkers));
 	}
 
 	/// <inheritdoc />
@@ -45,13 +39,6 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 		// список не кэширует их и собственных расчётов не добавляет.
 		var metrics = await _metrics.ReadAsync(cancellationToken).ConfigureAwait(false);
 		var metricsById = metrics.Constructions.ToDictionary(item => item.ConstructionId);
-		// Последние маркеры истории результата читаются тем же чтением списка:
-		// по одному последнему маркеру на конструкцию, без полных историй —
-		// они остаются в карточке. Потоки позиций из того же чтения метрик
-		// передаются читателю: итог последнего маркера сходится с карточкой.
-		// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
-		var markerTails = (await _resultMarkers.ReadAsync(metrics.PositionEntries, cancellationToken).ConfigureAwait(false))
-			.ToDictionary(tail => tail.ConstructionId);
 
 		using var db = new JournalDbContext(_options);
 		var headers = await db.Constructions
@@ -84,13 +71,6 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 			var risk = ConstructionTargetConverter.Convert(header.RiskValue, header.RiskUnit, header.AllocatedCapitalUsdt);
 			var profit = ConstructionTargetConverter.Convert(header.ProfitValue, header.ProfitUnit, header.AllocatedCapitalUsdt);
 
-			// Последний маркер истории результата строки: накопленный
-			// зафиксированный денежный итог — сумма вкладов операций последнего
-			// выведенного маркера; перечень операций расшифровки публикуется
-			// рядом. У конструкции без выведенных маркеров поле null, а не ноль.
-			// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
-			var lastResultMarker = markerTails.GetValueOrDefault(header.Id)?.LastMarker;
-
 			// Реальный риск проходит из метрик аналитики без пересчёта: расчёт из
 			// структуры ног и правила null (неограниченный случай, неразобранный
 			// символ) остаются в аналитике, список переносит величину как есть.
@@ -120,11 +100,6 @@ public sealed class ConstructionListReadModel : IConstructionListReadModel
 				item.QuoteValue,
 				item.CapitalUsagePercent,
 				item.RealRiskUsdt,
-				// Последний маркер истории результата проходит в строку готовой
-				// сводкой «итог + время + перечень операций расшифровки»:
-				// полный список маркеров остаётся в карточке.
-				// Traceability: openspec:analytics/performance#requirement-result-markers-contract
-				lastResultMarker,
 				item.RealRiskStatus,
 				// Счётчик предупреждений проходит из метрик без пересчёта: бейдж
 				// строки и перечень карточки обязаны показывать один набор.

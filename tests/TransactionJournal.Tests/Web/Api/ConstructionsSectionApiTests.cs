@@ -95,32 +95,11 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(closedRow["realRiskStatus"]!.GetValue<string>(), Is.EqualTo("finite"));
 		Assert.That(row["openedAt"]!.GetValue<string>(), Is.EqualTo("2026-06-18T09:05:00+00:00"));
 		Assert.That(row["closedAt"], Is.Null);
-		// Последний маркер истории результата входит в контракт строки: итог,
-		// время события и перечень операций расшифровки идут рядом с прочими
-		// колонками.
-		// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
-		Assert.That(row["lastResultMarker"]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-29.75m));
-		Assert.That(row["lastResultMarker"]!["eventAt"]!.GetValue<string>(), Is.EqualTo("2026-06-19T08:00:00+00:00"));
-		// Перечень операций расшифровки публикуется построчно: вид, дата и вклад
-		// операции; сумма вкладов равна итогу единственного маркера.
-		// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
-		var operations = row["lastResultMarker"]!["operations"]!.AsArray();
-		Assert.That(operations, Has.Count.EqualTo(1));
-		Assert.That(operations[0]!["kind"]!.GetValue<string>(), Is.EqualTo("closing"));
-		Assert.That(operations[0]!["date"]!.GetValue<string>(), Is.EqualTo("2026-06-19T08:00:00+00:00"));
-		Assert.That(operations[0]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(-29.75m));
-		// Детализация закрывающей записи публикуется рядом с операцией:
-		// инструмент, количество × эффективная цена, без стороны и суммы.
-		// Traceability: openspec:analytics/performance#requirement-result-markers-contract
-		var closingTrades = operations[0]!["trades"]!.AsArray();
-		Assert.That(closingTrades, Has.Count.EqualTo(1));
-		Assert.That(closingTrades[0]!["symbol"]!.GetValue<string>(), Is.EqualTo("ETH-28JUN24-3200-C"));
-		Assert.That(closingTrades[0]!["side"], Is.Null);
-		Assert.That(closingTrades[0]!["quantity"]!.GetValue<decimal>(), Is.EqualTo(2m));
-		Assert.That(closingTrades[0]!["price"]!.GetValue<decimal>(), Is.EqualTo(14.875m));
-		Assert.That(closingTrades[0]!["contributionUsdt"], Is.Null);
-		// Закрытая конструкция без выведенных маркеров идёт с null вместо сводки.
-		Assert.That(closedRow["lastResultMarker"], Is.Null);
+		// История результата удалена из журнала (ADR-0024): строка списка не
+		// публикует lastResultMarker ни со сводкой, ни с null-заглушкой —
+		// потребителям контракта не приходят фантомные данные удалённой фичи.
+		// Traceability: issue:#89
+		Assert.That(payload["items"]!.AsArray().Any(item => item!.AsObject().ContainsKey("lastResultMarker")), Is.False);
 	}
 
 	[TestMethod]
@@ -152,10 +131,6 @@ public sealed class ConstructionsSectionApiTests
 		// доступным, пока нереализованные величины гаснут в null.
 		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
 		Assert.That(row["realRiskUsdt"]!.GetValue<decimal>(), Is.EqualTo(150m));
-		// Последний маркер истории — величина из зафиксированных записей:
-		// сбой котировок на неё не влияет.
-		// Traceability: openspec:analytics/performance#scenario-marker-value-excludes-unrealized
-		Assert.That(row["lastResultMarker"]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(-29.75m));
 		// Реализованная часть и корректировки при сбое котировок остаются видимыми.
 		Assert.That(row["realizedPnL"]!.GetValue<decimal>(), Is.EqualTo(60.25m));
 		Assert.That(row["adjustmentsPnL"]!.GetValue<decimal>(), Is.EqualTo(0m));
@@ -285,35 +260,11 @@ public sealed class ConstructionsSectionApiTests
 		Assert.That(payload["counts"]!["openPositions"]!.GetValue<int>(), Is.EqualTo(1));
 		Assert.That(payload["counts"]!["trades"]!.GetValue<int>(), Is.EqualTo(3));
 		Assert.That(payload["counts"]!["adjustments"]!.GetValue<int>(), Is.EqualTo(1));
-		// Превью публикует последний маркер той же истории, что и карточка:
-		// накопленный итог, время события и перечень операций расшифровки.
-		// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
-		Assert.That(payload["lastResultMarker"]!["totalUsdt"]!.GetValue<decimal>(), Is.EqualTo(65.25m));
-		Assert.That(payload["lastResultMarker"]!["eventAt"]!.GetValue<string>(), Is.EqualTo("2026-06-19T10:00:00+00:00"));
-		// Сумма перечня операций расшифровки равна изменению последнего маркера.
-		// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
-		var lastOperations = payload["lastResultMarker"]!["operations"]!.AsArray();
-		Assert.That(lastOperations, Has.Count.EqualTo(1));
-		Assert.That(lastOperations[0]!["kind"]!.GetValue<string>(), Is.EqualTo("futures-close"));
-		Assert.That(lastOperations[0]!["date"]!.GetValue<string>(), Is.EqualTo("2026-06-19T10:00:00+00:00"));
-		Assert.That(lastOperations[0]!["contributionUsdt"]!.GetValue<decimal>(), Is.EqualTo(160.25m));
-		Assert.That(
-			lastOperations.Sum(operation => operation!["contributionUsdt"]!.GetValue<decimal>()),
-			Is.EqualTo(160.25m));
-		// Фьючерсный цикл в превью детализируется записями без индивидуальных
-		// сумм: вклад принадлежит циклу целиком.
-		// Traceability: openspec:analytics/performance#requirement-result-markers-contract
-		var futuresTrades = lastOperations[0]!["trades"]!.AsArray();
-		Assert.That(futuresTrades, Has.Count.EqualTo(2));
-		Assert.That(futuresTrades[0]!["symbol"]!.GetValue<string>(), Is.EqualTo("ETHUSDT"));
-		Assert.That(futuresTrades[0]!["side"]!.GetValue<string>(), Is.EqualTo("buy"));
-		Assert.That(futuresTrades[0]!["quantity"]!.GetValue<decimal>(), Is.EqualTo(0.5m));
-		Assert.That(futuresTrades[0]!["price"]!.GetValue<decimal>(), Is.EqualTo(3500m));
-		Assert.That(futuresTrades[0]!["contributionUsdt"], Is.Null);
-		Assert.That(futuresTrades[1]!["side"]!.GetValue<string>(), Is.EqualTo("sell"));
-		Assert.That(futuresTrades[1]!["quantity"]!.GetValue<decimal>(), Is.EqualTo(0.5m));
-		Assert.That(futuresTrades[1]!["price"]!.GetValue<decimal>(), Is.EqualTo(3520m));
-		Assert.That(futuresTrades[1]!["contributionUsdt"], Is.Null);
+		// История результата удалена из журнала (ADR-0024): превью не публикует
+		// lastResultMarker — потребителям контракта не приходят фантомные
+		// данные удалённой фичи.
+		// Traceability: issue:#89
+		Assert.That(payload!.AsObject().ContainsKey("lastResultMarker"), Is.False);
 	}
 
 	[TestMethod]
@@ -998,24 +949,6 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					QuoteValue: 500m,
 					CapitalUsagePercent: 16.7m,
 					RealRiskUsdt: 150m,
-					// Последний маркер открытой строки: накопленный зафиксированный
-					// итог, время события и перечень операций расшифровки; сумма
-					// вкладов перечня равна изменению — у единственного маркера итогу.
-					// Закрывающая запись детализируется инструментом и количеством ×
-					// эффективной ценой без стороны и индивидуальной суммы.
-					// Traceability: openspec:analytics/performance#scenario-marker-operations-sum-to-change
-					LastResultMarker: new ResultMarkerSummary(
-						-29.75m,
-						new DateTimeOffset(2026, 6, 19, 8, 0, 0, TimeSpan.Zero),
-						[
-							new ResultMarkerOperation
-							{
-								Kind = ResultMarkerKind.Closing,
-								EventTime = new DateTimeOffset(2026, 6, 19, 8, 0, 0, TimeSpan.Zero),
-								AmountUsdt = -29.75m,
-								Trades = [new ResultMarkerTradeDetail("ETH-28JUN24-3200-C", null, 2m, 14.875m, null)],
-							},
-						]),
 					RealRiskStatus: RealRiskStatus.Finite),
 				new ConstructionListItem(
 					ConstructionId: ClosedConstructionId,
@@ -1037,7 +970,6 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					CapitalUsagePercent: null,
 					// Закрытая конструкция без открытых остатков имеет нулевой конечный риск.
 					RealRiskUsdt: 0m,
-					// Закрытая конструкция без событий истории идёт без маркера.
 					RealRiskStatus: RealRiskStatus.Finite),
 			]);
 	}
@@ -1157,20 +1089,6 @@ internal sealed class StubListReadModel : IConstructionListReadModel
 					QuoteValue: null,
 					CapitalUsagePercent: null,
 					RealRiskUsdt: 150m,
-					// Последний маркер от котировок не зависит: итог и перечень
-					// операций остаются при сбое.
-					// Traceability: openspec:analytics/performance#scenario-marker-value-excludes-unrealized
-					LastResultMarker: new ResultMarkerSummary(
-						-29.75m,
-						new DateTimeOffset(2026, 6, 19, 8, 0, 0, TimeSpan.Zero),
-						[
-							new ResultMarkerOperation
-							{
-								Kind = ResultMarkerKind.Closing,
-								EventTime = new DateTimeOffset(2026, 6, 19, 8, 0, 0, TimeSpan.Zero),
-								AmountUsdt = -29.75m,
-							},
-						]),
 					RealRiskStatus: RealRiskStatus.Finite),
 			]));
 
@@ -1331,76 +1249,7 @@ internal sealed class StubDetailReadModel : IConstructionDetailReadModel
 			],
 			// Перечень предупреждений идёт из того же набора текущего чтения,
 			// что и счётчик метрик, — расхождение исключено.
-			RiskWarnings: _riskWarnings,
-			// История маркеров выведена при чтении: нумерация сплошная, последний
-			// маркер равен накопленному зафиксированному итогу конструкции,
-			// перечень каждого маркера несёт его операции расшифровки.
-			// Traceability: openspec:analytics/performance#scenario-card-contract-publishes-markers
-			ResultMarkers: new ConstructionResultMarkers
-			{
-				Markers =
-				[
-					new ResultMarker
-					{
-						Number = 1,
-						EventTime = openedAt,
-						Kind = ResultMarkerKind.Opening,
-						ChangeUsdt = -100m,
-						TotalUsdt = -100m,
-						Operations =
-						[
-							new ResultMarkerOperation
-							{
-								Kind = ResultMarkerKind.Opening,
-								EventTime = openedAt,
-								AmountUsdt = -100m,
-							},
-						],
-					},
-					new ResultMarker
-					{
-						Number = 2,
-						EventTime = new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero),
-						Kind = ResultMarkerKind.PnLAdjustment,
-						ChangeUsdt = 5m,
-						TotalUsdt = -95m,
-						Operations =
-						[
-							new ResultMarkerOperation
-							{
-								Kind = ResultMarkerKind.PnLAdjustment,
-								EventTime = new DateTimeOffset(2026, 6, 19, 0, 0, 0, TimeSpan.Zero),
-								AmountUsdt = 5m,
-							},
-						],
-					},
-					new ResultMarker
-					{
-						Number = 3,
-						EventTime = new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero),
-						Kind = ResultMarkerKind.FuturesClose,
-						ChangeUsdt = 160.25m,
-						TotalUsdt = 65.25m,
-						Operations =
-						[
-							new ResultMarkerOperation
-							{
-								Kind = ResultMarkerKind.FuturesClose,
-								EventTime = new DateTimeOffset(2026, 6, 19, 10, 0, 0, TimeSpan.Zero),
-								AmountUsdt = 160.25m,
-
-								// Вклад фьючерсного цикла принадлежит циклу целиком:
-								// записи детализации без индивидуальных сумм.
-								Trades =
-								[
-									new ResultMarkerTradeDetail("ETHUSDT", "buy", 0.5m, 3500m, null),
-									new ResultMarkerTradeDetail("ETHUSDT", "sell", 0.5m, 3520m, null),
-								],
-							},
-						],
-					},
-				],
-			});
+			RiskWarnings: _riskWarnings);
 		return Task.FromResult(data);
 	}
 }
