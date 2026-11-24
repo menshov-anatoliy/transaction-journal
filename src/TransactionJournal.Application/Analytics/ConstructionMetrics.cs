@@ -52,31 +52,31 @@ public sealed record ConstructionMetrics
 	public decimal? QuoteValue { get; init; }
 
 	/// <summary>
-	/// Реальный риск конструкции в USDT — наихудший результат её открытых
-	/// остатков на экспирации: совместный минимум платежа ног в группе одной
-	/// экспирации, группы разных экспираций суммируются консервативно. Без
-	/// открытых остатков риск нулевой; null — когда худший случай неограничен
-	/// (нетто-короткая позиция по коллам группы) или символ открытого остатка
-	/// не разобран, — причина отсутствия числа различима статусом
-	/// <see cref="RealRiskStatus"/>. Метрика выводится из структуры ног и
-	/// средних цен открытых остатков и от текущих котировок не зависит.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-	// Traceability: change:fix-finresult-indicator-real-risk/design#d1
+	/// Реальный риск конструкции в USDT — минусовая часть её текущего результата:
+	/// max(0, −итог) по текущим маркам, где итог — реализованный PnL, нереализованный
+	/// PnL и внешние корректировки. Формула едина для открытых и закрытых
+	/// конструкций: закрытая убыточная показывает риск, равный финальному убытку;
+	/// при неотрицательном итоге риск нулевой. null — когда итог недоступен
+	/// (сбой котировок или неоценённый открытый остаток): риск недоступен целиком,
+	/// частичный расчёт по остатку данных запрещён; причина различима статусом
+	/// <see cref="RealRiskStatus"/>.
+	// Минусовая часть текущего результата вместо худшего исхода на экспирацию —
+	// решение ADR-0025; живой контракт — issue-спека и тесты с меткой issue:#90.
+	// Traceability: issue:#90
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	/// </summary>
 	public decimal? RealRiskUsdt { get; init; }
 
 	/// <summary>
-	/// Состояние реального риска: конечный риск (`finite`), неограниченный
-	/// хвост убытка (`unbounded`) или неполные исходные данные (`unavailable`).
-	/// Статус сопровождает величину без потери: число выдаётся только для
-	/// `finite`, для остальных состояний <see cref="RealRiskUsdt"/> отсутствует.
+	/// Состояние реального риска: конечный риск (`finite`) или неполные данные
+	/// (`unavailable`). Статус сопровождает величину без потери: число выдаётся
+	/// только для `finite`, для `unavailable` <see cref="RealRiskUsdt"/> отсутствует.
 	/// Незаданный статус консервативно читается как «не рассчитан» — по умолчанию
 	/// он не может выдавать риск конечным, иначе потребители угадывали бы
 	/// конечный риск там, где он не рассчитан.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-	// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
-	// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
-	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	// Статусная пара вырождена в finite/unavailable: неограниченный хвост по
+	// маркам невозможен (ADR-0025).
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	/// </summary>
 	public RealRiskStatus RealRiskStatus { get; init; } = RealRiskStatus.Unavailable;
 

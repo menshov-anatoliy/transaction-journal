@@ -718,8 +718,8 @@ public static class ConstructionCardEndpoints
 			data.Metrics.CapitalUsagePercent,
 			data.Metrics.RealRiskUsdt,
 			// Статус проходит рядом с величиной: конечный риск отличим от
-			// неограниченного хвоста и неполных данных без догадок по null.
-			// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+			// нерассчитанного без догадок по null.
+			// Traceability: issue:#90
 			RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
 			data.Metrics.OpenedAt,
 			data.Metrics.ClosedAt,
@@ -1000,8 +1000,8 @@ public sealed record ConstructionCardResponse(
 /// <param name="AdjustmentsPnLPercent">Корректировки в процентах; null без базы.</param>
 /// <param name="QuoteValue">Стоимость открытых остатков по котировкам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
-/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
-/// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — минусовая часть текущего результата по маркам: max(0, −итог); null при недоступном итоге (сбой котировок или неоценённый остаток).</param>
+/// <param name="RealRiskStatus">Состояние реального риска: finite или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия — время первой сделки; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой.</param>
 /// <param name="DurationSeconds">Длительность конструкции в секундах; null без сделок.</param>
@@ -1012,8 +1012,8 @@ public sealed record ConstructionCardResponse(
 /// <param name="SyntheticAdjustedTotalUsdt">Сводная величина «с учётом зафиксированного синтетикой» — реализованный результат плюс сумма локов действующих связок (оспоренные не входят, ручные входят наравне); null без действующих связок.</param>
 // Реальный риск входит в контракт метрик карточки со статусом состояния:
 // полный индикатор карточки строится только конечного риска.
-// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-// Traceability: change:show-unbounded-finresult-risk/design#d1
+// Traceability: issue:#90
+// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 // Саммари времени жизни входит в контракт метрик аддитивно: metric-strip
 // карточки строит сводку времени жизни, null рендерится прочерком.
 // Traceability: openspec:analytics/option-lifetime#requirement-construction-lifetime-summary

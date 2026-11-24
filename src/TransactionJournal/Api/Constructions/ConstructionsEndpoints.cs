@@ -88,8 +88,8 @@ public static class ConstructionsEndpoints
 					item.CapitalUsagePercent,
 					item.RealRiskUsdt,
 					// Статус проходит рядом с величиной: конечный риск отличим от
-					// неограниченного хвоста и неполных данных без догадок по null.
-					// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+					// нерассчитанного без догадок по null.
+					// Traceability: issue:#90
 					RealRiskContract.SerializeStatus(item.RealRiskStatus, item.RealRiskUsdt),
 					item.OpenedAt,
 					item.ClosedAt,
@@ -160,8 +160,8 @@ public static class ConstructionsEndpoints
 				data.Metrics.CapitalUsagePercent,
 				data.Metrics.RealRiskUsdt,
 				// Статус проходит рядом с величиной: конечный риск отличим от
-				// неограниченного хвоста и неполных данных без догадок по null.
-				// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+				// нерассчитанного без догадок по null.
+				// Traceability: issue:#90
 				RealRiskContract.SerializeStatus(data.Metrics.RealRiskStatus, data.Metrics.RealRiskUsdt),
 				data.Metrics.OpenedAt,
 				data.Metrics.ClosedAt,
@@ -236,8 +236,8 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
 /// <param name="QuoteValue">Стоимость открытых позиций по котировкам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
-/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
-/// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — минусовая часть текущего результата по маркам: max(0, −итог); null при недоступном итоге (сбой котировок или неоценённый остаток).</param>
+/// <param name="RealRiskStatus">Состояние реального риска: finite или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="LiveHintCount">Число живых подсказок конструкции для бейджа строки.</param>
@@ -246,11 +246,12 @@ public sealed record ConstructionsSummaryResponse(
 /// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
 /// <param name="TotalIntrinsicValueUsdt">Суммарная внутренняя стоимость открытых опционных остатков; null без опционных ног или без тикеров.</param>
 // Реальный риск входит в контракт строки списка со статусом состояния:
-// насечка удалена вместе с худшим исходом (ADR-0021) — SPA различает
-// неограниченный хвост и неполные данные бейджами «∞»/«?» без догадок
-// по null.
-// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-// Traceability: change:show-unbounded-finresult-risk/design#d1
+// насечка удалена вместе с худшим исходом (ADR-0021), строка «unbounded»
+// ушла из контракта (ADR-0025) — SPA различает конечный и нерассчитанный
+// риск бейджами без догадок по null; бейдж «∞» уходит из UI в следующем
+// срезе frontend.
+// Traceability: issue:#90
+// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 // Счётчик предупреждений входит в контракт строки аддитивно: бейдж «⚠ N»
 // строится по числу из метрик аналитики, ноль — бейдж скрыт.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
@@ -303,8 +304,8 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="TotalPnLPercent">Итог в процентах от капитала; null без базы.</param>
 /// <param name="QuoteValue">Стоимость открытых позиций по котировкам; null без остатков или при сбое.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала в процентах; null без базы.</param>
-/// <param name="RealRiskUsdt">Реальный риск в USDT — наихудший результат открытых остатков на экспирации; null при неограниченном худшем случае или неполных данных.</param>
-/// <param name="RealRiskStatus">Состояние реального риска: finite, unbounded или unavailable; число выдаётся только конечному риску.</param>
+/// <param name="RealRiskUsdt">Реальный риск в USDT — минусовая часть текущего результата по маркам: max(0, −итог); null при недоступном итоге (сбой котировок или неоценённый остаток).</param>
+/// <param name="RealRiskStatus">Состояние реального риска: finite или unavailable; число выдаётся только конечному риску.</param>
 /// <param name="OpenedAt">Дата открытия; null без сделок.</param>
 /// <param name="ClosedAt">Дата закрытия; null у открытой конструкции.</param>
 /// <param name="QuotesAsOf">Отметка времени котировок оценки; null при сбое или без остатков.</param>
@@ -314,8 +315,8 @@ public sealed record ConstructionsUnavailableResponse(string Error);
 /// <param name="RiskWarnings">Полный перечень текстов предупреждений краткой карточки; пустой список без предупреждений.</param>
 // Реальный риск входит в контракт превью со статусом состояния: правая
 // область строит полный индикатор финрезультата только конечного риска.
-// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-// Traceability: change:show-unbounded-finresult-risk/design#d1
+// Traceability: issue:#90
+// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 // Предупреждения входят в контракт превью аддитивно: счётчик и полный
 // перечень текстов идут из одного вызова вычислителя с метриками.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
