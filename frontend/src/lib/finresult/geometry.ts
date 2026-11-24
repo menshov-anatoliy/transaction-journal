@@ -47,9 +47,9 @@ export interface FinResultInput {
 	readonly hasOpenResidual: boolean;
 	/**
 	 * Состояние реального риска из контракта API: finite — конечный риск,
-	 * unbounded — неограниченный хвост, unavailable — расчёт не удался.
-	 * Координаты на шкале не задаёт: состояние выводится вне полосы.
-	 * Traceability: change:show-unbounded-finresult-risk/design#d1
+	 * unavailable — расчёт не удался. Координаты на шкале не задаёт:
+	 * состояние выводится вне полосы.
+	 * Traceability: issue:#98
 	 */
 	readonly realRiskStatus: RealRiskStatus;
 }
@@ -113,9 +113,9 @@ export interface FinResultGeometry {
 	/** Золотая зона сверхприбыли за плановым профитом; null — превышения нет. */
 	readonly superZone: FinResultSpan | null;
 	/**
-	 * Состояние реального риска: различает конечный риск, неограниченный
-	 * хвост и нехватку данных; пробрасывается из входа как есть.
-	 * Traceability: change:show-unbounded-finresult-risk/design#d1
+	 * Состояние реального риска: различает конечный риск и нехватку
+	 * данных; пробрасывается из входа как есть.
+	 * Traceability: issue:#98
 	 */
 	readonly realRiskStatus: RealRiskStatus;
 	/** Позиция маркера итога; null — данных нет. */
@@ -172,17 +172,13 @@ export function computeFinResultGeometry(
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 	const incomplete = input.quotesDegraded && input.hasOpenResidual;
 
-	// Состояние риска без координаты на шкале: unbounded/unavailable
-	// выводятся отдельно от полосы, плановая граница подписывается
-	// плановым риском, а маркер итога сохраняется — от состояния
-	// риска и котировок он не зависит.
-	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
-	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
-	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
+	// Состояние риска без координаты на шкале: недоступный расчёт
+	// выводится отдельно от полосы, плановая граница подписывается
+	// плановым риском. По ячейке 8 макета при недоступном риске
+	// «маркера и числа нет» — итог не показывает ни точку, ни сумму.
+	// Traceability: issue:#98
 	const riskState: RiskState | null =
-		input.realRiskStatus === "unbounded" || input.realRiskStatus === "unavailable"
-			? input.realRiskStatus
-			: null;
+		input.realRiskStatus === "unavailable" ? input.realRiskStatus : null;
 
 	// Нейтральная полоса: плановых границ нет — зоны, деления, маркер
 	// текущего результата и маркеры истории отсутствуют, заполнение идёт
@@ -221,8 +217,13 @@ export function computeFinResultGeometry(
 			: null;
 
 	// Маркер итога стоит в истинном положении оценки ликвидации: шкала
-	// всегда охватывает итог, поэтому клип и прижатие не нужны.
-	const markerAt = total === null ? null : toFraction(total);
+	// всегда охватывает итог, поэтому клип и прижатие не нужны. При
+	// недоступном риске маркер скрыт — сбой котировок уводит состояние
+	// в «не удалось рассчитать» без точки и числа на полосе.
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
+	const markerAt =
+		total === null || riskState === "unavailable" ? null : toFraction(total);
 
 	// Единая заливка итога: неположительный итог — один красный тон от нуля
 	// до маркера, без разложения на реализованную и нереализованную части;
@@ -253,7 +254,7 @@ export function computeFinResultGeometry(
 		zero: "0",
 		profit: input.plannedProfit !== null ? formatFinAmount(input.plannedProfit) : null,
 		riskState: resolveRiskStateLabel(riskState),
-		marker: markerLabel,
+		marker: riskState === "unavailable" ? null : markerLabel,
 	};
 
 	// Разнос: текстовые подписи обходят занятое — переносом на
@@ -345,7 +346,10 @@ function buildNeutralGeometry(
 			zero: "0",
 			profit: null,
 			riskState: resolveRiskStateLabel(riskState),
-			marker: resolveMarkerLabel(realized, null, total, adjustments, quotesDegraded),
+			marker:
+				riskState === "unavailable"
+					? null
+					: resolveMarkerLabel(realized, null, total, adjustments, quotesDegraded),
 		},
 		placements:
 			layout === null || layout === undefined
@@ -383,23 +387,18 @@ function resolveScale(
 	return { min, max };
 }
 
-// Подпись состояния риска вне шкалы: тексты совпадают со сценариями
-// спецификации, null — состояния нет, риск конечный.
-// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
-// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
+// Подпись состояния риска вне шкалы: единственное состояние — недоступный
+// расчёт, «не удалось рассчитать»; null — риск конечный.
+// Traceability: issue:#98
 function resolveRiskStateLabel(riskState: RiskState | null): string | null {
-	if (riskState === "unbounded") {
-		return "риск не ограничен";
-	}
-
 	return riskState === "unavailable" ? "не удалось рассчитать" : null;
 }
 
-// Подпись планового деления риска: без состояния — число «−300»; при
-// unbounded/unavailable деление явно называется плановым риском, чтобы
+// Подпись планового деления риска: при конечном риске — число «−300»;
+// при недоступном расчёте деление явно называется плановым риском, чтобы
 // тонированную плановую зону не принимали за реальный риск.
-// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
-// Traceability: change:show-unbounded-finresult-risk/design#d2
+// Traceability: issue:#98
+// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 function resolveRiskTickLabel(
 	plannedRisk: number | null,
 	riskState: RiskState | null,

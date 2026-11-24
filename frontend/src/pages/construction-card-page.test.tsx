@@ -346,16 +346,13 @@ describe("карточка конструкции: действия и ввод"
 		expect(withinSummary.getByText(/2026-06-18/)).toBeInTheDocument();
 	});
 
-	// Неконечный реальный риск показывается канонической подписью статуса
-	// в группе РИСК сводки: неограниченный хвост и сбой расчёта не
-	// превращаются в прочерк или ноль.
-	// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
-	it.each([
-		["unbounded", "не ограничен"],
-		["unavailable", "не удалось рассчитать"],
-	] as const)("TryIfRealRiskStatusShownInRiskGroup %s", async (status, label) => {
+	// Недоступный реальный риск показывается канонической подписью состояния
+	// в группе РИСК сводки: сбой расчёта не превращается в прочерк или ноль,
+	// конечный риск приходит только с числом.
+	// Traceability: issue:#98
+	it("TryIfRealRiskStatusShownInRiskGroup", async () => {
 		cardApi.fetchConstructionCard.mockResolvedValue({
-			...card, metrics: { ...card.metrics, realRiskUsdt: null, realRiskStatus: status },
+			...card, metrics: { ...card.metrics, realRiskUsdt: null, realRiskStatus: "unavailable" },
 		});
 		renderCardPage();
 		await screen.findByRole("heading", { name: /ETH-240628-3200C\+P\s*открыта/i });
@@ -363,7 +360,7 @@ describe("карточка конструкции: действия и ввод"
 		const summary = document.querySelector('[data-slot="construction-metrics-card"]');
 		expect(summary).not.toBeNull();
 		const withinSummary = within(summary as HTMLElement);
-		expect(withinSummary.getByText(label)).toBeInTheDocument();
+		expect(withinSummary.getByText("не удалось рассчитать")).toBeInTheDocument();
 		expect(withinSummary.queryByText("45 USDT")).toBeNull();
 	});
 
@@ -779,14 +776,14 @@ describe("карточка конструкции", () => {
 		expect(document.querySelector('[data-slot="construction-card-warnings"]')).toBeNull();
 	});
 
-	// Неограниченный реальный риск и предупреждения сосуществуют: индикатор
-	// финрезультата сохраняет статус «риск не ограничен», секция предупреждений
-	// показывается независимо от него.
-	// Traceability: openspec:ui/screens#scenario-unbounded-badge-coexists-with-warnings
-	it("TryIfUnboundedRiskStateCoexistsWithWarningsSection", async () => {
+	// Недоступный реальный риск и предупреждения сосуществуют: индикатор
+	// финрезультата сохраняет статус «не удалось рассчитать», секция
+	// предупреждений показывается независимо от состояния риска.
+	// Traceability: issue:#98
+	it("TryIfUnavailableRiskStateCoexistsWithWarningsSection", async () => {
 		cardApi.fetchConstructionCard.mockResolvedValue({
 			...card,
-			metrics: { ...card.metrics, realRiskUsdt: null, realRiskStatus: "unbounded" },
+			metrics: { ...card.metrics, realRiskUsdt: null, realRiskStatus: "unavailable" },
 			riskWarnings: [{ text: "ETHUSDT · 2 контракта · убыток не ограничен" }],
 		});
 		renderCardPage();
@@ -794,7 +791,7 @@ describe("карточка конструкции", () => {
 		await screen.findByRole("heading", { name: "Предупреждения" });
 		const riskState = document.querySelector('[data-slot="fin-result-full"] [data-part="risk-state"]');
 		expect(riskState).not.toBeNull();
-		expect(riskState).toHaveTextContent("риск не ограничен");
+		expect(riskState).toHaveTextContent("не удалось рассчитать");
 		const section = document.querySelector('[data-slot="construction-card-warnings"]');
 		expect(section).not.toBeNull();
 		expect(section).toHaveTextContent("ETHUSDT · 2 контракта · убыток не ограничен");

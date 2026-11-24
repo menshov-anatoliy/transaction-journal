@@ -9,7 +9,10 @@ import { apiFetch } from "./http";
 export type ConstructionStatus = "open" | "closed" | "archived";
 
 /** Состояние реального риска: число величины выдаётся только конечному риску. */
-export type RealRiskStatus = "finite" | "unbounded" | "unavailable";
+// Перечень состояний вырожден в finite/unavailable по ADR-0025: неограниченный
+// хвост по текущим маркам невозможен, строка «unbounded» удалена из контракта.
+// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
+export type RealRiskStatus = "finite" | "unavailable";
 
 /** Сводка журнала для шапки раздела. */
 export interface ConstructionsSummary {
@@ -39,12 +42,13 @@ export interface ConstructionRow {
 	readonly totalPnLPercent: number | null;
 	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
-	// Реальный риск открытых остатков идёт парой «величина + статус»: число
-	// выдаётся только конечному риску, null при неограниченном хвосте или
-	// неполных данных, а статус различает эти причины — угадывать finite
-	// по плановому риску нельзя.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	// Реальный риск идёт парой «величина + статус»: число выдаётся только
+	// конечному риску — минусовой части текущего результата по текущим
+	// маркам; null при недоступном риске (сбой котировок или неоценённый
+	// остаток), частичный расчёт запрещён, угадывать finite по плановому
+	// риску нельзя.
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
 	readonly openedAt: string | null;
@@ -103,11 +107,11 @@ export interface ConstructionPreview {
 	readonly totalPnLPercent: number | null;
 	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
-	// Реальный риск открытых остатков идёт парой «величина + статус»: число
-	// только при конечном риске, null при неограниченном хвосте или неполных
-	// данных, а статус различает эти причины без подстановки планового риска.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	// Реальный риск идёт парой «величина + статус»: число только при
+	// конечном риске — минусовой части текущего результата по текущим
+	// маркам; null при недоступном риске без подстановки планового риска.
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
 	readonly openedAt: string | null;

@@ -2,7 +2,6 @@ import * as React from "react";
 import { ChevronDown, CircleHelp } from "lucide-react";
 import type {
 	ConstructionCard,
-	RealRiskStatus,
 	SyntheticCloseDisputeInput,
 	SyntheticCloseManualLinkInput,
 } from "@/lib/api/construction-card";
@@ -105,13 +104,6 @@ function MetricGroup({ group, children }: { group: MetricGroupKey; children: Rea
 			<div className="flex min-w-0 flex-wrap items-start gap-4">{children}</div>
 		</div>
 	);
-}
-
-/** Каноническая подпись неконечного реального риска: статус текстом вместо
-    заглушки — неограниченный хвост и сбой расчёта не выглядят «нет данных». */
-// Traceability: change:show-unbounded-finresult-risk/design#d1
-function realRiskStatusText(status: RealRiskStatus): string {
-	return status === "unbounded" ? "не ограничен" : "не удалось рассчитать";
 }
 
 /** Состав группы заголовка: метрики читаются из снимка карточки. Служебные
@@ -232,14 +224,18 @@ function groupMetrics(group: MetricGroupKey, card: ConstructionCard): React.Reac
 			return (
 				<>
 					{/* Реальный риск — пара «величина + статус» из read-модели:
-					    число только при конечном статусе, иначе канонический
-					    текст статуса вместо заглушки плановым риском. */}
-					{/* Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry */}
-					{/* Traceability: openspec:ui/screens#scenario-detail-header-meta-line */}
+					    число при конечном риске — минусовой части текущего
+					    результата по текущим маркам; при недоступном расчёте
+					    канонический текст состояния вместо числа-заглушки. */}
+					{/* Traceability: issue:#98 */}
+					{/* Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences */}
 					<Metric label="реальный риск" valueClassName={`tabular-nums ${VALUE_PART}`}>
 						<MetricHint tooltip={METRIC_TOOLTIPS.realRisk}>
 							{metrics.realRiskUsdt === null ? (
-								<span className="text-text-muted">{realRiskStatusText(metrics.realRiskStatus)}</span>
+								// По контракту конечный риск приходит только с числом,
+								// поэтому без числа риск недоступен — «не удалось
+								// рассчитать».
+								<span className="text-text-muted">не удалось рассчитать</span>
 							) : (
 								`${formatAmount(metrics.realRiskUsdt)} USDT`
 							)}
@@ -737,10 +733,9 @@ export function ConstructionMetricStrip({
 						// котировок не делает индикатор неполным.
 						// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 						hasOpenResidual: card.hasOpenResidual,
-						// Пара «число + статус» из контракта API: unbounded и
-						// unavailable дают состояние без числа.
-						// Traceability: openspec:ui/screens#requirement-risk-profit-hint
-						// Traceability: change:show-unbounded-finresult-risk/design#d1
+						// Пара «число + статус» из контракта API: недоступный
+						// расчёт даёт состояние без числа.
+						// Traceability: issue:#98
 						realRiskStatus: metrics.realRiskStatus,
 					}}
 				/>
@@ -804,8 +799,13 @@ export function ConstructionMetricStrip({
 							<span aria-hidden="true" className="size-[11px] shrink-0 rounded-full bg-primary" />
 							<span>маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки</span>
 						</div>
+						{/* Примечание о состояниях риска повторяет мастер design.pen:
+						    реальный риск виден числом на маркере итога, при сбое
+						    котировок расчёт недоступен — «?» на полосе, статус
+						    текстом и подпись планового риска на делении −Риск. */}
+						{/* Traceability: issue:#98 */}
 						<p className="text-[10.5px] text-text-muted">
-							Состояния вне шкалы показывают отдельно от полосы: «риск не ограничен» и «не удалось рассчитать».
+							Состояния риска: число на маркере; при сбое котировок — «?» на полосе, «не удалось рассчитать» и подпись планового риска на делении −Риск.
 						</p>
 					</PopoverContent>
 				</Popover>

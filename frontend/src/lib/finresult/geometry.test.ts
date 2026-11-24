@@ -266,52 +266,27 @@ describe("разнос и прижатие текстовых меток", () =>
 });
 
 describe("состояния риска", () => {
-	// Не конечный риск (unbounded/unavailable) не изображается конечной
-	// границей: состояние выводится текстом вне шкалы, плановое деление
-	// подписывается плановым риском, маркер итога сохраняется.
-	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
-	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
-	it("unbounded: статус вне шкалы, маркер итога сохранён", () => {
-		// Act: итог +5 942.16 при плановом риске 400 — хвост коротких коллов
-		// не ограничен.
-		const geometry = computeFinResultGeometry(
-			caseInput({
-				plannedRisk: 400,
-				realized: 5942.16,
-				unrealized: null,
-				realRiskStatus: "unbounded",
-			}),
-		);
-
-		// Assert: состояние вынесено наружу, плановое деление названо
-		// плановым риском.
-		expect(geometry.realRiskStatus).toBe("unbounded");
-		expect(geometry.labels.riskState).toBe("риск не ограничен");
-		expect(geometry.labels.risk).toBe("плановый риск −400");
-
-		// Assert: итог на краю шкалы; шкала охватывает итог.
-		expect(geometry.markerAt).toBe(1);
-		expect(geometry.labels.marker).toBe("+5\u00A0942.16");
-		expect(geometry.tone).toBe("positive");
-
-		// Assert: золотая зона от профита +900 до итога, зона риска до нуля.
-		expect(geometry.superZone).toEqual({ from: 1300 / 6342.16, to: 1 });
-		expect(geometry.riskZone).toEqual({ from: 0, to: 400 / 6342.16 });
-	});
-
-	it("unavailable: статус «не удалось рассчитать», плановое деление подписано", () => {
+	// Список состояний вырожден в unavailable: неограниченный хвост по
+	// текущим маркам невозможен, строка unbounded удалена из контракта.
+	// Недоступный риск не изображается конечной границей: состояние
+	// выводится текстом вне шкалы, плановое деление подписывается
+	// плановым риском, маркер итога и его число скрыты — по ячейке 8
+	// макета «маркера и числа нет».
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
+	it("unavailable: статус «не удалось рассчитать», плановое деление подписано, маркера нет", () => {
 		// Act: расчёт риска не удался при плановом риске 300.
 		const geometry = computeFinResultGeometry(
 			caseInput({ realized: 200, unrealized: null, realRiskStatus: "unavailable" }),
 		);
 
 		// Assert: статус «не удалось рассчитать», плановое деление —
-		// плановый риск −300, маркер итога +200 на своём месте.
+		// плановый риск −300, маркер и число итога скрыты.
 		expect(geometry.realRiskStatus).toBe("unavailable");
 		expect(geometry.labels.riskState).toBe("не удалось рассчитать");
 		expect(geometry.labels.risk).toBe("плановый риск −300");
-		expect(geometry.markerAt).toBeCloseTo(500 / 1200, 4);
-		expect(geometry.labels.marker).toBe("+200");
+		expect(geometry.markerAt).toBeNull();
+		expect(geometry.labels.marker).toBeNull();
 	});
 
 	// Без плановых границ полоса нейтральная: зон и маркера итога нет,

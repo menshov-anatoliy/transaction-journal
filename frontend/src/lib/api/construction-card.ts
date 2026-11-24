@@ -29,11 +29,12 @@ export interface ConstructionCardMetrics {
 	readonly adjustmentsPnLPercent: number | null;
 	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
-	// Реальный риск открытых остатков идёт парой «величина + статус»:
-	// число только при конечном риске, статус различает неограниченный
-	// хвост и неполные данные без заглушки плановым риском.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	// Реальный риск идёт парой «величина + статус»: число только при
+	// конечном риске — минусовой части текущего результата по текущим
+	// маркам; недоступный расчёт идёт без числа, без заглушки плановым
+	// риском.
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
 	// Сводная величина «с учётом зафиксированного синтетикой» —

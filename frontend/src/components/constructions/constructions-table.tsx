@@ -290,10 +290,9 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 								// Открытые остатки строки из семантики read-модели.
 								// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 								hasOpenResidual: hasOpenResidual(row.original),
-								// Пара «число + статус» из контракта API: unbounded/
-								// unavailable дают состояние без числа.
-								// Traceability: openspec:ui/screens#requirement-risk-profit-hint
-								// Traceability: change:show-unbounded-finresult-risk/design#d1
+								// Пара «число + статус» из контракта API: недоступный
+								// расчёт даёт состояние без числа.
+								// Traceability: issue:#98
 								realRiskStatus: row.original.realRiskStatus,
 							}}
 						/>

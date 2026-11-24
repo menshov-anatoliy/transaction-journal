@@ -272,21 +272,22 @@ describe("ConstructionMetricStrip: группы заголовка", () => {
 		expect(findMetric("выделенный капитал")).toHaveTextContent("—");
 	});
 
-	// Реальный риск деградирует статусом: неограниченный хвост и сбой
-	// расчёта показываются каноническим текстом вместо числа.
-	// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
-	it.each([
-		["unbounded", "не ограничен"],
-		["unavailable", "не удалось рассчитать"],
-	] as const)("показывает статус реального риска %s текстом", (status, text) => {
+	// Недоступный расчёт деградирует статусом: канонический текст «не удалось
+	// рассчитать» вместо числа, числа-заглушки нет. Конечный риск по
+	// контракту приходит только с числом, отдельной ветки у него нет.
+	// Traceability: issue:#98
+	it("показывает статус недоступного реального риска текстом", () => {
 		// Arrange: пара «величина + статус» без числа.
 		const base = makeCard();
 
 		// Act: рендер сводки карточки.
-		renderStrip({ ...base, metrics: { ...base.metrics, realRiskUsdt: null, realRiskStatus: status } });
+		renderStrip({
+			...base,
+			metrics: { ...base.metrics, realRiskUsdt: null, realRiskStatus: "unavailable" },
+		});
 
 		// Assert: в группе РИСК текст статуса, числа нет.
-		expect(findMetric("реальный риск")).toHaveTextContent(text);
+		expect(findMetric("реальный риск")).toHaveTextContent("не удалось рассчитать");
 		expect(findMetric("реальный риск").textContent).not.toContain("USDT");
 	});
 
@@ -1106,6 +1107,29 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(popupText).not.toContain("входная стоимость");
 		expect(popupText).not.toContain("открытых остатков");
 		expect(popupText).not.toContain("ac-43");
+	});
+
+	// Примечание о состояниях риска отражает новый состав метрики: реальный
+	// риск виден числом на маркере, при сбое котировок — «?» на полосе и
+	// подпись планового риска на делении −Риск; ветки «∞» и «риск не
+	// ограничен» в попапе не остались.
+	// Traceability: issue:#98
+	it("объясняет состояния риска по обновлённому макету", async () => {
+		// Arrange: открытая подсказка чтения.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
+		const popup = screen.getByRole("dialog");
+		const popupText = popup.textContent ?? "";
+
+		// Assert: примечание дословно из макета.
+		expect(popupText).toContain(
+			"Состояния риска: число на маркере; при сбое котировок — «?» на полосе, «не удалось рассчитать» и подпись планового риска на делении −Риск.",
+		);
+
+		// Assert: формулировок удалённых состояний в попапе нет.
+		expect(popupText).not.toContain("риск не ограничен");
+		expect(popupText).not.toContain("Состояния вне шкалы");
 	});
 
 	// Тест удаления: бейджи и штрихи маркеров изменения результата выведены
