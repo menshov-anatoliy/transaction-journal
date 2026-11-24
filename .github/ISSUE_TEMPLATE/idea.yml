@@ -1,5 +1,6 @@
 name: Идея доработки
 description: Черновик идеи. Дальше её формализует сессия опроса /triage #N.
+title: "Идея: "
 labels: ["needs-triage"]
 body:
   - type: markdown
