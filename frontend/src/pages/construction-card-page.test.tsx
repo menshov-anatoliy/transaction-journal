@@ -124,7 +124,6 @@ const card: ConstructionCard = {
 		},
 	],
 	syntheticCloses: [],
-	resultMarkers: [],
 	riskWarnings: [],
 };
 

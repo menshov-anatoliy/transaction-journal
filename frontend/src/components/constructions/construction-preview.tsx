@@ -72,16 +72,10 @@ export function ConstructionPreviewCard({ preview, liveHintCount }: Construction
 					// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 					hasOpenResidual: preview.counts.openPositions > 0,
 					// Пара «число + статус» из контракта API: unbounded/unavailable
-					// дают состояние без числа; маркеры истории рисуются
-					// независимо от состояния риска.
+					// дают состояние без числа.
 					// Traceability: openspec:ui/screens#requirement-risk-profit-hint
 					// Traceability: change:show-unbounded-finresult-risk/design#d1
 					realRiskStatus: preview.realRiskStatus,
-					// Последний маркер изменения результата превью: средний вид
-					// показывает только его — тёмный штрих без номера и суммы.
-					// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-medium-compact-last-marker-only
-					resultMarkers:
-						preview.lastResultMarker === null ? [] : [preview.lastResultMarker],
 				}}
 			/>
 

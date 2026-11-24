@@ -1,59 +1,22 @@
 import type { RealRiskStatus } from "../api/constructions";
-import type { ResultMarkerOperation } from "../api/construction-card";
 
 // Калькулятор геометрии индикатора финансового результата конструкции.
-// Чистая функция без React: переводит плановые границы, маркеры изменения
-// результата и текущий результат в доли шкалы 0..1, подписи и размещения
-// меток. Рендер (полный, средний и компактный индикаторы) строится поверх
-// этих долей и не считает ничего сам — одна геометрия на все представления.
+// Чистая функция без React: переводит плановые границы и текущий результат
+// в доли шкалы 0..1, подписи и размещения меток. Рендер (полный, средний и
+// компактный индикаторы) строится поверх этих долей и не считает ничего
+// сам — одна геометрия на все представления.
 // Шкала: зона риска от −Риск до 0, зона планового профита от 0 до +Профит;
-// при выходе точки за плановые границы шкала расширяется до истинного
-// положения — охват строится по плановым границам, маркеру текущего
-// результата и всем меткам истории, клипа крайних значений нет.
+// при выходе маркера за плановые границы шкала расширяется до его
+// истинного положения — охват строится по плановым границам и маркеру
+// текущего результата, клипа крайних значений нет.
 // Маркер — позиция текущего результата (реализованный + нереализованный +
-// внешние корректировки PnL); маркеры изменения результата — накопленный
-// зафиксированный результат на момент события журнала; результат рисуется
-// одной заливкой без разложения на реализованную и нереализованную части.
-// Бейджи маркеров стоят над полосой и при коллизии разносятся вертикально.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-risk-profit-hint
+// внешние корректировки PnL); результат рисуется одной заливкой без
+// разложения на реализованную и нереализованную части. Маркеры изменения
+// результата убраны из индикатора — история результата остаётся в журнале.
+// Traceability: issue:#94
 
 /** Состояние риска без числовой границы. */
 type RiskState = Exclude<RealRiskStatus, "finite">;
-
-/** Точка истории результата из контракта API: позиция на шкале считается по накопленному итогу. */
-// Карточка публикует маркеры полями eventTime/kind/changeUsdt, список и
-// превью — последний маркер полями totalUsdt/eventAt; общая часть — итог.
-// Рядом с каждым маркером идёт расшифровка его изменения перечнем операций
-// (включая события, подавленные порогом) — подсказка бейджа сверяется
-// сложением; фронтенд перечни не реконструирует.
-// Traceability: change:fix-finresult-marker-contributions/design#d4
-export interface FinResultHistoryMarker {
-	/** Накопленный зафиксированный результат на момент события, USDT. */
-	readonly totalUsdt: number;
-	/** Порядковый номер среди выведенных; нумерацию даёт контракт API. */
-	readonly number?: number;
-	/** Время события журнала, ISO — поле контракта карточки. */
-	readonly eventTime?: string;
-	/** Время события журнала, ISO — поле контракта списка и превью. */
-	readonly eventAt?: string;
-	/** Тип события журнала — строка из контракта API. */
-	readonly kind?: string;
-	/** Изменение от предыдущего выведенного маркера, USDT. */
-	readonly changeUsdt?: number;
-	/** Операции расшифровки изменения: вид, дата, вклад. */
-	readonly operations?: readonly ResultMarkerOperation[];
-}
-
-// Изменение маркера с предыдущей выведенной метки: контракт карточки
-// публикует changeUsdt явно; у последнего маркера списка/превью его нет —
-// изменением считается сумма перечня операций по инварианту расшифровки.
-// Traceability: change:fix-finresult-marker-contributions/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
-export function markerChangeUsdt(marker: FinResultHistoryMarker): number {
-	return (
-		marker.changeUsdt ??
-		(marker.operations ?? []).reduce((sum, operation) => sum + operation.contributionUsdt, 0)
-	);
-}
 
 /** Вход калькулятора: изначальные показатели конструкции и текущий результат. */
 export interface FinResultInput {
@@ -89,14 +52,6 @@ export interface FinResultInput {
 	 * Traceability: change:show-unbounded-finresult-risk/design#d1
 	 */
 	readonly realRiskStatus: RealRiskStatus;
-	/**
-	 * Выведенные маркеры изменения результата в хронологическом порядке —
-	 * уже отфильтрованные порогом и перенумерованные сервером; значение —
-	 * накопленный зафиксированный результат на момент события, от котировок
-	 * не зависит. Пустой список — истории ещё нет.
-	 * Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
-	 */
-	readonly resultMarkers: readonly FinResultHistoryMarker[];
 }
 
 /** Диапазон шкалы в долях 0..1; from не больше to. */
@@ -118,16 +73,9 @@ export interface FinResultLabelPlacement {
 	readonly align: FinResultLabelAlign;
 }
 
-/** Размещение бейджа маркера изменения результата; бейдж всегда над полосой. */
-export interface FinResultBadgePlacement {
-	readonly level: number;
-	readonly align: FinResultLabelAlign;
-}
-
 /**
- * Метрики разметки меток: ширина полосы, ширина одного символа подписи
- * пресета и габариты бейджа маркера. Без метрик разнос не считается
- * (компактный вид меток не имеет).
+ * Метрики разметки меток: ширина полосы и ширина одного символа подписи
+ * пресета. Без метрик разнос не считается (компактный вид меток не имеет).
  */
 export interface FinResultLabelLayout {
 	/** Ширина полосы индикатора в px — для перевода ширин меток в доли. */
@@ -136,10 +84,6 @@ export interface FinResultLabelLayout {
 	readonly aboveCharWidthPx: number;
 	/** Ширина символа подписей маркера (под полосой), px. */
 	readonly belowCharWidthPx: number;
-	/** Несумма бейджа без текста суммы: кружок номера, зазор и паддинги пилюли, px. */
-	readonly badgeChromePx: number;
-	/** Высота бейджа в строках модели разноса: ceil(высоты пилюли / строки). */
-	readonly badgeRows: number;
 }
 
 /** Размещения всех меток индикатора по ключам. */
@@ -149,22 +93,6 @@ export type FinResultLabelPlacements = {
 
 /** Ключ метки в геометрии. */
 type LabelKey = "risk" | "zero" | "profit" | "marker";
-
-/** Точка маркера изменения результата на шкале: позиция по итогу, изменение и тон по знаку изменения. */
-// Бейдж стоит на накопленном итоге (позиция x), но подписывается и
-// окрашивается суммой самого изменения с предыдущей выведенной метки —
-// тон по знаку изменения, не по знаку итога.
-// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
-export interface FinResultMarkerPoint {
-	/** Истинная позиция накопленного итога в долях шкалы — без клипа. */
-	readonly x: number;
-	/** Накопленный зафиксированный итог маркера, USDT — позиция бейджа. */
-	readonly total: number;
-	/** Изменение с предыдущей выведенной метки, USDT — подпись и тон бейджа. */
-	readonly change: number;
-	/** Тон бейджа по знаку изменения: акцент — плюс, риск — минус, ноль — нейтральный. */
-	readonly tone: "positive" | "negative" | "zero";
-}
 
 /** Итоговая геометрия индикатора в долях шкалы и готовые подписи. */
 export interface FinResultGeometry {
@@ -196,8 +124,6 @@ export interface FinResultGeometry {
 	readonly fillMain: FinResultSpan | null;
 	/** Тон маркера и подписей: положительный итог — зелёный, иначе красный. */
 	readonly tone: "positive" | "negative";
-	/** Точки маркеров изменения результата в хронологическом порядке; позиция истинная, без клипа. */
-	readonly markerPoints: readonly FinResultMarkerPoint[];
 	/** Готовые подписи индикатора. */
 	readonly labels: {
 		readonly risk: string | null;
@@ -212,11 +138,6 @@ export interface FinResultGeometry {
 	 * null — разнос не считался (метрики разметки не переданы).
 	 */
 	readonly placements: FinResultLabelPlacements | null;
-	/**
-	 * Разнос бейджей маркеров по индексам markerPoints: вертикальный
-	 * уровень над полосой и выравнивание; null — разнос не считался.
-	 */
-	readonly badgePlacements: readonly FinResultBadgePlacement[] | null;
 }
 
 /**
@@ -233,9 +154,6 @@ export function computeFinResultGeometry(
 	assertFinite("realized", input.realized);
 	assertFinite("unrealized", input.unrealized);
 	assertFinite("adjustments", input.adjustments);
-	for (const marker of input.resultMarkers) {
-		assertFinite("resultMarkers[].totalUsdt", marker.totalUsdt);
-	}
 
 	// Нереализованная часть существует только при открытых остатках и
 	// доступных котировках: сбой скрывает её, не подменяя нулём.
@@ -256,8 +174,8 @@ export function computeFinResultGeometry(
 
 	// Состояние риска без координаты на шкале: unbounded/unavailable
 	// выводятся отдельно от полосы, плановая граница подписывается
-	// плановым риском, а маркеры истории и маркер итога сохраняются —
-	// от состояния риска и котировок они не зависят.
+	// плановым риском, а маркер итога сохраняется — от состояния
+	// риска и котировок он не зависит.
 	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
 	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
@@ -284,13 +202,9 @@ export function computeFinResultGeometry(
 	}
 
 	// Шкала: базовые зоны из плановых показателей, охват расширяется до
-	// истинного положения маркера итога и всех меток истории — клипа
-	// крайних значений нет. Сверхприбыль маркеров истории золотую зону
-	// не создаёт: участки истории сверх +Профит расширяют шкалу, но не
-	// красятся золотом.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-scale-expands-to-markers-no-clip
-	const markerTotals = input.resultMarkers.map((marker) => marker.totalUsdt);
-	const scale = resolveScale(input.plannedRisk, input.plannedProfit, total, markerTotals);
+	// истинного положения маркера итога — клипа крайних значений нет.
+	// Traceability: openspec:ui/screens#scenario-finresult-super-zone-marker
+	const scale = resolveScale(input.plannedRisk, input.plannedProfit, total);
 	const toFraction = (value: number): number => (value - scale.min) / (scale.max - scale.min);
 
 	const zeroAt = toFraction(0);
@@ -309,22 +223,6 @@ export function computeFinResultGeometry(
 	// Маркер итога стоит в истинном положении оценки ликвидации: шкала
 	// всегда охватывает итог, поэтому клип и прижатие не нужны.
 	const markerAt = total === null ? null : toFraction(total);
-
-	// Точки маркеров изменения результата: позиция — накопленный итог на
-	// расширенной шкале, подпись и тон — изменение с предыдущей выведенной
-	// метки (контракты без явного changeUsdt восстанавливают его из
-	// перечня операций).
-	// Traceability: change:fix-finresult-marker-contributions/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-	const markerPoints: readonly FinResultMarkerPoint[] = input.resultMarkers.map((marker) => {
-		const change = markerChangeUsdt(marker);
-
-		return {
-			x: toFraction(marker.totalUsdt),
-			total: marker.totalUsdt,
-			change,
-			tone: change > 0 ? "positive" : change < 0 ? "negative" : "zero",
-		};
-	});
 
 	// Единая заливка итога: неположительный итог — один красный тон от нуля
 	// до маркера, без разложения на реализованную и нереализованную части;
@@ -358,12 +256,10 @@ export function computeFinResultGeometry(
 		marker: markerLabel,
 	};
 
-	// Разнос: сначала бейджи маркеров занимают уровни над полосой — их
-	// вертикальное положение задаёт штрихи на полосе, — затем текстовые
-	// подписи обходят занятое: переносом на противоположную сторону полосы,
-	// затем на следующий вертикальный уровень. Наплыва нет ни между собой,
-	// ни с бейджами.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
+	// Разнос: текстовые подписи обходят занятое — переносом на
+	// противоположную сторону полосы, затем на следующий вертикальный
+	// уровень; наплыва между метками нет.
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 	if (layout === null || layout === undefined) {
 		return {
 			neutral: false,
@@ -378,14 +274,11 @@ export function computeFinResultGeometry(
 			markerAt,
 			fillMain,
 			tone: total !== null && total > 0 ? "positive" : "negative",
-			markerPoints,
 			labels,
 			placements: null,
-			badgePlacements: null,
 		};
 	}
 	const occupied: OccupiedArea[] = [];
-	const badgePlacements = placeBadges(markerPoints, layout, occupied);
 	const placements = placeLabels(
 		labelItemsOf(labels, markerAt, zeroAt, profitZone),
 		layout,
@@ -405,18 +298,15 @@ export function computeFinResultGeometry(
 		markerAt,
 		fillMain,
 		tone: total !== null && total > 0 ? "positive" : "negative",
-		markerPoints,
 		labels,
 		placements,
-		badgePlacements,
 	};
 }
 
 // Нейтральная полоса без плановых границ: ноль в центре, позиционных
 // отметок нет (пропорция не определена), заполнение — до края по знаку
 // итога, значение итога выносится в подпись маркера. Состояние риска
-// остаётся в геометрии отдельно от нейтральной полосы; маркеров истории
-// на нейтральной полосе нет — как и маркера текущего результата.
+// остаётся в геометрии отдельно от нейтральной полосы.
 // Traceability: openspec:ui/screens#scenario-finresult-neutral-without-params
 // Traceability: openspec:ui/screens#scenario-finresult-risk-state-without-plan
 function buildNeutralGeometry(
@@ -450,7 +340,6 @@ function buildNeutralGeometry(
 		markerAt: null,
 		fillMain,
 		tone: total !== null && total > 0 ? "positive" : "negative",
-		markerPoints: [],
 		labels: {
 			risk: null,
 			zero: "0",
@@ -462,38 +351,26 @@ function buildNeutralGeometry(
 			layout === null || layout === undefined
 				? null
 				: { risk: null, zero: null, profit: null, marker: null },
-		badgePlacements: null,
 	};
 }
 
 // Границы шкалы: базовая часть −Риск…+Профит (незаданная сторона
 // симметрична заданной). Охват расширяется до истинного положения маркера
-// текущего результата и всех меток истории в обе стороны — клипа крайних
-// значений нет; золотая надбавка справа возникает только от итога.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-scale-expands-to-markers-no-clip
+// текущего результата в обе стороны — клипа крайних значений нет; золотая
+// надбавка справа возникает только от итога.
 // Traceability: openspec:ui/screens#scenario-finresult-super-zone-marker
 // Traceability: openspec:ui/screens#scenario-finresult-single-bound
 function resolveScale(
 	plannedRisk: number | null,
 	plannedProfit: number | null,
 	total: number | null,
-	markerTotals: readonly number[],
 ): { min: number; max: number } {
 	const risk = plannedRisk ?? plannedProfit ?? 0;
 	const profit = plannedProfit ?? plannedRisk ?? 0;
 	let min = -Math.abs(risk);
 	let max = profit;
 
-	// Расширение охвата: каждая точка истории и итог попадают в шкалу
-	// целиком, позиции остаются истинными.
-	for (const value of markerTotals) {
-		if (value < min) {
-			min = value;
-		}
-		if (value > max) {
-			max = value;
-		}
-	}
+	// Расширение охвата: итог попадает в шкалу целиком, позиция истинная.
 	if (total !== null) {
 		if (total < min) {
 			min = total;
@@ -571,7 +448,7 @@ function resolveMarkerLabel(
 	return formatFinAmount(total);
 }
 
-// ===== Разнос меток и бейджей =====
+// ===== Разнос меток =====
 
 // Метка для разноса: позиция в долях, ширинообразующий текст, высота в
 // строках и предпочитаемая сторона.
@@ -592,8 +469,7 @@ interface OccupiedArea {
 	readonly to: number;
 }
 
-// Верхний вертикальный уровень: бейджи плотной истории могут занять
-// несколько уровней, текстовых меток всегда меньше.
+// Верхний вертикальный уровень разноса текстовых меток.
 const MAX_LEVEL = 8;
 
 // Дескрипторы текстовых меток для разноса: маркер → профит → ноль → риск —
@@ -621,51 +497,7 @@ function labelItemsOf(
 	].filter((item): item is LabelItem => item !== null);
 }
 
-// Разносит бейджи маркеров над полосой: первый свободный вертикальный
-// уровень, прижатие крайних к краям изнутри. Коллизия решается только
-// вертикальным разносом — на противоположную сторону бейдж не переносится,
-// соседние бейджи на одном уровне не перекрываются.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-function placeBadges(
-	points: readonly FinResultMarkerPoint[],
-	layout: FinResultLabelLayout,
-	occupied: OccupiedArea[],
-): FinResultBadgePlacement[] {
-	return points.map((point) => {
-		const widthFraction = badgeWidthFraction(point.change, layout);
-		const align = chooseAlign(point.x, widthFraction);
-		const [from, to] = labelRange(point.x, widthFraction, align);
-
-		let level = 0;
-		while (
-			level <= MAX_LEVEL &&
-			overlapsAny(occupied, "above", level, layout.badgeRows, from, to)
-		) {
-			level++;
-		}
-		// Все уровни заняты (плотность выше модели): бейдж остаётся на
-		// верхнем уровне, перекрытие допустимо.
-		if (level > MAX_LEVEL) {
-			level = MAX_LEVEL;
-		}
-		occupied.push({ side: "above", level, rows: layout.badgeRows, from, to });
-
-		return { level, align };
-	});
-}
-
-// Ширина бейджа в долях: несумма пилюли (кружок номера, зазор, паддинги)
-// плюс текст подписи бейджа по ширине символа пресета — детерминированная
-// функция без DOM (табличные цифры, суммы короткие). Подпись бейджа —
-// сумма изменения метки, ширина считается по ней.
-function badgeWidthFraction(change: number, layout: FinResultLabelLayout): number {
-	const text = formatFinAmount(change);
-
-	return (layout.badgeChromePx + text.length * layout.aboveCharWidthPx) / layout.scaleWidthPx;
-}
-
-// Разносит текстовые метки по сторонам, уровням и выравниванию с учётом
-// уже занятых бейджами областей. Порядок перебора мест: вертикальный
+// Разносит текстовые метки по сторонам, уровням и выравниванию. Порядок перебора мест: вертикальный
 // уровень внешний, стороны внутри уровня — при коллизии метка сначала
 // уходит на противоположную сторону и лишь затем на следующий уровень;
 // крайние метки прижимаются к краям изнутри.

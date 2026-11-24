@@ -30,23 +30,6 @@ const openRow: ConstructionRow = {
 	quoteValue: 500,
 	capitalUsagePercent: 16.7,
 	realRiskUsdt: 45,
-	lastResultMarker: {
-		totalUsdt: 15.25,
-		eventAt: "2026-06-18T09:05:00Z",
-		// Закрывающая запись детализирована единственной строкой сделки
-		// без стороны и вклада — контракт записи закрытия.
-		// Traceability: change:fix-finresult-marker-contributions/design#d4
-		operations: [
-			{
-				kind: "closing",
-				date: "2026-06-18T09:05:00Z",
-				contributionUsdt: 15.25,
-				trades: [
-					{ symbol: "ETH-240628-3200C", side: null, quantity: 1, price: 15.25, contributionUsdt: null },
-				],
-			},
-		],
-	},
 	realRiskStatus: "finite",
 	openedAt: "2026-06-18T09:05:00Z",
 	closedAt: null,
@@ -74,7 +57,6 @@ const closedRow: ConstructionRow = {
 	quoteValue: null,
 	capitalUsagePercent: null,
 	realRiskUsdt: 0,
-	lastResultMarker: null,
 	realRiskStatus: "finite",
 	openedAt: "2026-05-20T10:00:00Z",
 	closedAt: "2026-05-31T12:00:00Z",

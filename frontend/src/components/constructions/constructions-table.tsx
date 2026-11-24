@@ -291,17 +291,10 @@ export function ConstructionsTable({ rows, selectedId, onSelect, onOpenInNewWind
 								// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 								hasOpenResidual: hasOpenResidual(row.original),
 								// Пара «число + статус» из контракта API: unbounded/
-								// unavailable дают состояние без числа; маркеры
-								// истории рисуются независимо от состояния риска.
+								// unavailable дают состояние без числа.
 								// Traceability: openspec:ui/screens#requirement-risk-profit-hint
 								// Traceability: change:show-unbounded-finresult-risk/design#d1
 								realRiskStatus: row.original.realRiskStatus,
-								// Последний маркер изменения результата строки:
-								// компактный вид рисует только его — тёмный штрих
-								// без номера и суммы.
-								// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-medium-compact-last-marker-only
-								resultMarkers:
-									row.original.lastResultMarker === null ? [] : [row.original.lastResultMarker],
 							}}
 						/>
 					</div>

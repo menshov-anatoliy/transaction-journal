@@ -29,23 +29,6 @@ const preview: ConstructionPreview = {
 	quoteValue: 500,
 	capitalUsagePercent: 16.7,
 	realRiskUsdt: 45,
-	lastResultMarker: {
-		totalUsdt: 15.25,
-		eventAt: "2026-06-18T09:05:00",
-		// Закрывающая запись детализирована единственной строкой сделки
-		// без стороны и вклада — контракт записи закрытия.
-		// Traceability: change:fix-finresult-marker-contributions/design#d4
-		operations: [
-			{
-				kind: "closing",
-				date: "2026-06-18T09:05:00",
-				contributionUsdt: 15.25,
-				trades: [
-					{ symbol: "ETH-240628-3200C", side: null, quantity: 1, price: 15.25, contributionUsdt: null },
-				],
-			},
-		],
-	},
 	realRiskStatus: "finite",
 	openedAt: "2026-06-18T09:05:00",
 	closedAt: null,

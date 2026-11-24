@@ -14,8 +14,7 @@ import { cn } from "@/lib/utils";
 // Содержимое попапа по паттерну макета: заголовок метрики (12.5/600),
 // назначение — всегда, метод расчёта — когда зафиксирован в справочнике,
 // по разделу на каждый показатель многопоказательной метрики
-// (показатель 11/600 вторичным тоном + описание 11 обычное), построчные
-// записи перечня (например, расшифровка метки маркера) и примечание
+// (показатель 11/600 вторичным тоном + описание 11 обычное) и примечание
 // в конце подсказки.
 export function MetricTooltipContent({
 	tooltip,
@@ -37,24 +36,6 @@ export function MetricTooltipContent({
 					<span className="text-text-secondary">{section.text}</span>
 				</span>
 			))}
-			{tooltip.rows?.map((row, index) => {
-				// Ряд может быть строкой либо вложенной детализацией: indent-ряд
-				// (строки сделок, период связки под строкой операции) рендерится
-				// с отступом, меньшим кеглем и приглушённым тоном, остальные —
-				// прежние.
-				// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
-				const item = typeof row === "string" ? { text: row } : row;
-
-				return item.indent ? (
-					<span className="pl-3 text-[10.5px] text-text-muted" key={`${index}:${item.text}`}>
-						{item.text}
-					</span>
-				) : (
-					<span className="text-text-secondary" key={`${index}:${item.text}`}>
-						{item.text}
-					</span>
-				);
-			})}
 			{tooltip.note ? <span className="text-text-muted">{tooltip.note}</span> : null}
 		</span>
 	);

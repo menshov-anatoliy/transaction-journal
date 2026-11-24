@@ -1,5 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { computeFinResultGeometry } from "@/lib/finresult/geometry";
@@ -18,12 +17,13 @@ function renderIndicator(ui: Parameters<typeof render>[0]) {
 
 // Смоук-проверки компонентов индикатора финрезультата: рендер строится на
 // геометрии калькулятора (юнит-эталоны покрыты в geometry.test.ts), здесь
-// проверяем публичный контракт представлений — какие бейджи, подписи, штрихи
-// и области выдаёт каждый из трёх видов.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-risk-profit-hint
+// проверяем публичный контракт представлений — какие зоны, подписи и
+// области выдаёт каждый из трёх видов; маркерных частей истории (бейджи,
+// штрихи, триггеры расшифровок) ни один вид не рисует.
+// Traceability: issue:#94
 
 // Вход кейса C3: маркер текущего результата — итог −70, подписи плановых
-// делений «−300 / 0 / +900»; маркеров истории нет.
+// делений «−300 / 0 / +900».
 const CASE_C3: FinResultInput = {
 	plannedRisk: 300,
 	plannedProfit: 900,
@@ -33,7 +33,6 @@ const CASE_C3: FinResultInput = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRiskStatus: "finite",
-	resultMarkers: [],
 };
 
 // Вход кейса C6: сверхприбыль — итог +1 400 растягивает золотую зону,
@@ -47,89 +46,6 @@ const CASE_C6: FinResultInput = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRiskStatus: "finite",
-	resultMarkers: [],
-};
-
-// Вход истории результата: окно сборки −100 и синтетическое закрытие +30 —
-// последний бейдж стоит на −70, подписан изменением +30, текущий результат
-// −40 за счёт нереализованной части. Время события без зоны — формат даты
-// стабилен в любой часовой зоне; у каждой метки — расшифровка перечнем
-// операций из контракта: окно сборки детализировано сделками ног, связка —
-// периодом действия без сделок.
-// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
-const CASE_MARKERS: FinResultInput = {
-	plannedRisk: 300,
-	plannedProfit: 900,
-	realized: -70,
-	unrealized: 30,
-	adjustments: 0,
-	quotesDegraded: false,
-	hasOpenResidual: true,
-	realRiskStatus: "finite",
-	resultMarkers: [
-		{
-			number: 1,
-			eventTime: "2026-06-20T14:30:00",
-			kind: "opening",
-			changeUsdt: -100,
-			totalUsdt: -100,
-			operations: [
-				{
-					kind: "opening",
-					date: "2026-06-20T14:30:00",
-					contributionUsdt: -100,
-					trades: [
-						{ symbol: "BTC-26SEP26-60000-C", side: "buy", quantity: 1, price: 60, contributionUsdt: -60.2 },
-						{ symbol: "BTC-26SEP26-60000-P", side: "buy", quantity: 1, price: 39.8, contributionUsdt: -39.8 },
-					],
-				},
-			],
-		},
-		{
-			number: 2,
-			eventTime: "2026-06-25T10:05:00",
-			kind: "synthetic-close",
-			changeUsdt: 30,
-			totalUsdt: -70,
-			operations: [
-				{
-					kind: "synthetic-close",
-					date: "2026-06-25T10:05:00",
-					contributionUsdt: 30,
-					trades: null,
-					periodSince: "2026-06-20T14:30:00",
-					periodUntil: null,
-				},
-			],
-		},
-	],
-};
-
-// Вход сценария result-marker-last-vs-current: предыдущая выведенная метка
-// −40, последняя метка −70 при изменении −30, маркер текущего результата −40
-// за счёт нереализованной части +30 — бейдж подписан изменением, не итогом.
-const CASE_LAST_VS_CURRENT: FinResultInput = {
-	...CASE_MARKERS,
-	realized: -70,
-	unrealized: 30,
-	resultMarkers: [
-		{
-			number: 1,
-			eventTime: "2026-06-20T14:30:00",
-			kind: "opening",
-			changeUsdt: -40,
-			totalUsdt: -40,
-			operations: [{ kind: "opening", date: "2026-06-20T14:30:00", contributionUsdt: -40 }],
-		},
-		{
-			number: 2,
-			eventTime: "2026-06-26T12:00:00",
-			kind: "closing",
-			changeUsdt: -30,
-			totalUsdt: -70,
-			operations: [{ kind: "closing", date: "2026-06-26T12:00:00", contributionUsdt: -30 }],
-		},
-	],
 };
 
 // Вход сценария finresult-unbounded-risk: открытый нетто-короткий колл,
@@ -144,7 +60,6 @@ const CASE_UNBOUNDED: FinResultInput = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRiskStatus: "unbounded",
-	resultMarkers: [],
 };
 
 // Вход сценария finresult-unavailable-risk: исходные данные позиции
@@ -158,7 +73,6 @@ const CASE_UNAVAILABLE: FinResultInput = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRiskStatus: "unavailable",
-	resultMarkers: [],
 };
 
 // Вход сценария finresult-risk-state-without-plan: плановых границ нет,
@@ -172,7 +86,6 @@ const CASE_UNBOUNDED_WITHOUT_PLAN: FinResultInput = {
 	quotesDegraded: false,
 	hasOpenResidual: true,
 	realRiskStatus: "unbounded",
-	resultMarkers: [],
 };
 
 describe("полный индикатор", () => {
@@ -189,320 +102,27 @@ describe("полный индикатор", () => {
 		// Assert: частей прежней границы в полосе и подписях нет.
 		expect(container.querySelector('[data-part="border"]')).toBeNull();
 		expect(container.querySelector('[data-part="border-label"]')).toBeNull();
-		expect(container.querySelector('[data-part="marker-tick"]')).toBeNull();
 	});
 
-	// Каждый маркер истории показан номерным бейджем над полосой: бейдж
-	// стоит на накопленном итоге маркера, подписан суммой изменения
-	// с предыдущей выведенной метки и окрашен по знаку изменения; номера
-	// идут подряд без пропусков.
-	// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
-	it("рисует номерные бейджи маркеров с суммами изменения над полосой", () => {
-		// Act: история из двух событий.
-		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_MARKERS} />);
+	// Тест удаления: бейджи, штрихи и триггеры подсказок маркеров изменения
+	// результата выведены из индикатора — история результата осталась
+	// в журнале событий, и ни один вид её на полосе не рисует
+	// (ADR-0024: тесты — живая спецификация поведения).
+	// Traceability: issue:#89
+	it("не рисует бейджи, штрихи и триггеры расшифровок маркеров истории", () => {
+		// Act: один и тот же вход во все три представления.
+		const views = [FullFinResultIndicator, MediumFinResultIndicator, CompactFinResultIndicator];
 
-		// Assert: два бейджа; номера 1 и 2 идут подряд, подписи — суммы
-		// изменения (−100 и +30), тон по знаку изменения — второй бейдж
-		// акцентный на отрицательном накопленном итоге −70.
-		const badges = container.querySelectorAll<HTMLElement>('[data-part="marker-badge"]');
-		expect(badges).toHaveLength(2);
-		expect(badges[0]).toHaveTextContent("1");
-		expect(badges[0]).toHaveTextContent("−100");
-		expect(badges[0].dataset.tone).toBe("negative");
-		expect(badges[1]).toHaveTextContent("2");
-		expect(badges[1]).toHaveTextContent("+30");
-		expect(badges[1].dataset.tone).toBe("positive");
+		for (const View of views) {
+			const { container, unmount } = renderIndicator(<View input={CASE_C3} />);
 
-		// Assert: под каждым бейджем — тёмный штрих на полосе.
-		expect(container.querySelectorAll('[data-part="marker-tick"]')).toHaveLength(2);
-	});
-
-	// Последняя метка отличается от маркера текущего результата: бейдж
-	// стоит на накопленном итоге −70, подписан изменением −30 (пример спеки),
-	// маркер — текущий результат −40 под полосой.
-	// Traceability: openspec:ui/screens#scenario-result-marker-last-vs-current
-	it("подписывает последний бейдж изменением −30 на итоге −70, маркер — −40", () => {
-		// Act: история −40 → −70, нереализованная часть подняла итог до −40.
-		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_LAST_VS_CURRENT} />);
-
-		// Assert: подпись маркера текущего результата −40 живёт в стеке под
-		// полосой; последний бейдж подписан изменением −30 и тон negative
-		// по знаку изменения — не итогом −70.
-		const markerLabel = container.querySelector<HTMLElement>('[data-part="marker-label"]');
-		expect(markerLabel).toHaveTextContent("−40");
-		const belowStack = markerLabel?.parentElement;
-		const badges = container.querySelectorAll<HTMLElement>('[data-part="marker-badge"]');
-		const lastBadge = badges[badges.length - 1];
-		expect(lastBadge).toHaveTextContent("−30");
-		expect(lastBadge).not.toHaveTextContent("−70");
-		expect(lastBadge.dataset.tone).toBe("negative");
-		expect(lastBadge.parentElement).not.toBe(belowStack);
-	});
-
-	// Подсказка числа сосуществует с попапом чтения: наведение на бейдж
-	// маркера открывает расшифровку метки — накопленный итог в заголовке,
-	// изменение с предыдущей выведенной метки, перечень операций изменения
-	// со сделками каждой операции под её строкой, период действия связки;
-	// сумма перечня равна изменению и восстанавливает накопленный итог;
-	// попап «Как читать индикатор» доступен по своему триггеру карточки
-	// (его открытие проверяют тесты metric-strip).
-	// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
-	// Traceability: openspec:ui/screens#scenario-indicator-number-tooltip-coexists
-	it("открывает подсказку-расшифровку метки со сделками наведением на бейдж", async () => {
-		// Arrange: полный вид с историей результата.
-		const user = userEvent.setup();
-		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_MARKERS} />);
-		const badges = container.querySelectorAll<HTMLElement>('[data-part="marker-badge"]');
-
-		// Act: наведение на первый бейдж.
-		await user.hover(within(badges[0]).getByText("−100"));
-
-		// Assert: подсказка по роли tooltip — заголовок «Метка 1 · сумма»,
-		// изменение с начала истории, операция «вид · дата · сумма» со
-		// строками сделок под ней и строка-инвариант первой метки.
-		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
-		const tooltip = screen.getByRole("tooltip");
-		expect(tooltip).toHaveTextContent("Метка 1 · −100 USDT");
-		expect(tooltip).toHaveTextContent("изменение с начала истории: −100 USDT");
-		expect(tooltip).toHaveTextContent("Открытие · 2026-06-20 · −100 USDT");
-		expect(tooltip).toHaveTextContent("BTC-26SEP26-60000-C · buy · 1 × 60 · −60.2 USDT");
-		expect(tooltip).toHaveTextContent("BTC-26SEP26-60000-P · buy · 1 × 39.8 · −39.8 USDT");
-		expect(tooltip).toHaveTextContent("Σ перечня = изменение");
-
-		// Act: закрытие первой подсказки и наведение на бейдж связки.
-		await user.unhover(badges[0]);
-		await user.hover(within(badges[1]).getByText("+30"));
-		await waitFor(() =>
-			expect(screen.getByRole("tooltip")).toHaveTextContent("Метка 2 · −70 USDT"),
-		);
-		const linkTooltip = screen.getByRole("tooltip");
-
-		// Assert: расшифровка второй метки: изменение с метки 1, связка без
-		// сделок с периодом действия (конец null — «действует») и инвариант
-		// с восстановлением накопленного итога из предыдущей метки.
-		expect(linkTooltip).toHaveTextContent("изменение с метки 1: +30 USDT");
-		expect(linkTooltip).toHaveTextContent("Синтетическое закрытие · 2026-06-25 · +30 USDT");
-		expect(linkTooltip).toHaveTextContent("период действия: 2026-06-20–действует");
-		expect(linkTooltip).toHaveTextContent(
-			"Σ перечня = +30 = изменение метки; итог метки 1 (−100) + +30 = −70 USDT",
-		);
-	});
-
-	// Нумерация меток сплошная, а операции подавленных порогом событий
-	// сервер включает в расшифровку следующего выведенного маркера: бейджа
-	// для подавленного события нет, его вклад виден в перечне метки 2,
-	// входит в её изменение, а каждая операция детализирована сделками —
-	// у сделки цикла без собственного вклада последний сегмент опущен.
-	// Traceability: openspec:ui/screens#scenario-result-marker-below-threshold-hidden
-	it("включает операции подавленного события в расшифровку следующей метки", async () => {
-		// Arrange: после метки 1 (−100) событие −5 подавлено порогом,
-		// следующая выведенная метка 2 накопила −75 — её изменение +25
-		// складывается из выведенной операции +30 и подавленной −5.
-		const input: FinResultInput = {
-			...CASE_MARKERS,
-			resultMarkers: [
-				CASE_MARKERS.resultMarkers[0],
-				{
-					number: 2,
-					eventTime: "2026-06-28T12:00:00",
-					kind: "closing",
-					changeUsdt: 25,
-					totalUsdt: -75,
-					operations: [
-						{
-							kind: "closing",
-							date: "2026-06-27T09:00:00",
-							contributionUsdt: 30,
-							trades: [
-								{ symbol: "BTC-26SEP26-60000-C", side: "sell", quantity: 1, price: 30.5, contributionUsdt: 30 },
-							],
-						},
-						{
-							kind: "futures-close",
-							date: "2026-06-28T12:00:00",
-							contributionUsdt: -5,
-							trades: [
-								{ symbol: "BTC-28SEP26", side: "sell", quantity: 1, price: 5, contributionUsdt: null },
-							],
-						},
-					],
-				},
-			],
-		};
-		const user = userEvent.setup();
-		const { container } = renderIndicator(<FullFinResultIndicator input={input} />);
-
-		// Assert: выведенных бейджей два, номера идут подряд без пропусков —
-		// отдельного бейджа у подавленного события нет.
-		const badges = container.querySelectorAll<HTMLElement>('[data-part="marker-badge"]');
-		expect(badges).toHaveLength(2);
-		expect(badges[0]).toHaveTextContent("1");
-		expect(badges[1]).toHaveTextContent("2");
-
-		// Act: раскрытие расшифровки метки 2 — бейдж подписан изменением +25.
-		await user.hover(within(badges[1]).getByText("+25"));
-		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
-		const tooltip = screen.getByRole("tooltip");
-
-		// Assert: перечень включает операцию подавленного события со сделками
-		// под строками; сумма перечня 30 + (−5) = +25 равна изменению метки,
-		// инвариант восстанавливает итог −75 из предыдущей метки −100.
-		expect(tooltip).toHaveTextContent("Метка 2 · −75 USDT");
-		expect(tooltip).toHaveTextContent("изменение с метки 1: +25 USDT");
-		expect(tooltip).toHaveTextContent("Закрытие · 2026-06-27 · +30 USDT");
-		expect(tooltip).toHaveTextContent("BTC-26SEP26-60000-C · sell · 1 × 30.5 · +30 USDT");
-		expect(tooltip).toHaveTextContent("Закрытие фьючерса · 2026-06-28 · −5 USDT");
-		// Сделка фьючерсного цикла без собственного вклада — без сегмента
-		// суммы: вклад принадлежит round-trip целиком.
-		expect(tooltip).toHaveTextContent("BTC-28SEP26 · sell · 1 × 5");
-		expect(tooltip).toHaveTextContent(
-			"Σ перечня = +25 = изменение метки; итог метки 1 (−100) + +25 = −75 USDT",
-		);
-	});
-
-	// Несколько однотипных операций перечисляются построчно с индивидуальными
-	// суммами и сделками под строкой каждой операции, без свёртки «×N»;
-	// при переполнении перечень прокручивается.
-	// Traceability: openspec:ui/screens#scenario-marker-breakdown-no-grouping
-	it("перечисляет однотипные операции построчно и прокручивает переполнение", async () => {
-		// Arrange: серия фьючерсных закрытий в одной метке — сервер отдаёт
-		// каждую операцию отдельной записью перечня; вклад каждой сделки
-		// цикла null — строки сделок без сегмента суммы.
-		const input: FinResultInput = {
-			...CASE_MARKERS,
-			resultMarkers: [
-				{
-					number: 1,
-					eventTime: "2026-06-30T18:00:00",
-					kind: "futures-close",
-					changeUsdt: 60,
-					totalUsdt: 60,
-					operations: [
-						{
-							kind: "futures-close",
-							date: "2026-06-28T10:00:00",
-							contributionUsdt: 20,
-							trades: [{ symbol: "BTC-28SEP26", side: "sell", quantity: 1, price: 20, contributionUsdt: null }],
-						},
-						{
-							kind: "futures-close",
-							date: "2026-06-29T10:00:00",
-							contributionUsdt: 25,
-							trades: [{ symbol: "BTC-28SEP26", side: "buy", quantity: 1, price: 25, contributionUsdt: null }],
-						},
-						{
-							kind: "futures-close",
-							date: "2026-06-30T18:00:00",
-							contributionUsdt: 15,
-							trades: [{ symbol: "BTC-28SEP26", side: "sell", quantity: 1, price: 15, contributionUsdt: null }],
-						},
-					],
-				},
-			],
-		};
-		const user = userEvent.setup();
-		const { container } = renderIndicator(<FullFinResultIndicator input={input} />);
-
-		// Act: наведение на единственный бейдж метки — подпись «+60».
-		const badge = container.querySelector<HTMLElement>('[data-part="marker-badge"]');
-		await user.hover(within(badge!).getByText("+60"));
-		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
-		const tooltip = screen.getByRole("tooltip");
-
-		// Assert: три строки по одной операции — индивидуальные даты и суммы,
-		// под строкой каждой — её сделка без сегмента вклада; свёртки «×N»
-		// нет.
-		expect(tooltip).toHaveTextContent("Закрытие фьючерса · 2026-06-28 · +20 USDT");
-		expect(tooltip).toHaveTextContent("BTC-28SEP26 · sell · 1 × 20");
-		expect(tooltip).toHaveTextContent("Закрытие фьючерса · 2026-06-29 · +25 USDT");
-		expect(tooltip).toHaveTextContent("BTC-28SEP26 · buy · 1 × 25");
-		expect(tooltip).toHaveTextContent("Закрытие фьючерса · 2026-06-30 · +15 USDT");
-		expect(tooltip).toHaveTextContent("BTC-28SEP26 · sell · 1 × 15");
-		expect(tooltip.textContent).not.toContain("×3");
-		expect(tooltip.textContent).not.toContain("×N");
-
-		// Assert: переполнение — прокрутка попапа: ограничение высоты
-		// и вертикальный скролл на контенте подсказки.
-		const content = document.querySelector('[data-slot="tooltip-content"]');
-		expect(content?.className).toContain("overflow-y-auto");
-		expect(content?.className).toContain("max-h-[240px]");
-	});
-
-	// Закрывающая запись детализируется единственной строкой без стороны
-	// и вклада, снятая связка — периодом действия с датой снятия.
-	// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
-	it("детализирует закрывающую запись без стороны и снятую связку периодом", async () => {
-		// Arrange: поставка закрывает остаток, затем связка снята —
-		// periodUntil равен моменту снятия.
-		const input: FinResultInput = {
-			...CASE_MARKERS,
-			resultMarkers: [
-				CASE_MARKERS.resultMarkers[0],
-				{
-					number: 2,
-					eventTime: "2026-06-26T10:00:00",
-					kind: "delivery",
-					changeUsdt: -5,
-					totalUsdt: -105,
-					operations: [
-						{
-							kind: "delivery",
-							date: "2026-06-26T10:00:00",
-							contributionUsdt: -5,
-							trades: [
-								{ symbol: "BTC-26SEP26-60000", side: null, quantity: 1, price: 60500, contributionUsdt: null },
-							],
-						},
-					],
-				},
-				{
-					number: 3,
-					eventTime: "2026-06-27T18:00:00",
-					kind: "synthetic-release",
-					changeUsdt: 0,
-					totalUsdt: -105,
-					operations: [
-						{
-							kind: "synthetic-release",
-							date: "2026-06-27T18:00:00",
-							contributionUsdt: 0,
-							trades: null,
-							periodSince: "2026-06-20T14:30:00",
-							periodUntil: "2026-06-27T18:00:00",
-						},
-					],
-				},
-			],
-		};
-		const user = userEvent.setup();
-		const { container } = renderIndicator(<FullFinResultIndicator input={input} />);
-		const badges = container.querySelectorAll<HTMLElement>('[data-part="marker-badge"]');
-
-		// Act: расшифровка метки 2 (поставка).
-		await user.hover(within(badges[1]).getByText("−5"));
-		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
-		const deliveryTooltip = screen.getByRole("tooltip");
-
-		// Assert: закрывающая запись — одна строка сделки без стороны
-		// и без вклада; цена с группировкой сверяется по префиксу до
-		// неразрывного пробела разряда тысяч.
-		expect(deliveryTooltip).toHaveTextContent("Поставка · 2026-06-26 · −5 USDT");
-		expect(deliveryTooltip).toHaveTextContent("BTC-26SEP26-60000 · 1 × 60");
-		expect(deliveryTooltip).toHaveTextContent(
-			"Σ перечня = −5 = изменение метки; итог метки 1 (−100) + −5 = −105 USDT",
-		);
-
-		// Act: расшифровка метки 3 (снятие связки) — бейдж подписан «0».
-		await user.unhover(badges[1]);
-		await user.hover(within(badges[2]).getByText("0"));
-		await waitFor(() =>
-			expect(screen.getByRole("tooltip")).toHaveTextContent("Снятие синтетики"),
-		);
-		const releaseTooltip = screen.getByRole("tooltip");
-
-		// Assert: связка детализирована периодом действия с датой снятия.
-		expect(releaseTooltip).toHaveTextContent("Снятие синтетики · 2026-06-27 · 0 USDT");
-		expect(releaseTooltip).toHaveTextContent("период действия: 2026-06-20–2026-06-27");
+			// Assert: ни бейджа с номером и суммой, ни штриха истории,
+			// ни хит-зоны расшифровки на полосе нет.
+			expect(container.querySelector('[data-part="marker-badge"]')).toBeNull();
+			expect(container.querySelector('[data-part="marker-tick"]')).toBeNull();
+			expect(container.querySelector('[data-part="marker-tick-trigger"]')).toBeNull();
+			unmount();
+		}
 	});
 
 	it("позиционирует маркер по доле геометрии", () => {
@@ -541,7 +161,7 @@ describe("полный индикатор", () => {
 	// Вертикальный разнос: метка нулевого уровня прижата к полосе одинаково
 	// с обеих сторон — верхней стороной стека под полосой и нижней стороной
 	// стека над полосой; внешний уровень уходит на свои строки от полосы.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 	it("прижимает метки нулевого уровня к полосе одинаково с обеих сторон", () => {
 		// Arrange: в jsdom полоса не измеряется (ширина 0 даёт вырожденный
 		// разнос), поэтому фиксируем ширину явно — калькулятор в тесте и в
@@ -554,8 +174,6 @@ describe("полный индикатор", () => {
 				scaleWidthPx: 480,
 				aboveCharWidthPx: 7,
 				belowCharWidthPx: 6.5,
-				badgeChromePx: 30,
-				badgeRows: 2,
 			});
 			const placements = geometry.placements;
 			expect(placements).not.toBeNull();
@@ -607,53 +225,6 @@ describe("полный индикатор", () => {
 });
 
 describe("средний индикатор", () => {
-	// Средний вид показывает только последний маркер истории — тёмный
-	// вертикальный штрих на полосе в его позиции, без номера и суммы.
-	// Traceability: openspec:ui/screens#scenario-medium-compact-last-marker-only
-	it("рисует только штрих последнего маркера без бейджей", () => {
-		// Act: средний вид с полной историей карточки (мобильная сводка).
-		const { container } = renderIndicator(<MediumFinResultIndicator input={CASE_MARKERS} />);
-
-		// Assert: один штрих в позиции последнего маркера −70 (позиция
-		// несёт триггер подсказки, штрих внутри него).
-		const trigger = container.querySelector<HTMLElement>('[data-part="marker-tick-trigger"]');
-		const tick = container.querySelector<HTMLElement>('[data-part="marker-tick"]');
-		expect(trigger).not.toBeNull();
-		expect(tick).not.toBeNull();
-		expect(Number.parseFloat(trigger?.style.left ?? "")).toBeCloseTo((230 / 1200) * 100, 3);
-
-		// Assert: бейджей с номерами и суммами нет, области описания нет.
-		expect(container.querySelector('[data-part="marker-badge"]')).toBeNull();
-		expect(container.querySelector('[data-part="marker-description"]')).toBeNull();
-		expect(container.querySelector('[data-part="marker-description-empty"]')).toBeNull();
-	});
-
-	// Расшифровка последней метки доступна как подсказка на области
-	// последнего маркера: перечень операций контракта списка/превью.
-	// Traceability: openspec:ui/screens#scenario-medium-compact-last-marker-only
-	it("открывает расшифровку последней метки подсказкой на штрихе", async () => {
-		// Arrange: средний вид с последней меткой и её перечнем операций.
-		const user = userEvent.setup();
-		const { container } = renderIndicator(<MediumFinResultIndicator input={CASE_MARKERS} />);
-
-		// Act: наведение на область последнего маркера.
-		const trigger = container.querySelector<HTMLElement>('[data-part="marker-tick-trigger"]');
-		expect(trigger).not.toBeNull();
-		await user.hover(trigger!);
-		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
-		const tooltip = screen.getByRole("tooltip");
-
-		// Assert: та же расшифровка, что у бейджа полного вида: инвариант
-		// восстанавливает итог, связка детализирована периодом действия.
-		expect(tooltip).toHaveTextContent("Метка 2 · −70 USDT");
-		expect(tooltip).toHaveTextContent("изменение с метки 1: +30 USDT");
-		expect(tooltip).toHaveTextContent("Синтетическое закрытие · 2026-06-25 · +30 USDT");
-		expect(tooltip).toHaveTextContent("период действия: 2026-06-20–действует");
-		expect(tooltip).toHaveTextContent(
-			"Σ перечня = +30 = изменение метки; итог метки 1 (−100) + +30 = −70 USDT",
-		);
-	});
-
 	it("показывает шкалу и подписи в уменьшенном виде", () => {
 		// Act: средний вид для сводных карточек.
 		renderIndicator(<MediumFinResultIndicator input={CASE_C3} />);
@@ -735,7 +306,7 @@ describe("состояние риска в представлениях", () => 
 
 	// Метки не наплывают: статус состояния занимает собственную строку
 	// колонки, маркер остаётся в стеке под полосой.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 	it("полный: статус состояния и метка маркера занимают разные строки", () => {
 		// Act.
 		const { container } = renderIndicator(<FullFinResultIndicator input={CASE_UNBOUNDED} />);
@@ -830,79 +401,28 @@ describe("компактный индикатор", () => {
 	// Компакт сохраняет ширину 132px мастера и токенные цвета в любой ячейке.
 	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 	// Traceability: openspec:ui/design-system#requirement-visual-layer-uses-design-tokens
-	it("использует ширину макета и токенный цвет штриха последнего маркера", () => {
-		// Arrange / Act: компактный индикатор с историей результата.
-		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_MARKERS} />);
+	it("использует ширину макета и токенные цвета маркера итога", () => {
+		// Arrange / Act: компактный индикатор строки таблицы.
+		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_C3} />);
 
-		// Assert: размер задаётся компонентом, штрих последнего маркера —
-		// тёмный токен textPrimary, обводка маркера итога — surface.
+		// Assert: размер задаётся компонентом, обводка маркера итога —
+		// токен surface.
 		expect(container.firstElementChild).toHaveClass("w-[132px]");
-		expect(container.querySelector('[data-part="marker-tick"]')).toHaveClass("bg-text-primary");
 		expect(container.querySelector('[data-part="marker"]')).toHaveClass("border-surface");
 	});
 
 	it("рисует только полосу без текстовых подписей", () => {
-		// Act: компакт для строк таблицы конструкций с историей.
-		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_MARKERS} />);
+		// Act: компакт для строк таблицы конструкций.
+		const { container } = renderIndicator(<CompactFinResultIndicator input={CASE_C3} />);
 
-		// Assert: полоса с зонами, маркером и одним штрихом последнего
-		// маркера; текстовых подписей и бейджей нет.
+		// Assert: полоса с зоной и маркером; текстовых подписей нет.
 		expect(container.querySelector('[data-part="bar"]')).not.toBeNull();
 		expect(container.querySelector('[data-part="marker"]')).not.toBeNull();
-		expect(container.querySelectorAll('[data-part="marker-tick"]')).toHaveLength(1);
-		expect(container.querySelector('[data-part="marker-badge"]')).toBeNull();
 		expect(container.textContent).toBe("");
 	});
 
-	// Расшифровка последней метки доступна и в компактном виде строки
-	// таблицы: подсказка на области последнего маркера, без номера и суммы.
-	// Traceability: openspec:ui/screens#scenario-medium-compact-last-marker-only
-	it("открывает расшифровку последней метки подсказкой на штрихе", async () => {
-		// Arrange: компакт с последней меткой из контракта строки списка:
-		// закрывающая запись детализирована строкой без стороны и вклада.
-		const user = userEvent.setup();
-		const { container } = renderIndicator(
-			<CompactFinResultIndicator
-				input={{
-					...CASE_MARKERS,
-					resultMarkers: [
-						{
-							totalUsdt: 15.25,
-							eventAt: "2026-06-18T09:05:00",
-							operations: [
-								{
-									kind: "closing",
-									date: "2026-06-18T09:05:00",
-									contributionUsdt: 15.25,
-									trades: [
-										{ symbol: "ETH-240628-3200C", side: null, quantity: 1, price: 15.25, contributionUsdt: null },
-									],
-								},
-							],
-						},
-					],
-				}}
-			/>,
-		);
-
-		// Act: наведение на область последнего маркера.
-		const trigger = container.querySelector<HTMLElement>('[data-part="marker-tick-trigger"]');
-		expect(trigger).not.toBeNull();
-		await user.hover(trigger!);
-		await waitFor(() => expect(screen.getByRole("tooltip")).toBeInTheDocument());
-		const tooltip = screen.getByRole("tooltip");
-
-		// Assert: расшифровка без номера метки — контракт строки номера
-		// не публикует; перечень, строка сделки и инвариант на месте.
-		expect(tooltip).toHaveTextContent("Метка изменения результата · +15.25 USDT");
-		expect(tooltip).toHaveTextContent("Закрытие · 2026-06-18 · +15.25 USDT");
-		expect(tooltip).toHaveTextContent("ETH-240628-3200C · 1 × 15.25");
-		expect(tooltip).toHaveTextContent("Σ перечня = изменение");
-	});
-
-	it("нейтральная полоса не рисует зон и штрихов истории", () => {
-		// Act: плановые границы не заданы, история передана — на нейтральной
-		// полосе маркеры истории не выводятся.
+	it("нейтральная полоса не рисует зон", () => {
+		// Act: плановые границы не заданы.
 		const { container } = renderIndicator(
 			<CompactFinResultIndicator
 				input={{
@@ -914,15 +434,13 @@ describe("компактный индикатор", () => {
 					quotesDegraded: false,
 					hasOpenResidual: true,
 					realRiskStatus: "finite",
-					resultMarkers: [{ totalUsdt: -100 }],
 				}}
 			/>,
 		);
 
-		// Assert: ни зон, ни штрихов истории — заполнение от нуля до края.
+		// Assert: ни зон — заполнение от нуля до края.
 		expect(container.querySelector('[data-part="risk-zone"]')).toBeNull();
 		expect(container.querySelector('[data-part="profit-zone"]')).toBeNull();
-		expect(container.querySelector('[data-part="marker-tick"]')).toBeNull();
 		expect(container.querySelector('[data-part="fill-main"]')).not.toBeNull();
 	});
 
@@ -942,7 +460,6 @@ describe("компактный индикатор", () => {
 					quotesDegraded: true,
 					hasOpenResidual: true,
 					realRiskStatus: "finite",
-					resultMarkers: [{ totalUsdt: -550 }],
 				}}
 			/>,
 		);
@@ -956,7 +473,7 @@ describe("компактный индикатор", () => {
 
 	// Перенесённая калькулятором на другую сторону метка не теряется: стек
 	// собирается по фактической стороне из разноса, а не по канонической.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
+	// Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 	it("рендерит метку маркера в стеке фактической стороны", () => {
 		// Act: итог +420 и метка профита на одной стороне — маркер ниже,
 		// деление профита уходит наверх.
@@ -971,7 +488,6 @@ describe("компактный индикатор", () => {
 					quotesDegraded: false,
 					hasOpenResidual: true,
 					realRiskStatus: "finite",
-					resultMarkers: [],
 				}}
 			/>,
 		);
@@ -1059,18 +575,5 @@ describe("доступность индикатора", () => {
 		// Assert: состояние озвучивается итогом маркера текущего результата.
 		const labelled = screen.getByRole("img", { name: /результат −70/ });
 		expect(labelled).toHaveAttribute("aria-label", expect.stringContaining("−70"));
-	});
-
-	// Число маркеров истории названо в описании: пользователь скринридера
-	// слышит объём истории без чтения области описания.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-	it("называет число маркеров истории в описании", () => {
-		// Act.
-		renderIndicator(<FullFinResultIndicator input={CASE_MARKERS} />);
-
-		// Assert: в aria-label названы оба маркера истории.
-		expect(screen.getByRole("img").getAttribute("aria-label")).toContain(
-			"маркеров изменения результата 2",
-		);
 	});
 });
