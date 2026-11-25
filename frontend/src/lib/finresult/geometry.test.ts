@@ -6,31 +6,28 @@ import {
 } from "./geometry";
 
 // Калькулятор геометрии индикатора финрезультата: чистая математика в долях
-// шкалы, без React и DOM. Кейсы покрывают семантику маркеров изменения
-// результата: шкала охватывает плановые границы, маркер текущего результата
-// и все метки истории без клипа; маркер стоит на текущем результате
-// (реализованный + нереализованный + корректировки); бейджи истории
-// разносятся вертикально при коллизии.
-// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-risk-profit-hint
+// шкалы, без React и DOM. Кейсы покрывают построение шкалы и зон, маркер
+// текущего результата (реализованный + нереализованный + корректировки),
+// заливки итога и вертикальный разнос текстовых меток; маркерных частей
+// истории (точки, бейджи, расширение шкалы до истории) в геометрии больше
+// нет — история результата остаётся в журнале событий.
+// Traceability: issue:#94
 
 // Полный индикатор макета: ширина полосы 936 px.
 const FULL_WIDTH = 936;
 
 // Метрики разметки полного пресета: полоса 936 px, символ над полосой 7 px,
-// под полосой 6.5 px, несумма бейджа 30 px, высота бейджа — две строки.
+// под полосой 6.5 px.
 const LAYOUT: FinResultLabelLayout = {
 	scaleWidthPx: FULL_WIDTH,
 	aboveCharWidthPx: 7,
 	belowCharWidthPx: 6.5,
-	badgeChromePx: 30,
-	badgeRows: 2,
 };
 
 // Базовый вход кейсов: плановый риск 300, плановый профит 900 — как в
 // подписях шкалы «−300 / 0 / +900» макета. Остатки закрыты
 // (hasOpenResidual: false) — так сбой котировок не делает индикатор
-// неполным; кейсы с открытыми остатками переопределяют флаг. Маркеров
-// истории по умолчанию нет — свежая конструкция без событий журнала.
+// неполным; кейсы с открытыми остатками переопределяют флаг.
 function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
 	return {
 		plannedRisk: 300,
@@ -41,7 +38,6 @@ function caseInput(overrides: Partial<FinResultInput>): FinResultInput {
 		quotesDegraded: false,
 		hasOpenResidual: false,
 		realRiskStatus: "finite",
-		resultMarkers: [],
 		...overrides,
 	};
 }
@@ -50,16 +46,17 @@ const CASE_FRESH = caseInput({});
 
 describe("кейс C1 · только что открыли", () => {
 	// Свежая позиция: сделок закрытия нет, нереализованная ≈ 0 (комиссии и
-	// спред), маркеров истории ещё нет. Маркер стоит у нуля: ликвидация
-	// сейчас вернёт ≈ 0.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-risk-profit-hint
-	it("маркер у нуля, маркеров истории нет", () => {
+	// спред), маркеров истории в индикаторе больше нет. Маркер стоит у нуля:
+	// ликвидация сейчас вернёт ≈ 0. Кейс обновлён срезом #94 — прежняя метка
+	// вела на требование, чей текст живой спеки всё ещё предписывает бейджи
+	// истории, поэтому ссылка переведена на задачу, меняющую поведение.
+	// Traceability: issue:#94
+	it("маркер у нуля", () => {
 		// Act: свежая конструкция без реализованного результата.
 		const geometry = computeFinResultGeometry(CASE_FRESH);
 
-		// Assert: маркер — позиция итога ≈ 0, история пуста.
+		// Assert: маркер — позиция итога ≈ 0.
 		expect(geometry.markerAt).toBeCloseTo(0.25, 3);
-		expect(geometry.markerPoints).toEqual([]);
 
 		// Assert: шкала и зоны из подписей «−300 / 0 / +900».
 		expect(geometry.zeroAt).toBeCloseTo(0.25, 3);
@@ -214,185 +211,24 @@ describe("кейс C6 · сверхприбыль: итог превысил п�
 	});
 });
 
-describe("шкала охватывает маркеры истории без клипа", () => {
-	// Клип крайних значений удалён: маркер истории за плановой границей
-	// расширяет шкалу до истинного положения, бейдж стоит на своей точке.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-scale-expands-to-markers-no-clip
-	it("маркер −520 за плановым риском 400 расширяет шкалу влево", () => {
-		// Act: плановый риск 400, первая метка истории −520.
+describe("охват шкалы без истории маркеров", () => {
+	// Тест удаления: шкала больше не охватывает маркеры истории — охват
+	// строится только по плановым границам и итогу текущего результата;
+	// точки и бейджи истории выведены из геометрии
+	// (ADR-0024: тесты — живая спецификация поведения).
+	// Traceability: issue:#89
+	it("шкала строится по плановым границам и итогу", () => {
+		// Act: плановый риск 400, итог +950 за профитом.
 		const geometry = computeFinResultGeometry(
-			caseInput({ plannedRisk: 400, resultMarkers: [{ totalUsdt: -520 }] }),
+			caseInput({ plannedRisk: 400, realized: 950, unrealized: null }),
 		);
 
-		// Assert: шкала расширяется влево до −520, точка истории стоит на
-		// левом краю шкалы — истинная позиция, клипа и прижатия нет.
-		expect(geometry.scaleMin).toBe(-520);
-		expect(geometry.scaleMax).toBe(900);
-		expect(geometry.markerPoints).toEqual([{ x: 0, total: -520, tone: "negative" }]);
-
-		// Assert: плановая зона риска остаётся от −400 до нуля в новых долях.
-		expect(geometry.riskZone).toEqual({ from: 0, to: 520 / 1420 });
-	});
-
-	it("метки истории справа плана расширяют шкалу, но золотую зону не создают", () => {
-		// Act: метка +1200 за плановым профитом +900, текущий итог +0.
-		const geometry = computeFinResultGeometry(
-			caseInput({ resultMarkers: [{ totalUsdt: 1200 }] }),
-		);
-
-		// Assert: шкала растянута до метки, точка на правом краю.
-		expect(geometry.scaleMax).toBe(1200);
-		expect(geometry.markerPoints[0]?.x).toBe(1);
-
-		// Assert: золотой зоны нет — сверхприбыль создаёт только маркер
-		// текущего результата, метки истории не красятся золотом.
-		expect(geometry.superZone).toBeNull();
-		expect(geometry.profitZone).toEqual({ from: 300 / 1500, to: 1200 / 1500 });
-	});
-
-	it("охват учитывает и маркер итога, и все метки истории", () => {
-		// Act: итог +950 за профитом, метки от −450 до +700.
-		const geometry = computeFinResultGeometry(
-			caseInput({
-				realized: 950,
-				unrealized: null,
-				resultMarkers: [{ totalUsdt: -450 }, { totalUsdt: 700 }],
-			}),
-		);
-
-		// Assert: минимум шкалы — самая левая метка, максимум — итог.
-		expect(geometry.scaleMin).toBe(-450);
+		// Assert: минимум — плановый риск, максимум — итог.
+		expect(geometry.scaleMin).toBe(-400);
 		expect(geometry.scaleMax).toBe(950);
 
-		// Assert: доли точек пересчитаны от новой шкалы.
-		expect(geometry.markerPoints[0]?.x).toBeCloseTo(0, 4);
-		expect(geometry.markerPoints[1]?.x).toBeCloseTo(1150 / 1400, 4);
-		expect(geometry.markerAt).toBeCloseTo(1, 4);
-	});
-});
-
-describe("точки истории: порядок, тон и отличие от маркера итога", () => {
-	// Бейджи идут в порядке номеров, суммы — накопленный зафиксированный
-	// результат на момент события; последний бейдж и маркер текущего
-	// результата — разные точки: история хранит зафиксированную часть,
-	// маркер учитывает и нереализованную.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-marker-last-vs-current
-	it("точки идут в хронологическом порядке с тоном по знаку итога", () => {
-		// Act: история −100 → +150 → +300 при текущем итоге +240.
-		const geometry = computeFinResultGeometry(
-			caseInput({
-				realized: 240,
-				unrealized: null,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: 150 }, { totalUsdt: 300 }],
-			}),
-		);
-
-		// Assert: порядок входа сохранён, тон по знаку суммы каждой точки.
-		expect(geometry.markerPoints.map((point) => point.total)).toEqual([-100, 150, 300]);
-		expect(geometry.markerPoints.map((point) => point.tone)).toEqual([
-			"negative",
-			"positive",
-			"positive",
-		]);
-
-		// Assert: доли считаются от охвата −300…+900.
-		expect(geometry.markerPoints[0]?.x).toBeCloseTo(200 / 1200, 4);
-		expect(geometry.markerPoints[1]?.x).toBeCloseTo(450 / 1200, 4);
-		expect(geometry.markerPoints[2]?.x).toBeCloseTo(600 / 1200, 4);
-	});
-
-	it("последний бейдж −70 стоит левее маркера текущего результата −40", () => {
-		// Act: история до −70, нереализованная часть +30 подняла текущий
-		// результат до −40.
-		const geometry = computeFinResultGeometry(
-			caseInput({
-				realized: -70,
-				unrealized: 30,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: -70 }],
-			}),
-		);
-
-		// Assert: последний бейдж подписан суммой −70, маркер итога — −40.
-		expect(geometry.markerPoints[1]).toEqual({ x: 230 / 1200, total: -70, tone: "negative" });
-		expect(geometry.markerAt).toBeCloseTo(260 / 1200, 4);
-		expect(geometry.labels.marker).toBe("−40");
-		expect(geometry.markerPoints[1]!.x).toBeLessThan(geometry.markerAt ?? 0);
-	});
-
-	// Нулевой итог истории — нейтральный тон бейджа без тонировки по знаку.
-	it("нулевая сумма истории даёт нейтральный тон", () => {
-		// Act: метка с нулевым накопленным итогом.
-		const geometry = computeFinResultGeometry(
-			caseInput({ resultMarkers: [{ totalUsdt: 0 }] }),
-		);
-
-		// Assert: тон zero — ни красный, ни акцентный.
-		expect(geometry.markerPoints[0]?.tone).toBe("zero");
-	});
-});
-
-describe("разнос бейджей истории над полосой", () => {
-	// Коллизия бейджей решается вертикальным разносом: второй бейдж уходит
-	// на следующий свободный уровень, соседние бейджи на одном уровне
-	// не перекрываются.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-result-markers-badges-above-bar
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-no-overlap
-	it("столкнувшиеся бейджи разносятся вертикально", () => {
-		// Act: две метки +100 и +105 — точки почти совпали на шкале.
-		const geometry = computeFinResultGeometry(
-			caseInput({ resultMarkers: [{ totalUsdt: 100 }, { totalUsdt: 105 }] }),
-			LAYOUT,
-		);
-
-		// Assert: первый бейдж на нулевом уровне у полосы, второй — через
-		// высоту пилюли выше; оба по центру своих точек.
-		expect(geometry.badgePlacements).toEqual([
-			{ level: 0, align: "center" },
-			{ level: 2, align: "center" },
-		]);
-	});
-
-	it("бейджи и текстовые подписи не наплывают друг на друга", () => {
-		// Act: метка истории на нуле — бейдж занимает нулевой уровень над
-		// полосой, деление нуля вытесняется на противоположную сторону.
-		const geometry = computeFinResultGeometry(
-			caseInput({ resultMarkers: [{ totalUsdt: 0 }] }),
-			LAYOUT,
-		);
-
-		// Assert: бейдж стоит на нулевом уровне над полосой, деление нуля —
-		// под полосой на следующем свободном уровне.
-		expect(geometry.badgePlacements?.[0]).toEqual({ level: 0, align: "center" });
-		expect(geometry.placements?.zero).toEqual({ side: "below", level: 1, align: "center" });
-		expect(geometry.placements?.marker).toEqual({ side: "below", level: 0, align: "center" });
-	});
-
-	// Крайние бейджи прижимаются к краям шкалы изнутри, габариты не растут.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-finresult-labels-edge-flush
-	it("крайние бейджи прижимаются к краям изнутри", () => {
-		// Act: метки на обоих краях шкалы — левая точка расширена до −520,
-		// правая — до +2000.
-		const geometry = computeFinResultGeometry(
-			caseInput({ plannedRisk: 400, resultMarkers: [{ totalUsdt: -520 }, { totalUsdt: 2000 }] }),
-			LAYOUT,
-		);
-
-		// Assert: левый бейдж выровнен по левому краю, правый — по правому.
-		expect(geometry.badgePlacements?.[0]?.align).toBe("start");
-		expect(geometry.badgePlacements?.[1]?.align).toBe("end");
-	});
-
-	it("без метрик разметки бейджи получают только позиции, без разноса", () => {
-		// Act: геометрия без layout — разнос не считается.
-		const geometry = computeFinResultGeometry(
-			caseInput({ resultMarkers: [{ totalUsdt: 100 }] }),
-		);
-
-		// Assert: точки истории есть, размещений нет.
-		expect(geometry.markerPoints).toHaveLength(1);
-		expect(geometry.badgePlacements).toBeNull();
-		expect(geometry.placements).toBeNull();
+		// Assert: плановая зона риска — от планового риска до нуля.
+		expect(geometry.riskZone).toEqual({ from: 0, to: 400 / 1350 });
 	});
 });
 
@@ -430,80 +266,49 @@ describe("разнос и прижатие текстовых меток", () =>
 });
 
 describe("состояния риска", () => {
-	// Не конечный риск (unbounded/unavailable) не изображается конечной
-	// границей: состояние выводится текстом вне шкалы, плановое деление
-	// подписывается плановым риском, маркеры истории и маркер итога
-	// сохраняются.
-	// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
-	// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
-	it("unbounded: статус вне шкалы, маркеры истории и итог сохранены", () => {
-		// Act: итог +5 942.16 при плановом риске 400 и меткой +300 — хвост
-		// коротких коллов не ограничен.
-		const geometry = computeFinResultGeometry(
-			caseInput({
-				plannedRisk: 400,
-				realized: 5942.16,
-				unrealized: null,
-				realRiskStatus: "unbounded",
-				resultMarkers: [{ totalUsdt: 300 }],
-			}),
-		);
-
-		// Assert: состояние вынесено наружу, плановое деление названо
-		// плановым риском.
-		expect(geometry.realRiskStatus).toBe("unbounded");
-		expect(geometry.labels.riskState).toBe("риск не ограничен");
-		expect(geometry.labels.risk).toBe("плановый риск −400");
-
-		// Assert: метка истории и итог на месте; шкала охватывает итог.
-		expect(geometry.markerPoints).toEqual([{ x: 700 / 6342.16, total: 300, tone: "positive" }]);
-		expect(geometry.markerAt).toBe(1);
-		expect(geometry.labels.marker).toBe("+5\u00A0942.16");
-		expect(geometry.tone).toBe("positive");
-
-		// Assert: золотая зона от профита +900 до итога, зона риска до нуля.
-		expect(geometry.superZone).toEqual({ from: 1300 / 6342.16, to: 1 });
-		expect(geometry.riskZone).toEqual({ from: 0, to: 400 / 6342.16 });
-	});
-
-	it("unavailable: статус «не удалось рассчитать», плановое деление подписано", () => {
+	// Список состояний вырожден в unavailable: неограниченный хвост по
+	// текущим маркам невозможен, строка unbounded удалена из контракта.
+	// Недоступный риск не изображается конечной границей: состояние
+	// выводится текстом вне шкалы, плановое деление подписывается
+	// плановым риском, маркер итога и его число скрыты — по ячейке 8
+	// макета «маркера и числа нет».
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
+	it("unavailable: статус «не удалось рассчитать», плановое деление подписано, маркера нет", () => {
 		// Act: расчёт риска не удался при плановом риске 300.
 		const geometry = computeFinResultGeometry(
 			caseInput({ realized: 200, unrealized: null, realRiskStatus: "unavailable" }),
 		);
 
 		// Assert: статус «не удалось рассчитать», плановое деление —
-		// плановый риск −300, маркер итога +200 на своём месте.
+		// плановый риск −300, маркер и число итога скрыты.
 		expect(geometry.realRiskStatus).toBe("unavailable");
 		expect(geometry.labels.riskState).toBe("не удалось рассчитать");
 		expect(geometry.labels.risk).toBe("плановый риск −300");
-		expect(geometry.markerAt).toBeCloseTo(500 / 1200, 4);
-		expect(geometry.labels.marker).toBe("+200");
+		expect(geometry.markerAt).toBeNull();
+		expect(geometry.labels.marker).toBeNull();
 	});
 
-	// Без плановых границ полоса нейтральная: зон, маркера итога и маркеров
-	// истории нет, состояние риска сохраняется отдельно от полосы.
+	// Без плановых границ полоса нейтральная: зон и маркера итога нет,
+	// состояние риска сохраняется отдельно от полосы.
 	// Traceability: openspec:ui/screens#scenario-finresult-neutral-without-params
 	// Traceability: openspec:ui/screens#scenario-finresult-risk-state-without-plan
-	it("нейтральная полоса без плановых параметров не показывает маркеры истории", () => {
-		// Act: границы не настроены, история есть.
+	it("нейтральная полоса без плановых параметров", () => {
+		// Act: границы не настроены.
 		const geometry = computeFinResultGeometry(
 			caseInput({
 				plannedRisk: null,
 				plannedProfit: null,
 				realized: -50,
 				unrealized: 30,
-				resultMarkers: [{ totalUsdt: 50 }],
 			}),
 		);
 
-		// Assert: полоса без зон и точек истории, заполнение от нуля до края
-		// по знаку итога.
+		// Assert: полоса без зон, заполнение от нуля до края по знаку итога.
 		expect(geometry.neutral).toBe(true);
 		expect(geometry.riskZone).toBeNull();
 		expect(geometry.profitZone).toBeNull();
 		expect(geometry.superZone).toBeNull();
-		expect(geometry.markerPoints).toEqual([]);
 		expect(geometry.zeroAt).toBeCloseTo(0.5, 3);
 		expect(geometry.fillMain).toEqual({ from: 0, to: 0.5 });
 		expect(geometry.labels.risk).toBeNull();
@@ -511,57 +316,44 @@ describe("состояния риска", () => {
 		expect(geometry.labels.marker).toBe("−20");
 	});
 
-	// Задан один параметр — шкала односторонняя, все метки истории
-	// показываются без порога.
+	// Задан один параметр — шкала односторонняя.
 	// Traceability: openspec:ui/screens#scenario-finresult-single-bound
-	it("задан только риск: зона риска и все метки истории", () => {
-		// Act: профит не задан, история из двух меток.
+	it("задан только риск: зона риска", () => {
+		// Act: профит не задан.
 		const geometry = computeFinResultGeometry(
 			caseInput({
 				plannedRisk: 300,
 				plannedProfit: null,
 				realized: -150,
 				unrealized: null,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: 50 }],
 			}),
 		);
 
-		// Assert: шкала симметрична риску, зона прибыли отсутствует, обе
-		// метки на своих истинных долях.
+		// Assert: шкала симметрична риску, зона прибыли отсутствует.
 		expect(geometry.riskZone).toEqual({ from: 0, to: 0.5 });
 		expect(geometry.profitZone).toBeNull();
 		expect(geometry.labels.risk).toBe("−300");
 		expect(geometry.labels.profit).toBeNull();
-		expect(geometry.markerPoints).toEqual([
-			{ x: 200 / 600, total: -100, tone: "negative" },
-			{ x: 350 / 600, total: 50, tone: "positive" },
-		]);
 	});
 });
 
-describe("сбой котировок и закрытая конструкция", () => {
-	// Маркеры истории от котировок не зависят: сбой скрывает только
-	// нереализованную часть текущего результата.
+describe("сбой котировок", () => {
+	// Сбой котировок скрывает только нереализованную часть текущего
+	// результата.
 	// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
-	it("сбой котировок скрывает только нереализованную часть, история сохранена", () => {
-		// Act: сбой котировок при открытых остатках, история из двух меток.
+	it("сбой котировок скрывает только нереализованную часть", () => {
+		// Act: сбой котировок при открытых остатках.
 		const geometry = computeFinResultGeometry(
 			caseInput({
 				realized: -250,
 				unrealized: null,
 				quotesDegraded: true,
 				hasOpenResidual: true,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: -250 }],
 			}),
 		);
 
-		// Assert: индикатор неполный, обе метки истории на месте, маркер —
-		// на доступной части −250.
+		// Assert: индикатор неполный, маркер — на доступной части −250.
 		expect(geometry.incomplete).toBe(true);
-		expect(geometry.markerPoints).toEqual([
-			{ x: 200 / 1200, total: -100, tone: "negative" },
-			{ x: 50 / 1200, total: -250, tone: "negative" },
-		]);
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.labels.marker).toBe("−250");
 	});
@@ -577,26 +369,6 @@ describe("сбой котировок и закрытая конструкция
 		expect(geometry.markerAt).toBeCloseTo(50 / 1200, 4);
 		expect(geometry.labels.marker).toBe("−250");
 	});
-
-	// Закрытая конструкция сохраняет историю: последняя метка равна
-	// итоговому накопленному зафиксированному результату.
-	// Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#scenario-closed-construction-keeps-history
-	it("закрытая конструкция: последняя метка — итоговый зафиксированный результат", () => {
-		// Act: остатков нет, реализованный +30, история −100 → +30.
-		const geometry = computeFinResultGeometry(
-			caseInput({
-				realized: 30,
-				unrealized: null,
-				resultMarkers: [{ totalUsdt: -100 }, { totalUsdt: 30 }],
-			}),
-		);
-
-		// Assert: последняя точка истории совпадает с текущим зафиксированным
-		// результатом, позиции совпадают.
-		expect(geometry.markerPoints[1]).toEqual({ x: 330 / 1200, total: 30, tone: "positive" });
-		expect(geometry.markerAt).toBeCloseTo(330 / 1200, 4);
-		expect(geometry.labels.marker).toBe("+30");
-	});
 });
 
 describe("отказ на некорректных входах", () => {
@@ -607,7 +379,6 @@ describe("отказ на некорректных входах", () => {
 		["Infinity в unrealized", caseInput({ unrealized: Number.POSITIVE_INFINITY })],
 		["NaN в adjustments", caseInput({ adjustments: Number.NaN })],
 		["NaN в plannedRisk", caseInput({ plannedRisk: Number.NaN })],
-		["NaN в сумме маркера", caseInput({ resultMarkers: [{ totalUsdt: Number.NaN }] })],
 	])("ThrowOn%s", (_name, input) => {
 		// Act + Assert: некорректное значение отвергается ошибкой.
 		expect(() => computeFinResultGeometry(input)).toThrow();

@@ -255,11 +255,12 @@ function ConstructionCardBody({ card }: { readonly card: ConstructionCard }) {
 					{/* Секция «Предупреждения» — полный перечень диагностики над
 					    таблицами записей по фрейму «Предупреждения» экрана
 					    «Карточка конструкции» (QbFRE) design.pen; при пустом наборе
-					    секция скрыта целиком. Бейдж «∞» индикатора финрезультата
-					    про агрегатный статус и от предупреждений не зависит.
+					    секция скрыта целиком. Состояние недоступного риска
+					    индикатора финрезультата — про доступность расчёта,
+					    от предупреждений не зависит.
 					    Traceability: openspec:ui/screens#scenario-detail-warnings-section-above-tables
 					    Traceability: openspec:ui/screens#scenario-detail-warnings-section-hidden
-					    Traceability: openspec:ui/screens#scenario-unbounded-badge-coexists-with-warnings */}
+					    Traceability: issue:#98 */}
 					{card.riskWarnings.length > 0 && <RiskWarningsSection warnings={card.riskWarnings} />}
 
 					{/* Заголовки и счётчики сеток живут в головках секций-карточек

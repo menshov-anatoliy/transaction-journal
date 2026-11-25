@@ -10,7 +10,7 @@ namespace TransactionJournal.Tests.Application.Sync.Reconciliation;
 /// <summary>
 /// Разовый диагностический прогон сверки: живая база журнала сопоставляется
 /// с CSV-выгрузкой Bybit AssetChangeDetails из каталога примеров только на
-/// чтение; прогон пропускается без живых данных, при расхождениях падает
+/// чтение; прогон включается явно, пропускается без живых данных, при расхождениях падает
 /// с полным отчётом.
 /// Traceability: openspec:sync/bybit-statement-reconciliation#requirement-one-off-diagnostic-run
 /// </summary>
@@ -27,6 +27,15 @@ public class BybitStatementDiagnosticRunTests
 	[Description("Разовая сверка живой базы журнала с CSV-выгрузкой Bybit AssetChangeDetails проходит без расхождений")]
 	public void TryIfLiveDataReconcilesWithBybitStatement()
 	{
+		// Сверка живых данных запускается только по запросу, отдельно от обычных тестов.
+		// Traceability: doc:openspec/specs/sync/bybit-statement-reconciliation/spec.md#requirement-сверка-выполняется-разовым-диагностическим-прогоном-на-живых-данных
+		if (Environment.GetEnvironmentVariable("TJ_RUN_BYBIT_RECONCILIATION") != "1")
+		{
+			Microsoft.VisualStudio.TestTools.UnitTesting.Assert.Inconclusive(
+				"Для запуска сверки с живыми данными задайте TJ_RUN_BYBIT_RECONCILIATION=1.");
+			return;
+		}
+
 		// Arrange: разрешение живых данных машины — базы журнала и каталога выгрузки.
 		var paths = ReconciliationPaths.ResolveFromTestAssembly();
 

@@ -13,6 +13,26 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Префиксы заголовков
+
+Тип issue виден по префиксу заголовка — без отдельных меток (метки треков
+не вводятся, см. [triage-labels.md](./triage-labels.md)). Каждый скилл,
+создающий issue, обязан ставить префикс; после префикса — имя в терминах
+глоссария.
+
+| Префикс | Артефакт | Кто ставит |
+|---|---|---|
+| `Идея: ` | черновик идеи | шаблон `idea.yml` |
+| `Баг: ` | черновик, классифицированный как bug | `/triage` переименовывает `Идея:` → `Баг:` |
+| `Спека: ` | issue-спека | `/to-spec` |
+| `Срез k/n: ` | sub-issue спеки, `k` — порядок по blocking-связям, `n` — всего срезов | `/to-tickets` |
+| `Карта: ` | карта `wayfinder:map` | `/wayfinder` |
+| `Research: ` / `Решение: ` / `Прототип: ` / `Прогон: ` / `Сборка: ` | тикеты карты `wayfinder:research` / `grilling` / `prototype` / `task` | `/wayfinder` |
+
+Черновик на треке «Срез» сохраняет префикс `Идея:`/`Баг:` — бриф живёт в
+его комментарии. Переименование заголовка не нарушает неизменность тела
+черновика.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_

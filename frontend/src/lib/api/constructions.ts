@@ -1,5 +1,4 @@
 import { apiFetch } from "./http";
-import type { ResultMarkerOperation } from "./construction-card";
 
 // Контракты раздела «Конструкции» единого API: обзор списка со сводкой,
 // превью выделенной конструкции. Величины недоступные из-за сбоя котировок
@@ -10,21 +9,10 @@ import type { ResultMarkerOperation } from "./construction-card";
 export type ConstructionStatus = "open" | "closed" | "archived";
 
 /** Состояние реального риска: число величины выдаётся только конечному риску. */
-export type RealRiskStatus = "finite" | "unbounded" | "unavailable";
-
-/** Последний маркер изменения результата: накопленный итог, время и расшифровка события. */
-// Контракт списка и превью публикует тот же перечень операций, что и
-// карточка: расшифровка последней метки доступна в среднем и компактном
-// видах индикатора — подсказкой на последнем маркере.
-// Traceability: change:fix-finresult-marker-contributions/design#d4
-export interface ConstructionLastResultMarker {
-	/** Накопленный зафиксированный результат на момент события, USDT. */
-	readonly totalUsdt: number;
-	/** Время события журнала, ISO. */
-	readonly eventAt: string;
-	/** Расшифровка изменения последней метки: операции с предыдущего выведенного маркера. */
-	readonly operations: readonly ResultMarkerOperation[];
-}
+// Перечень состояний вырожден в finite/unavailable по ADR-0025: неограниченный
+// хвост по текущим маркам невозможен, строка «unbounded» удалена из контракта.
+// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
+export type RealRiskStatus = "finite" | "unavailable";
 
 /** Сводка журнала для шапки раздела. */
 export interface ConstructionsSummary {
@@ -54,18 +42,15 @@ export interface ConstructionRow {
 	readonly totalPnLPercent: number | null;
 	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
-	// Реальный риск открытых остатков идёт парой «величина + статус»: число
-	// выдаётся только конечному риску, null при неограниченном хвосте или
-	// неполных данных, а статус различает эти причины — угадывать finite
-	// по плановому риску нельзя.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	// Реальный риск идёт парой «величина + статус»: число выдаётся только
+	// конечному риску — минусовой части текущего результата по текущим
+	// маркам; null при недоступном риске (сбой котировок или неоценённый
+	// остаток), частичный расчёт запрещён, угадывать finite по плановому
+	// риску нельзя.
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
-	// Последний маркер изменения результата строки: компактный вид
-	// индикатора рисует тёмный штрих в позиции накопленного итога.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
-	readonly lastResultMarker: ConstructionLastResultMarker | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly liveHintCount: number;
@@ -122,17 +107,13 @@ export interface ConstructionPreview {
 	readonly totalPnLPercent: number | null;
 	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
-	// Реальный риск открытых остатков идёт парой «величина + статус»: число
-	// только при конечном риске, null при неограниченном хвосте или неполных
-	// данных, а статус различает эти причины без подстановки планового риска.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	// Реальный риск идёт парой «величина + статус»: число только при
+	// конечном риске — минусовой части текущего результата по текущим
+	// маркам; null при недоступном риске без подстановки планового риска.
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
-	// Последний маркер изменения результата превью: средний вид индикатора
-	// показывает только его — тёмный штрих без номера и суммы.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-list-preview-publish-last-marker
-	readonly lastResultMarker: ConstructionLastResultMarker | null;
 	readonly openedAt: string | null;
 	readonly closedAt: string | null;
 	readonly quotesAsOf: string | null;

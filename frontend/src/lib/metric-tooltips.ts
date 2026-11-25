@@ -4,10 +4,6 @@
 // метод, отсутствующий в источниках, в текст подсказки не придумывается.
 // Traceability: openspec:ui/screens#requirement-metric-tooltip-text-sourced
 
-import type { FinResultHistoryMarker } from "./finresult/geometry";
-import { formatFinAmount } from "./finresult/geometry";
-import { formatDay } from "./format/display-time";
-
 // Раздел подсказки многопоказательной метрики: по одному разделу
 // на каждый показатель ячейки или колонки.
 export interface MetricTooltipSection {
@@ -16,15 +12,14 @@ export interface MetricTooltipSection {
 }
 
 // Текст подсказки метрики: заголовок метрики, назначение — всегда,
-// метод расчёта — только когда он зафиксирован в источнике; построчные
-// записи rows — перечень внутри подсказки (например, операции расшифровки
-// метки), note — примечание в конце подсказки.
+// метод расчёта — только когда он зафиксирован в источнике;
+// sections — разделы многопоказательной метрики, note — примечание
+// в конце подсказки.
 export interface MetricTooltip {
 	readonly title: string;
 	readonly purpose: string;
 	readonly method?: string;
 	readonly sections?: readonly MetricTooltipSection[];
-	readonly rows?: readonly string[];
 	readonly note?: string;
 }
 
@@ -462,17 +457,27 @@ export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip 
 			"Плановая прибыль конструкции к экспирации: задаёт зелёную зону шкалы индикатора от нуля до +Профит; за границей начинается сверхприбыль.",
 	},
 
-	// Реальный риск в группе РИСК заголовка конструкции: число при конечном
-	// статусе, канонический текст статуса при unbounded/unavailable —
-	// пара «величина + статус» из read-модели без заглушек.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+	// Реальный риск в группе РИСК заголовка конструкции: минусовая часть
+	// текущего результата по текущим маркам по ADR-0025; число при конечном
+	// статусе, при недоступном расчёте — канонический текст состояния.
+	// Состав и метод повторяют тултип «Реальный риск» макета design.pen.
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	// Traceability: doc:GLOSSARY.md#Реальный риск
 	realRisk: {
 		title: "Реальный риск",
 		purpose:
-			"Худший сценарий по структуре открытых остатков на оси цены базового актива: совместный минимум платежа ног групп; публикуется парой — число при конечном статусе, иначе статус «не ограничен» или «не удалось рассчитать».",
-		method:
-			"Совместный минимум платежа групп открытых остатков по оси цены базового актива, где линейные ноги входят в группу своего базового актива; из структуры ног и средней цены открытого остатка, от текущих котировок не зависит; после закрытия остатков равен нулю.",
+			"Минусовая часть текущего результата конструкции по текущим маркам; при сбое котировок недоступна вместе с итогом.",
+		sections: [
+			{
+				label: "Значение, USDT",
+				text: "Минусовая часть текущего результата по текущим маркам: реализованный результат + стоимость открытых остатков + внешние корректировки PnL",
+			},
+			{
+				label: "Метод",
+				text: "max(0, −(реализованный + нереализованный + корректировки)); при сбое котировок — «не удалось рассчитать» и «?» на полосе",
+			},
+		],
 	},
 
 	// Маркер результата на шкале индикатора: рыночная часть — оценка
@@ -557,62 +562,3 @@ export const METRIC_TOOLTIPS: { readonly [K in MetricTooltipKey]: MetricTooltip 
 		],
 	},
 };
-
-// Человекочитаемая подпись вида операции расшифровки метки: термины
-// фиксированного набора вкладов модели вкладов операций; неизвестная
-// строка из контракта выводится как есть.
-// Traceability: change:fix-finresult-marker-contributions/design#d3
-function resultMarkerOperationKindLabel(kind: string | undefined): string {
-	const labels: { readonly [key: string]: string } = {
-		opening: "Открытие",
-		closing: "Закрытие",
-		roll: "Ролл",
-		"synthetic-close": "Синтетическое закрытие",
-		"synthetic-release": "Снятие синтетики",
-		"futures-close": "Закрытие фьючерса",
-		"pnl-adjustment": "Корректировка PnL",
-		delivery: "Поставка",
-	};
-
-	return kind === undefined ? "Операция" : (labels[kind] ?? kind);
-}
-
-// Подсказка-расшифровка метки маркера изменения результата: заголовок
-// «Метка N · итог USDT», подстрока изменения с предыдущей выведенной метки,
-// построчный перечень операций «вид · дата · сумма вклада» без группировки
-// и строка-инвариант «Σ перечня = изменение». Строится по операциям
-// конкретного маркера из контракта — статичного текста у расшифровки нет;
-// контракту последнего маркера списка/превью changeUsdt не публикуется —
-// изменением считается сумма его перечня операций.
-// Traceability: openspec:ui/screens#requirement-risk-profit-hint
-// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
-export function resultMarkerBreakdownTooltip(marker: FinResultHistoryMarker): MetricTooltip {
-	const total = formatFinAmount(marker.totalUsdt);
-	const number = marker.number;
-	const title = number === undefined ? `Метка изменения результата · ${total} USDT` : `Метка ${number} · ${total} USDT`;
-
-	// Изменение: контракт карточки публикует его явно, контракт последнего
-	// маркера списка/превью — только перечень операций, сумма которых по
-	// инварианту равна изменению.
-	const change =
-		marker.changeUsdt ??
-		(marker.operations ?? []).reduce((sum, operation) => sum + operation.contributionUsdt, 0);
-	const purpose =
-		number === undefined || number <= 1
-			? `изменение с начала истории: ${formatFinAmount(change)} USDT`
-			: `изменение с метки ${number - 1}: ${formatFinAmount(change)} USDT`;
-
-	// Построчный перечень: каждая операция отдельной строкой, без свёрток
-	// «×N»; подавленные порогом события сервер включает в перечень сам.
-	const rows = (marker.operations ?? []).map(
-		(operation) =>
-			`${resultMarkerOperationKindLabel(operation.kind)} · ${formatDay(operation.date)} · ${formatFinAmount(operation.contributionUsdt)} USDT`,
-	);
-
-	return {
-		title,
-		purpose,
-		rows,
-		note: rows.length > 0 ? "Σ перечня = изменение" : undefined,
-	};
-}

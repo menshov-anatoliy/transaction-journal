@@ -25,9 +25,8 @@ namespace TransactionJournal.Application;
 /// <param name="ClosedAt">Дата закрытия — момент обнуления последней позиции; null у открытой конструкции.</param>
 /// <param name="QuoteValue">Стоимость открытых позиций конструкции по котировкам; null при закрытой конструкции или недоступной оценке котировок.</param>
 /// <param name="CapitalUsagePercent">Занятость капитала — стоимость в процентах от капитала; null без базы процентов или стоимости.</param>
-/// <param name="RealRiskUsdt">Реальный риск конструкции в USDT — наихудший результат открытых остатков на экспирации; null, когда худший случай неограничен или символ остатка не разобран — причина различима статусом.</param>
-/// <param name="RealRiskStatus">Состояние реального риска: конечный (`finite`), неограниченный (`unbounded`) или нерассчитанный (`unavailable`); незаданный читается как «не рассчитан», а не как конечный.</param>
-/// <param name="LastResultMarker">Последний маркер изменения результата — накопленный зафиксированный денежный итог (сумма вкладов операций перечня), время события и перечень операций расшифровки; null, когда выведенных маркеров у конструкции ещё нет.</param>
+/// <param name="RealRiskUsdt">Реальный риск конструкции в USDT — минусовая часть текущего результата по маркам: max(0, −итог); null, когда итог недоступен (сбой котировок или неоценённый остаток) — причина различима статусом.</param>
+/// <param name="RealRiskStatus">Состояние реального риска: конечный (`finite`) или нерассчитанный (`unavailable`); незаданный читается как «не рассчитан», а не как конечный.</param>
 /// <param name="RiskWarningsCount">Число предупреждений диагностики незакрытых рисков — счётчик бейджа «⚠ N» строки; ноль — предупреждений нет.</param>
 /// <param name="DaysToNearestExpiry">Остаток полных суток до ближайшей экспирации открытых опционных ног; null без опционных ног.</param>
 /// <param name="NetDailyDecayUsdt">Нетто-дневной распад открытых опционных ног со знаком, USDT/день; null без опционных ног или без тикеров.</param>
@@ -44,17 +43,11 @@ namespace TransactionJournal.Application;
 // Traceability: openspec:analytics/performance#requirement-mark-value-of-position-and-construction
 // Реальный риск публикуется в контракте строки списка: величина переносится
 // из метрик аналитики как есть, правила расчёта и null остаются в аналитике.
-// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
+// Traceability: issue:#90
 // Статус проходит рядом с величиной без потери: null без статуса дал бы
-// представлению двусмысленность — неограниченный хвост и неполные данные
+// представлению двусмысленность — нерассчитанный риск и конечный ноль
 // надо различать, а конечный ноль не превращать в отсутствие величины.
-// Traceability: openspec:analytics/performance#scenario-real-risk-unbounded-is-null
-// Traceability: openspec:analytics/performance#scenario-real-risk-unparseable-symbol-is-null
-// Последний маркер истории результата идёт в строку списка готовой сводкой:
-// накопленный зафиксированный итог, время события и перечень операций
-// расшифровки вычислены при чтении, полный список маркеров остаётся
-// в карточке конструкции.
-// Traceability: openspec:analytics/performance#scenario-list-preview-publish-last-marker
+// Traceability: issue:#90
 // Счётчик предупреждений переносится из метрик аналитики как есть: расчёт по
 // открытым остаткам остаётся в аналитике, строка списка и превью показывают
 // число бейджем; ноль означает отсутствие бейджа.
@@ -85,7 +78,6 @@ public sealed record ConstructionListItem(
 	decimal? QuoteValue = null,
 	decimal? CapitalUsagePercent = null,
 	decimal? RealRiskUsdt = null,
-	ResultMarkerSummary? LastResultMarker = null,
 	RealRiskStatus RealRiskStatus = RealRiskStatus.Unavailable,
 	int RiskWarningsCount = 0,
 	int? DaysToNearestExpiry = null,

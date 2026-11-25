@@ -1,0 +1,32 @@
+name: Идея доработки
+description: Черновик идеи. Дальше её формализует сессия опроса /triage #N.
+title: "Идея: "
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Опишите идею своими словами, полнота не нужна. Тело issue останется исходным черновиком,
+        а контракт для агента появится позже — в комментарии Agent Brief или в отдельной issue-спеке.
+        Процесс описан в `docs/agents/sdlc.md`.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Проблема
+      description: Что сейчас мешает или чего не хватает? Кто это замечает и в какой ситуации?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Желаемый результат
+      description: Что должно стать возможным или измениться, когда идея будет реализована?
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Ограничения и заметки
+      description: Что нельзя затрагивать, известные риски, ссылки, наброски решения.
+    validations:
+      required: false

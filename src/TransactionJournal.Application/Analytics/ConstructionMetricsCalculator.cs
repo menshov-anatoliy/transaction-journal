@@ -14,8 +14,6 @@ namespace TransactionJournal.Application.Analytics;
 /// </summary>
 public sealed class ConstructionMetricsCalculator
 {
-	private readonly RealRiskCalculator _realRiskCalculator = new();
-
 	private readonly ConstructionRiskDiagnosticsCalculator _riskDiagnosticsCalculator = new();
 
 	/// <summary>Вычислитель метрик времени жизни опционных ног — время берёт у того же поставщика, что и длительность конструкции.</summary>
@@ -41,11 +39,10 @@ public sealed class ConstructionMetricsCalculator
 	/// процентов — процентные величины возвращаются отсутствующими. Даты выводятся
 	/// из записей: открытие — время первой сделки, закрытие — момент обнуления
 	/// последней позиции; длительность открытой конструкции считается от первой
-	/// сделки до переданного текущего момента. Реальный риск — наихудший результат
-	/// открытых остатков на экспирации — выводится из структуры ног и средних цен
-	/// открытых остатков и от текущих котировок не зависит; в метрики он переносится
-	/// вместе со статусом, различающим конечный, неограниченный и нерассчитанный
-	/// риск, без изменения расчёта результата конструкции. Рядом же
+	/// сделки до переданного текущего момента. Реальный риск — минусовая часть
+	/// итога конструкции по текущим маркам — выводится клэмпом уже вычисленного
+	/// итога: при доступном итоге это max(0, −итог), при недоступном — состояние
+	/// «не рассчитан» без числа. Рядом же
 	/// вычисляется диагностика незакрытых рисков из текущих открытых остатков:
 	/// в метрики попадает счётчик предупреждений, записи переносятся в контракты
 	/// превью и карточки; в базу ничего не пишется. Тем же проходом встраиваются
@@ -112,15 +109,17 @@ public sealed class ConstructionMetricsCalculator
 			? null
 			: openResiduals.Sum(position => position.QuoteValue.GetValueOrDefault());
 
-		// Реальный риск — наихудший результат открытых остатков на экспирации:
-		// выводится из структуры ног и средних цен остатков, текущие котировки на
-		// метрику не влияют, поэтому сбой котировок её не задевает. В метрики
-		// проходит состояние рядом с величиной: отсутствие числа перестаёт быть
-		// двусмысленным — неограниченный хвост и неполные исходные данные
-		// различимы потребителями, а P&L и прочие метрики не затронуты.
-		// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-		// Traceability: openspec:analytics/performance#scenario-real-risk-marks-failure-independent
-		var realRisk = _realRiskCalculator.CalculateResult(positionList);
+		// Реальный риск — минусовая часть итога конструкции по текущим маркам:
+		// состав метрики един для открытых и закрытых конструкций — реализованный
+		// PnL, нереализованный PnL и внешние корректировки входят через уже
+		// вычисленный итог, а неотрицательный итог клэмпится нулём. Недоступный
+		// итог — сбой котировок или неоценённый открытый остаток — делает риск
+		// недоступным целиком: число не выдаётся, частичный расчёт по доступной
+		// части данных запрещён.
+		// Traceability: issue:#90
+		// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
+		decimal? realRiskUsdt = totalPnL == null ? null : Math.Max(0m, -totalPnL.Value);
+		var realRiskStatus = totalPnL == null ? RealRiskStatus.Unavailable : RealRiskStatus.Finite;
 
 		// Диагностика незакрытых рисков — тот же проход по метрикам позиций,
 		// что и реальный риск: единый вызов вычислителя питает и счётчик бейджа,
@@ -190,8 +189,8 @@ public sealed class ConstructionMetricsCalculator
 			AdjustmentsPnL = adjustmentsPnL,
 			TotalPnL = totalPnL,
 			QuoteValue = quoteValue,
-			RealRiskUsdt = realRisk.Usdt,
-			RealRiskStatus = realRisk.Status,
+			RealRiskUsdt = realRiskUsdt,
+			RealRiskStatus = realRiskStatus,
 			RiskWarningsCount = riskDiagnostics.Count + expiryDiagnostics.Count,
 			RiskWarnings = warnings,
 			Lifetime = lifetimeEvaluation,

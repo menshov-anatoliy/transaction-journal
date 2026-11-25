@@ -137,14 +137,14 @@ public class SyntheticCloseManualLinkLogicalLayerTests
 		Assert.That(after.SyntheticCloses, Has.Count.EqualTo(1));
 
 		// Инструментальные величины строк позиций совпадают запись за записью:
-		// сверяются строки без презентационного распада остатка.
+		// сверяются строки без презентационного распада остатка и аннотаций ноги.
 		var beforeBySymbol = before.Positions
-			.Select(row => row with { SyntheticResidual = null, OtherResidual = null })
+			.Select(WithoutSyntheticAnnotations)
 			.ToDictionary(row => row.Symbol, StringComparer.Ordinal);
 		foreach (var afterRow in after.Positions)
 		{
 			var beforeRow = beforeBySymbol[afterRow.Symbol];
-			Assert.That(afterRow with { SyntheticResidual = null, OtherResidual = null }, Is.EqualTo(beforeRow),
+			Assert.That(WithoutSyntheticAnnotations(afterRow), Is.EqualTo(beforeRow),
 				$"инструментальная строка позиции {afterRow.Symbol}");
 		}
 
@@ -212,6 +212,14 @@ public class SyntheticCloseManualLinkLogicalLayerTests
 		CreateOptions(),
 		new JournalMetricsReadModel(CreateOptions(), new StubFreshQuoteSource(4300m, FetchedAt)),
 		new PositionReadModel(CreateOptions()));
+
+	private static ConstructionPositionRow WithoutSyntheticAnnotations(ConstructionPositionRow row) => row with
+	{
+		SyntheticResidual = null,
+		OtherResidual = null,
+		SyntheticClosedQuantity = null,
+		SyntheticOpenQuantity = null,
+	};
 
 	private DbContextOptions<JournalDbContext> CreateOptions() =>
 		new DbContextOptionsBuilder<JournalDbContext>()

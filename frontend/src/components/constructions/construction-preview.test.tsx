@@ -29,11 +29,6 @@ const preview: ConstructionPreview = {
 	quoteValue: 500,
 	capitalUsagePercent: 16.7,
 	realRiskUsdt: 45,
-	lastResultMarker: {
-		totalUsdt: 15.25,
-		eventAt: "2026-06-18T09:05:00",
-		operations: [{ kind: "closing", date: "2026-06-18T09:05:00", contributionUsdt: 15.25 }],
-	},
 	realRiskStatus: "finite",
 	openedAt: "2026-06-18T09:05:00",
 	closedAt: null,
@@ -138,6 +133,20 @@ describe("краткая карточка конструкции", () => {
 		expect(medium).not.toBeNull();
 		expect(within(medium as HTMLElement).getByRole("img", { name: /результат \+105\.5/ })).toBeInTheDocument();
 		expect(within(medium as HTMLElement).queryByRole("img", { name: /результат \+100\.5/ })).not.toBeInTheDocument();
+	});
+
+	// Состояние недоступного риска в среднем индикаторе превью: состояние
+	// выводится текстом «не удалось рассчитать» без маркера и числа,
+	// как в ячейке 9 макета для среднего вида.
+	// Traceability: issue:#98
+	it("показывает «не удалось рассчитать» в индикаторе при недоступном риске", () => {
+		// Act: превью с недоступным расчётом реального риска.
+		renderPreview({ realRiskUsdt: null, realRiskStatus: "unavailable" });
+
+		// Assert: состояние названо текстом, числа и процента риска нет.
+		expect(screen.getByText("не удалось рассчитать")).toBeInTheDocument();
+		expect(screen.queryByText(/USDT/)).not.toBeInTheDocument();
+		expect(screen.queryByText(/%/)).not.toBeInTheDocument();
 	});
 
 	it("показывает период, счётчики записей и живые подсказки", () => {

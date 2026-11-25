@@ -14,8 +14,7 @@ import { cn } from "@/lib/utils";
 // Содержимое попапа по паттерну макета: заголовок метрики (12.5/600),
 // назначение — всегда, метод расчёта — когда зафиксирован в справочнике,
 // по разделу на каждый показатель многопоказательной метрики
-// (показатель 11/600 вторичным тоном + описание 11 обычное), построчные
-// записи перечня (например, расшифровка метки маркера) и примечание
+// (показатель 11/600 вторичным тоном + описание 11 обычное) и примечание
 // в конце подсказки.
 export function MetricTooltipContent({
 	tooltip,
@@ -36,9 +35,6 @@ export function MetricTooltipContent({
 					<span className="font-semibold text-text-secondary">{section.label}</span>
 					<span className="text-text-secondary">{section.text}</span>
 				</span>
-			))}
-			{tooltip.rows?.map((row) => (
-				<span className="text-text-secondary" key={row}>{row}</span>
 			))}
 			{tooltip.note ? <span className="text-text-muted">{tooltip.note}</span> : null}
 		</span>

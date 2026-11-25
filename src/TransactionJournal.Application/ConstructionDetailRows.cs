@@ -216,7 +216,6 @@ public sealed record SyntheticCloseRow(
 /// <param name="Adjustments">Строки таблицы корректировок, упорядоченные по дате.</param>
 /// <param name="SyntheticCloses">Строки распознанных синтетических закрытий конструкции; null оставлен совместимости прежних построений — читающий слой всегда передаёт список.</param>
 /// <param name="RiskWarnings">Тексты предупреждений диагностики незакрытых рисков конструкции; null оставлен совместимости прежних построений — читающий слой всегда передаёт список.</param>
-/// <param name="ResultMarkers">История маркеров изменения результата конструкции после порога проявления и перенумерации; null оставлен совместимости прежних построений — читающий слой всегда передаёт историю.</param>
 // Капитал передаётся незаданным как есть: скрытие процентов — решение
 // представления, подмена нулём вводила бы ложную базу процентов.
 // Traceability: openspec:ui/screens#scenario-detail-no-capital-no-percent
@@ -233,11 +232,6 @@ public sealed record SyntheticCloseRow(
 // при каждом чтении.
 // Traceability: openspec:analytics/risk-diagnostics#requirement-risk-diagnostics-on-open-residuals
 // Traceability: openspec:analytics/risk-diagnostics#scenario-diagnostics-recomputed-on-read
-// История маркеров — аддитивное поле данных экрана: выведенные маркеры с
-// финальной нумерацией вычисляются при чтении поверх тех же записей журнала,
-// хранением не живут и пересобираются при изменении журнала или связок.
-// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
-// Traceability: change:add-finresult-result-history-markers/design#d1
 public sealed record ConstructionDetailData(
 	long ConstructionId,
 	string Name,
@@ -260,5 +254,4 @@ public sealed record ConstructionDetailData(
 	IReadOnlyList<SyntheticCloseRow>? SyntheticCloses = null,
 	TargetUnit? RiskUnit = null,
 	TargetUnit? ProfitUnit = null,
-	IReadOnlyList<string>? RiskWarnings = null,
-	ConstructionResultMarkers? ResultMarkers = null);
+	IReadOnlyList<string>? RiskWarnings = null);

@@ -95,7 +95,6 @@ function makeCard(overrides: Partial<ConstructionCard> = {}): ConstructionCard {
 		closingWarnings: [],
 		adjustments: [],
 		syntheticCloses: [],
-		resultMarkers: [],
 		riskWarnings: [],
 		...overrides,
 	};
@@ -273,28 +272,29 @@ describe("ConstructionMetricStrip: группы заголовка", () => {
 		expect(findMetric("выделенный капитал")).toHaveTextContent("—");
 	});
 
-	// Реальный риск деградирует статусом: неограниченный хвост и сбой
-	// расчёта показываются каноническим текстом вместо числа.
-	// Traceability: openspec:ui/screens#scenario-detail-header-meta-line
-	it.each([
-		["unbounded", "не ограничен"],
-		["unavailable", "не удалось рассчитать"],
-	] as const)("показывает статус реального риска %s текстом", (status, text) => {
+	// Недоступный расчёт деградирует статусом: канонический текст «не удалось
+	// рассчитать» вместо числа, числа-заглушки нет. Конечный риск по
+	// контракту приходит только с числом, отдельной ветки у него нет.
+	// Traceability: issue:#98
+	it("показывает статус недоступного реального риска текстом", () => {
 		// Arrange: пара «величина + статус» без числа.
 		const base = makeCard();
 
 		// Act: рендер сводки карточки.
-		renderStrip({ ...base, metrics: { ...base.metrics, realRiskUsdt: null, realRiskStatus: status } });
+		renderStrip({
+			...base,
+			metrics: { ...base.metrics, realRiskUsdt: null, realRiskStatus: "unavailable" },
+		});
 
 		// Assert: в группе РИСК текст статуса, числа нет.
-		expect(findMetric("реальный риск")).toHaveTextContent(text);
+		expect(findMetric("реальный риск")).toHaveTextContent("не удалось рассчитать");
 		expect(findMetric("реальный риск").textContent).not.toContain("USDT");
 	});
 
 	// Метрика прежней границы удалена из сводки вместе с частью индикатора:
-	// группу РИСК покидает только «реальный риск», историю результата несут
-	// маркеры изменения результата.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
+	// группу РИСК покидает только «реальный риск» — история результата
+	// остаётся в журнале событий, а не в сводке карточки.
+	// Traceability: issue:#94
 	it("выводит в группе РИСК только реальный риск", () => {
 		// Arrange/Act: рендер сводки карточки по умолчанию.
 		renderStrip(makeCard());
@@ -1061,46 +1061,39 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(screen.getByText(/сверхприбыль — золотая зона за \+Профит/)).toBeTruthy();
 	});
 
-	// Пояснение отражает актуальную модель чтения: подсказка объясняет
-	// зоны, маркеры изменения результата — номерные бейджи с суммами над
-	// полосой, историю накопленного зафиксированного результата, строящуюся
-	// из вкладов операций с порогом проявления 5% планового риска, где
-	// первый и последний бейджи безусловны, последний — текущий накопленный
-	// зафиксированный результат, расшифровка метки — подсказка бейджа
-	// с перечнем операций, — и маркер текущего результата, отличающийся
-	// от последнего бейджа нереализованной частью; формулировки устаревших
-	// моделей (насечка худшего исхода, модель среза сводной) в попапе
-	// отсутствуют.
-	// Traceability: openspec:ui/screens#scenario-reading-tooltip-explains-current-model
-	// Traceability: openspec:ui/screens#scenario-result-marker-last-vs-current
-	it("поясняет маркеры изменения результата и маркер текущего результата без устаревших формулировок", async () => {
+	// Пояснение отражает актуальную модель чтения по макету: подсказка
+	// объясняет зоны и маркер текущего результата; легенда «Маркеры
+	// изменения результата» удалена из попапа вместе с бейджами и штрихами
+	// истории — история результата осталась в журнале событий, поэтому
+	// в попапе не осталось ни бейджных формулировок, ни отличия маркера
+	// от последнего бейджа.
+	// Traceability: issue:#94
+	it("объясняет зоны и маркер текущего результата без легенды маркеров истории", async () => {
 		// Arrange: открытая подсказка чтения.
 		const user = userEvent.setup();
 		renderStrip(makeCard());
 		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
 		const popup = screen.getByRole("dialog");
 
-		// Assert: маркеры изменения результата объяснены историей из вкладов
-		// операций с порогом и расшифровкой меток; зафиксированная
-		// синтетикой часть адресована строкой и сводной карточки.
-		expect(within(popup).getByText(/маркеры изменения результата — номерные бейджи с суммами над полосой/)).toBeTruthy();
-		expect(within(popup).getByText(/строящаяся из вкладов операций/)).toBeTruthy();
-		expect(within(popup).getByText(/с порогом проявления 5% планового риска/)).toBeTruthy();
-		expect(within(popup).getByText(/первый и последний бейджи безусловны/)).toBeTruthy();
-		expect(within(popup).getByText(/расшифровка каждой метки — подсказка бейджа/)).toBeTruthy();
-		expect(within(popup).getByText(/сумма перечня равна изменению метки/)).toBeTruthy();
-		expect(within(popup).getByText(/видна в строке «зафиксировано синтетикой» и сводной «С учётом зафиксированного синтетикой»/)).toBeTruthy();
+		// Assert: маркер текущего результата объяснён формулировкой макета —
+		// реализованный результат, оценка остатков «заберу при ликвидации
+		// сейчас» и внешние корректировки.
+		expect(within(popup).getByText(/маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки/)).toBeTruthy();
 
-		// Assert: маркер текущего результата объяснен с отличием от
-		// последнего бейджа — нереализованной частью.
-		expect(within(popup).getByText(/маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки, подпись под полосой/)).toBeTruthy();
-		expect(within(popup).getByText(/история хранит зафиксированный результат, а маркер учитывает и нереализованную часть/)).toBeTruthy();
+		// Assert: формулировок маркеров истории в попапе нет — легенда
+		// удалена по обновлённому макету.
+		const popupText = popup.textContent ?? "";
+		expect(popupText).not.toContain("Маркеры изменения результата");
+		expect(popupText).not.toContain("номерные бейджи");
+		expect(popupText).not.toContain("подсказка-расшифровка");
+		expect(popupText).not.toContain("порогом проявления");
+		expect(popupText).not.toContain("подпись под полосой");
+		expect(popupText).not.toContain("история хранит зафиксированный результат");
 
 		// Assert: устаревших формулировок во всём попапе нет — проверяем
 		// по полному тексту попапа: шаблон подписи прежней границы
 		// «значение USDT · процент», формулировки устаревшей модели
 		// «насечка/худший исход» и модели среза сводной.
-		const popupText = popup.textContent ?? "";
 		expect(popupText).not.toContain("USDT ·");
 		expect(popupText).not.toContain("от плановой границы зоны");
 		expect(popupText).not.toContain("оценка итога");
@@ -1116,44 +1109,44 @@ describe("ConstructionMetricStrip: подсказка чтения индика�
 		expect(popupText).not.toContain("ac-43");
 	});
 
-	it("показывает бейджи маркеров с подсказками-расшифровками в полном виде сводки", () => {
-		// Полный индикатор в сводке карточки получает выведенные маркеры
-		// из контракта: бейджи с суммами над полосой; описательная область
-		// маркеров удалена — расшифровка живёт в подсказках бейджей.
-		// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
-		// Traceability: openspec:ui/screens#requirement-risk-profit-hint
-		// Arrange: карточка с историей из окна открытия и корректировки PnL.
-		renderStrip(makeCard({
-			resultMarkers: [
-				{
-					number: 1,
-					eventTime: "2026-10-01T09:10:00",
-					kind: "opening",
-					changeUsdt: -95,
-					totalUsdt: -95,
-					operations: [{ kind: "opening", date: "2026-10-01T09:10:00", contributionUsdt: -95 }],
-				},
-				{
-					number: 2,
-					eventTime: "2026-10-14T18:00:00",
-					kind: "pnl-adjustment",
-					changeUsdt: 5,
-					totalUsdt: -90,
-					operations: [{ kind: "pnl-adjustment", date: "2026-10-14T18:00:00", contributionUsdt: 5 }],
-				},
-			],
-		}));
+	// Примечание о состояниях риска отражает новый состав метрики: реальный
+	// риск виден числом на маркере, при сбое котировок — «?» на полосе и
+	// подпись планового риска на делении −Риск; ветки «∞» и «риск не
+	// ограничен» в попапе не остались.
+	// Traceability: issue:#98
+	it("объясняет состояния риска по обновлённому макету", async () => {
+		// Arrange: открытая подсказка чтения.
+		const user = userEvent.setup();
+		renderStrip(makeCard());
+		await user.click(screen.getByRole("button", { name: "Как читать индикатор" }));
+		const popup = screen.getByRole("dialog");
+		const popupText = popup.textContent ?? "";
 
-		// Assert: бейджи с номерами и суммами над полосой.
-		const badges = document.querySelectorAll('[data-part="marker-badge"]');
-		expect(badges).toHaveLength(2);
-		expect(badges[0].textContent).toContain("−95");
-		expect(badges[1].textContent).toContain("−90");
+		// Assert: примечание дословно из макета.
+		expect(popupText).toContain(
+			"Состояния риска: число на маркере; при сбое котировок — «?» на полосе, «не удалось рассчитать» и подпись планового риска на делении −Риск.",
+		);
 
-		// Assert: области описания маркеров под индикатором нет —
-		// расшифровка переехала в подсказки бейджей.
+		// Assert: формулировок удалённых состояний в попапе нет.
+		expect(popupText).not.toContain("риск не ограничен");
+		expect(popupText).not.toContain("Состояния вне шкалы");
+	});
+
+	// Тест удаления: бейджи и штрихи маркеров изменения результата выведены
+	// из индикатора сводки — маркерных частей истории в карточке нет,
+	// история результата осталась в журнале событий
+	// (ADR-0024: тесты — живая спецификация поведения).
+	// Traceability: issue:#89
+	it("не рисует бейджи и штрихи маркеров истории в сводке", () => {
+		// Arrange/Act: рендер сводки карточки по умолчанию (полный вид).
+		renderStrip(makeCard());
+
+		// Assert: ни бейджа с суммой изменения, ни штриха истории,
+		// ни хит-зоны расшифровки в сводке нет.
+		expect(document.querySelector('[data-part="marker-badge"]')).toBeNull();
+		expect(document.querySelector('[data-part="marker-tick"]')).toBeNull();
+		expect(document.querySelector('[data-part="marker-tick-trigger"]')).toBeNull();
 		expect(document.querySelector('[data-part="marker-description"]')).toBeNull();
-		expect(document.querySelector('[data-part="marker-description-empty"]')).toBeNull();
 	});
 
 	it("закрывается по Esc", async () => {

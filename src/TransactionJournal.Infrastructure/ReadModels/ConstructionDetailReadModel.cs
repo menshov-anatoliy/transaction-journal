@@ -92,32 +92,6 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		var risk = ConstructionTargetConverter.Convert(construction.RiskValue, construction.RiskUnit, construction.AllocatedCapitalUsdt);
 		var profit = ConstructionTargetConverter.Convert(construction.ProfitValue, construction.ProfitUnit, construction.AllocatedCapitalUsdt);
 
-		// История маркеров изменения результата: события журнала, значения на
-		// срезах, порог проявления и нумерация вычисляются при чтении единым
-		// вычислителем поверх тех же записей, что питают сводку и потоки позиций.
-		// Спор связки задним числом перестраивает историю очередным чтением.
-		// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-history-events
-		// Traceability: change:add-finresult-result-history-markers/design#d1
-		var resultMarkers = new ConstructionResultMarkersCalculator().Calculate(new ResultMarkersInput
-		{
-			EntriesBySymbol = metrics.PositionEntries.GetValueOrDefault(constructionId)
-				?? new Dictionary<string, IReadOnlyList<PositionFifoEntry>>(StringComparer.Ordinal),
-			Trades = trades.MaterializedTrades,
-			ClosingEntries = closing.Entries,
-			Links = synthetic.LinkIntervals,
-			Adjustments = adjustments
-				.Select(row => new ResultMarkerAdjustment
-				{
-					AdjustmentId = row.AdjustmentId,
-					Date = row.Date,
-					AmountUsdt = row.AmountUsdt,
-				})
-				.ToList(),
-			// Порог проявления — 5% планового риска конструкции: тот же плановый
-			// риск, что у границ индикатора сводки.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-marker-threshold
-			PlannedRiskUsdt = risk.Usdt,
-		});
 		return new ConstructionDetailData(
 			construction.Id,
 			construction.Name,
@@ -148,11 +122,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			// Единица ввода проходит в DTO: форма правки предзаполняет поле
 			// первоисточника, не подменяя введённую единицу вычисленной.
 			RiskUnit: construction.RiskUnit,
-			ProfitUnit: construction.ProfitUnit,
-			// История маркеров идёт в данные экрана аддитивно: карточка публикует
-			// выведенные маркеры, превью берёт последний из той же истории.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-markers-contract
-			ResultMarkers: resultMarkers);
+			ProfitUnit: construction.ProfitUnit);
 	}
 
 	#region Чтение таблиц
@@ -451,7 +421,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	/// Traceability: change:manual-journal-management/design#d5
 	/// Traceability: change:synthetic-close-logical-layer/design#d1
 	/// </summary>
-	private static async Task<(List<SyntheticCloseRow> Rows, IReadOnlyDictionary<string, decimal> QuantityByLinearSymbol, IReadOnlyDictionary<string, decimal> QuantityByClosedLegSymbol, List<ResultMarkerLinkInterval> LinkIntervals)> ReadSyntheticClosesAsync(
+	private static async Task<(List<SyntheticCloseRow> Rows, IReadOnlyDictionary<string, decimal> QuantityByLinearSymbol, IReadOnlyDictionary<string, decimal> QuantityByClosedLegSymbol)> ReadSyntheticClosesAsync(
 		JournalDbContext db,
 		long constructionId,
 		List<MaterializedTrade> materializedTrades,
@@ -507,11 +477,6 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 		// связок — расхождение признака с локом и сводной величиной исключено.
 		// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
 		var quantityByClosedLegSymbol = new Dictionary<string, decimal>(StringComparer.Ordinal);
-		// Интервалы действия связок — материал событий истории результата:
-		// появление связки и её снятие спором образуют маркеры изменения
-		// результата со значением, учитывающим новый набор действующих связок.
-		// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-synthetic-link-change-marker
-		var linkIntervals = new List<ResultMarkerLinkInterval>();
 		foreach (var link in links)
 		{
 			var key = (link.LinearExecId, link.CounterOptionExecId);
@@ -536,11 +501,6 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 				quantityByClosedLegSymbol[link.ClosedLegSymbol] =
 					quantityByClosedLegSymbol.GetValueOrDefault(link.ClosedLegSymbol) + link.Quantity;
 			}
-
-			// Оспоренная связка действует в истории до момента записи спора:
-			// снятие задаёт отдельное событие, пересчитывающее последующие маркеры.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-link-dispute-recomputes-history
-			linkIntervals.Add(LinkIntervalOf(link, lockedValue, materializedTrades, disputedKeys.Contains(key) ? DisputeAt(disputes, key) : null));
 		}
 
 		// Ручные связки добавляются к прогону распознавания: каждая действует
@@ -572,41 +532,10 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 			// Traceability: openspec:domain/synthetic-close#requirement-synthetic-close-leg-annotation-values
 			quantityByClosedLegSymbol[link.ClosedLegSymbol] =
 				quantityByClosedLegSymbol.GetValueOrDefault(link.ClosedLegSymbol) + link.Quantity;
-			// Ручная связка действует без конца: спора у ручной связки нет.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-synthetic-link-change-marker
-			linkIntervals.Add(LinkIntervalOf(link, lockedValue, materializedTrades, null));
 		}
 
-		return (rows, quantityByLinearSymbol, quantityByClosedLegSymbol, linkIntervals);
+		return (rows, quantityByLinearSymbol, quantityByClosedLegSymbol);
 	}
-
-	/// <summary>
-	/// Интервал действия связки в истории результата: появление — время поздней
-	/// из двух сделок связки, снятие — момент спора, если он записан.
-	/// </summary>
-	private static ResultMarkerLinkInterval LinkIntervalOf(
-		SyntheticCloseLink link,
-		decimal lockedValue,
-		List<MaterializedTrade> materializedTrades,
-		DateTimeOffset? until)
-	{
-		var linearTrade = TradeOf(link.LinearExecId, materializedTrades);
-		var counterTrade = TradeOf(link.CounterOptionExecId, materializedTrades);
-		return new ResultMarkerLinkInterval
-		{
-			LinkId = $"{link.LinearExecId}|{link.CounterOptionExecId}",
-			Since = linearTrade.ExecutedAt > counterTrade.ExecutedAt ? linearTrade.ExecutedAt : counterTrade.ExecutedAt,
-			Until = until,
-			LockedValueUsdt = lockedValue,
-		};
-	}
-
-	/// <summary>Момент спора по паре сделок связки; спора нет — null.</summary>
-	private static DateTimeOffset? DisputeAt(List<SyntheticCloseDispute> disputes, (string LinearExecId, string CounterOptionExecId) key) =>
-		disputes
-			.Where(dispute => dispute.LinearExecId == key.LinearExecId && dispute.CounterOptionExecId == key.CounterOptionExecId)
-			.Select(dispute => (DateTimeOffset?)dispute.DisputedAt)
-			.FirstOrDefault();
 
 	/// <summary>
 	/// Переводит ручную связку в связку логического слоя: обе сделки находятся
@@ -702,7 +631,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 	// Идентификатор пометки и предупреждения доносят до экрана действие строки
 	// позиции и предупреждение об избыточной закрывающей записи.
 	// Traceability: openspec:ui/screens#requirement-manual-close-mark-from-position
-	private async Task<(List<ConstructionClosingEntryRow> Rows, List<RedundantClosingEntryWarning> Warnings, List<PositionClosingEntry> Entries)> ReadClosingEntriesAsync(
+	private async Task<(List<ConstructionClosingEntryRow> Rows, List<RedundantClosingEntryWarning> Warnings)> ReadClosingEntriesAsync(
 		long constructionId,
 		CancellationToken cancellationToken)
 	{
@@ -718,11 +647,7 @@ public sealed class ConstructionDetailReadModel : IConstructionDetailReadModel
 					entry.Price is null ? null : -entry.Quantity * entry.Price.Value,
 					ManualAnnotationIdOf(entry)))
 				.ToList(),
-			result.Warnings.ToList(),
-			// Сырые записи идут рядом со строками: вид, время и ключ источника
-			// записи — материал событий истории результата конструкции.
-			// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-adjustment-and-closing-entry-marker
-			result.ClosingEntries.ToList());
+			result.Warnings.ToList());
 	}
 
 	/// <summary>

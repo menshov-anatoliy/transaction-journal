@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, RouterProvider, createMemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppLayout } from "@/components/layout/AppLayout";
 import type { ConstructionsOverview } from "@/lib/api/constructions";
 import { InboxPage } from "./inbox-page";
@@ -194,6 +194,8 @@ beforeEach(() => {
 	syncApi.fetchSyncRuns.mockResolvedValue([]);
 });
 
+afterEach(() => vi.useRealTimers());
+
 describe("раздел «Входящие»", () => {
 	it("показывает непривязанные сделки и конструкции-цели", async () => {
 		// Цели рендерятся в контекстной панели каркаса — страница в каркасе.
@@ -318,6 +320,9 @@ describe("раздел «Входящие»", () => {
 	});
 
 	it("сбрасывает фильтры кнопкой «Сбросить»", async () => {
+		// При сбросе окно за последний месяц должно включать сделки из фикстуры.
+		// Traceability: doc:openspec/specs/ui/screens/spec.md#фильтры-по-умолчанию-показывают-последний-месяц
+		vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
 		const user = userEvent.setup();
 		renderPage();
 		await screen.findByText("exec-buy");

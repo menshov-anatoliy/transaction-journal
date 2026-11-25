@@ -66,4 +66,35 @@ describe("справочник подсказок метрик", () => {
 		expect(METRIC_TOOLTIPS.positionRealizedPnl.sections).toHaveLength(2);
 		expect(METRIC_TOOLTIPS.listTotal.sections).toHaveLength(2);
 	});
+
+	it("подсказка реального риска описывает минусовую часть текущего результата", () => {
+		// Состав и метод метрики по ADR-0025 повторяют тултип «Реальный
+		// риск» макета: назначение, раздел «Значение, USDT» и раздел
+		// «Метод» с формулой клэмпа; формулировок удалённой модели
+		// (худший сценарий на оси цены, «не ограничен») в текстах нет.
+		// Traceability: issue:#98
+		// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
+		const tooltip = METRIC_TOOLTIPS.realRisk;
+
+		// Assert: метрика называется «Реальный риск», разделы — дословно
+		// из макета.
+		expect(tooltip.title).toBe("Реальный риск");
+		expect(tooltip.sections).toEqual([
+			{
+				label: "Значение, USDT",
+				text: "Минусовая часть текущего результата по текущим маркам: реализованный результат + стоимость открытых остатков + внешние корректировки PnL",
+			},
+			{
+				label: "Метод",
+				text: "max(0, −(реализованный + нереализованный + корректировки)); при сбое котировок — «не удалось рассчитать» и «?» на полосе",
+			},
+		]);
+
+		// Assert: формулировок прежней модели в подсказке нет.
+		const allText = [tooltip.purpose, ...(tooltip.sections?.map((s) => s.text) ?? [])].join(" ");
+		expect(allText).not.toContain("не ограничен");
+		expect(allText).not.toContain("ось цены");
+		expect(allText).not.toContain("минимум платежа");
+		expect(allText).not.toContain("экспираци");
+	});
 });

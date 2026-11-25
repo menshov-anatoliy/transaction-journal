@@ -30,11 +30,6 @@ const openRow: ConstructionRow = {
 	quoteValue: 500,
 	capitalUsagePercent: 16.7,
 	realRiskUsdt: 45,
-	lastResultMarker: {
-		totalUsdt: 15.25,
-		eventAt: "2026-06-18T09:05:00Z",
-		operations: [{ kind: "closing", date: "2026-06-18T09:05:00Z", contributionUsdt: 15.25 }],
-	},
 	realRiskStatus: "finite",
 	openedAt: "2026-06-18T09:05:00Z",
 	closedAt: null,
@@ -62,7 +57,6 @@ const closedRow: ConstructionRow = {
 	quoteValue: null,
 	capitalUsagePercent: null,
 	realRiskUsdt: 0,
-	lastResultMarker: null,
 	realRiskStatus: "finite",
 	openedAt: "2026-05-20T10:00:00Z",
 	closedAt: "2026-05-31T12:00:00Z",
@@ -231,22 +225,22 @@ describe("таблица конструкций", () => {
 		expect(screen.getByRole("row", { name: /BTC-240531/ }).querySelector('[data-slot="warning-badge"]')).toBeNull();
 	});
 
-	// Строка с неограниченным реальным риском и предупреждениями: бейдж «∞»
+	// Строка с недоступным реальным риском и предупреждениями: бейдж «?»
 	// компактного индикатора сохраняется, бейдж «⚠ N» показывается независимо.
-	// Traceability: openspec:ui/screens#scenario-unbounded-badge-coexists-with-warnings
-	it("показывает бейдж ∞ и бейдж предупреждений в строке независимо друг от друга", () => {
-		// Act: таблица со строкой, у которой статус риска unbounded и есть предупреждения.
+	// Traceability: issue:#98
+	it("показывает бейдж ? и бейдж предупреждений в строке независимо друг от друга", () => {
+		// Act: таблица со строкой, у которой расчёт риска недоступен и есть предупреждения.
 		renderTable(
 			<ConstructionsTable
-				rows={[{ ...openRow, realRiskUsdt: null, realRiskStatus: "unbounded" as const }]}
+				rows={[{ ...openRow, realRiskUsdt: null, realRiskStatus: "unavailable" as const }]}
 				selectedId={null}
 				onSelect={() => {}}
 			/>,
 		);
 
-		// Assert: в одной строке живут бейдж «∞» поверх полосы и бейдж «⚠ 1».
+		// Assert: в одной строке живут бейдж «?» поверх полосы и бейдж «⚠ 1».
 		const row = screen.getByRole("row", { name: /ETH-240628/ });
-		expect(row.querySelector('[data-slot="fin-result-compact"] [data-part="risk-state"]')).toHaveTextContent("∞");
+		expect(row.querySelector('[data-slot="fin-result-compact"] [data-part="risk-state"]')).toHaveTextContent("?");
 		expect(row.querySelector('[data-slot="warning-badge"]')).toHaveTextContent("⚠ 1");
 	});
 

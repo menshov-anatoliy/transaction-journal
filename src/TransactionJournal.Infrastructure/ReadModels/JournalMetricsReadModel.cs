@@ -122,8 +122,10 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		var assignments = constructionIdByExecId.ToDictionary(
 			pair => pair.Key,
 			pair => (string?)pair.Value.ToString(CultureInfo.InvariantCulture));
+		// Автозакрытие по экспирации использует тот же источник времени, что и метрики.
+		// Traceability: adr:docs/adr/0002-option-expiry-closing-entries.md#экспирация-опционов--закрывающие-записи-а-не-спец-сущности
 		var expiry = new ExpiryMaterializer(tradeMaterializer, resolver)
-			.Materialize(rawExecutions, rawDeliveries, assignments, DateTimeOffset.UtcNow, manualTrades);
+			.Materialize(rawExecutions, rawDeliveries, assignments, _timeProvider.GetUtcNow(), manualTrades);
 
 		var streams = new Dictionary<(long ConstructionId, string Symbol), List<StreamEvent>>();
 		foreach (var trade in trades)
@@ -170,11 +172,6 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 
 		var positionCalculator = new PositionMetricsCalculator();
 		var positionMetrics = new List<PositionMetrics>();
-		// Потоки записей сохраняются рядом с метриками позиций: история результата
-		// конструкции считается по тем же записям, поэтому срезы маркеров сходятся
-		// с реализованным результатом сводки без второго конвейера.
-		// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#requirement-result-marker-value
-		var positionEntries = new Dictionary<long, Dictionary<string, IReadOnlyList<PositionFifoEntry>>>();
 		var orderedKeys = streams.Keys
 			.OrderBy(key => key.ConstructionId)
 			.ThenBy(key => key.Symbol, StringComparer.Ordinal);
@@ -184,13 +181,6 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 			if (entries.Count > 0)
 			{
 				positionMetrics.Add(positionCalculator.Calculate(key.ConstructionId, key.Symbol, entries));
-				if (positionEntries.TryGetValue(key.ConstructionId, out var bySymbol) == false)
-				{
-					bySymbol = new Dictionary<string, IReadOnlyList<PositionFifoEntry>>(StringComparer.Ordinal);
-					positionEntries.Add(key.ConstructionId, bySymbol);
-				}
-
-				bySymbol.Add(key.Symbol, entries);
 			}
 		}
 		// Нереализованная часть открытых остатков оценивается свежими котировками на момент
@@ -246,9 +236,6 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		{
 			Constructions = constructionMetrics,
 			Positions = evaluation.Positions,
-			PositionEntries = positionEntries.ToDictionary(
-				pair => pair.Key,
-				pair => (IReadOnlyDictionary<string, IReadOnlyList<PositionFifoEntry>>)pair.Value),
 			TotalPnL = totalPnL,
 			RealizedPnL = realizedPnL,
 			UnrealizedPnL = unrealizedPnL,

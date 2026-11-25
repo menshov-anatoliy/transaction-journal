@@ -2,7 +2,6 @@ import * as React from "react";
 import { ChevronDown, CircleHelp } from "lucide-react";
 import type {
 	ConstructionCard,
-	RealRiskStatus,
 	SyntheticCloseDisputeInput,
 	SyntheticCloseManualLinkInput,
 } from "@/lib/api/construction-card";
@@ -105,13 +104,6 @@ function MetricGroup({ group, children }: { group: MetricGroupKey; children: Rea
 			<div className="flex min-w-0 flex-wrap items-start gap-4">{children}</div>
 		</div>
 	);
-}
-
-/** Каноническая подпись неконечного реального риска: статус текстом вместо
-    заглушки — неограниченный хвост и сбой расчёта не выглядят «нет данных». */
-// Traceability: change:show-unbounded-finresult-risk/design#d1
-function realRiskStatusText(status: RealRiskStatus): string {
-	return status === "unbounded" ? "не ограничен" : "не удалось рассчитать";
 }
 
 /** Состав группы заголовка: метрики читаются из снимка карточки. Служебные
@@ -232,14 +224,18 @@ function groupMetrics(group: MetricGroupKey, card: ConstructionCard): React.Reac
 			return (
 				<>
 					{/* Реальный риск — пара «величина + статус» из read-модели:
-					    число только при конечном статусе, иначе канонический
-					    текст статуса вместо заглушки плановым риском. */}
-					{/* Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry */}
-					{/* Traceability: openspec:ui/screens#scenario-detail-header-meta-line */}
+					    число при конечном риске — минусовой части текущего
+					    результата по текущим маркам; при недоступном расчёте
+					    канонический текст состояния вместо числа-заглушки. */}
+					{/* Traceability: issue:#98 */}
+					{/* Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences */}
 					<Metric label="реальный риск" valueClassName={`tabular-nums ${VALUE_PART}`}>
 						<MetricHint tooltip={METRIC_TOOLTIPS.realRisk}>
 							{metrics.realRiskUsdt === null ? (
-								<span className="text-text-muted">{realRiskStatusText(metrics.realRiskStatus)}</span>
+								// По контракту конечный риск приходит только с числом,
+								// поэтому без числа риск недоступен — «не удалось
+								// рассчитать».
+								<span className="text-text-muted">не удалось рассчитать</span>
 							) : (
 								`${formatAmount(metrics.realRiskUsdt)} USDT`
 							)}
@@ -700,24 +696,24 @@ export function ConstructionMetricStrip({
 			</div>
 
 			{/* Полный (или средний на узком экране) индикатор финансового
-			    результата: зоны планового риска и профита, маркеры изменения
-			    результата над полосой, маркер текущего результата под ней.
-			    Полный вид показывает бейджи маркеров с суммами, у каждого
-			    бейджа — подсказка-расшифровка метки перечнем операций,
-			    средний — только последний маркер штрихом с той же
-			    подсказкой. */}
+			    результата: зоны планового риска и профита, маркер текущего
+			    результата под полосой. Маркерные части истории (бейджи и
+			    штрихи с расшифровками) удалены по обновлённому макету —
+			    история результата остаётся в журнале событий. */}
 			{/* Подсказка чтения индикатора карточки: «?» в правом верхнем
 			    углу блока индикатора, выше текстовых меток, по клику
 			    открывает попап с пояснением чтения шкалы — зоны планового
-			    риска, профита и сверхприбыли, маркеры изменения результата,
-			    маркер текущего результата и состояния вне шкалы;
+			    риска, профита и сверхприбыли, маркер текущего результата
+			    и состояния вне шкалы;
 			    закрывается кликом вне, Esc и повторным кликом по триггеру.
 			    Подсказка живёт только в карточке: компактный вид таблиц и
 			    краткая карточка контекстной панели её не получают и сохраняют
 			    доступные названия состояний риска (aria-label/title
 			    компактного вида). */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-opens */}
-			{/* Traceability: change:add-finresult-result-history-markers/specs/ui/screens/spec#requirement-indicator-reading-tooltip */}
+			{/* Состав попапа чтения изменён срезом #94: легенда маркеров
+			    изменения результата удалена по обновлённому макету. */}
+			{/* Traceability: issue:#94 */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-closes */}
 			{/* Traceability: change:add-finresult-reading-tooltip/specs/ui/screens/spec#scenario-reading-tooltip-card-only */}
 			<div className="relative -mt-4 pt-[26px]">
@@ -737,17 +733,10 @@ export function ConstructionMetricStrip({
 						// котировок не делает индикатор неполным.
 						// Traceability: openspec:ui/screens#scenario-finresult-marks-failure-partial
 						hasOpenResidual: card.hasOpenResidual,
-						// Пара «число + статус» из контракта API: unbounded и
-						// unavailable дают состояние без числа; маркеры истории
-						// и маркер итога рисуются независимо от состояния риска.
-						// Traceability: openspec:ui/screens#requirement-risk-profit-hint
-						// Traceability: change:show-unbounded-finresult-risk/design#d1
+						// Пара «число + статус» из контракта API: недоступный
+						// расчёт даёт состояние без числа.
+						// Traceability: issue:#98
 						realRiskStatus: metrics.realRiskStatus,
-						// Выведенные маркеры изменения результата из контракта
-						// карточки: порог и нумерация посчитаны на сервере,
-						// фронтенд рендерит как есть.
-						// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
-						resultMarkers: card.resultMarkers,
 					}}
 				/>
 				{/* Триггер стоит в отдельном верхнем ряду блока индикатора:
@@ -779,8 +768,8 @@ export function ConstructionMetricStrip({
 					</PopoverTrigger>
 					{/* Состав пояснения повторяет мастер design.pen
 					    «Подсказка/Чтение индикатора»: заголовок, свотчи зон,
-					    ряд маркеров изменения результата, маркер текущего
-					    результата и примечание про состояния вне шкалы. */}
+					    маркер текущего результата и примечание про состояния
+					    вне шкалы. */}
 					<PopoverContent
 						side="bottom"
 						align="end"
@@ -800,25 +789,23 @@ export function ConstructionMetricStrip({
 							<span aria-hidden="true" className="size-3 shrink-0 rounded-[3px] bg-super-zone" />
 							<span>сверхприбыль — золотая зона за +Профит</span>
 						</div>
-						{/* Маркеры изменения результата — история накопленного
-						    зафиксированного результата, строящаяся из вкладов
-						    операций (модель вкладов операций, ADR-0022); расшифровка
-						    каждой метки — подсказка бейджа с перечнем операций,
-						    а зафиксированная синтетикой часть видна в строке
-						    «зафиксировано синтетикой» и сводной карточки. */}
-						{/* Traceability: openspec:ui/screens#scenario-reading-tooltip-explains-current-model */}
-						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
-							<span aria-hidden="true" className="flex h-[14px] shrink-0 items-center rounded-full border px-1 text-[8px] font-semibold text-[color:var(--fin-negative)]">
-								1
-							</span>
-							<span>маркеры изменения результата — номерные бейджи с суммами над полосой: история накопленного зафиксированного результата, строящаяся из вкладов операций (открытия и закрытия опционных окон, роллы, синтетическое закрытие и его снятие, фьючерсы — только позиции, закрытые до нулевого остатка, закрывающие записи, корректировки PnL) с порогом проявления 5% планового риска; первый и последний бейджи безусловны, последний — текущий накопленный зафиксированный результат; расшифровка каждой метки — подсказка бейджа: перечень операций «вид · дата · сумма» с предыдущей выведенной метки, включая подавленные порогом, — сумма перечня равна изменению метки; зафиксированная синтетикой часть видна в строке «зафиксировано синтетикой» и сводной «С учётом зафиксированного синтетикой»</span>
-						</div>
+						{/* Маркер текущего результата — полная сумма оценки
+						    ликвидации сейчас: реализованный результат, остатки
+						    и внешние корректировки; легенда «Маркеры изменения
+						    результата» убрана из попапа по обновлённому макету —
+						    история результата остаётся в журнале событий. */}
+						{/* Traceability: issue:#94 */}
 						<div className="flex items-center gap-2 text-[11px] text-text-secondary">
 							<span aria-hidden="true" className="size-[11px] shrink-0 rounded-full bg-primary" />
-							<span>маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки, подпись под полосой; он отличается от последнего бейджа — история хранит зафиксированный результат, а маркер учитывает и нереализованную часть</span>
+							<span>маркер — текущий результат: реализованный результат, оценка остатков «заберу при ликвидации сейчас» и внешние корректировки</span>
 						</div>
+						{/* Примечание о состояниях риска повторяет мастер design.pen:
+						    реальный риск виден числом на маркере итога, при сбое
+						    котировок расчёт недоступен — «?» на полосе, статус
+						    текстом и подпись планового риска на делении −Риск. */}
+						{/* Traceability: issue:#98 */}
 						<p className="text-[10.5px] text-text-muted">
-							Состояния вне шкалы показывают отдельно от полосы: «риск не ограничен» и «не удалось рассчитать».
+							Состояния риска: число на маркере; при сбое котировок — «?» на полосе, «не удалось рассчитать» и подпись планового риска на делении −Риск.
 						</p>
 					</PopoverContent>
 				</Popover>

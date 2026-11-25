@@ -17,56 +17,6 @@ export type ClosingEntryKind = "delivery" | "otm-expiry" | "manual-mark";
 /** Источник внешней корректировки PnL. */
 export type AdjustmentSource = "robot" | "manual";
 
-// Вид операции расшифровки маркера изменения результата в контракте API:
-// фиксированный набор вкладов модели вкладов операций — открытие/закрытие
-// опционного окна, ролл, синтетическое закрытие и его снятие, фьючерсный
-// цикл до нулевого остатка, внешняя корректировка PnL, закрывающая запись
-// (поставка). Бэкенд публикует kebab-case строку.
-// Traceability: change:fix-finresult-marker-contributions/design#d3
-export type ResultMarkerKind =
-	| "opening"
-	| "closing"
-	| "roll"
-	| "synthetic-close"
-	| "synthetic-release"
-	| "futures-close"
-	| "pnl-adjustment"
-	| "delivery";
-
-/** Операция в расшифровке маркера: один вклад в изменение накопленного итога. */
-// Перечень операций маркера N охватывает все события после события
-// маркера N−1, включая события, подавленные порогом проявления, —
-// сумма вкладов равна changeUsdt маркера, результат сверяется сложением.
-// Traceability: change:fix-finresult-marker-contributions/design#d4
-export interface ResultMarkerOperation {
-	/** Вид операции: элемент фиксированного набора вкладов. */
-	readonly kind: ResultMarkerKind;
-	/** Дата операции, ISO. */
-	readonly date: string;
-	/** Вклад операции в изменение накопленного итога, USDT. */
-	readonly contributionUsdt: number;
-}
-
-/** Маркер изменения результата: точка истории накопленного зафиксированного результата. */
-// Контракт публикует уже выведенные маркеры: порог проявления и сквозная
-// нумерация посчитаны на сервере, фронтенд рендерит как есть; рядом
-// с каждым маркером — расшифровка его изменения перечнем операций.
-// Traceability: change:fix-finresult-marker-contributions/design#d4
-export interface ResultMarker {
-	/** Порядковый номер среди выведенных маркеров — подряд без пропусков. */
-	readonly number: number;
-	/** Время события журнала, ISO. */
-	readonly eventTime: string;
-	/** Тип события журнала, породившего маркер. */
-	readonly kind: ResultMarkerKind;
-	/** Изменение накопленного итога от предыдущего выведенного маркера, USDT. */
-	readonly changeUsdt: number;
-	/** Накопленный зафиксированный результат на момент события, USDT. */
-	readonly totalUsdt: number;
-	/** Расшифровка изменения: операции с предыдущего выведенного маркера, включая подавленные порогом. */
-	readonly operations: readonly ResultMarkerOperation[];
-}
-
 /** Метрики карточки: сводка kstrip с периодом и длительностью. */
 export interface ConstructionCardMetrics {
 	readonly realizedPnL: number;
@@ -79,11 +29,12 @@ export interface ConstructionCardMetrics {
 	readonly adjustmentsPnLPercent: number | null;
 	readonly quoteValue: number | null;
 	readonly capitalUsagePercent: number | null;
-	// Реальный риск открытых остатков идёт парой «величина + статус»:
-	// число только при конечном риске, статус различает неограниченный
-	// хвост и неполные данные без заглушки плановым риском.
-	// Traceability: openspec:analytics/performance#requirement-real-risk-worst-at-expiry
-	// Traceability: change:show-unbounded-finresult-risk/design#d1
+	// Реальный риск идёт парой «величина + статус»: число только при
+	// конечном риске — минусовой части текущего результата по текущим
+	// маркам; недоступный расчёт идёт без числа, без заглушки плановым
+	// риском.
+	// Traceability: issue:#98
+	// Traceability: adr:docs/adr/0025-real-risk-negative-part-of-current-result.md#consequences
 	readonly realRiskUsdt: number | null;
 	readonly realRiskStatus: RealRiskStatus;
 	// Сводная величина «с учётом зафиксированного синтетикой» —
@@ -255,10 +206,6 @@ export interface ConstructionCard {
 	// конструкции без связок, строка «зафиксировано синтетикой» не выводится.
 	// Traceability: openspec:ui/screens#requirement-detail-synthetic-close-line
 	readonly syntheticCloses: readonly ConstructionCardSyntheticClose[];
-	// Выведенные маркеры изменения результата в хронологическом порядке:
-	// порог и нумерация посчитаны на сервере, пустой список — истории ещё нет.
-	// Traceability: change:add-finresult-result-history-markers/specs/analytics/performance/spec#scenario-card-contract-publishes-markers
-	readonly resultMarkers: readonly ResultMarker[];
 	// Полный перечень предупреждений диагностики незакрытых рисков: секция
 	// «Предупреждения» карточки перечисляет все записи, а пустой список
 	// скрывает секцию целиком. Источник тот же вызов вычислителя, что у

@@ -489,8 +489,10 @@ public sealed class AgentSectionApiTests
 					services.AddSingleton(store);
 					services.RemoveAll<IChatContextReader>();
 					services.AddSingleton<IChatContextReader>(new RecordingContextReader());
-				},
-				settings => settings["Llm:ApiKey"] = string.Empty);
+					// Подменяем опции, прочитанные при запуске, но оставляем выбор клиента хосту.
+					services.RemoveAll<ChatModelOptions>();
+					services.AddSingleton(new ChatModelOptions());
+				});
 			using var client = factory.CreateClient();
 			var chatId = await CreateChatAsync(client, "Проверь конструкцию без ключа модели", "7", ["journal"]);
 
@@ -508,7 +510,9 @@ public sealed class AgentSectionApiTests
 			Assert.That(response.Content.Headers.ContentType!.MediaType, Is.EqualTo("text/event-stream"));
 			var frames = ParseFrames(await response.Content.ReadAsStringAsync());
 			Assert.That(frames[0].EventName, Is.EqualTo("start"));
-			var error = frames.Single(frame => frame.EventName == "error");
+			var errors = frames.Where(frame => frame.EventName == "error").ToArray();
+			Assert.That(errors, Has.Length.EqualTo(1));
+			var error = errors[0];
 			Assert.That(error.Data!["message"]!.GetValue<string>(), Does.Contain("API-ключ"));
 
 			// Assert: история доступна: чат остаётся в списке активных, оба

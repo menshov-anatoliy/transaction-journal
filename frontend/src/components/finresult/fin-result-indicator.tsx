@@ -1,18 +1,13 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { MetricHint } from "@/components/ui/metric-tooltip";
-import { METRIC_TOOLTIPS, resultMarkerBreakdownTooltip } from "@/lib/metric-tooltips";
+import { METRIC_TOOLTIPS } from "@/lib/metric-tooltips";
 import {
 	computeFinResultGeometry,
-	formatFinAmount,
-	type FinResultBadgePlacement,
 	type FinResultGeometry,
-	type FinResultHistoryMarker,
 	type FinResultInput,
-	type FinResultLabelAlign,
 	type FinResultLabelLayout,
 	type FinResultLabelPlacement,
-	type FinResultMarkerPoint,
 	type FinResultSpan,
 } from "@/lib/finresult/geometry";
 
@@ -20,33 +15,30 @@ import {
 // (сводные блоки и превью) и компактный (строки таблиц). Все три вида рендерят
 // одну геометрию калькулятора в долях шкалы и отличаются только пресетом
 // размеров: полоса с зонами планового риска/профита/сверхприбыли, заливка
-// результата, маркер текущего результата и маркеры изменения результата.
-// Полный вид показывает маркеры изменения результата номерными бейджами
-// с суммами над полосой (тёмный штрих на полосе под каждым бейджем); у
-// каждого бейджа — подсказка-расшифровка метки: перечень операций изменения
-// с предыдущей выведенной метки; средний и компактный виды рисуют только
-// последний маркер — тёмный вертикальный штрих на полосе без номера и
-// суммы, с той же подсказкой-расшифровкой на области последнего маркера.
+// результата и маркер текущего результата с подписью под полосой. Номерные
+// бейджи и штрихи маркеров изменения результата с их подсказками-расшифровками
+// убраны: история результата остаётся в журнале событий, индикатор показывает
+// только текущее состояние.
+// Traceability: issue:#94
 // У полного и среднего видов подписи (деления шкалы над полосой, маркер под
 // ней) размещает калькулятор: разнос по сторонам полосы, вертикальным
 // уровням и выравниванию считается по измеренной ширине полосы. Состояние
-// не конечного риска (unbounded/unavailable) выводится отдельно от шкалы:
-// текстовый статус у полного и среднего видов, бейдж ∞/? у компактного —
-// обозначения зафиксированы в мастерах design.pen.
-// Traceability: openspec:ui/screens#requirement-risk-profit-hint
+// недоступного риска (unavailable) выводится отдельно от шкалы: текстовый
+// статус у полного и среднего видов, бейдж «?» у компактного — обозначения
+// зафиксированы в мастерах design.pen.
+// Traceability: issue:#98
 
 /** Пропсы всех видов индикатора. */
 export interface FinResultIndicatorProps {
-	/** Показатели конструкции, маркеры истории и текущий результат. */
+	/** Показатели конструкции и текущий результат. */
 	readonly input: FinResultInput;
 	readonly className?: string;
 }
 
 // Пресет размеров представления: высоты, шрифты и радиусы из макета
 // (полный референс onchD, средний rMxFZ, компактный FMghY), плюс метрики
-// подписей и бейджей маркеров для разноса: ширина символа над/под полосой,
-// высота строки метки, отступ между секциями и номинальная ширина полосы
-// до измерения.
+// подписей для разноса: ширина символа над/под полосой, высота строки
+// метки, отступ между секциями и номинальная ширина полосы до измерения.
 interface SizePreset {
 	/** Высота полосы, px. */
 	readonly barHeight: number;
@@ -66,16 +58,6 @@ interface SizePreset {
 	readonly aboveCharWidthPx: number;
 	/** Ширина символа подписей под полосой (маркер), px. */
 	readonly belowCharWidthPx: number;
-	/** Несумма бейджа маркера без текста суммы: кружок, зазор, паддинги, рамка, px. */
-	readonly badgeChromePx: number;
-	/** Высота пилюли бейджа маркера, px. */
-	readonly badgePillHeightPx: number;
-	/** Высота бейджа в строках модели разноса. */
-	readonly badgeRows: number;
-	/** Кегль суммы бейджа маркера, px. */
-	readonly badgeFontPx: number;
-	/** Диаметр кружка номера бейджа, px. */
-	readonly badgeCirclePx: number;
 	/** Номинальная ширина полосы до измерения ResizeObserver, px. */
 	readonly nominalWidthPx: number;
 	/** Класс подписей делений шкалы. */
@@ -86,8 +68,6 @@ interface SizePreset {
 	readonly riskScaleToneClass: string;
 	/** Класс тона подписи планового профита на шкале. */
 	readonly profitScaleToneClass: string;
-	/** Режим маркеров истории: полный вид — бейджи над полосой, остальные — последний штрих. */
-	readonly markerDisplay: "badges" | "last-tick";
 }
 
 const FULL_PRESET: SizePreset = {
@@ -104,15 +84,6 @@ const FULL_PRESET: SizePreset = {
 	sectionGapPx: 5,
 	aboveCharWidthPx: 7,
 	belowCharWidthPx: 6.5,
-	// Бейдж маркера (мастер onchD): кружок номера 12px, зазор 4px, паддинги
-	// пилюли по 6px и рамка 1px с двух сторон — несумма 30px; пилюля 18px
-	// занимает две строки модели разноса.
-	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
-	badgeChromePx: 30,
-	badgePillHeightPx: 18,
-	badgeRows: 2,
-	badgeFontPx: 10,
-	badgeCirclePx: 12,
 	nominalWidthPx: 480,
 	scaleLabelClass: "text-[11.5px]",
 	markerLabelClass: "text-[10.5px]",
@@ -121,7 +92,6 @@ const FULL_PRESET: SizePreset = {
 	// Traceability: openspec:ui/design-system#requirement-design-pen-single-source
 	riskScaleToneClass: "text-[color:var(--fin-negative)]",
 	profitScaleToneClass: "font-medium text-[color:var(--fin-positive-strong)]",
-	markerDisplay: "badges",
 };
 
 const MEDIUM_PRESET: SizePreset = {
@@ -136,12 +106,6 @@ const MEDIUM_PRESET: SizePreset = {
 	sectionGapPx: 5,
 	aboveCharWidthPx: 6.5,
 	belowCharWidthPx: 6,
-	// Средний вид показывает только последний маркер штрихом — бейджей нет.
-	badgeChromePx: 0,
-	badgePillHeightPx: 0,
-	badgeRows: 0,
-	badgeFontPx: 0,
-	badgeCirclePx: 0,
 	nominalWidthPx: 360,
 	scaleLabelClass: "text-[10.5px]",
 	markerLabelClass: "text-[9.5px]",
@@ -150,7 +114,6 @@ const MEDIUM_PRESET: SizePreset = {
 	// Traceability: openspec:ui/screens#scenario-list-context-panel-brief-card
 	riskScaleToneClass: "text-text-muted",
 	profitScaleToneClass: "font-medium text-text-muted",
-	markerDisplay: "last-tick",
 };
 
 const COMPACT_PRESET: SizePreset = {
@@ -162,27 +125,20 @@ const COMPACT_PRESET: SizePreset = {
 	sectionGapPx: 6,
 	aboveCharWidthPx: 6,
 	belowCharWidthPx: 6,
-	// Компактный вид показывает только последний маркер штрихом — бейджей нет.
-	badgeChromePx: 0,
-	badgePillHeightPx: 0,
-	badgeRows: 0,
-	badgeFontPx: 0,
-	badgeCirclePx: 0,
 	nominalWidthPx: 132,
 	scaleLabelClass: "",
 	markerLabelClass: "",
 	// Компактному виду подписи не положены — тона шкалы не применяются.
 	riskScaleToneClass: "",
 	profitScaleToneClass: "",
-	markerDisplay: "last-tick",
 };
 
-/** Полный индикатор для карточки конструкции: бейджи маркеров с подсказками-расшифровками. */
+/** Полный индикатор для карточки конструкции. */
 export function FullFinResultIndicator({ input, className }: FinResultIndicatorProps) {
 	return <DetailedFinResultIndicator input={input} preset={FULL_PRESET} className={className} dataSlot="fin-result-full" />;
 }
 
-/** Средний индикатор для сводных блоков и превью: последний маркер штрихом. */
+/** Средний индикатор для сводных блоков и превью. */
 export function MediumFinResultIndicator({ input, className }: FinResultIndicatorProps) {
 	return <DetailedFinResultIndicator input={input} preset={MEDIUM_PRESET} className={className} dataSlot="fin-result-medium" />;
 }
@@ -193,18 +149,12 @@ export function MediumFinResultIndicator({ input, className }: FinResultIndicato
 export function CompactFinResultIndicator({ input, className }: FinResultIndicatorProps) {
 	// Компактному виду подписи не положены — layout разметки не передаётся.
 	const geometry = computeFinResultGeometry(input);
-	// Короткий символ состояния: ∞ — неограниченный хвост, ? — расчёт не
-	// удался. Бейдж выводится отдельным элементом поверх полосы, поэтому
-	// координатная геометрия и ширина 132px не меняются; в конечном
-	// состоянии бейджа нет.
-	// Traceability: openspec:ui/screens#scenario-finresult-compact-risk-state
-	// Traceability: change:show-unbounded-finresult-risk/design#d3
-	const riskGlyph =
-		geometry.realRiskStatus === "unbounded"
-			? "∞"
-			: geometry.realRiskStatus === "unavailable"
-				? "?"
-				: null;
+	// Короткий символ состояния: ? — расчёт риска не удался. Бейдж выводится
+	// отдельным элементом поверх полосы, поэтому координатная геометрия и
+	// ширина 132px не меняются; конечный риск числа не требует — он виден
+	// числом на маркере, бейджа у конечного состояния нет.
+	// Traceability: issue:#98
+	const riskGlyph = geometry.realRiskStatus === "unavailable" ? "?" : null;
 	const title =
 		[geometry.labels.riskState, geometry.incomplete ? "неполный: сбой котировок" : null]
 			.filter(Boolean)
@@ -220,7 +170,7 @@ export function CompactFinResultIndicator({ input, className }: FinResultIndicat
 			aria-label={describeForScreenReader(geometry)}
 			title={title}
 		>
-			<FinResultBar geometry={geometry} preset={COMPACT_PRESET} lastMarker={input.resultMarkers[input.resultMarkers.length - 1]} />
+			<FinResultBar geometry={geometry} preset={COMPACT_PRESET} />
 			{riskGlyph !== null && (
 				<span
 					data-part="risk-state"
@@ -248,8 +198,6 @@ function DetailedFinResultIndicator({
 		scaleWidthPx: width ?? preset.nominalWidthPx,
 		aboveCharWidthPx: preset.aboveCharWidthPx,
 		belowCharWidthPx: preset.belowCharWidthPx,
-		badgeChromePx: preset.badgeChromePx,
-		badgeRows: preset.badgeRows,
 	};
 	const geometry = computeFinResultGeometry(input, layout);
 
@@ -261,22 +209,20 @@ function DetailedFinResultIndicator({
 			className={cn("flex flex-col", className)}
 			style={{ gap: preset.sectionGapPx }}
 		>
-			<LabelStack geometry={geometry} preset={preset} side="above" markers={input.resultMarkers} />
+			<LabelStack geometry={geometry} preset={preset} side="above" />
 			{/* Текстовое описание состояния несёт сама полоса: контейнер не
 			    объявлен role="img", иначе триггеры подсказок числовых подписей
 			    внутри были бы скрыты от скринридеров вместе с содержимым img.
 			    Traceability: openspec:ui/screens#requirement-indicator-numbers-tooltips-alongside-reading-popover */}
 			<div role="img" aria-label={describeForScreenReader(geometry)}>
-				<FinResultBar geometry={geometry} preset={preset} lastMarker={input.resultMarkers[input.resultMarkers.length - 1]} />
+				<FinResultBar geometry={geometry} preset={preset} />
 			</div>
-			<LabelStack geometry={geometry} preset={preset} side="below" markers={input.resultMarkers} />
+			<LabelStack geometry={geometry} preset={preset} side="below" />
 			{geometry.labels.riskState !== null && (
-				// Статус не конечного риска — отдельная строка вне координат
+				// Статус недоступного риска — отдельная строка вне координат
 				// шкалы: собственной строкой колонки он гарантированно не
 				// пересекается с метками делений и маркера.
-				// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
-				// Traceability: openspec:ui/screens#scenario-finresult-unavailable-risk
-				// Traceability: change:show-unbounded-finresult-risk/design#d3
+				// Traceability: issue:#98
 				<span
 					data-part="risk-state"
 					className={cn(
@@ -295,18 +241,16 @@ function DetailedFinResultIndicator({
 // каждая метка абсолютом на своём уровне; сторона, уровень и выравнивание
 // назначены калькулятором так, чтобы метки не пересекались, а крайние
 // прижимались внутрь шкалы. Высота стека считается по нижней границе самой
-// далёкой метки (уровень + строки), включая бейджи маркеров над полосой.
+// далёкой метки (уровень + строки).
 // Traceability: openspec:ui/screens#scenario-finresult-labels-no-overlap
 function LabelStack({
 	geometry,
 	preset,
 	side,
-	markers,
 }: {
 	geometry: FinResultGeometry;
 	preset: SizePreset;
 	side: "above" | "below";
-	markers: readonly FinResultHistoryMarker[];
 }) {
 	const placements = geometry.placements;
 	if (placements === null) {
@@ -314,15 +258,9 @@ function LabelStack({
 	}
 
 	const items = collectLabelItems(geometry, preset, side, placements);
-	const badges = side === "above" && preset.markerDisplay === "badges" ? geometry.markerPoints : [];
-	const badgePlacements = geometry.badgePlacements;
-	const stackRows = Math.max(
-		0,
-		...items.map((item) => item.placement.level + item.rows),
-		...badges.map((_, index) => (badgePlacements?.[index]?.level ?? 0) + preset.badgeRows),
-	);
+	const stackRows = Math.max(0, ...items.map((item) => item.placement.level + item.rows));
 
-	if (items.length === 0 && badges.length === 0) {
+	if (items.length === 0) {
 		return null;
 	}
 
@@ -338,109 +276,8 @@ function LabelStack({
 					{item.content}
 				</span>
 			))}
-			{badges.map((point, index) => {
-				const placement = badgePlacements?.[index];
-				if (placement === undefined) {
-					return null;
-				}
-				const marker = markers[index];
-
-				return (
-					<MarkerBadge
-						key={index}
-						marker={marker ?? { totalUsdt: point.total, number: index + 1 }}
-						point={point}
-						placement={placement}
-						preset={preset}
-					/>
-				);
-			})}
 		</div>
 	);
-}
-
-// Бейдж маркера изменения результата: номер в кружке и сумма накопленного
-// зафиксированного результата в пилюле с рамкой по знаку итога; уровень
-// разноса отсчитывается от полосы, крайние бейджи прижимаются к краям
-// изнутри. Содержимое бейджа (номер и сумма) — триггер подсказки-расшифровки
-// метки: перечень операций изменения с предыдущей выведенной метки, включая
-// подавленные порогом, при переполнении перечень прокручивается; подсказки
-// чисел сосуществуют с попапом «Как читать индикатор», не заменяя его.
-// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
-// Traceability: openspec:ui/screens#scenario-marker-badge-breakdown-tooltip
-// Traceability: openspec:ui/screens#scenario-indicator-number-tooltip-coexists
-function MarkerBadge({
-	marker,
-	point,
-	placement,
-	preset,
-}: {
-	marker: FinResultHistoryMarker;
-	point: FinResultMarkerPoint;
-	placement: FinResultBadgePlacement;
-	preset: SizePreset;
-}) {
-	const toneClass =
-		point.tone === "negative"
-			? "border-[color:var(--fin-negative)] text-[color:var(--fin-negative)]"
-			: point.tone === "positive"
-				? "border-[color:var(--fin-positive-strong)] text-[color:var(--fin-positive-strong)]"
-				: "border-text-muted text-text-secondary";
-	const circleClass =
-		point.tone === "negative"
-			? "bg-[color:var(--fin-negative)]"
-			: point.tone === "positive"
-				? "bg-[color:var(--fin-positive-strong)]"
-				: "bg-text-muted";
-
-	return (
-		<span
-			data-part="marker-badge"
-			data-tone={point.tone}
-			className={cn("absolute flex items-center gap-1 rounded-full border bg-surface px-1.5", toneClass)}
-			style={{
-				bottom: placement.level * preset.labelLineHeightPx,
-				height: preset.badgePillHeightPx,
-				fontSize: preset.badgeFontPx,
-				...badgeAnchorStyle(point.x, placement.align),
-			}}
-		>
-			{/* Расшифровка метки строится по операциям контракта; скролл
-			    перечня при переполнении несёт попап подсказки. */}
-			<MetricHint
-				tooltip={resultMarkerBreakdownTooltip(marker)}
-				contentClassName="max-h-[240px] overflow-y-auto"
-				triggerAsChild
-			>
-				<span tabIndex={0} className="flex items-center gap-1">
-					<span
-						aria-hidden="true"
-						className={cn("flex shrink-0 items-center justify-center rounded-full font-semibold text-surface", circleClass)}
-						style={{ width: preset.badgeCirclePx, height: preset.badgeCirclePx, lineHeight: 1 }}
-					>
-						{marker.number ?? 0}
-					</span>
-					<span className="font-semibold tabular-nums">
-						{formatFinAmount(point.total)}
-					</span>
-				</span>
-			</MetricHint>
-		</span>
-	);
-}
-
-// Горизонтальное позиционирование бейджа по выравниванию из разноса:
-// центр — по ширине позиции, края — прижаты изнутри, габариты не растут.
-function badgeAnchorStyle(x: number, align: FinResultLabelAlign): React.CSSProperties {
-	if (align === "start") {
-		return { left: `${x * 100}%` };
-	}
-
-	if (align === "end") {
-		return { right: `${(1 - x) * 100}%` };
-	}
-
-	return { left: `${x * 100}%`, transform: "translateX(-50%)" };
 }
 
 // Метки стороны: деления шкалы (риск, ноль, профит) и маркер; у каждой —
@@ -589,29 +426,10 @@ function labelAnchorStyle(
 	return { ...base, left, transform: "translateX(-50%)" };
 }
 
-// Полоса: тонируемые зоны в скруглённой маске, единая заливка результата,
-// тёмные штрихи маркеров изменения результата и маркер итога поверх.
-// Полный вид ставит штрих под каждым бейджем, средний и компактный — только
-// под последним маркером (без номера и суммы), а область последнего маркера
-// снабжается той же подсказкой-расшифровкой, что и бейджи полного вида.
+// Полоса: тонируемые зоны в скруглённой маске, единая заливка результата
+// и маркер текущего результата поверх.
 // Traceability: openspec:ui/screens#requirement-risk-profit-hint
-// Traceability: openspec:ui/screens#scenario-medium-compact-last-marker-only
-function FinResultBar({
-	geometry,
-	preset,
-	lastMarker,
-}: {
-	geometry: FinResultGeometry;
-	preset: SizePreset;
-	/** Последний маркер истории — источник расшифровки для среднего и компактного видов. */
-	readonly lastMarker?: FinResultHistoryMarker;
-}) {
-	// Штрих на полосе стоит в истинной позиции маркера; полный вид штрихует
-	// все точки истории, остальные виды — только последнюю.
-	// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
-	const tickPoints =
-		preset.markerDisplay === "badges" ? geometry.markerPoints : geometry.markerPoints.slice(-1);
-
+function FinResultBar({ geometry, preset }: { geometry: FinResultGeometry; preset: SizePreset }) {
 	return (
 		<div className="relative" style={{ height: preset.barHeight + preset.barPaddingY * 2 }}>
 			<div
@@ -656,44 +474,6 @@ function FinResultBar({
 						style={spanStyle(geometry.fillMain)}
 					/>
 				)}
-				{tickPoints.map((point, index) =>
-					preset.markerDisplay === "last-tick" && lastMarker !== undefined ? (
-						// Последний маркер среднего/компактного вида несёт ту же
-						// подсказку-расшифровку, что и бейджи полного вида:
-						// триггер — хит-зона вокруг штриха, доступная с клавиатуры.
-						// Traceability: openspec:ui/screens#scenario-medium-compact-last-marker-only
-						<MetricHint
-							key={index}
-							tooltip={resultMarkerBreakdownTooltip(lastMarker)}
-							contentClassName="max-h-[240px] overflow-y-auto"
-							triggerAsChild
-						>
-							<span
-								tabIndex={0}
-								role="button"
-								data-part="marker-tick-trigger"
-								aria-label="Расшифровка последней метки изменения результата"
-								className="absolute inset-y-0 -translate-x-1/2 flex items-center justify-center"
-								style={{ left: percent(point.x), width: 12 }}
-							>
-								<span
-									data-part="marker-tick"
-									className="h-full w-[2px] rounded-[1px] bg-text-primary"
-								/>
-							</span>
-						</MetricHint>
-					) : (
-						// Тёмный штрих 2px в позиции маркера: стоит в истинной точке
-						// истории, бейдж с суммой при коллизии уходит вверх от него.
-						// Traceability: openspec:ui/screens#scenario-result-markers-badges-above-bar
-						<span
-							key={index}
-							data-part="marker-tick"
-							className="absolute top-0 bottom-0 -translate-x-1/2 rounded-[1px] bg-text-primary"
-							style={{ left: percent(point.x), width: 2 }}
-						/>
-					),
-				)}
 			</div>
 
 			{geometry.markerAt !== null && (
@@ -718,12 +498,12 @@ function FinResultBar({
 }
 
 // Текстовое описание для скринридеров: состояние риска, плановая граница
-// в состоянии не конечного риска, число маркеров истории и результат.
-// В состояниях unbounded/unavailable описание называет полное состояние и
-// отдельно плановый риск, чтобы тонированную плановую зону не принимали за
-// реальный риск; в конечном состоянии описание прежнее.
+// в состоянии недоступного риска и результат.
+// При недоступном риске описание называет состояние и отдельно плановый
+// риск, чтобы тонированную плановую зону не принимали за реальный риск;
+// в конечном состоянии описание прежнее.
 // Traceability: openspec:ui/screens#scenario-finresult-compact-risk-state
-// Traceability: openspec:ui/screens#scenario-finresult-unbounded-risk
+// Traceability: issue:#98
 function describeForScreenReader(geometry: FinResultGeometry): string {
 	const state = geometry.labels.riskState ?? "";
 	const planned = state !== "" ? (geometry.labels.risk ?? "") : "";
@@ -732,11 +512,9 @@ function describeForScreenReader(geometry: FinResultGeometry): string {
 	// корректировки, а при сбое котировок — доступную часть.
 	// Traceability: change:unify-current-result/specs/ui/screens/spec#scenario-finresult-marker-incomplete-with-adjustments
 	const marker = geometry.labels.marker !== null ? `результат ${geometry.labels.marker}` : "";
-	const markers =
-		geometry.markerPoints.length > 0 ? `маркеров изменения результата ${geometry.markerPoints.length}` : "";
 	const incomplete = geometry.incomplete ? "неполный, сбой котировок" : "";
 
-	return [state, planned, markers, marker, incomplete].filter(Boolean).join(", ") || "нет данных о результате";
+	return [state, planned, marker, incomplete].filter(Boolean).join(", ") || "нет данных о результате";
 }
 
 // Ширина контейнера через ResizeObserver; без наблюдения (тестовая среда

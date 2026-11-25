@@ -4,7 +4,7 @@
 
 ## Цель
 
-Traceability-разметка связывает смысловые решения в коде и тестах с источниками требований: OpenSpec specs и change-артефактами, ADR, документацией, ТЗ, issue и другими материалами, где описан смысл поведения.
+Traceability-разметка связывает смысловые решения в коде и тестах с источниками требований: GitHub Issues со срезами и спеками, ADR, документацией и другими материалами, где описан смысл поведения. OpenSpec specs и change-артефакты — legacy-источники ([ADR-0023](../../docs/adr/0023-sdlc-issue-and-adr-without-openspec.md)).
 
 ## Формат метки
 
@@ -20,13 +20,20 @@ Traceability-разметка связывает смысловые решени
 
 Поддерживаемые цели:
 
-- `openspec:<capability-path>#<requirement-or-scenario>` — актуальная спецификация по capability path: обычно в `openspec/specs`, а до sync/архивации change — в соответствующем active change spec с тем же capability path.
-- `change:<change-name>/<artifact>#<section>` — временное решение в active/archive change.
-- `doc:<relative-path>#<section>` — проектная документация.
+- `issue:#<number>` — срез или issue-спека в GitHub: контракт задаёт бриф агента или тело issue-спеки. Основная постоянная цель для новой работы.
 - `adr:<relative-path>#<decision-or-section>` — архитектурное решение.
-- `issue:#<number>` — задача GitHub, если требование пока не формализовано в спецификации.
+- `doc:<relative-path>#<section>` — проектная документация.
+- `openspec:<capability-path>#<requirement-or-scenario>` — legacy: актуальная спецификация по capability path: обычно в `openspec/specs`, а до sync/архивации change — в соответствующем active change spec с тем же capability path.
+- `change:<change-name>/<artifact>#<section>` — legacy: временное решение в active/archive change.
+
+Новые метки ссылаются на `issue:#<number>`, `adr:` или `doc:`. Цели `openspec:` и `change:` допустимы только в уже существующих метках и при доведении активных OpenSpec changes. Не переписывай legacy-метки массово; когда смысловой блок с такой меткой меняется по другой причине, переведи её на `issue:#<number>` той задачи, которая меняет поведение, или на `adr:`.
 
 Примеры:
+
+```csharp
+// Маркер изменения результата показывается только при превышении порога проявления.
+// Traceability: issue:#123
+```
 
 ```csharp
 // Активный заказ определяется по последнему актуальному событию журнала.
@@ -55,6 +62,8 @@ Traceability-разметка связывает смысловые решени
 
 ## Явные идентификаторы в OpenSpec specs
 
+Раздел действует только для legacy specs и активных OpenSpec changes до их архивации; новые OpenSpec specs не создаются.
+
 Для новых и изменяемых живых spec-файлов OpenSpec (`openspec/specs/**` и `openspec/changes/*/specs/**`) каждый заголовок `### Requirement:` и `#### Scenario:` должен иметь отдельную строку `Traceability ID:` сразу под заголовком.
 
 Пример:
@@ -80,7 +89,13 @@ Traceability ID: scenario-state-is-rebuilt-from-event-log
 
 ### Из source в implementation
 
-Чтобы найти все кодовые, тестовые и документационные ссылки на конкретный OpenSpec fragment, ищи точную строку маркера:
+Чтобы найти все кодовые, тестовые и документационные ссылки на срез или issue-спеку, ищи точную строку маркера (якорь `$` отсекает `#12` при поиске `#1`, а `--crlf` нужен для файлов с окончаниями CRLF):
+
+```powershell
+rg --crlf --glob "*.{cs,cshtml,razor,ts,tsx,html,md}" "Traceability: issue:#<number>$" .
+```
+
+Для legacy OpenSpec fragment ищи точную строку маркера:
 
 ```powershell
 rg --glob "*.{cs,cshtml,razor,ts,tsx,html,md}" "Traceability: openspec:<capability-path>#<fragment-id>" .
@@ -114,7 +129,11 @@ rg --glob "*.{cs,cshtml,razor,ts,tsx,html,md}" "Traceability: .*;.*(openspec:|ch
 
 Этот рецепт нужен только для точечных cleanup-правок в уже изменяемых смысловых блоках, а не для массового переписывания репозитория.
 
-## Инвариант разрешения ссылок OpenSpec
+## Инвариант разрешения ссылок
+
+Каждая ссылка `issue:#<number>` обязана указывать на существующий issue со срезом (комментарий Agent Brief) или на issue-спеку. Закрытый issue остаётся допустимой целью: он фиксирует, почему поведение такое.
+
+## Инвариант разрешения ссылок OpenSpec (legacy)
 
 Каждая ссылка вида `openspec:<capability-path>#<fragment-id>` в коде, тестах или документации обязана разрешаться в совпадающую строку `Traceability ID: <fragment-id>` в live spec с тем же capability path.
 
@@ -142,7 +161,7 @@ rg --glob "*.{cs,cshtml,razor,ts,tsx,html,md}" "Traceability: .*;.*(openspec:|ch
 - Для тестов метка должна быть рядом с тестовым методом или внутри AAA-блока, который проверяет требование.
 - Рядом с каждой меткой должен находиться отдельный человекочитаемый комментарий на русском языке, поясняющий смысл требования, поведения или проверки; префикс `Traceability:` оставляй неизменным для поиска.
 - Не считай метку заменой обычных комментариев и не удаляй существующие полезные пояснения из-за наличия `Traceability:`.
-- Если релевантного артефакта нет, сначала зафиксируй требование в OpenSpec или документации. `issue:#<number>` допустим только как временная ссылка.
+- Если релевантного артефакта нет, сначала зафиксируй требование в срезе или issue-спеке через `/triage` (см. `docs/agents/sdlc.md`) либо в ADR/документации. Ссылка `issue:#<number>` должна указывать на срез или issue-спеку с контрактом, а не на черновик идеи без брифа.
 - Для новых и изменяемых смысловых блоков не объединяй несколько целей в одной строке; предпочитай несколько соседних строк `Traceability:` и оставляй `;`-списки только как legacy-совместимый формат.
 - Для ссылок вида `openspec:<capability-path>#<fragment-id>` используй только такой `fragment-id`, который буквально присутствует в соответствующем live `spec.md` в строке `Traceability ID: <fragment-id>` — в main spec или, если capability ещё не синхронизирован, в active change spec с тем же path.
 

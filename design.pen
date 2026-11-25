@@ -622,150 +622,6 @@
                       ]
                     }
                   ]
-                },
-                {
-                  "type": "frame",
-                  "id": "p1K5x",
-                  "name": "Подсказка/Расшифровка маркера",
-                  "reusable": true,
-                  "width": 300,
-                  "fill": "$surface",
-                  "cornerRadius": 10,
-                  "stroke": "$border",
-                  "layout": "vertical",
-                  "gap": 8,
-                  "padding": 12,
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "rgahC",
-                      "name": "Заголовок",
-                      "fill": "$textPrimary",
-                      "content": "Метка 5 · +125 USDT",
-                      "fontFamily": "$font",
-                      "fontSize": 12.5,
-                      "fontWeight": "600"
-                    },
-                    {
-                      "type": "text",
-                      "id": "QBPic",
-                      "name": "Подзаголовок",
-                      "fill": "$textSecondary",
-                      "textGrowth": "fixed-width",
-                      "width": "fill_container",
-                      "content": "изменение с метки 4: +65 USDT — операции расшифровки:",
-                      "fontFamily": "$font",
-                      "fontSize": 11,
-                      "fontWeight": "normal"
-                    },
-                    {
-                      "type": "frame",
-                      "id": "SSXXd",
-                      "name": "Перечень",
-                      "width": "fill_container",
-                      "height": 74,
-                      "layout": "vertical",
-                      "gap": 3,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "a22PXt",
-                          "name": "Оп:Открытие 12.05",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Открытие · 12.05 · −100",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "Wv1Yx",
-                          "name": "Оп:Закрытие фьючерса 28.05",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Закрытие фьючерса · 28.05 · +40",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "HT6Xw",
-                          "name": "Оп:Снятие синтетики 02.06",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Снятие синтетики · 02.06 · +30",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "ZzAYO",
-                          "name": "Оп:Закрытие фьючерса 11.06",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Закрытие фьючерса · 11.06 · +55",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "zjkic",
-                          "name": "Оп:Корректировка PnL 14.06",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Корректировка PnL · 14.06 · +5",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "text",
-                          "id": "SYXOF",
-                          "name": "Оп:Ролл 21.06",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Ролл · 21.06 · +35",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        },
-                        {
-                          "type": "rectangle",
-                          "cornerRadius": 1.5,
-                          "id": "PS4gH",
-                          "layoutPosition": "absolute",
-                          "x": 270,
-                          "y": 6,
-                          "name": "ScrollThumb",
-                          "fill": "$border",
-                          "width": 3,
-                          "height": 30
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "JP8md",
-                      "name": "Инвариант",
-                      "fill": "$textSecondary",
-                      "textGrowth": "fixed-width",
-                      "width": "fill_container",
-                      "content": "Σ перечня = +65 = изменение метки; итог метки 4 (+60) + 65 = +125",
-                      "fontFamily": "$font",
-                      "fontSize": 11,
-                      "fontWeight": "normal"
-                    }
-                  ]
                 }
               ]
             }
@@ -2356,82 +2212,6 @@
                     },
                     {
                       "type": "frame",
-                      "id": "Tz80s",
-                      "name": "Маркеры изменения результата",
-                      "width": "fill_container",
-                      "gap": 8,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "KqGwk",
-                          "name": "Свотч-бейдж",
-                          "width": 46,
-                          "height": 16,
-                          "fill": "$surface",
-                          "cornerRadius": 8,
-                          "stroke": "$neg",
-                          "strokeWidth": 1,
-                          "gap": 3,
-                          "padding": [
-                            1,
-                            4,
-                            1,
-                            5
-                          ],
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "frame",
-                              "id": "R5h3L",
-                              "name": "Num",
-                              "width": 10,
-                              "height": 10,
-                              "fill": "$neg",
-                              "cornerRadius": 5,
-                              "justifyContent": "center",
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "GRWPB",
-                                  "name": "NumText",
-                                  "fill": "#FFFFFF",
-                                  "content": "1",
-                                  "fontFamily": "$font",
-                                  "fontSize": 7.5,
-                                  "fontWeight": "700"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "text",
-                              "id": "kUOOs",
-                              "name": "Sum",
-                              "fill": "$neg",
-                              "content": "−100",
-                              "fontFamily": "$font",
-                              "fontSize": 9,
-                              "fontWeight": "600"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "lauHt",
-                          "name": "Описание",
-                          "fill": "$textSecondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "маркеры изменения результата — номерные бейджи с суммами над полосой: история накопленного зафиксированного результата, строящаяся из вкладов операций (открытия и закрытия опционных окон, роллы, синтетическое закрытие и его снятие, фьючерсы — только позиции, закрытые до нулевого остатка, закрывающие записи, корректировки PnL) с порогом проявления 5% планового риска; первый и последний бейджи безусловны, последний — текущий накопленный зафиксированный результат; расшифровка каждой метки — подсказка бейджа: перечень операций «вид · дата · сумма» с предыдущей выведенной метки, включая подавленные порогом, — сумма перечня равна изменению метки; зафиксированная синтетикой часть видна в строке «зафиксировано синтетикой» и сводной «С учётом зафиксированного синтетикой»",
-                          "fontFamily": "$font",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
                       "id": "KiC5S",
                       "name": "Зона",
                       "width": "fill_container",
@@ -2498,7 +2278,7 @@
                       "fill": "$textMuted",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Состояния вне шкалы показывают отдельно от полосы: «риск не ограничен» и «не удалось рассчитать»; «риска нет» — при нулевом реальном риске.",
+                      "content": "Состояния риска: число на маркере; при сбое котировок — «?» на полосе, «не удалось рассчитать» и подпись планового риска на делении −Риск.",
                       "fontFamily": "$font",
                       "fontSize": 10.5,
                       "fontWeight": "normal"
@@ -6197,8 +5977,8 @@
                                   "type": "text",
                                   "id": "Qzuqe",
                                   "name": "T",
-                                  "fill": "$accentStrong",
-                                  "content": "+25,45",
+                                  "fill": "$textMuted",
+                                  "content": "не удалось рассчитать",
                                   "fontFamily": "$font",
                                   "fontSize": 12,
                                   "fontWeight": "600"
@@ -6221,6 +6001,9 @@
                                       "x": 21.9,
                                       "enabled": false,
                                       "fill": "$neg"
+                                    },
+                                    "Zt4oh": {
+                                      "enabled": true
                                     }
                                   }
                                 }
@@ -6801,6 +6584,23 @@
                   "name": "Превью",
                   "width": "fill_container",
                   "descendants": {
+                    "zwttk/YiUDF": {
+                      "content": "плановый риск −300"
+                    },
+                    "zwttk/a5MBtQ": {
+                      "enabled": false
+                    },
+                    "zwttk/vVY6E": {
+                      "enabled": false
+                    },
+                    "zwttk/DCBuR": {
+                      "enabled": true
+                    },
+                    "Fgj7T/Q4NLmR": {
+                      "content": "не удалось рассчитать",
+                      "fontSize": 12,
+                      "fill": "$textMuted"
+                    },
                     "CH9gv": {
                       "enabled": true
                     }
@@ -8019,6 +7819,32 @@
                               "content": "реализованный + нереализованный результат позиций и внешние корректировки PnL"
                             }
                           }
+                        },
+                        {
+                          "id": "vBCeF",
+                          "type": "ref",
+                          "ref": "CDitz",
+                          "name": "Подсказка «Реальный риск» открыта",
+                          "layoutPosition": "absolute",
+                          "x": 60,
+                          "y": 112,
+                          "descendants": {
+                            "GeVNN": {
+                              "content": "Реальный риск"
+                            },
+                            "so206": {
+                              "content": "Значение, USDT"
+                            },
+                            "gk36c": {
+                              "content": "минусовая часть текущего результата по текущим маркам: реализованный результат + стоимость открытых остатков + внешние корректировки PnL"
+                            },
+                            "BP8uh": {
+                              "content": "Метод"
+                            },
+                            "l8lnHC": {
+                              "content": "max(0, −(реализованный + нереализованный + корректировки)); при сбое котировок — «не удалось рассчитать» и «?» на полосе"
+                            }
+                          }
                         }
                       ]
                     },
@@ -8069,16 +7895,6 @@
                               "fontWeight": "600"
                             }
                           ]
-                        },
-                        {
-                          "id": "LLJps",
-                          "type": "ref",
-                          "ref": "p1K5x",
-                          "name": "Расшифровка метки · открыта",
-                          "layoutPosition": "absolute",
-                          "x": 470,
-                          "y": 96,
-                          "width": 300
                         }
                       ]
                     }
@@ -17301,6 +17117,7 @@
       "y": 5332,
       "name": "Стенд/Индикатор · состояния",
       "width": 1240,
+      "height": 1749,
       "fill": "$surface",
       "cornerRadius": 12,
       "stroke": "$border",
@@ -17313,7 +17130,7 @@
           "id": "sL7Bc",
           "name": "Title",
           "fill": "$textPrimary",
-          "content": "Индикатор финрезультата · 7 кейсов (полный + компактный)",
+          "content": "Индикатор финрезультата · 7 кейсов зон + недоступность риска (полный + компактный + средний)",
           "fontFamily": "$font",
           "fontSize": 15,
           "fontWeight": "600"
@@ -17840,8 +17657,8 @@
         },
         {
           "type": "frame",
-          "id": "K5CurA",
-          "name": "Cell:8 · Маркеры изменения результата: пустое состояние — нет выведенных маркеров, полоса без бейджей",
+          "id": "q7UrnE",
+          "name": "Cell:8 · Риск недоступен (сбой котировок) — полный и компактный",
           "width": "fill_container",
           "fill": "$bg",
           "cornerRadius": 10,
@@ -17851,64 +17668,69 @@
           "children": [
             {
               "type": "text",
-              "id": "R1Yur",
+              "id": "tv4aF",
               "name": "Cap",
               "fill": "$textSecondary",
-              "textGrowth": "fixed-width",
-              "width": "fill_container",
-              "content": "Маркеры изменения результата: пустое состояние — полоса без бейджей и штрихов, область описания отсутствует",
+              "content": "8 · Риск недоступен (сбой котировок): маркера и числа нет — «не удалось рассчитать», на делении −Риск остаётся подпись планового риска",
               "fontFamily": "$font",
               "fontSize": 12,
-              "fontWeight": "normal"
+              "fontWeight": "600"
             },
             {
-              "id": "b6lK4",
+              "id": "SUo57",
               "type": "ref",
               "ref": "onchD",
               "name": "Full",
-              "width": 936,
               "descendants": {
-                "T2Cco": {
+                "Ur0eD": {
+                  "content": "плановый риск −300",
+                  "x": 0
+                },
+                "tZ9yY": {
+                  "x": 224,
+                  "fill": "$neg",
                   "enabled": false
                 },
-                "sCszM": {
+                "vuPkg": {
+                  "content": "≈ 0",
+                  "fill": "$neg",
+                  "x": 220,
                   "enabled": false
+                },
+                "zOC3O": {
+                  "enabled": true
                 }
               }
             },
             {
-              "type": "text",
-              "id": "PqKej",
-              "name": "Cap2",
-              "fill": "$textSecondary",
-              "textGrowth": "fixed-width",
-              "width": "fill_container",
-              "content": "Средний и компактный виды без последнего маркера (появляется с первым выведенным):",
-              "fontFamily": "$font",
-              "fontSize": 12,
-              "fontWeight": "normal"
-            },
-            {
               "type": "frame",
-              "id": "C9Bvi",
+              "id": "iEqWv",
               "name": "CompactRow",
-              "width": 417,
-              "height": 24,
               "gap": 10,
               "alignItems": "center",
               "children": [
                 {
-                  "id": "QA3RS",
+                  "id": "M8rwrg",
                   "type": "ref",
                   "ref": "FMghY",
-                  "name": "Cmp"
+                  "name": "Cmp",
+                  "descendants": {
+                    "i9F80C": {
+                      "x": 28.6,
+                      "fill": "$neg",
+                      "enabled": false
+                    },
+                    "Zt4oh": {
+                      "enabled": true
+                    }
+                  }
                 },
                 {
                   "type": "text",
-                  "id": "U3wez",
+                  "id": "ZONQt",
                   "name": "Note",
                   "fill": "$textMuted",
-                  "content": "компактный вид — состояние риска сохраняется",
+                  "content": "компактный вид — «?» на полосе вместо маркера",
                   "fontFamily": "$font",
                   "fontSize": 11,
                   "fontWeight": "normal"
@@ -17919,139 +17741,54 @@
         },
         {
           "type": "frame",
-          "id": "KXZaQ",
-          "name": "Cell:9 · Расшифровка метки: подсказка бейджа — перечень операций с предыдущей выведенной метки",
+          "id": "KWrvD",
+          "name": "Cell:9 · Риск недоступен — средний вид",
           "width": "fill_container",
           "fill": "$bg",
+          "cornerRadius": 10,
           "layout": "vertical",
           "gap": 10,
           "padding": 14,
           "children": [
             {
               "type": "text",
-              "id": "lJ5Yu",
+              "id": "SGl9S",
               "name": "Cap",
               "fill": "$textSecondary",
-              "textGrowth": "fixed-width",
-              "width": "fill_container",
-              "content": "Расшифровка метки — подсказка бейджа: перечень операций «вид · дата · сумма вклада» с предыдущей выведенной метки, включая подавленные порогом, без группировки; при переполнении перечень прокручивается:",
+              "content": "9 · Риск недоступен · средний вид (превью, мобильный стрип): «не удалось рассчитать», на делении −Риск подпись планового риска",
               "fontFamily": "$font",
               "fontSize": 12,
-              "fontWeight": "normal"
+              "fontWeight": "600"
             },
             {
-              "type": "frame",
-              "id": "fYNRr",
-              "name": "FullWrap",
-              "width": "fill_container",
-              "height": 260,
-              "layout": "none",
-              "children": [
-                {
-                  "id": "eCyLJ",
-                  "type": "ref",
-                  "ref": "onchD",
-                  "name": "Full",
-                  "x": 0,
-                  "y": 0,
-                  "width": 936,
-                  "height": 131
+              "id": "W4C0Gg",
+              "type": "ref",
+              "ref": "rMxFZ",
+              "name": "Индикатор средний · недоступный",
+              "width": 312,
+              "height": 76,
+              "descendants": {
+                "YiUDF": {
+                  "content": "плановый риск −300",
+                  "x": 0
                 },
-                {
-                  "id": "J9D6e6",
-                  "type": "ref",
-                  "ref": "p1K5x",
-                  "name": "Расшифровка · открыта",
-                  "x": 520,
-                  "y": 64,
-                  "width": 300
+                "a5MBtQ": {
+                  "enabled": false
+                },
+                "vVY6E": {
+                  "enabled": false
+                },
+                "DCBuR": {
+                  "enabled": true
                 }
-              ]
+              }
             },
             {
               "type": "text",
-              "id": "x8rSLl",
-              "name": "Cap2",
-              "fill": "$textSecondary",
-              "textGrowth": "fixed-width",
-              "width": "fill_container",
-              "content": "Средний и компактный виды — только последний маркер, без номера и суммы; расшифровка последнего маркера — той же подсказкой:",
-              "fontFamily": "$font",
-              "fontSize": 12,
-              "fontWeight": "normal"
-            },
-            {
-              "type": "frame",
-              "id": "zUndS",
-              "name": "Row2",
-              "gap": 24,
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "ZigXq",
-                  "name": "CompactWrap",
-                  "width": 470,
-                  "height": 200,
-                  "layout": "none",
-                  "children": [
-                    {
-                      "id": "YP217",
-                      "type": "ref",
-                      "ref": "FMghY",
-                      "name": "Cmp",
-                      "x": 0,
-                      "y": 8,
-                      "width": 132,
-                      "height": 24
-                    },
-                    {
-                      "id": "iGcZh",
-                      "type": "ref",
-                      "ref": "p1K5x",
-                      "name": "Расшифровка · открыта",
-                      "x": 150,
-                      "y": 0,
-                      "width": 300
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "bVlkg",
-                  "name": "PreviewWrap",
-                  "width": 664,
-                  "height": 392,
-                  "layout": "none",
-                  "children": [
-                    {
-                      "id": "Kka2h",
-                      "type": "ref",
-                      "ref": "N6abN",
-                      "name": "Preview",
-                      "x": 0,
-                      "y": 0,
-                      "width": 344,
-                      "height": 388
-                    },
-                    {
-                      "id": "RvspN",
-                      "type": "ref",
-                      "ref": "p1K5x",
-                      "name": "Расшифровка · открыта",
-                      "x": 358,
-                      "y": 0,
-                      "width": 300
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "text",
-              "id": "JmUcv",
+              "id": "puvTn",
               "name": "Note",
               "fill": "$textMuted",
-              "content": "Σ перечня = изменению метки; итог предыдущей выведенной метки + Σ перечня = итог метки",
+              "content": "граница и маркер на левом краю планового риска",
               "fontFamily": "$font",
               "fontSize": 11,
               "fontWeight": "normal"
@@ -18850,6 +18587,9 @@
                       "x": 3.6,
                       "fill": "$neg",
                       "enabled": false
+                    },
+                    "Zt4oh": {
+                      "enabled": true
                     }
                   }
                 },
@@ -18866,7 +18606,7 @@
                       "id": "o4Y0JK",
                       "name": "I",
                       "fill": "$neg",
-                      "content": "итог −30,60",
+                      "content": "не удалось рассчитать",
                       "fontFamily": "$font",
                       "fontSize": 12,
                       "fontWeight": "600"
@@ -19292,35 +19032,8 @@
             },
             {
               "type": "frame",
-              "id": "KdPyN",
-              "x": 58,
-              "y": 6,
-              "name": "RiskStateBadge",
-              "enabled": false,
-              "width": 16,
-              "height": 12,
-              "fill": "$textPrimary",
-              "cornerRadius": 6,
-              "layout": "vertical",
-              "justifyContent": "center",
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "text",
-                  "id": "D0eV8J",
-                  "name": "Glyph",
-                  "fill": "#FFFFFF",
-                  "content": "∞",
-                  "fontFamily": "$font",
-                  "fontSize": 9,
-                  "fontWeight": "700"
-                }
-              ]
-            },
-            {
-              "type": "frame",
               "id": "Zt4oh",
-              "x": 76,
+              "x": 58,
               "y": 6,
               "name": "UnavailableBadge",
               "enabled": false,
@@ -19343,17 +19056,6 @@
                   "fontWeight": "700"
                 }
               ]
-            },
-            {
-              "type": "rectangle",
-              "cornerRadius": 1,
-              "id": "xXnre",
-              "x": 34.9,
-              "y": 5,
-              "name": "LastResultTick",
-              "fill": "$textPrimary",
-              "width": 2,
-              "height": 14
             }
           ]
         },
@@ -19363,7 +19065,7 @@
           "name": "Индикатор/Полный",
           "reusable": true,
           "width": 936,
-          "height": 131,
+          "height": 82,
           "layout": "vertical",
           "gap": 9,
           "children": [
@@ -19423,352 +19125,6 @@
                   "fontFamily": "$font",
                   "fontSize": 11.5,
                   "fontWeight": "normal"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "T2Cco",
-              "name": "MarkerBadges",
-              "width": "fill_container",
-              "height": 40,
-              "layout": "none",
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "u6AxN",
-                  "x": 63.8,
-                  "y": 0,
-                  "name": "Badge:1",
-                  "width": 59.6,
-                  "height": 18,
-                  "fill": "$surface",
-                  "cornerRadius": 9,
-                  "stroke": "$neg",
-                  "strokeWidth": 1,
-                  "gap": 4,
-                  "padding": [
-                    2,
-                    5,
-                    2,
-                    6
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "nwp4r",
-                      "name": "Num",
-                      "width": 12,
-                      "height": 12,
-                      "fill": "$neg",
-                      "cornerRadius": 6,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "Iw4Iw",
-                          "name": "NumText",
-                          "fill": "#FFFFFF",
-                          "content": "1",
-                          "fontFamily": "$font",
-                          "fontSize": 8.5,
-                          "fontWeight": "700"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "D6ZMJv",
-                      "name": "Sum",
-                      "fill": "$neg",
-                      "content": "−180",
-                      "fontFamily": "$font",
-                      "fontSize": 10.5,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "cgoTX",
-                  "x": 126.2,
-                  "y": 0,
-                  "name": "Badge:2",
-                  "width": 59.6,
-                  "height": 18,
-                  "fill": "$surface",
-                  "cornerRadius": 9,
-                  "stroke": "$neg",
-                  "strokeWidth": 1,
-                  "gap": 4,
-                  "padding": [
-                    2,
-                    5,
-                    2,
-                    6
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "XDapb",
-                      "name": "Num",
-                      "width": 12,
-                      "height": 12,
-                      "fill": "$neg",
-                      "cornerRadius": 6,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "uIaHZ",
-                          "name": "NumText",
-                          "fill": "#FFFFFF",
-                          "content": "2",
-                          "fontFamily": "$font",
-                          "fontSize": 8.5,
-                          "fontWeight": "700"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "SvKop",
-                      "name": "Sum",
-                      "fill": "$neg",
-                      "content": "−100",
-                      "fontFamily": "$font",
-                      "fontSize": 10.5,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "bXZfe",
-                  "x": 164.4,
-                  "y": 22,
-                  "name": "Badge:3",
-                  "width": 53.2,
-                  "height": 18,
-                  "fill": "$surface",
-                  "cornerRadius": 9,
-                  "stroke": "$neg",
-                  "strokeWidth": 1,
-                  "gap": 4,
-                  "padding": [
-                    2,
-                    5,
-                    2,
-                    6
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "XBfNl",
-                      "name": "Num",
-                      "width": 12,
-                      "height": 12,
-                      "fill": "$neg",
-                      "cornerRadius": 6,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "gFrRr",
-                          "name": "NumText",
-                          "fill": "#FFFFFF",
-                          "content": "3",
-                          "fontFamily": "$font",
-                          "fontSize": 8.5,
-                          "fontWeight": "700"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "FJeJ0",
-                      "name": "Sum",
-                      "fill": "$neg",
-                      "content": "−55",
-                      "fontFamily": "$font",
-                      "fontSize": 10.5,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "ZGbaE",
-                  "x": 226.1,
-                  "y": 0,
-                  "name": "Badge:4",
-                  "width": 53.2,
-                  "height": 18,
-                  "fill": "$surface",
-                  "cornerRadius": 9,
-                  "stroke": "$accentStrong",
-                  "strokeWidth": 1,
-                  "gap": 4,
-                  "padding": [
-                    2,
-                    5,
-                    2,
-                    6
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "jzTDz",
-                      "name": "Num",
-                      "width": 12,
-                      "height": 12,
-                      "fill": "$accentStrong",
-                      "cornerRadius": 6,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "O3aDt",
-                          "name": "NumText",
-                          "fill": "#FFFFFF",
-                          "content": "4",
-                          "fontFamily": "$font",
-                          "fontSize": 8.5,
-                          "fontWeight": "700"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "y5O0mP",
-                      "name": "Sum",
-                      "fill": "$accentStrong",
-                      "content": "+24",
-                      "fontFamily": "$font",
-                      "fontSize": 10.5,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "Nh91w",
-                  "x": 344.7,
-                  "y": 0,
-                  "name": "Badge:5",
-                  "width": 59.6,
-                  "height": 18,
-                  "fill": "$surface",
-                  "cornerRadius": 9,
-                  "stroke": "$accentStrong",
-                  "strokeWidth": 1,
-                  "gap": 4,
-                  "padding": [
-                    2,
-                    5,
-                    2,
-                    6
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "fQcqJ",
-                      "name": "Num",
-                      "width": 12,
-                      "height": 12,
-                      "fill": "$accentStrong",
-                      "cornerRadius": 6,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "s9q1T",
-                          "name": "NumText",
-                          "fill": "#FFFFFF",
-                          "content": "5",
-                          "fontFamily": "$font",
-                          "fontSize": 8.5,
-                          "fontWeight": "700"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "sLsMw",
-                      "name": "Sum",
-                      "fill": "$accentStrong",
-                      "content": "+180",
-                      "fontFamily": "$font",
-                      "fontSize": 10.5,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "b6xF7z",
-                  "x": 394.3,
-                  "y": 22,
-                  "name": "Badge:6",
-                  "width": 59.6,
-                  "height": 18,
-                  "fill": "$surface",
-                  "cornerRadius": 9,
-                  "stroke": "$accentStrong",
-                  "strokeWidth": 1,
-                  "gap": 4,
-                  "padding": [
-                    2,
-                    5,
-                    2,
-                    6
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "G2GU3",
-                      "name": "Num",
-                      "width": 12,
-                      "height": 12,
-                      "fill": "$accentStrong",
-                      "cornerRadius": 6,
-                      "justifyContent": "center",
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "poskn",
-                          "name": "NumText",
-                          "fill": "#FFFFFF",
-                          "content": "6",
-                          "fontFamily": "$font",
-                          "fontSize": 8.5,
-                          "fontWeight": "700"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "h0sdTJ",
-                      "name": "Sum",
-                      "fill": "$accentStrong",
-                      "content": "+244",
-                      "fontFamily": "$font",
-                      "fontSize": 10.5,
-                      "fontWeight": "600"
-                    }
-                  ]
                 }
               ]
             },
@@ -19848,84 +19204,6 @@
                   ]
                 },
                 {
-                  "type": "frame",
-                  "id": "sCszM",
-                  "x": 0,
-                  "y": 0,
-                  "name": "HistoryTicks",
-                  "width": 936,
-                  "height": 14,
-                  "layout": "none",
-                  "children": [
-                    {
-                      "type": "rectangle",
-                      "cornerRadius": 1,
-                      "id": "O0oRdc",
-                      "x": 92.6,
-                      "y": 0,
-                      "name": "Tick:1",
-                      "fill": "$textPrimary",
-                      "width": 2,
-                      "height": 14
-                    },
-                    {
-                      "type": "rectangle",
-                      "cornerRadius": 1,
-                      "id": "zFdjS",
-                      "x": 155,
-                      "y": 0,
-                      "name": "Tick:2",
-                      "fill": "$textPrimary",
-                      "width": 2,
-                      "height": 14
-                    },
-                    {
-                      "type": "rectangle",
-                      "cornerRadius": 1,
-                      "id": "I9ICS0",
-                      "x": 190,
-                      "y": 0,
-                      "name": "Tick:3",
-                      "fill": "$textPrimary",
-                      "width": 2,
-                      "height": 14
-                    },
-                    {
-                      "type": "rectangle",
-                      "cornerRadius": 1,
-                      "id": "p0BrDb",
-                      "x": 251.7,
-                      "y": 0,
-                      "name": "Tick:4",
-                      "fill": "$textPrimary",
-                      "width": 2,
-                      "height": 14
-                    },
-                    {
-                      "type": "rectangle",
-                      "cornerRadius": 1,
-                      "id": "nUf2A",
-                      "x": 373.5,
-                      "y": 0,
-                      "name": "Tick:5",
-                      "fill": "$textPrimary",
-                      "width": 2,
-                      "height": 14
-                    },
-                    {
-                      "type": "rectangle",
-                      "cornerRadius": 1,
-                      "id": "gLwAD",
-                      "x": 423.1,
-                      "y": 0,
-                      "name": "Tick:6",
-                      "fill": "$textPrimary",
-                      "width": 2,
-                      "height": 14
-                    }
-                  ]
-                },
-                {
                   "type": "ellipse",
                   "id": "tZ9yY",
                   "x": 333.3,
@@ -19962,22 +19240,9 @@
                 },
                 {
                   "type": "text",
-                  "id": "bYBwW",
-                  "x": 0,
-                  "y": 0,
-                  "name": "RiskStateLabel",
-                  "enabled": false,
-                  "fill": "$neg",
-                  "content": "риск не ограничен",
-                  "fontFamily": "$font",
-                  "fontSize": 10.5,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "text",
                   "id": "zOC3O",
                   "x": 0,
-                  "y": 16,
+                  "y": 0,
                   "name": "UnavailableLabel",
                   "enabled": false,
                   "fill": "$neg",
@@ -20135,17 +19400,6 @@
                   "height": 10,
                   "stroke": "#FFFFFF",
                   "strokeWidth": 1.5
-                },
-                {
-                  "type": "rectangle",
-                  "cornerRadius": 1,
-                  "id": "AhGE9",
-                  "x": 62.7,
-                  "y": -2,
-                  "name": "LastResultTick",
-                  "fill": "$textPrimary",
-                  "width": 2,
-                  "height": 18
                 }
               ]
             },
@@ -20171,22 +19425,9 @@
                 },
                 {
                   "type": "text",
-                  "id": "F1E8D4",
-                  "x": 0,
-                  "y": 0,
-                  "name": "RiskStateLabel",
-                  "enabled": false,
-                  "fill": "$neg",
-                  "content": "риск не ограничен",
-                  "fontFamily": "$font",
-                  "fontSize": 9.5,
-                  "fontWeight": "600"
-                },
-                {
-                  "type": "text",
                   "id": "DCBuR",
                   "x": 0,
-                  "y": 15,
+                  "y": 0,
                   "name": "UnavailableLabel",
                   "enabled": false,
                   "fill": "$neg",
@@ -22748,7 +21989,7 @@
                           "fill": "$risk",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "BTC-26DEC-100000-C · 1 контракт · убыток не ограничен",
+                          "content": "BTC-26DEC-100000-C · 1 контракт · убыток ограничен премией",
                           "fontFamily": "$font",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -27740,7 +26981,7 @@
                   "id": "A9eRgM",
                   "name": "Meta",
                   "fill": "$textMuted",
-                  "content": "плановый риск 300 / плановый профит 900 · реальный риск 250 · конечный · капитал 6 000 USDT · открыта 12 авг 2026, 10:04",
+                  "content": "плановый риск 300 / плановый профит 900 · реальный риск 250 · капитал 6 000 USDT · открыта 12 авг 2026, 10:04",
                   "fontFamily": "$font",
                   "fontSize": 12,
                   "fontWeight": "normal"
@@ -35163,106 +34404,6 @@
       ],
       "width": 572,
       "height": 833
-    },
-    {
-      "type": "frame",
-      "id": "TX4Ak",
-      "x": 3360,
-      "y": 8187,
-      "name": "Сверка/Расшифровка метки · живая карточка localhost · 04.11.2026",
-      "width": 1100,
-      "fill": "$bg",
-      "layout": "vertical",
-      "gap": 10,
-      "padding": 14,
-      "children": [
-        {
-          "type": "text",
-          "id": "gb8Xd",
-          "name": "Cap",
-          "fill": "$textSecondary",
-          "textGrowth": "fixed-width",
-          "width": "fill_container",
-          "content": "Скриншот-сверка (ADR-0011): живая карточка http://localhost:5019/constructions/10 — бейджи маркеров над полосой и подсказка-расшифровка соответствуют макету (Cell:9) по составу и токенам; расхождений, требующих правки, нет.",
-          "fontFamily": "$font",
-          "fontSize": 12,
-          "fontWeight": "normal"
-        },
-        {
-          "type": "frame",
-          "id": "AphYK",
-          "name": "Row",
-          "gap": 16,
-          "children": [
-            {
-              "type": "frame",
-              "id": "uhsG7",
-              "name": "Живая карточка · бейджи",
-              "width": 530,
-              "layout": "vertical",
-              "gap": 6,
-              "children": [
-                {
-                  "type": "rectangle",
-                  "id": "prmMS",
-                  "name": "Скрин",
-                  "fill": {
-                    "type": "image",
-                    "enabled": true,
-                    "url": "screenshot-localhost-finresult-markers.png",
-                    "mode": "cover"
-                  },
-                  "width": 530,
-                  "height": 330
-                },
-                {
-                  "type": "text",
-                  "id": "rHBaW",
-                  "name": "Cap1",
-                  "fill": "$textMuted",
-                  "content": "Живая карточка: номерные бейджи с суммами над полосой, области описания нет",
-                  "fontFamily": "$font",
-                  "fontSize": 11,
-                  "fontWeight": "normal"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "jsecT",
-              "name": "Живая карточка · расшифровка",
-              "width": 530,
-              "layout": "vertical",
-              "gap": 6,
-              "children": [
-                {
-                  "type": "rectangle",
-                  "id": "xeCxr",
-                  "name": "Скрин",
-                  "fill": {
-                    "type": "image",
-                    "enabled": true,
-                    "url": "screenshot-localhost-finresult-breakdown.png",
-                    "mode": "cover"
-                  },
-                  "width": 530,
-                  "height": 330
-                },
-                {
-                  "type": "text",
-                  "id": "L4X0N",
-                  "name": "Cap2",
-                  "fill": "$textMuted",
-                  "content": "Живая подсказка бейджа: перечень «вид · дата · сумма» и Σ перечня = изменение (включая подавленную операцию +0.92)",
-                  "fontFamily": "$font",
-                  "fontSize": 11,
-                  "fontWeight": "normal"
-                }
-              ]
-            }
-          ]
-        }
-      ]
     }
   ],
   "variables": {
