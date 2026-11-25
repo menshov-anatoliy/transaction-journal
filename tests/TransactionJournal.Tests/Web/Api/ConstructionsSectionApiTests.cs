@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -15,11 +16,13 @@ using TransactionJournal.Application;
 using TransactionJournal.Application.Analytics;
 using TransactionJournal.Application.Bybit;
 using TransactionJournal.Application.Sync;
+using TransactionJournal.Chats.Ports;
 using TransactionJournal.Domain;
 using TransactionJournal.Domain.Data;
 using TransactionJournal.Hints;
 using TransactionJournal.Hints.Display;
 using TransactionJournal.Hints.Ports;
+using TransactionJournal.Infrastructure.Chats;
 using Assert = NUnit.Framework.Assert;
 using Description = Microsoft.VisualStudio.TestTools.UnitTesting.DescriptionAttribute;
 
@@ -812,14 +815,9 @@ internal sealed class SectionApiFactory : WebApplicationFactory<Program>
 
 	private readonly Action<IServiceCollection>? _configureServices;
 
-	private readonly Action<IDictionary<string, string?>>? _configureConfiguration;
-
-	public SectionApiFactory(
-		Action<IServiceCollection>? configureServices = null,
-		Action<IDictionary<string, string?>>? configureConfiguration = null)
+	public SectionApiFactory(Action<IServiceCollection>? configureServices = null)
 	{
 		_configureServices = configureServices;
-		_configureConfiguration = configureConfiguration;
 		// Program читает строку подключения из builder.Configuration ещё до того,
 		// как фабрика применит свои in-memory значения к собранному хосту; без
 		// переменной окружения все доменные сервисы хоста ушли бы в базу по
@@ -844,11 +842,15 @@ internal sealed class SectionApiFactory : WebApplicationFactory<Program>
 			{
 				["ConnectionStrings:Journal"] = $"Data Source={_databasePath}",
 			};
-			_configureConfiguration?.Invoke(settings);
 			config.AddInMemoryCollection(settings);
 		});
 		// Стабильные заглушки доменных зависимостей поверх реальных регистраций.
-		builder.ConfigureTestServices(services => _configureServices?.Invoke(services));
+		builder.ConfigureTestServices(services =>
+		{
+			// Тесты не должны открывать рабочую базу чатов из App_Data.
+			services.AddSingleton<IChatStore>(_ => new ChatStore(_databasePath + ".chats"));
+			_configureServices?.Invoke(services);
+		});
 	}
 
 	protected override void Dispose(bool disposing)
@@ -863,8 +865,12 @@ internal sealed class SectionApiFactory : WebApplicationFactory<Program>
 		// следующие фабрики того же процесса не унаследовали эту базу.
 		Environment.SetEnvironmentVariable(DatabaseEnvironmentVariable, _previousDatabaseEnvironmentValue);
 
+		// Пул SQLite держит файл чатов открытым даже после остановки тестового хоста.
+		using var chatConnection = new SqliteConnection($"Data Source={_databasePath}.chats");
+		SqliteConnection.ClearPool(chatConnection);
+
 		// Временная база и соседние WAL-файлы удаляются после прогона.
-		foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
+		foreach (var suffix in new[] { string.Empty, "-wal", "-shm", ".chats", ".chats-wal", ".chats-shm" })
 		{
 			try
 			{

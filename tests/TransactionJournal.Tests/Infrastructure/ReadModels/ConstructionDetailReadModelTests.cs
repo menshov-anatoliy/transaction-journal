@@ -1321,10 +1321,8 @@ public class ConstructionDetailReadModelTests
 
 	/// <summary>Создаёт настоящее хранилище консультаций над временной папкой проверки.</summary>
 	/// <summary>Собирает read-модель деталей над реальными метриками журнала и позициями.</summary>
-	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentQuoteSource freshQuoteSource) => new(
-		CreateOptions(),
-		new JournalMetricsReadModel(CreateOptions(), freshQuoteSource),
-		new PositionReadModel(CreateOptions()));
+	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentQuoteSource freshQuoteSource) =>
+		CreateDetailReadModel(freshQuoteSource, new FixedTimeProvider(LifetimeNow));
 
 	/// <summary>
 	/// Собирает read-модель деталей над фиксированными часами: остаток суток до
@@ -1334,7 +1332,7 @@ public class ConstructionDetailReadModelTests
 	private ConstructionDetailReadModel CreateDetailReadModel(IFreshInstrumentQuoteSource freshQuoteSource, TimeProvider timeProvider) => new(
 		CreateOptions(),
 		new JournalMetricsReadModel(CreateOptions(), freshQuoteSource, timeProvider: timeProvider),
-		new PositionReadModel(CreateOptions()));
+		new PositionReadModel(CreateOptions(), timeProvider: timeProvider));
 
 	/// <summary>Добавляет живой опцион сценария времени жизни в справочник инструментов: доска 25JUN27 08:00 UTC.</summary>
 	private async Task SeedFutureCallInstrumentAsync()

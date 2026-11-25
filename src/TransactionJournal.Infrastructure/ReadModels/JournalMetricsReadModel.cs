@@ -122,8 +122,10 @@ public sealed class JournalMetricsReadModel : IJournalMetricsReadModel
 		var assignments = constructionIdByExecId.ToDictionary(
 			pair => pair.Key,
 			pair => (string?)pair.Value.ToString(CultureInfo.InvariantCulture));
+		// Автозакрытие по экспирации использует тот же источник времени, что и метрики.
+		// Traceability: adr:docs/adr/0002-option-expiry-closing-entries.md#экспирация-опционов--закрывающие-записи-а-не-спец-сущности
 		var expiry = new ExpiryMaterializer(tradeMaterializer, resolver)
-			.Materialize(rawExecutions, rawDeliveries, assignments, DateTimeOffset.UtcNow, manualTrades);
+			.Materialize(rawExecutions, rawDeliveries, assignments, _timeProvider.GetUtcNow(), manualTrades);
 
 		var streams = new Dictionary<(long ConstructionId, string Symbol), List<StreamEvent>>();
 		foreach (var trade in trades)
