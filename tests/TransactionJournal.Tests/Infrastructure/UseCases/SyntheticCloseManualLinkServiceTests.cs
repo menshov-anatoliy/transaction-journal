@@ -199,6 +199,26 @@ public class SyntheticCloseManualLinkServiceTests
 	}
 
 	[TestMethod]
+	[Description("Количество связки, равное меньшей из сделок с неравными количествами, создаётся")]
+	// Согласованность количества — верхняя граница по каждой из сделок
+	// (quantity <= min(|q_linear|, |q_option|)): количество 0.3 равно
+	// встречному опциону и меньше линейной сделки 0.5 — связка создаётся.
+	// Traceability: issue:#100
+	public async Task TryIfQuantityEqualToSmallerSideAccepted()
+	{
+		// Arrange: конструкция стрэддла с крупным перпом 0.5 и коллом 0.3.
+		var construction = await CreateStraddleConstructionAsync();
+		await AddExchangeTradeAsync("big-perp", XautPerp, "linear", "Buy", "0.5", "4300", "0.2", ExecMs(2026, 10, 15, 14, 0), "USDT");
+		await _binding.BindAsync(construction.Id, "big-perp");
+
+		// Act: создаём связку количеством 0.3 — верхней границей меньшей сделки.
+		var link = await _service.CreateAsync(construction.Id, "big-perp", "case-call", 0.3m);
+
+		// Assert: связка на границе min(0.5, 0.3) сохранена как задано.
+		Assert.That(link.Quantity, Is.EqualTo(0.3m));
+	}
+
+	[TestMethod]
 	[Description("Количество связки больше количества линейной сделки отклоняется")]
 	// Количество связки не превышает количество ни одной из сделок пары.
 	// Traceability: openspec:domain/synthetic-close#scenario-manual-link-rejected-on-mismatch
