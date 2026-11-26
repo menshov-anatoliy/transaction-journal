@@ -4,18 +4,23 @@ namespace TransactionJournal.Domain.ConstructionAssembly;
 
 /// <summary>
 /// Чистая функция распознавания синтетических закрытий ног конструкции по
-/// шаблону правила ac-43: линейное исполнение образует связку со встречным
-/// опционным исполнением, когда совпадает базовый актив, зазор не превышает
+/// шаблону правила ac-43: линейное исполнение образует связки со встречными
+/// опционными исполнениями, когда совпадает базовый актив, зазор не превышает
 /// 60 минут (та же константа окна, что в сборке), страйк и экспирация
 /// встречного опциона совпадают с открытой опционной ногой той же доски,
-/// количества равны и не превышают открытую часть ноги, встречный опцион
-/// продаётся (его покупка связкой не считается), а направления соответствуют
-/// правилу: закрытие длинного PUT — покупка фьючерса и продажа
-/// CALL, длинного CALL — продажа фьючерса и продажа PUT. Каждое исполнение
-/// входит не более чем в одну связку; при нескольких кандидатах берётся
-/// раннее по времени, затем по execId. Прогон детерминирован: записи
-/// упорядочены по (ExecTimeMs, ExecId), остатки ног вычисляются на лету по
-/// мере скана, повторный вызов над тем же составом записей даёт те же связки.
+/// встречный опцион продаётся (его покупка связкой не считается), а
+/// направления соответствуют правилу: закрытие длинного PUT — покупка
+/// фьючерса и продажа CALL, длинного CALL — продажа фьючерса и продажа PUT.
+/// Связка покрывает минимум непокрытых остатков линейного исполнения и
+/// встречного опциона: одно исполнение может входить в несколько связок, у
+/// каждой записи остаётся непокрытый остаток, исчерпанная (нулевой остаток)
+/// запись в связках не участвует, полного покрытия сторон не требуется; связка
+/// не закрывает больше открытой части закрываемой ноги с учётом уже покрытого
+/// связками. При нескольких кандидатах связки берут раннее по времени, затем
+/// по execId. Прогон детерминирован: записи упорядочены по (ExecTimeMs,
+/// ExecId), остатки сторон и ног вычисляются на лету по мере скана, повторный
+/// вызов над тем же составом записей даёт те же связки.
+/// Traceability: issue:#100
 /// Traceability: change:synthetic-close-logical-layer/specs/domain/synthetic-close/spec#requirement-synthetic-close-recognition-deterministic
 /// Traceability: change:synthetic-close-logical-layer/design#d1
 /// Traceability: change:synthetic-close-logical-layer/design#d2
@@ -90,8 +95,18 @@ public static class SyntheticCloseRecognizer
 
 		// Однопроходный скан: остатки ног накапливаются по мере прохождения
 		// опционных записей, поэтому линейное исполнение сопоставляется с пулом
-		// кандидатов при остатках на свой момент прогона.
-		var usedOptionExecIds = new HashSet<string>(StringComparer.Ordinal);
+		// кандидатов при остатках на свой момент прогона. Непокрытые остатки
+		// опционных кандидатов и накопленное связками покрытие закрываемых ног
+		// ведутся рядом: связка расходует часть остатка записи, исчерпанная
+		// запись и полностью покрытая нога дальнейших связок не образуют.
+		// Traceability: issue:#100
+		var optionRemainders = new Dictionary<string, decimal>(StringComparer.Ordinal);
+		foreach (var optionRecord in optionRecords)
+		{
+			optionRemainders[optionRecord.Execution.ExecId] = decimal.Abs(optionRecord.Execution.SignedQuantity);
+		}
+
+		var coveredByClosedLeg = new Dictionary<LegKey, decimal>();
 		var legNets = new Dictionary<LegKey, decimal>();
 		var links = new List<SyntheticCloseLink>();
 		foreach (var execution in orderedExecutions)
@@ -112,11 +127,7 @@ public static class SyntheticCloseRecognizer
 				&& LinearSymbolParser.TryParseBaseCoin(execution.Symbol, out var linearBaseCoin))
 			{
 				var linearRecord = linearRecords[execution.ExecId];
-				var link = MatchLinear(linearRecord, optionRecords, usedOptionExecIds, legNets, legSymbols);
-				if (link is not null)
-				{
-					links.Add(link);
-				}
+				links.AddRange(MatchLinear(linearRecord, optionRecords, optionRemainders, coveredByClosedLeg, legNets, legSymbols));
 			}
 		}
 
@@ -128,20 +139,25 @@ public static class SyntheticCloseRecognizer
 	#region Правила сопоставления
 
 	/// <summary>
-	/// Сопоставляет линейное исполнение с первым неиспользованным встречным
-	/// опционным кандидатом. Пул кандидатов упорядочен по прогону, поэтому
-	/// первый подходящий — раннее по времени, затем по execId.
+	/// Сопоставляет линейное исполнение со встречными опционными кандидатами,
+	/// пока у линейной записи остаётся непокрытый остаток. Связка покрывает
+	/// минимум непокрытых остатков линейной записи и кандидата, поэтому одно
+	/// исполнение может входить в несколько связок, а исчерпанный кандидат
+	/// (нулевой остаток) в связках не участвует. Пул кандидатов упорядочен по
+	/// прогону, поэтому связки берут ранних по времени, затем по execId.
+	/// Traceability: issue:#100
 	/// </summary>
-	private static SyntheticCloseLink? MatchLinear(
+	private static List<SyntheticCloseLink> MatchLinear(
 		LinearRecord linearRecord,
 		IReadOnlyList<OptionRecord> optionRecords,
-		HashSet<string> usedOptionExecIds,
+		Dictionary<string, decimal> optionRemainders,
+		Dictionary<LegKey, decimal> coveredByClosedLeg,
 		Dictionary<LegKey, decimal> legNets,
 		Dictionary<LegKey, string> legSymbols)
 	{
+		var links = new List<SyntheticCloseLink>();
 		var linear = linearRecord.Execution;
 		var baseCoin = linearRecord.BaseCoin;
-		var quantity = decimal.Abs(linear.SignedQuantity);
 
 		// Направления по ac-43: покупка фьючерса закрывает длинный пут
 		// (встречный опцион — продаваемый CALL), продажа фьючерса — длинный
@@ -150,9 +166,23 @@ public static class SyntheticCloseRecognizer
 		var counterType = isPutClose ? OptionType.Call : OptionType.Put;
 		var closedType = isPutClose ? OptionType.Put : OptionType.Call;
 
+		// Непокрытый остаток линейного исполнения: каждая связка расходует его
+		// часть, исчерпанный остаток завершает подбор кандидатов — непокрытая
+		// часть остаётся в инбоксе/позиции как сейчас.
+		// Traceability: issue:#100
+		var remaining = decimal.Abs(linear.SignedQuantity);
+
 		foreach (var candidate in optionRecords)
 		{
-			if (usedOptionExecIds.Contains(candidate.Execution.ExecId))
+			if (remaining <= 0m)
+			{
+				break;
+			}
+
+			// Исчерпанный кандидат (нулевой остаток) дальнейших связок не образует.
+			// Traceability: issue:#100
+			var candidateRemaining = optionRemainders[candidate.Execution.ExecId];
+			if (candidateRemaining <= 0m)
 			{
 				continue;
 			}
@@ -165,27 +195,37 @@ public static class SyntheticCloseRecognizer
 			if (parts.Type != counterType
 				|| string.Equals(parts.BaseCoin, baseCoin, StringComparison.Ordinal) == false
 				|| Math.Abs(candidate.Execution.ExecTimeMs - linear.ExecTimeMs) > LinkGapMs
-				|| candidate.Execution.SignedQuantity >= 0m
-				|| decimal.Abs(candidate.Execution.SignedQuantity) != quantity)
+				|| candidate.Execution.SignedQuantity >= 0m)
 			{
 				continue;
 			}
 
 			// Закрываемая нога — опцион противоположного типа на той же доске
 			// (страйк и экспирация совпадают со встречным опционом); связка
-			// допустима только против длинной ноги и не закрывает больше её
-			// открытой части.
+			// допустима только против длинной ноги.
 			var closedKey = new LegKey(parts.BaseCoin, parts.ExpiryDate, parts.Strike, closedType);
 			if (legNets.TryGetValue(closedKey, out var closedNet) == false
 				|| closedNet <= 0m
-				|| quantity > closedNet
 				|| legSymbols.TryGetValue(closedKey, out var closedSymbol) == false)
 			{
 				continue;
 			}
 
-			usedOptionExecIds.Add(candidate.Execution.ExecId);
-			return new SyntheticCloseLink
+			// Связка покрывает минимум непокрытых остатков сторон и не больше
+			// оставшейся открытой части закрываемой ноги с учётом уже покрытого
+			// связками: кандидат сверх открытой части пропускается.
+			// Traceability: issue:#100
+			coveredByClosedLeg.TryGetValue(closedKey, out var covered);
+			var quantity = Math.Min(remaining, candidateRemaining);
+			if (quantity > closedNet - covered)
+			{
+				continue;
+			}
+
+			optionRemainders[candidate.Execution.ExecId] = candidateRemaining - quantity;
+			remaining -= quantity;
+			coveredByClosedLeg[closedKey] = covered + quantity;
+			links.Add(new SyntheticCloseLink
 			{
 				LinearExecId = linear.ExecId,
 				LinearExecTimeMs = linear.ExecTimeMs,
@@ -197,10 +237,10 @@ public static class SyntheticCloseRecognizer
 				Strike = parts.Strike,
 				BoardExpiryDate = parts.ExpiryDate,
 				Quantity = quantity,
-			};
+			});
 		}
 
-		return null;
+		return links;
 	}
 
 	#endregion
